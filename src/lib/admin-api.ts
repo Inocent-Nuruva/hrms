@@ -1,3 +1,4 @@
+import { extractBackupCodes } from "@/lib/backup-codes";
 import { env } from "@/lib/env";
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
 import {
@@ -1665,7 +1666,9 @@ function buildNotificationChannelRegistryQuery(
   return query ? `?${query}` : "";
 }
 
-function buildNotificationTemplateQuery(params: NotificationTemplateQueryParams) {
+function buildNotificationTemplateQuery(
+  params: NotificationTemplateQueryParams,
+) {
   const searchParams = new URLSearchParams();
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim());
@@ -3422,7 +3425,9 @@ export async function getNotificationChannelSetting(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/notifications/channel-settings/${encodeURIComponent(channel)}`,
-    { token },
+    {
+      token,
+    },
   );
   return (
     (normalizeSingle(payload) as NotificationChannelSetting | null) ??
@@ -3532,7 +3537,9 @@ export async function listNotificationTemplates(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/notifications/templates${buildNotificationTemplateQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload) as NotificationTemplateItem[];
 }
@@ -3591,15 +3598,14 @@ export async function listNotificationRules(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/notifications/rules${buildNotificationRuleQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload) as NotificationRuleItem[];
 }
 
-export async function getNotificationRule(
-  token: string,
-  id: string | number,
-) {
+export async function getNotificationRule(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(
     `/api/notifications/rules/${id}`,
     { token },
@@ -6319,7 +6325,11 @@ export async function syncHikvisionAttendance(
 ) {
   return adminRequest<unknown>(
     `/api/hikvision/devices/${deviceId}/attendance/sync`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -6330,7 +6340,11 @@ export async function syncHikvisionAttendanceByDate(
 ) {
   return adminRequest<unknown>(
     `/api/hikvision/devices/${deviceId}/attendance/sync-date`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -6341,7 +6355,11 @@ export async function syncHikvisionAttendanceByEmployee(
 ) {
   return adminRequest<unknown>(
     `/api/hikvision/devices/${deviceId}/attendance/sync-employee`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -6352,7 +6370,11 @@ export async function syncHikvisionAttendanceByRange(
 ) {
   return adminRequest<unknown>(
     `/api/hikvision/devices/${deviceId}/attendance/sync-range`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -6363,7 +6385,11 @@ export async function pullHikvisionAttendancePage(
 ) {
   return adminRequest<unknown>(
     `/api/hikvision/devices/${deviceId}/attendance/pull-page`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -6440,7 +6466,9 @@ export async function getAccessCredentialDeviceActionRoutes(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/access-control/access-credentials/${id}/device-action-routes`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
@@ -6596,7 +6624,9 @@ export async function listAccessEmployeeAuditLogs(
   const query = buildAccessAuditLogQuery(params);
   const payload = await adminRequest<unknown>(
     `/api/access-control/employees/${employeeId}/audit-logs${query}`,
-    { token },
+    {
+      token,
+    },
   );
   const rows = normalizeList(payload);
   const pagination = extractUsersPagination(
@@ -6909,7 +6939,10 @@ export async function retryEmployeeMovementOperation(
 ) {
   return adminRequest<unknown>(
     `/api/employee-movements/${id}/operations/${operationId}/retry`,
-    { method: "POST", token },
+    {
+      method: "POST",
+      token,
+    },
   );
 }
 
@@ -7731,7 +7764,11 @@ export async function createEmployeeDeviceCard(
 ) {
   return adminRequest<unknown>(
     `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/cards`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -7804,7 +7841,10 @@ export async function enableEmployeeDeviceUser(
 ) {
   return adminRequest<unknown>(
     `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/enable`,
-    { method: "PATCH", token },
+    {
+      method: "PATCH",
+      token,
+    },
   );
 }
 
@@ -7815,7 +7855,10 @@ export async function disableEmployeeDeviceUser(
 ) {
   return adminRequest<unknown>(
     `/api/access-control/employees/${employeeId}/devices/${deviceId}/users/disable`,
-    { method: "PATCH", token },
+    {
+      method: "PATCH",
+      token,
+    },
   );
 }
 
@@ -8592,7 +8635,11 @@ export async function startHrProfileChangeReview(
 ) {
   return adminRequest<unknown>(
     `/api/hr/profile-change-requests/${id}/start-review`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -8628,7 +8675,11 @@ export async function requestHrProfileChangeCorrection(
 ) {
   return adminRequest<unknown>(
     `/api/hr/profile-change-requests/${id}/request-correction`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -9307,6 +9358,8 @@ export type OnboardingWorkflowStepPayload = {
   step_type: string;
   assigned_role_id?: number;
   assigned_user_id?: number;
+  assigned_department_id?: number;
+  metadata?: AdminRecord;
   due_days: number;
   step_order?: number;
 };
@@ -9672,76 +9725,6 @@ function unwrapOnboardingRequest(payload: unknown): AdminRecord | null {
   );
 }
 
-function readOnboardingEmployeeId(record: AdminRecord) {
-  const employee =
-    asRecord(record.employee) ??
-    asRecord(record.employee_profile) ??
-    asRecord(record.employeeProfile);
-  const companyUser =
-    asRecord(record.company_user) ??
-    asRecord(record.companyUser) ??
-    asRecord(employee?.company_user) ??
-    asRecord(employee?.companyUser);
-  return (
-    readNumberFromRecord(record, ["employee_id", "employeeId"]) ??
-    readNumberFromRecord(employee, ["id", "employee_id", "employeeId"]) ??
-    readNumberFromRecord(companyUser, ["employee_id", "employeeId"])
-  );
-}
-
-function readOnboardingCreatePayload(
-  record: AdminRecord,
-): CreateOnboardingRequestPayload {
-  const employeeId = readOnboardingEmployeeId(record);
-  if (employeeId === null || employeeId < 1) {
-    throw new Error("Onboarding request is missing employee_id.");
-  }
-
-  const workflow =
-    asRecord(record.workflow) ?? asRecord(record.assigned_workflow);
-  const workflowId =
-    readNumberFromRecord(record, ["workflow_id", "onboarding_workflow_id"]) ??
-    readNumberFromRecord(workflow, ["id", "workflow_id"]);
-
-  const title =
-    typeof record.title === "string" && record.title.trim()
-      ? record.title.trim()
-      : typeof record.name === "string" && record.name.trim()
-        ? record.name.trim()
-        : undefined;
-  const description =
-    typeof record.description === "string" && record.description.trim()
-      ? record.description.trim()
-      : undefined;
-  const plannedStart =
-    typeof record.planned_start_date === "string" &&
-    record.planned_start_date.trim()
-      ? record.planned_start_date
-      : undefined;
-  const plannedCompletion =
-    typeof record.planned_completion_date === "string" &&
-    record.planned_completion_date.trim()
-      ? record.planned_completion_date
-      : undefined;
-  const provisioning = asRecord(record.provisioning) as
-    CreateOnboardingRequestPayload["provisioning"] | null;
-
-  return {
-    employee_id: Math.trunc(employeeId),
-    submit: true,
-    title: title || "Onboarding",
-    ...(workflowId !== null && workflowId > 0
-      ? { workflow_id: Math.trunc(workflowId) }
-      : {}),
-    ...(description ? { description } : {}),
-    ...(plannedStart ? { planned_start_date: plannedStart } : {}),
-    ...(plannedCompletion
-      ? { planned_completion_date: plannedCompletion }
-      : {}),
-    ...(provisioning ? { provisioning } : {}),
-  };
-}
-
 function isExistingOnboardingConflict(errorObject: unknown) {
   const status =
     typeof errorObject === "object" &&
@@ -9758,58 +9741,45 @@ function isExistingOnboardingConflict(errorObject: unknown) {
   );
 }
 
-/**
- * The documented API has no POST /submit and UpdateOnboardingRequestDto cannot
- * set `submit` or `status`. Drafts are submitted by creating a request with
- * `submit: true` (the create-time flag).
- */
 export async function submitOnboardingRequest(
   token: string,
   id: string | number,
-  fallback: AdminRecord = {},
+  options: { allow_incomplete_employee_details?: boolean } = {},
 ) {
-  const current = await getOnboardingRequest(token, id);
-  const merged: AdminRecord = {
-    ...fallback,
-    ...(current ?? {}),
-  };
-  if (
-    !looksLikeOnboardingRequest(merged) &&
-    !readOnboardingEmployeeId(merged)
-  ) {
-    throw new Error("Onboarding request was not found.");
-  }
-  const payload = readOnboardingCreatePayload(merged);
+  return adminRequest<unknown>(`/api/onboarding/requests/${id}/submit`, {
+    method: "POST",
+    token,
+    body: options,
+  });
+}
 
-  const createSubmitted = () => createOnboardingRequest(token, payload);
+export async function submitMyOnboardingDetails(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${id}/employee-details/submit`,
+    { method: "POST", token },
+  );
+}
 
-  try {
-    const created = await createSubmitted();
-    const createdRecord = (normalizeSingle(created) ??
-      asRecord(created) ??
-      {}) as AdminRecord;
-    const createdId = readNumberFromRecord(createdRecord, ["id", "request_id"]);
-    if (createdId !== null && String(createdId) !== String(id)) {
-      await cancelOnboardingRequest(token, id, {
-        reason: "Superseded by submitted onboarding request",
-      }).catch(() => undefined);
-    }
-    return created;
-  } catch (errorObject) {
-    if (!isExistingOnboardingConflict(errorObject)) {
-      throw errorObject;
-    }
-    try {
-      await cancelOnboardingRequest(token, id, {
-        reason: "Submitting onboarding request",
-      });
-    } catch {
-      throw new Error(
-        "This draft cannot be submitted in place. Create a new onboarding request with Submit immediately.",
-      );
-    }
-    return createSubmitted();
-  }
+export async function reviewOnboardingEmployeeDetails(
+  token: string,
+  id: string | number,
+  sections: Array<{
+    section_key: string;
+    status: "approved" | "changes_requested";
+    comment?: string;
+  }>,
+) {
+  return adminRequest<unknown>(
+    `/api/onboarding/requests/${id}/employee-details/review`,
+    {
+      method: "POST",
+      token,
+      body: { sections },
+    },
+  );
 }
 
 export async function reactivateOnboardingRequest(
@@ -10974,7 +10944,11 @@ export async function emergencyOffboardingAccessTermination(
 ) {
   return adminRequest<unknown>(
     `/api/offboarding/requests/${requestId}/access-termination/emergency`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -10984,7 +10958,10 @@ export async function retryOffboardingAccessTermination(
 ) {
   return adminRequest<unknown>(
     `/api/offboarding/requests/${requestId}/access-termination/retry`,
-    { method: "POST", token },
+    {
+      method: "POST",
+      token,
+    },
   );
 }
 
@@ -10996,7 +10973,11 @@ export async function delegateOffboardingApproval(
 ) {
   return adminRequest<unknown>(
     `/api/offboarding/requests/${requestId}/approvals/${approvalId}/delegate`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -11008,7 +10989,11 @@ export async function updateOffboardingSettlement(
 ) {
   return adminRequest<unknown>(
     `/api/offboarding/requests/${requestId}/settlements/${itemId}`,
-    { method: "PATCH", token, body: data },
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -11020,7 +11005,11 @@ export async function reassignOffboardingTask(
 ) {
   return adminRequest<unknown>(
     `/api/offboarding/requests/${requestId}/tasks/${taskId}/reassign`,
-    { method: "PATCH", token, body: data },
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -11030,7 +11019,10 @@ export async function createEmployeeFinanceOffboardingRecoveries(
 ) {
   return adminRequest<unknown>(
     `/api/finance/employee-finance/offboarding/${offboardingRequestId}/recoveries`,
-    { method: "POST", token },
+    {
+      method: "POST",
+      token,
+    },
   );
 }
 
@@ -12072,6 +12064,31 @@ export async function createEmployeeProfile(
   }
 }
 
+export async function updateMyEmployeeProfile(
+  token: string,
+  data: Omit<
+    CreateEmployeePayload,
+    | "employee_no"
+    | "primary_branch_id"
+    | "primary_department_id"
+    | "primary_position_id"
+    | "position_id"
+    | "employment_status"
+    | "employment_type"
+    | "hire_date"
+    | "probation_end_date"
+    | "reports_to"
+    | "departments"
+    | "onboarding"
+  >,
+) {
+  return adminRequest<unknown>("/api/employees/me", {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
 /**
  * Creates a pending employee invitation and queues both configured delivery
  * channels. The backend turns the invitation into a user and employee when
@@ -12113,7 +12130,9 @@ export async function resendEmployeeInvitation(
 export async function getPublicEmployeeInvitation(token: string) {
   const payload = await adminRequest<unknown>(
     `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
-    { dedupe: false },
+    {
+      dedupe: false,
+    },
   );
   return normalizeSingle(payload) as unknown as PublicEmployeeInvitation;
 }
@@ -12498,36 +12517,7 @@ export async function selectMyProfileAvatar(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-/** Pull backup codes from 2FA setup / regenerate payloads. */
-export function extractBackupCodes(payload: unknown): string[] {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data) ?? root;
-  const candidates = [
-    data?.backup_codes,
-    data?.backupCodes,
-    data?.recovery_codes,
-    data?.recoveryCodes,
-    data?.codes,
-    root?.backup_codes,
-    root?.backupCodes,
-    root?.recovery_codes,
-    root?.recoveryCodes,
-  ];
-
-  for (const value of candidates) {
-    if (Array.isArray(value)) {
-      return value.map((entry) => String(entry ?? "").trim()).filter(Boolean);
-    }
-    if (typeof value === "string" && value.trim()) {
-      return value
-        .split(/[\n,]+/)
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-    }
-  }
-
-  return [];
-}
+export { extractBackupCodes };
 
 /**
  * GET /api/me/profile/avatar-options
@@ -13180,7 +13170,9 @@ export async function listHrProfileUpdateApprovalRequests(
     );
     const payload = await adminRequest<unknown>(
       `/api/hr/self-service/approvals/profile-updates?${query.toString()}`,
-      { token },
+      {
+        token,
+      },
     );
     const rows = normalizeList(payload);
     const pagination = extractUsersPagination(
@@ -13270,7 +13262,9 @@ export async function listHrProfileUpdateApprovalRequests(
     });
     const payload = await adminRequest<unknown>(
       `/api/hr/self-service/approvals/profile-updates?${bare.toString()}`,
-      { token },
+      {
+        token,
+      },
     );
     const rows = normalizeList(payload);
     const pagination = extractUsersPagination(
@@ -15208,7 +15202,10 @@ export async function calculatePayrollFinalSettlement(
 ) {
   return adminRequest<unknown>(
     `/api/payroll/reports/final-settlements/${offboardingRequestId}/calculate`,
-    { method: "POST", token },
+    {
+      method: "POST",
+      token,
+    },
   );
 }
 
@@ -16264,7 +16261,11 @@ export async function actionPerformanceReviewWorkflow(
 ) {
   return adminRequest<unknown>(
     `/api/performance/reviews/${reviewId}/workflow/action`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16399,7 +16400,11 @@ export async function carryForwardPerformanceDevelopmentGoals(
 ) {
   return adminRequest<unknown>(
     "/api/performance/development-plans/carry-forward",
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16454,7 +16459,11 @@ export async function createPerformanceImprovementPlan(
 ) {
   return adminRequest<unknown>(
     `/api/performance/reviews/${reviewId}/improvement-plan`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16475,7 +16484,11 @@ export async function reviewPerformanceImprovementMilestone(
 ) {
   return adminRequest<unknown>(
     `/api/performance/improvement-milestones/${milestoneId}/review`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16513,7 +16526,11 @@ export async function approvePerformanceReview(
 ) {
   return adminRequest<unknown>(
     `/api/performance/reviews/${periodAssignmentId}/approve`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16524,7 +16541,11 @@ export async function invitePerformanceFeedback360(
 ) {
   return adminRequest<unknown>(
     `/api/performance/reviews/${reviewId}/feedback-360/invitations`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16644,7 +16665,9 @@ export async function listManagerEmployeeKpis(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/performance/manager/kpis${buildEmployeeKpiQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -16727,7 +16750,11 @@ export async function submitMyPerformanceSelfReview(
 ) {
   return adminRequest<unknown>(
     `/api/performance/me/reviews/${periodAssignmentId}/self-review`,
-    { method: "POST", token, body: { review } },
+    {
+      method: "POST",
+      token,
+      body: { review },
+    },
   );
 }
 
@@ -16738,7 +16765,11 @@ export async function submitMyPerformanceFeedback360(
 ) {
   return adminRequest<unknown>(
     `/api/performance/me/feedback-360/${requestId}/submit`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16749,7 +16780,11 @@ export async function declineMyPerformanceFeedback360(
 ) {
   return adminRequest<unknown>(
     `/api/performance/me/feedback-360/${requestId}/decline`,
-    { method: "POST", token, body: { reason } },
+    {
+      method: "POST",
+      token,
+      body: { reason },
+    },
   );
 }
 
@@ -16791,7 +16826,11 @@ export async function updateMyPerformanceDevelopmentGoal(
 ) {
   return adminRequest<unknown>(
     `/api/performance/me/development-goals/${goalId}`,
-    { method: "PATCH", token, body: data },
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16847,7 +16886,11 @@ export async function validateManagerAchievement(
 ) {
   return adminRequest<unknown>(
     `/api/performance/manager/achievements/${achievementId}/validate`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -16858,7 +16901,11 @@ export async function submitManagerPerformanceReview(
 ) {
   return adminRequest<unknown>(
     `/api/performance/manager/reviews/${periodAssignmentId}/submit`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -17390,7 +17437,9 @@ export async function listMyFieldFollowUps(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/me/field-visits/follow-ups/list${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17530,7 +17579,9 @@ export async function listEmployeeFinanceAuditTimeline(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/employee-finance/reports/audit${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17585,7 +17636,9 @@ export async function listEmployeeFinanceApplications(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/employee-finance/applications${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17608,7 +17661,11 @@ export async function approveEmployeeFinanceApplication(
 ) {
   return adminRequest<unknown>(
     `/api/finance/employee-finance/applications/${id}/approve`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -17645,7 +17702,9 @@ export async function listEmployeeFinanceAccounts(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/finance/employee-finance/accounts${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17656,7 +17715,9 @@ export async function getEmployeeFinanceAccountStatement(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/finance/employee-finance/accounts/${accountId}/statement`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
@@ -17720,7 +17781,11 @@ export async function requestEmployeeFinanceDeferment(
 ) {
   return adminRequest<unknown>(
     `/api/finance/employee-finance/accounts/${accountId}/deferments`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -17731,7 +17796,11 @@ export async function requestEmployeeFinanceReschedule(
 ) {
   return adminRequest<unknown>(
     `/api/finance/employee-finance/accounts/${accountId}/reschedules`,
-    { method: "POST", token, body: data },
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -17741,7 +17810,10 @@ export async function createEmployeeFinanceSettlementQuote(
 ) {
   return adminRequest<unknown>(
     `/api/finance/employee-finance/accounts/${accountId}/settlement-quotes`,
-    { method: "POST", token },
+    {
+      method: "POST",
+      token,
+    },
   );
 }
 
@@ -17758,7 +17830,9 @@ export async function listEmployeeFinanceApplicationDocuments(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/employee-finance/applications/${applicationId}/documents`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17785,7 +17859,9 @@ export async function listEmployeeFinanceApplicationGuarantors(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/employee-finance/applications/${applicationId}/guarantors`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -17796,7 +17872,9 @@ export async function getEmployeeFinanceSanctionLetter(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/employee-finance/applications/${applicationId}/sanction-letter`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
@@ -18114,7 +18192,11 @@ export async function updateMyActivityEntry(
 ) {
   return adminRequest<unknown>(
     `/api/me/activities/reports/${reportId}/entries/${entryId}`,
-    { method: "PATCH", token, body: data },
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -18172,7 +18254,9 @@ export async function listManagerPendingActivityReviews(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/manager/activities/pending-reviews${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeList(payload);
 }
@@ -18421,7 +18505,11 @@ export async function updatePlatformSmsRegistryItem(
 ) {
   return adminRequest<unknown>(
     `/api/sms/platform/registry/${encodeURIComponent(code)}`,
-    { method: "PATCH", token, body: data },
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
   );
 }
 
@@ -18639,7 +18727,9 @@ export async function getHrAttendanceSchedulePreview(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/hr/attendance/schedules/preview${buildRecordQuery(params)}`,
-    { token },
+    {
+      token,
+    },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
@@ -18730,16 +18820,22 @@ export async function runAnalyticsCustomReport(
 }
 
 export async function getAnalyticsReportCatalog(token: string) {
-  const payload = await adminRequest<unknown>("/api/analytics/reports/catalog", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/analytics/reports/catalog",
+    {
+      token,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listOperationalAnalyticsReports(token: string) {
-  const payload = await adminRequest<unknown>("/api/analytics/reports/operational", {
-    token,
-  });
+  const payload = await adminRequest<unknown>(
+    "/api/analytics/reports/operational",
+    {
+      token,
+    },
+  );
   return normalizeList(payload);
 }
 

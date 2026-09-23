@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
   output: "standalone",
   allowedDevOrigins: ["192.168.1.165"],
   bundlePagesRouterDependencies: true,
+  // Dashboard routes are large. Keep only the active one resident so a long
+  // dev session does not pin every visited page in memory.
+  onDemandEntries: {
+    maxInactiveAge: 20 * 1000,
+    pagesBufferLength: 2,
+  },
   experimental: {
     webpackMemoryOptimizations: true,
     // Avoid compiling every route into one large resident process. Routes are

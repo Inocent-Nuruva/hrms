@@ -16,7 +16,7 @@ import type {
   AuthUser,
   AuthTokens,
 } from "@/types";
-import { extractBackupCodes } from "@/lib/admin-api";
+import { extractBackupCodes } from "@/lib/backup-codes";
 import { readPermissionLabelsFromUnknown } from "@/lib/dashboard-permissions";
 import { apiRequest, ApiError } from "@/services/api";
 import { decodeJwtPayload, isLikelyRefreshToken } from "@/utils/token-utils";

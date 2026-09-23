@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { Ban, CheckCheck, CircleHelp, Pencil, Plus, RefreshCw, Send, Trash2, X } from "lucide-react"
+import { Ban, CheckCheck, CircleHelp, Copy, Pencil, Plus, RefreshCw, Send, Trash2, X } from "lucide-react"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 
@@ -14,7 +14,6 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import {
-  acknowledgeOnboardingRequest,
   approveOnboardingRequest,
   cancelOnboardingRequest,
   completeOnboardingRequest,
@@ -52,12 +51,12 @@ import {
   listOnboardingWorkflowSteps,
   listOnboardingWorkflows,
   listResource,
-  listAllRoleUsers,
   listShiftResources,
   listTimetableResources,
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
+  reviewOnboardingEmployeeDetails,
   resendEmployeeInvitation,
   submitOnboardingRequest,
   uploadOnboardingDocument,
@@ -72,21 +71,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogDescription,
@@ -97,14 +83,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { BadgeCheck } from "@/components/animate-ui/icons/badge-check"
 import { CircleX } from "@/components/animate-ui/icons/circle-x"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   buildOnboardingProvisioningPayload,
   type OnboardingDeviceAssignmentDraft,
@@ -119,7 +98,6 @@ import {
   isOnboardingActableStatus,
   isOnboardingDraftStatus,
   preferredAssigneeId,
-  recordHasRole,
   personDisplayName,
   recordMatchesId,
   resolveApprovalOwnerLabel,
@@ -154,7 +132,10 @@ function readStoredToken() {
   const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
   if (authTokensRaw) {
     try {
-      const parsed = JSON.parse(authTokensRaw) as { accessToken?: string; access_token?: string }
+      const parsed = JSON.parse(authTokensRaw) as {
+        accessToken?: string
+        access_token?: string
+      }
       const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
       if (accessToken) {
         return accessToken
@@ -208,6 +189,64 @@ function toRecord(value: unknown): AdminRecord | null {
   return value as AdminRecord
 }
 
+function collectDepartmentIds(row: AdminRecord) {
+  const ids = new Set<number>()
+  const sources = [
+    row,
+    toRecord(row.company_user),
+    toRecord(row.companyUser),
+    toRecord(row.user),
+    toRecord(row.employee),
+    toRecord(row.profile),
+  ].filter((source): source is AdminRecord => Boolean(source))
+
+  sources.forEach((source) => {
+    const directId = readNumber(source, [
+      "department_id",
+      "departmentId",
+      "primary_department_id",
+      "primaryDepartmentId",
+    ])
+    if (directId !== null) ids.add(directId)
+
+    for (const key of ["department", "departmentDetail", "primary_department", "primaryDepartment"]) {
+      const department = toRecord(source[key])
+      const departmentId = department ? readNumber(department, ["id", "department_id"]) : null
+      if (departmentId !== null) ids.add(departmentId)
+    }
+
+    const directIds = Array.isArray(source.department_ids)
+      ? source.department_ids
+      : Array.isArray(source.departmentIds)
+        ? source.departmentIds
+        : []
+    directIds.forEach((value) => {
+      const departmentId = readNumber({ value }, ["value"])
+      if (departmentId !== null) ids.add(departmentId)
+    })
+
+    if (Array.isArray(source.departments)) {
+      source.departments.forEach((value) => {
+        const directDepartmentId = readNumber({ value }, ["value"])
+        if (directDepartmentId !== null) {
+          ids.add(directDepartmentId)
+          return
+        }
+        const assignment = toRecord(value)
+        const nestedDepartment = assignment
+          ? (toRecord(assignment.department) ?? toRecord(assignment.departmentDetail))
+          : null
+        const departmentId = assignment ? readNumber(assignment, ["department_id", "departmentId", "id"]) : null
+        const nestedDepartmentId = nestedDepartment ? readNumber(nestedDepartment, ["id", "department_id"]) : null
+        if (departmentId !== null) ids.add(departmentId)
+        if (nestedDepartmentId !== null) ids.add(nestedDepartmentId)
+      })
+    }
+  })
+
+  return ids
+}
+
 function formatInvitationDate(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
     return "-"
@@ -228,14 +267,26 @@ function invitationDeliveryStatus(row: AdminRecord, channel: "email" | "sms") {
   return channelDelivery ? readString(channelDelivery, ["status"]) : "-"
 }
 
-function invitationDeliveryValue(
-  row: AdminRecord,
-  channel: "email" | "sms",
-  keys: string[]
-) {
+function invitationDeliveryValue(row: AdminRecord, channel: "email" | "sms", keys: string[]) {
   const delivery = toRecord(row.delivery)
   const channelDelivery = toRecord(delivery?.[channel])
   return channelDelivery ? readString(channelDelivery, keys) : "-"
+}
+
+function formatInvitationDeliveryError(value: string) {
+  if (!value || value === "-") return value
+  const normalized = value.trim()
+  const lower = normalized.toLowerCase()
+
+  if (lower.includes("sendasdenied") || lower.includes("not allowed to send as")) {
+    return "The SMTP account cannot use the configured sender address. Use the authenticated mailbox as the sender or grant Send As permission."
+  }
+  if (lower.includes("authentication unsuccessful") || lower.includes("invalid login")) {
+    return "SMTP authentication failed. Check the username, password, and mailbox SMTP AUTH setting."
+  }
+
+  const withoutDiagnostics = normalized.split("[BeginDiagnosticData]", 1)[0]?.trim() || normalized
+  return withoutDiagnostics.length > 320 ? `${withoutDiagnostics.slice(0, 317)}…` : withoutDiagnostics
 }
 
 function invitationDisplayName(row: AdminRecord | null) {
@@ -324,17 +375,9 @@ const ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES = new Set(["onboarding"])
 
 function getEmployeeEmploymentStatus(row: AdminRecord) {
   const nested =
-    toRecord(row.company_user) ??
-    toRecord(row.companyUser) ??
-    toRecord(row.user) ??
-    toRecord(row.profile) ??
-    null
+    toRecord(row.company_user) ?? toRecord(row.companyUser) ?? toRecord(row.user) ?? toRecord(row.profile) ?? null
   return String(
-    row.employment_status ??
-      row.employmentStatus ??
-      nested?.employment_status ??
-      nested?.employmentStatus ??
-      ""
+    row.employment_status ?? row.employmentStatus ?? nested?.employment_status ?? nested?.employmentStatus ?? ""
   )
     .trim()
     .toLowerCase()
@@ -369,14 +412,14 @@ async function listOnboardingRequestsIncludingDrafts(
     sortOrder: "DESC"
     search?: string
     employee_id?: number
-  },
+  }
 ) {
   const [main, ...draftLists] = await Promise.all([
     listOnboardingRequests(token, requestQuery),
     ...ONBOARDING_DRAFT_LIST_STATUSES.map((status) =>
       listOnboardingRequests(token, { ...requestQuery, status }).catch(() => ({
         rows: [] as AdminRecord[],
-      })),
+      }))
     ),
   ])
   return mergeOnboardingRequestRows(main.rows, ...draftLists.map((result) => result.rows))
@@ -402,8 +445,7 @@ function collectRequestEmployeeIds(rows: AdminRecord[]) {
     }
     const nested = toRecord(row.employee) ?? toRecord(row.employee_profile)
     const id =
-      readNumber(row, ["employee_id", "employeeId"]) ??
-      readNumber(nested ?? {}, ["id", "employee_id", "employeeId"])
+      readNumber(row, ["employee_id", "employeeId"]) ?? readNumber(nested ?? {}, ["id", "employee_id", "employeeId"])
     if (id !== null) {
       ids.add(id)
     }
@@ -412,8 +454,7 @@ function collectRequestEmployeeIds(rows: AdminRecord[]) {
 }
 
 function defaultOnboardingWorkflowId(workflows: AdminRecord[]) {
-  const preferred =
-    workflows.find((row) => row.is_default === true || row.isDefault === true) ?? workflows[0] ?? null
+  const preferred = workflows.find((row) => row.is_default === true || row.isDefault === true) ?? workflows[0] ?? null
   return preferred ? readNumber(preferred, ["id", "workflow_id"]) : null
 }
 
@@ -462,23 +503,44 @@ function toTimestamp(value: unknown) {
   return parsed.toLocaleString()
 }
 
-type RequestAction =
-  | "submit"
-  | "approve"
-  | "reject"
-  | "cancel"
-  | "complete"
-  | "delete"
+type RequestAction = "submit" | "approve" | "reject" | "cancel" | "complete" | "delete"
 
 type OnboardingWorkflowStepDraft = {
   id?: number
   is_required: boolean
   name: string
   description: string
+  checklist_items: WorkflowChecklistItem[]
+  metadata?: AdminRecord
   step_type: string
   assigned_role_id?: number
   assigned_user_id?: number
+  assigned_department_id?: number
   due_days: number
+}
+
+type WorkflowChecklistItem = {
+  name: string
+  description: string
+}
+
+function workflowStepChecklist(row: AdminRecord) {
+  const metadata = toRecord(row.metadata)
+  const value = metadata?.checklist_items ?? metadata?.checklistItems
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        const name = item.trim()
+        return name ? { name, description: "" } : null
+      }
+      const record = toRecord(item)
+      if (!record) return null
+      const name = readString(record, ["name", "title"], "").trim()
+      const description = readString(record, ["description", "instructions"], "").trim()
+      return name ? { name, description } : null
+    })
+    .filter((item): item is WorkflowChecklistItem => item !== null)
 }
 
 function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
@@ -488,6 +550,7 @@ function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
   const stepType = readString(row, ["step_type", "task_type", "type"])
   const assignedRoleId = readNumber(row, ["assigned_role_id", "role_id"])
   const assignedUserId = readNumber(row, ["assigned_user_id", "company_user_id", "user_id"])
+  const assignedDepartmentId = readNumber(row, ["assigned_department_id", "department_id"])
   const dueDays = readNumber(row, ["due_days", "expected_duration_days", "dueDays"])
 
   return {
@@ -498,10 +561,15 @@ function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
       String(row.is_required ?? row.isRequired ?? "true").toLowerCase() === "true",
     name: name === "-" ? "" : name,
     description: description === "-" ? "" : description,
+    checklist_items: workflowStepChecklist(row),
+    ...(toRecord(row.metadata) ? { metadata: toRecord(row.metadata) ?? undefined } : {}),
     step_type: stepType === "-" ? "task" : stepType,
     due_days: dueDays !== null && dueDays > 0 ? dueDays : 1,
     ...(assignedRoleId !== null && assignedRoleId > 0 ? { assigned_role_id: assignedRoleId } : {}),
     ...(assignedUserId !== null && assignedUserId > 0 ? { assigned_user_id: assignedUserId } : {}),
+    ...(assignedDepartmentId !== null && assignedDepartmentId > 0
+      ? { assigned_department_id: assignedDepartmentId }
+      : {}),
   }
 }
 
@@ -550,15 +618,7 @@ function extractWorkflowSteps(record: AdminRecord | null): AdminRecord[] {
   return []
 }
 
-const ENVELOPE_STATUS_VALUES = new Set([
-  "success",
-  "ok",
-  "error",
-  "fail",
-  "failed",
-  "true",
-  "false",
-])
+const ENVELOPE_STATUS_VALUES = new Set(["success", "ok", "error", "fail", "failed", "true", "false"])
 
 function isWorkflowStatusValue(value: string) {
   const normalized = value.trim().toLowerCase()
@@ -659,9 +719,7 @@ function workflowFormFromRecord(record: AdminRecord | null): {
       if (candidate !== "-" && isWorkflowStatusValue(candidate)) {
         const lower = candidate.toLowerCase()
         status =
-          lower.includes("inactive") || lower.includes("disabled") || lower.includes("archived")
-            ? "inactive"
-            : "active"
+          lower.includes("inactive") || lower.includes("disabled") || lower.includes("archived") ? "inactive" : "active"
       }
     }
     if (isDefault === null) {
@@ -682,6 +740,13 @@ function workflowFormFromRecord(record: AdminRecord | null): {
 
 /** API body for POST/PATCH workflow steps — never send 0 ids. */
 function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
+  const metadata: AdminRecord = { ...(step.metadata ?? {}) }
+  delete metadata.checklist_items
+  delete metadata.checklistItems
+  if (step.checklist_items.length > 0) {
+    metadata.checklist_items = step.checklist_items
+  }
+
   const payload: {
     is_required: boolean
     name: string
@@ -690,18 +755,24 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
     due_days: number
     assigned_role_id?: number
     assigned_user_id?: number
+    assigned_department_id?: number
+    metadata?: AdminRecord
   } = {
     is_required: Boolean(step.is_required),
     name: String(step.name ?? "").trim(),
     description: String(step.description ?? "").trim(),
     step_type: String(step.step_type ?? "task").trim() || "task",
     due_days: Number(step.due_days) > 0 ? Number(step.due_days) : 1,
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   }
   if (typeof step.assigned_role_id === "number" && step.assigned_role_id > 0) {
     payload.assigned_role_id = step.assigned_role_id
   }
   if (typeof step.assigned_user_id === "number" && step.assigned_user_id > 0) {
     payload.assigned_user_id = step.assigned_user_id
+  }
+  if (typeof step.assigned_department_id === "number" && step.assigned_department_id > 0) {
+    payload.assigned_department_id = step.assigned_department_id
   }
   return payload
 }
@@ -862,9 +933,7 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
     tryAdd(nestedStep.next_action)
   }
 
-  const status = normalized(
-    row.status ?? row.request_status ?? row.onboarding_status ?? row.workflow_status
-  )
+  const status = normalized(row.status ?? row.request_status ?? row.onboarding_status ?? row.workflow_status)
 
   // Status-based fallbacks when API does not expose available_actions.
   if (picked.size === 0) {
@@ -912,7 +981,13 @@ function statusBadgeClass(status: string) {
   if (value === "active" || value === "in_progress" || value === "processing") {
     return "bg-sky-100 text-sky-700"
   }
-  if (value === "draft" || value === "pending" || value === "submitted" || value === "in_review" || value === PENDING_ONBOARDING_STATUS) {
+  if (
+    value === "draft" ||
+    value === "pending" ||
+    value === "submitted" ||
+    value === "in_review" ||
+    value === PENDING_ONBOARDING_STATUS
+  ) {
     return "bg-amber-100 text-amber-700"
   }
   return "bg-slate-100 text-slate-700"
@@ -940,9 +1015,7 @@ function buildAttendanceDeviceLabel(row: AdminRecord, resolveBranchLabel: (branc
   const branchLabel = resolveBranchLabel(readNumber(row, ["branch_id", "branchId"]))
 
   const title = [deviceName, deviceCode, serial].filter((value) => value !== "-")
-  const detail = [model, vendor, integrationType, branchLabel]
-    .filter((value) => value !== "-")
-    .join(" • ")
+  const detail = [model, vendor, integrationType, branchLabel].filter((value) => value !== "-").join(" • ")
 
   if (title.length === 0) {
     return detail || `Device #${readNumber(row, ["id", "device_id"]) ?? "?"}`
@@ -977,10 +1050,7 @@ function MultiSelectChecklist({
         ) : null}
       </div>
       <div
-        className={cn(
-          "overflow-y-auto rounded-md border border-slate-200 bg-white",
-          compact ? "max-h-28" : "max-h-44"
-        )}
+        className={cn("overflow-y-auto rounded-md border border-slate-200 bg-white", compact ? "max-h-28" : "max-h-44")}
       >
         {options.length === 0 ? (
           <div className={cn("text-muted-foreground", compact ? "px-2 py-2 text-xs" : "px-3 py-3 text-sm")}>
@@ -1019,11 +1089,7 @@ function MultiSelectChecklist({
 export function OnboardingView() {
   const searchParams = useSearchParams()
   const highlightedRequestId = React.useMemo(
-    () =>
-      searchParams?.get("highlight") ??
-      searchParams?.get("requestId") ??
-      searchParams?.get("request_id") ??
-      "",
+    () => searchParams?.get("highlight") ?? searchParams?.get("requestId") ?? searchParams?.get("request_id") ?? "",
     [searchParams]
   )
   const requestedTab = searchParams?.get("tab") ?? ""
@@ -1031,11 +1097,8 @@ export function OnboardingView() {
   const actorPermissions = actor.permissionLabels
   const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
   const canViewOnboardingRequests = React.useMemo(
-    () =>
-      actor.ready &&
-      (isEmployeeMode ||
-        canPerformPermission(actorPermissions, "onboarding_requests:read")),
-    [actor.ready, actorPermissions, isEmployeeMode],
+    () => actor.ready && (isEmployeeMode || canPerformPermission(actorPermissions, "onboarding_requests:read")),
+    [actor.ready, actorPermissions, isEmployeeMode]
   )
   const canViewOnboardingWorkflows = React.useMemo(
     () =>
@@ -1049,48 +1112,41 @@ export function OnboardingView() {
         ],
         mode: "any",
       }),
-    [actor.ready, actorPermissions],
+    [actor.ready, actorPermissions]
   )
   const canReadEmployeeDirectory = React.useMemo(
     () => canPerformPermission(actorPermissions, "employees:read"),
-    [actorPermissions],
+    [actorPermissions]
   )
   const canReadOnboardingDocuments = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_documents:read"),
-    [actorPermissions],
+    [actorPermissions]
   )
   const canReadOnboardingTasks = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_tasks:read"),
-    [actorPermissions],
+    [actorPermissions]
   )
-  const canReadRoles = React.useMemo(
-    () => canPerformPermission(actorPermissions, "roles:read"),
-    [actorPermissions],
-  )
+  const canReadRoles = React.useMemo(() => canPerformPermission(actorPermissions, "roles:read"), [actorPermissions])
   const canReadCompanyUsers = React.useMemo(
     () =>
       canPerformPermission(actorPermissions, {
         permissions: ["company_users:read", "users:read"],
         mode: "any",
       }),
-    [actorPermissions],
+    [actorPermissions]
   )
   const canViewPendingInvitations = React.useMemo(
     () =>
       actor.ready &&
       canPerformPermission(actorPermissions, {
-        permissions: [
-          "employees:create",
-          "onboarding_requests:read",
-          "onboarding_workflows:read",
-        ],
+        permissions: ["employees:create", "onboarding_requests:read", "onboarding_workflows:read"],
         mode: "any",
       }),
-    [actor.ready, actorPermissions],
+    [actor.ready, actorPermissions]
   )
   const canResendPendingInvitations = React.useMemo(
     () => canPerformPermission(actorPermissions, "employees:create"),
-    [actorPermissions],
+    [actorPermissions]
   )
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
@@ -1125,7 +1181,7 @@ export function OnboardingView() {
     [actorPermissions]
   )
   const [activeTab, setActiveTab] = React.useState<OnboardingTab>(
-    requestedTab === "invitations" ? "invitations" : "requests",
+    requestedTab === "invitations" ? "invitations" : "requests"
   )
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -1185,6 +1241,9 @@ export function OnboardingView() {
   const [selectedRequestDocuments, setSelectedRequestDocuments] = React.useState<AdminRecord[]>([])
   const [selectedRequestTasks, setSelectedRequestTasks] = React.useState<AdminRecord[]>([])
   const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<AdminRecord[]>([])
+  const [employeeReviewStep, setEmployeeReviewStep] = React.useState(0)
+  const [employeeReviewComments, setEmployeeReviewComments] = React.useState<Record<string, string>>({})
+  const [allowIncompleteWorkflowStart, setAllowIncompleteWorkflowStart] = React.useState(false)
   const [showDocumentComposer, setShowDocumentComposer] = React.useState(false)
   const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
   const [documentForm, setDocumentForm] = React.useState({
@@ -1196,6 +1255,7 @@ export function OnboardingView() {
   const [showTaskComposer, setShowTaskComposer] = React.useState(false)
   const [taskForm, setTaskForm] = React.useState({
     title: "",
+    asset_items: [""],
     description: "",
     task_type: "general",
     assigned_company_user_id: "",
@@ -1227,17 +1287,22 @@ export function OnboardingView() {
     is_default: "false",
     step_name: "",
     step_description: "",
+    step_checklist_items: [] as WorkflowChecklistItem[],
     step_type: "task",
     due_days: "1",
     is_required: "true",
     assigned_user_id: "",
-    assigned_role_id: "",
+    assigned_department_id: "",
   })
   const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
   const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
-  const [roleUsers, setRoleUsers] = React.useState<AdminRecord[]>([])
-  const [roleUsersLoading, setRoleUsersLoading] = React.useState(false)
+  const [checklistItemDialogOpen, setChecklistItemDialogOpen] = React.useState(false)
+  const [editingChecklistItemIndex, setEditingChecklistItemIndex] = React.useState<number | null>(null)
+  const [checklistItemForm, setChecklistItemForm] = React.useState({
+    name: "",
+    description: "",
+  })
   const [editingStepIndex, setEditingStepIndex] = React.useState<number | null>(null)
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
@@ -1251,8 +1316,7 @@ export function OnboardingView() {
   }, [requestedTab])
 
   const resolveBranchLabel = React.useCallback(
-    (branchId: number | null) =>
-      resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"]),
+    (branchId: number | null) => resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"]),
     [branches]
   )
 
@@ -1389,217 +1453,285 @@ export function OnboardingView() {
     []
   )
 
-  const loadLookups = React.useCallback(async (token: string, lookupKeys: OnboardingLookupKey[], force = false) => {
-    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
-    if (missingKeys.length === 0) {
-      return
-    }
-
-    const results = await Promise.all(
-      missingKeys.map(async (key) => {
-        switch (key) {
-          case "employees": {
-            const onboardingEmployees = await listEmployees(token, {
-              page: 1,
-              limit: 200,
-              sortBy: "created_at",
-              sortOrder: "DESC",
-              employment_status: "onboarding",
-            })
-            const merged = mergeEmployeeRows(onboardingEmployees.rows).filter(isOnboardingEligibleEmployee)
-            return {
-              key,
-              result: {
-                ...onboardingEmployees,
-                rows: merged,
-              },
-            }
-          }
-          case "workflows":
-            return { key, result: await listOnboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "users": {
-            const companyUsers = await listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(
-              () => [] as AdminRecord[],
-            )
-            return {
-              key,
-              result: {
-                rows: companyUsers,
-                page: 1,
-                limit: companyUsers.length,
-                total: companyUsers.length,
-                totalPages: 1,
-              },
-            }
-          }
-          case "roles":
-            return { key, result: await listResource("roles", token) }
-          case "branches":
-            return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "departments":
-            return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "shifts":
-            return { key, result: await listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "rotationGroups":
-            return {
-              key,
-              result: await listShiftResources(token, "shift-rotation-groups", {
-                page: 1,
-                limit: 100,
-                sortBy: "created_at",
-                sortOrder: "DESC",
-              }),
-            }
-          case "timetables":
-            return { key, result: await listTimetableResources(token, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "accessGroups":
-            return { key, result: await listAccessControlResources(token, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "accessOrganizations":
-            return { key, result: await listAccessControlResources(token, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "attendanceDevices":
-            return { key, result: await listAttendanceDevices(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-        }
-      })
-    )
-
-    results.forEach((entry) => {
-      if (!entry) return
-      switch (entry.key) {
-        case "employees":
-          setEmployees(entry.result.rows)
-          break
-        case "workflows":
-          setWorkflows(entry.result.rows)
-          break
-        case "users":
-          setUsers(entry.result.rows)
-          break
-        case "roles":
-          setRoles(entry.result)
-          break
-        case "branches":
-          setBranches(entry.result.rows)
-          break
-        case "departments":
-          setDepartments(entry.result.rows)
-          break
-        case "shifts":
-          setShiftRecords(entry.result.rows)
-          break
-        case "rotationGroups":
-          setRotationGroupRecords(entry.result.rows)
-          break
-        case "timetables":
-          setTimetableRecords(entry.result.rows)
-          break
-        case "accessGroups":
-          setAccessGroups(entry.result.rows)
-          break
-        case "accessOrganizations":
-          setAccessOrganizations(entry.result.rows)
-          break
-        case "attendanceDevices":
-          setAttendanceDevices(entry.result.rows)
-          break
-      }
-    })
-
-    setLoadedLookups((current) => {
-      const next = { ...current }
-      missingKeys.forEach((key) => {
-        next[key] = true
-      })
-      return next
-    })
-  }, [loadedLookups])
-
-  const ensureLookups = React.useCallback(async (lookupKeys: OnboardingLookupKey[], force = false) => {
-    const token = readStoredToken()
-    if (!token) {
-      const message = "Authentication required. Please log in again."
-      setError(message)
-      showErrorAlert(message)
-      return false
-    }
-
-    setLoading(true)
-    setError(null)
-    try {
-      await loadLookups(token, lookupKeys, force)
-      return true
-    } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding form data."
-      setError(message)
-      showErrorAlert(message)
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [loadLookups])
-
-  const reloadAll = React.useCallback(async (targetTab: OnboardingTab = activeTab, force = false) => {
-    const token = readStoredToken()
-    if (!token) {
-      const message = "Authentication required. Please log in again."
-      setError(message)
-      showErrorAlert(message)
-      return
-    }
-
-    const requestQuery = {
-      page: 1,
-      limit: 100,
-      sortBy: "created_at" as const,
-      sortOrder: "DESC" as const,
-      search: debouncedRequestSearch.trim() || undefined,
-      employee_id:
-        requestEmployeeFilter && Number(requestEmployeeFilter) > 0
-          ? Number(requestEmployeeFilter)
-          : undefined,
-    }
-    const workflowQuery = {
-      page: 1,
-      limit: 100,
-      sortBy: "created_at" as const,
-      sortOrder: "DESC" as const,
-      search: debouncedWorkflowSearch.trim() || undefined,
-      status: workflowStatusFilter !== "all" ? workflowStatusFilter : undefined,
-    }
-
-    const fetchKey =
-      targetTab === "invitations"
-        ? "invitations:pending"
-        : targetTab === "requests"
-        ? `requests:${JSON.stringify(requestQuery)}`
-        : `workflows:${JSON.stringify(workflowQuery)}`
-
-    if (!force) {
-      const lastKey =
-        targetTab === "invitations"
-          ? invitationsFetchKeyRef.current
-          : targetTab === "requests"
-            ? requestsFetchKeyRef.current
-            : workflowsFetchKeyRef.current
-      if (lastKey === fetchKey) {
+  const loadLookups = React.useCallback(
+    async (token: string, lookupKeys: OnboardingLookupKey[], force = false) => {
+      const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+      if (missingKeys.length === 0) {
         return
       }
-    }
 
-    setLoading(true)
-    setError(null)
-    try {
-      if (targetTab === "invitations") {
-        const invitationRows = await listPendingEmployeeInvitations(token)
-        setInvitations(invitationRows)
-        invitationsFetchKeyRef.current = fetchKey
-      } else if (targetTab === "requests") {
-        if (isEmployeeMode) {
-          const mine = await listMyOnboardingRequests(token)
-          setRequests(mine)
-          requestsFetchKeyRef.current = fetchKey
-        } else {
-          const [requestRowsResult, employeesResult, recentEmployeesResult, workflowsResult] =
-            await Promise.all([
+      const results = await Promise.all(
+        missingKeys.map(async (key) => {
+          switch (key) {
+            case "employees": {
+              const onboardingEmployees = await listEmployees(token, {
+                page: 1,
+                limit: 200,
+                sortBy: "created_at",
+                sortOrder: "DESC",
+                employment_status: "onboarding",
+              })
+              const merged = mergeEmployeeRows(onboardingEmployees.rows).filter(isOnboardingEligibleEmployee)
+              return {
+                key,
+                result: {
+                  ...onboardingEmployees,
+                  rows: merged,
+                },
+              }
+            }
+            case "workflows":
+              return {
+                key,
+                result: await listOnboardingWorkflows(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "users": {
+              const companyUsers = await listAllCurrentCompanyUsers(token, {
+                maxPages: 30,
+              }).catch(() => [] as AdminRecord[])
+              return {
+                key,
+                result: {
+                  rows: companyUsers,
+                  page: 1,
+                  limit: companyUsers.length,
+                  total: companyUsers.length,
+                  totalPages: 1,
+                },
+              }
+            }
+            case "roles":
+              return { key, result: await listResource("roles", token) }
+            case "branches":
+              return {
+                key,
+                result: await listBranches(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "departments":
+              return {
+                key,
+                result: await listDepartments(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "shifts":
+              return {
+                key,
+                result: await listShiftResources(token, "shifts", {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "rotationGroups":
+              return {
+                key,
+                result: await listShiftResources(token, "shift-rotation-groups", {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "timetables":
+              return {
+                key,
+                result: await listTimetableResources(token, "timetables", {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "accessGroups":
+              return {
+                key,
+                result: await listAccessControlResources(token, "groups", {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "accessOrganizations":
+              return {
+                key,
+                result: await listAccessControlResources(token, "organizations", {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+            case "attendanceDevices":
+              return {
+                key,
+                result: await listAttendanceDevices(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              }
+          }
+        })
+      )
+
+      results.forEach((entry) => {
+        if (!entry) return
+        switch (entry.key) {
+          case "employees":
+            setEmployees(entry.result.rows)
+            break
+          case "workflows":
+            setWorkflows(entry.result.rows)
+            break
+          case "users":
+            setUsers(entry.result.rows)
+            break
+          case "roles":
+            setRoles(entry.result)
+            break
+          case "branches":
+            setBranches(entry.result.rows)
+            break
+          case "departments":
+            setDepartments(entry.result.rows)
+            break
+          case "shifts":
+            setShiftRecords(entry.result.rows)
+            break
+          case "rotationGroups":
+            setRotationGroupRecords(entry.result.rows)
+            break
+          case "timetables":
+            setTimetableRecords(entry.result.rows)
+            break
+          case "accessGroups":
+            setAccessGroups(entry.result.rows)
+            break
+          case "accessOrganizations":
+            setAccessOrganizations(entry.result.rows)
+            break
+          case "attendanceDevices":
+            setAttendanceDevices(entry.result.rows)
+            break
+        }
+      })
+
+      setLoadedLookups((current) => {
+        const next = { ...current }
+        missingKeys.forEach((key) => {
+          next[key] = true
+        })
+        return next
+      })
+    },
+    [loadedLookups]
+  )
+
+  const ensureLookups = React.useCallback(
+    async (lookupKeys: OnboardingLookupKey[], force = false) => {
+      const token = readStoredToken()
+      if (!token) {
+        const message = "Authentication required. Please log in again."
+        setError(message)
+        showErrorAlert(message)
+        return false
+      }
+
+      setLoading(true)
+      setError(null)
+      try {
+        await loadLookups(token, lookupKeys, force)
+        return true
+      } catch (errorObject) {
+        const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding form data."
+        setError(message)
+        showErrorAlert(message)
+        return false
+      } finally {
+        setLoading(false)
+      }
+    },
+    [loadLookups]
+  )
+
+  const reloadAll = React.useCallback(
+    async (targetTab: OnboardingTab = activeTab, force = false) => {
+      const token = readStoredToken()
+      if (!token) {
+        const message = "Authentication required. Please log in again."
+        setError(message)
+        showErrorAlert(message)
+        return
+      }
+
+      const requestQuery = {
+        page: 1,
+        limit: 100,
+        sortBy: "created_at" as const,
+        sortOrder: "DESC" as const,
+        search: debouncedRequestSearch.trim() || undefined,
+        employee_id:
+          requestEmployeeFilter && Number(requestEmployeeFilter) > 0 ? Number(requestEmployeeFilter) : undefined,
+      }
+      const workflowQuery = {
+        page: 1,
+        limit: 100,
+        sortBy: "created_at" as const,
+        sortOrder: "DESC" as const,
+        search: debouncedWorkflowSearch.trim() || undefined,
+        status: workflowStatusFilter !== "all" ? workflowStatusFilter : undefined,
+      }
+
+      const fetchKey =
+        targetTab === "invitations"
+          ? "invitations:pending"
+          : targetTab === "requests"
+            ? `requests:${JSON.stringify(requestQuery)}`
+            : `workflows:${JSON.stringify(workflowQuery)}`
+
+      if (!force) {
+        const lastKey =
+          targetTab === "invitations"
+            ? invitationsFetchKeyRef.current
+            : targetTab === "requests"
+              ? requestsFetchKeyRef.current
+              : workflowsFetchKeyRef.current
+        if (lastKey === fetchKey) {
+          return
+        }
+      }
+
+      setLoading(true)
+      setError(null)
+      try {
+        if (targetTab === "invitations") {
+          const invitationRows = await listPendingEmployeeInvitations(token)
+          setInvitations(invitationRows)
+          invitationsFetchKeyRef.current = fetchKey
+        } else if (targetTab === "requests") {
+          if (isEmployeeMode) {
+            const mine = await listMyOnboardingRequests(token)
+            setRequests(mine)
+            requestsFetchKeyRef.current = fetchKey
+          } else {
+            const [requestRowsResult, employeesResult, recentEmployeesResult, workflowsResult] = await Promise.all([
               listOnboardingRequestsIncludingDrafts(token, requestQuery),
               canReadEmployeeDirectory
                 ? listEmployees(token, {
@@ -1627,96 +1759,94 @@ export function OnboardingView() {
                   })
                 : Promise.resolve(null),
             ])
-          const onboardingEmployees = mergeEmployeeRows(
-            employeesResult?.rows ?? [],
-            recentEmployeesResult?.rows ?? [],
-          ).filter(isOnboardingEligibleEmployee)
-          if (employeesResult || recentEmployeesResult) {
-            setEmployees(onboardingEmployees)
-          }
-          if (workflowsResult) {
-            setWorkflows(workflowsResult.rows)
-          }
-          setLoadedLookups((current) => ({
-            ...current,
-            ...(employeesResult || recentEmployeesResult ? { employees: true } : {}),
-            ...(workflowsResult ? { workflows: true } : {}),
-          }))
+            const onboardingEmployees = mergeEmployeeRows(
+              employeesResult?.rows ?? [],
+              recentEmployeesResult?.rows ?? []
+            ).filter(isOnboardingEligibleEmployee)
+            if (employeesResult || recentEmployeesResult) {
+              setEmployees(onboardingEmployees)
+            }
+            if (workflowsResult) {
+              setWorkflows(workflowsResult.rows)
+            }
+            setLoadedLookups((current) => ({
+              ...current,
+              ...(employeesResult || recentEmployeesResult ? { employees: true } : {}),
+              ...(workflowsResult ? { workflows: true } : {}),
+            }))
 
-          let requestRows = requestRowsResult
-          const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult?.rows ?? [])
-          const missingEmployees = onboardingEmployees.filter((employee) => {
-            const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-            return employeeId !== null && !collectRequestEmployeeIds(requestRows).has(employeeId)
-          })
-
-          if (canCreateOnboardingRequests && missingEmployees.length > 0) {
-            const createdDrafts = await Promise.allSettled(
-              missingEmployees.map((employee) => {
-                const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-                if (employeeId === null) {
-                  return Promise.resolve(null)
-                }
-                const name =
-                  getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
-                return ensureDraftOnboardingRequest(token, {
-                  employee_id: employeeId,
-                  workflow_id: defaultWorkflowId ?? undefined,
-                  title:
-                    name && name !== "Unknown employee"
-                      ? `Onboarding for ${name}`
-                      : "Onboarding",
-                })
-              })
-            )
-            const createdRows = createdDrafts.flatMap((result) => {
-              if (result.status !== "fulfilled" || !result.value) {
-                return []
-              }
-              return [result.value]
-            })
-            const refreshedRows = await listOnboardingRequestsIncludingDrafts(token, requestQuery)
-            requestRows = mergeOnboardingRequestRows(refreshedRows, createdRows, requestRows)
-          }
-
-          const coveredEmployeeIds = collectRequestEmployeeIds(requestRows)
-          const pendingRows = onboardingEmployees
-            .filter((employee) => {
+            let requestRows = requestRowsResult
+            const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult?.rows ?? [])
+            const missingEmployees = onboardingEmployees.filter((employee) => {
               const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-              return employeeId !== null && !coveredEmployeeIds.has(employeeId)
+              return employeeId !== null && !collectRequestEmployeeIds(requestRows).has(employeeId)
             })
-            .map(buildPendingOnboardingRow)
 
-          setRequests([...pendingRows, ...requestRows])
-          requestsFetchKeyRef.current = fetchKey
+            if (canCreateOnboardingRequests && missingEmployees.length > 0) {
+              const createdDrafts = await Promise.allSettled(
+                missingEmployees.map((employee) => {
+                  const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+                  if (employeeId === null) {
+                    return Promise.resolve(null)
+                  }
+                  const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+                  return ensureDraftOnboardingRequest(token, {
+                    employee_id: employeeId,
+                    workflow_id: defaultWorkflowId ?? undefined,
+                    title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
+                  })
+                })
+              )
+              const createdRows = createdDrafts.flatMap((result) => {
+                if (result.status !== "fulfilled" || !result.value) {
+                  return []
+                }
+                return [result.value]
+              })
+              const refreshedRows = await listOnboardingRequestsIncludingDrafts(token, requestQuery)
+              requestRows = mergeOnboardingRequestRows(refreshedRows, createdRows, requestRows)
+            }
+
+            const coveredEmployeeIds = collectRequestEmployeeIds(requestRows)
+            const pendingRows = onboardingEmployees
+              .filter((employee) => {
+                const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+                return employeeId !== null && !coveredEmployeeIds.has(employeeId)
+              })
+              .map(buildPendingOnboardingRow)
+
+            setRequests([...pendingRows, ...requestRows])
+            requestsFetchKeyRef.current = fetchKey
+          }
+        } else {
+          const workflowsResult = await listOnboardingWorkflows(token, workflowQuery)
+          setWorkflows(workflowsResult.rows)
+          setLoadedLookups((current) => ({ ...current, workflows: true }))
+          workflowsFetchKeyRef.current = fetchKey
         }
-      } else {
-        const workflowsResult = await listOnboardingWorkflows(token, workflowQuery)
-        setWorkflows(workflowsResult.rows)
-        setLoadedLookups((current) => ({ ...current, workflows: true }))
-        workflowsFetchKeyRef.current = fetchKey
+        setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
+      } catch (errorObject) {
+        const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding data."
+        setError(message)
+        showErrorAlert(message)
+      } finally {
+        setLoading(false)
       }
-      setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
-    } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding data."
-      setError(message)
-      showErrorAlert(message)
-    } finally {
-      setLoading(false)
-    }
-  }, [
-    activeTab,
-    debouncedRequestSearch,
-    debouncedWorkflowSearch,
-    loadLookups,
-    isEmployeeMode,
-    canReadEmployeeDirectory,
-    canCreateOnboardingRequests,
-    canViewOnboardingWorkflows,
-    requestEmployeeFilter,
-    requestStatusFilter,
-    workflowStatusFilter,
-  ])
+    },
+    [
+      activeTab,
+      debouncedRequestSearch,
+      debouncedWorkflowSearch,
+      loadLookups,
+      isEmployeeMode,
+      canReadEmployeeDirectory,
+      canCreateOnboardingRequests,
+      canViewOnboardingWorkflows,
+      requestEmployeeFilter,
+      requestStatusFilter,
+      workflowStatusFilter,
+    ]
+  )
 
   React.useEffect(() => {
     if (!actor.ready) return
@@ -1730,13 +1860,7 @@ export function OnboardingView() {
     } else if (canViewPendingInvitations) {
       setActiveTab("invitations")
     }
-  }, [
-    activeTab,
-    actor.ready,
-    canViewOnboardingRequests,
-    canViewOnboardingWorkflows,
-    canViewPendingInvitations,
-  ])
+  }, [activeTab, actor.ready, canViewOnboardingRequests, canViewOnboardingWorkflows, canViewPendingInvitations])
 
   React.useEffect(() => {
     if (!actor.ready) return
@@ -1788,7 +1912,9 @@ export function OnboardingView() {
   const requestStatusOptions = React.useMemo(() => {
     const statuses = new Set<string>(REQUEST_STATUS_FILTER_OPTIONS)
     requests.forEach((row) => {
-      const value = String(row.status ?? "").trim().toLowerCase()
+      const value = String(row.status ?? "")
+        .trim()
+        .toLowerCase()
       if (value) statuses.add(value)
     })
     return Array.from(statuses)
@@ -1817,35 +1943,31 @@ export function OnboardingView() {
     )
   }, [invitationSearch, invitations])
 
-  const resendPendingInvitation = React.useCallback(async (row: AdminRecord) => {
-    const invitationId = readNumber(row, ["id", "invitation_id"])
-    const token = readStoredToken()
-    if (invitationId === null || !token) {
-      showErrorAlert("Unable to resend this invitation.")
-      return
-    }
+  const resendPendingInvitation = React.useCallback(
+    async (row: AdminRecord) => {
+      const invitationId = readNumber(row, ["id", "invitation_id"])
+      const token = readStoredToken()
+      if (invitationId === null || !token) {
+        showErrorAlert("Unable to resend this invitation.")
+        return
+      }
 
-    setResendingInvitationId(invitationId)
-    try {
-      await resendEmployeeInvitation(token, invitationId)
-      invitationsFetchKeyRef.current = null
-      await reloadAll("invitations", true)
-      showSuccessAlert("Invitation resent by email and SMS.")
-    } catch (errorObject) {
-      showErrorAlert(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to resend the invitation."
-      )
-    } finally {
-      setResendingInvitationId(null)
-    }
-  }, [reloadAll])
-
-  const selectableEmployees = React.useMemo(
-    () => employees.filter(isOnboardingEligibleEmployee),
-    [employees]
+      setResendingInvitationId(invitationId)
+      try {
+        await resendEmployeeInvitation(token, invitationId)
+        invitationsFetchKeyRef.current = null
+        await reloadAll("invitations", true)
+        showSuccessAlert("Invitation resent by email and SMS.")
+      } catch (errorObject) {
+        showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to resend the invitation.")
+      } finally {
+        setResendingInvitationId(null)
+      }
+    },
+    [reloadAll]
   )
+
+  const selectableEmployees = React.useMemo(() => employees.filter(isOnboardingEligibleEmployee), [employees])
 
   const employeeLabelById = React.useMemo(() => {
     const map = new Map<number, string>()
@@ -1857,26 +1979,31 @@ export function OnboardingView() {
     return map
   }, [employees])
 
-  const requestRowEmployeeLabel = React.useCallback((row: AdminRecord) => {
-    const inlineName = getEmployeeDisplayName(row)
-    if (inlineName) {
-      return inlineName
-    }
-    const nestedEmployee = toRecord(row.employee) ?? toRecord(row.employee_profile)
-    if (nestedEmployee) {
-      const nestedName = getEmployeeDisplayName(nestedEmployee)
-      if (nestedName) {
-        return nestedName
+  const requestRowEmployeeLabel = React.useCallback(
+    (row: AdminRecord) => {
+      const inlineName = getEmployeeDisplayName(row)
+      if (inlineName) {
+        return inlineName
       }
-    }
-    const employeeId = readNumber(row, ["employee_id", "employeeId"])
-    return employeeLabelById.get(employeeId ?? -1) ?? (employeeId === null ? "-" : `Employee #${employeeId}`)
-  }, [employeeLabelById])
+      const nestedEmployee = toRecord(row.employee) ?? toRecord(row.employee_profile)
+      if (nestedEmployee) {
+        const nestedName = getEmployeeDisplayName(nestedEmployee)
+        if (nestedName) {
+          return nestedName
+        }
+      }
+      const employeeId = readNumber(row, ["employee_id", "employeeId"])
+      return employeeLabelById.get(employeeId ?? -1) ?? (employeeId === null ? "-" : `Employee #${employeeId}`)
+    },
+    [employeeLabelById]
+  )
 
   const filteredRequests = React.useMemo(() => {
     const searchValue = requestSearch.trim().toLowerCase()
     return requests.filter((row) => {
-      const statusValue = String(row.status ?? "").trim().toLowerCase()
+      const statusValue = String(row.status ?? "")
+        .trim()
+        .toLowerCase()
       if (requestStatusFilter === "draft") {
         if (!isOnboardingDraftStatus(statusValue)) {
           return false
@@ -1916,37 +2043,35 @@ export function OnboardingView() {
   const filteredWorkflows = React.useMemo(() => {
     const searchValue = workflowSearch.trim().toLowerCase()
     return workflows.filter((row) => {
-      const statusValue = String(row.status ?? "").trim().toLowerCase()
+      const statusValue = String(row.status ?? "")
+        .trim()
+        .toLowerCase()
       if (workflowStatusFilter !== "all" && statusValue !== workflowStatusFilter) {
         return false
       }
       if (!searchValue) {
         return true
       }
-      return [row.id, row.workflow_id, row.name, row.title, row.description, row.status, row.is_default]
-        .some((value) =>
-          String(value ?? "")
-            .toLowerCase()
-            .includes(searchValue)
-        )
+      return [row.id, row.workflow_id, row.name, row.title, row.description, row.status, row.is_default].some((value) =>
+        String(value ?? "")
+          .toLowerCase()
+          .includes(searchValue)
+      )
     })
   }, [workflowSearch, workflowStatusFilter, workflows])
 
   const workflowStatusOptions = React.useMemo(() => {
     const statuses = new Set<string>(WORKFLOW_STATUS_FILTER_OPTIONS)
     workflows.forEach((row) => {
-      const value = String(row.status ?? "").trim().toLowerCase()
+      const value = String(row.status ?? "")
+        .trim()
+        .toLowerCase()
       if (value) statuses.add(value)
     })
     return Array.from(statuses)
   }, [workflows])
 
-  function resolveOptionLabel(
-    rows: AdminRecord[],
-    id: number | null,
-    idKeys: string[],
-    labelKeys: string[]
-  ) {
+  function resolveOptionLabel(rows: AdminRecord[], id: number | null, idKeys: string[], labelKeys: string[]) {
     if (id === null) return "-"
     const found = rows.find((row) => recordMatchesId(row, id, idKeys))
     if (!found) return "-"
@@ -2017,14 +2142,9 @@ export function OnboardingView() {
     setRequestProvisioning((previous) => ({
       ...previous,
       attendanceMode: mode,
-      shiftAssignment:
-        mode === "shift"
-          ? previous.shiftAssignment
-          : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      shiftAssignment: mode === "shift" ? previous.shiftAssignment : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
       timetableAssignment:
-        mode === "timetable"
-          ? previous.timetableAssignment
-          : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+        mode === "timetable" ? previous.timetableAssignment : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
     }))
   }
 
@@ -2059,17 +2179,18 @@ export function OnboardingView() {
   )
 
   const assignableUsers = React.useMemo(() => {
-    const roleId = Number(workflowForm.assigned_role_id)
+    const departmentId = Number(workflowForm.assigned_department_id)
     const selectedId = Number(workflowForm.assigned_user_id)
-    const hasRole = Number.isFinite(roleId) && roleId > 0
-    const roleSource = roleUsers.map(flattenAssigneeRecord)
     const catalog = users.map(flattenAssigneeRecord)
-    const source = hasRole && roleSource.length > 0 ? roleSource : catalog
-    const filtered = filterAssigneesForStep(source, {
-      roleId: hasRole && roleSource.length === 0 ? roleId : null,
+    const filtered = filterAssigneesForStep(catalog, {
       selectedId: Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
     })
-    const usable = filtered.length > 0 ? filtered : catalog
+    const hasDepartmentData = filtered.some((row) => collectDepartmentIds(row).size > 0)
+    const departmentUsers =
+      Number.isFinite(departmentId) && departmentId > 0
+        ? filtered.filter((row) => collectDepartmentIds(row).has(departmentId))
+        : []
+    const usable = hasDepartmentData ? departmentUsers : filtered
     const seen = new Set<number>()
     return usable.filter((row) => {
       const id = preferredAssigneeId(row)
@@ -2077,42 +2198,23 @@ export function OnboardingView() {
       seen.add(id)
       return true
     })
-  }, [roleUsers, users, workflowForm.assigned_role_id, workflowForm.assigned_user_id])
+  }, [users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
 
-  React.useEffect(() => {
-    const roleId = Number(workflowForm.assigned_role_id)
-    if (!Number.isFinite(roleId) || roleId <= 0) {
-      setRoleUsers([])
-      setRoleUsersLoading(false)
-      return
-    }
-    const token = readStoredToken()
-    if (!token) {
-      setRoleUsers([])
-      return
-    }
-    let cancelled = false
-    setRoleUsersLoading(true)
-    void (async () => {
-      try {
-        const result = await listAllRoleUsers(token, roleId, { maxPages: 30 })
-        if (!cancelled) {
-          setRoleUsers(result.map(flattenAssigneeRecord))
-        }
-      } catch {
-        if (!cancelled) {
-          setRoleUsers([])
-        }
-      } finally {
-        if (!cancelled) {
-          setRoleUsersLoading(false)
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [workflowForm.assigned_role_id])
+  const taskAssignableUsers = React.useMemo(() => {
+    const departmentId = Number(taskForm.assigned_department_id)
+    if (!Number.isFinite(departmentId) || departmentId <= 0) return []
+    const catalog = users.map(flattenAssigneeRecord)
+    const hasDepartmentData = catalog.some((row) => collectDepartmentIds(row).size > 0)
+    const filtered = catalog.filter((row) => collectDepartmentIds(row).has(departmentId))
+    const source = hasDepartmentData ? filtered : catalog
+    const seen = new Set<number>()
+    return source.filter((row) => {
+      const id = preferredAssigneeId(row)
+      if (id === null || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }, [taskForm.assigned_department_id, users])
 
   async function hydrateAssignedUser(assignedId: number | null) {
     if (assignedId === null || assignedId <= 0) {
@@ -2134,21 +2236,25 @@ export function OnboardingView() {
     setUsers((current) =>
       findAssigneeRecord(current, assignedId)
         ? current
-        : [{ id: assignedId, full_name: `User #${assignedId}` }, ...current],
+        : [{ id: assignedId, full_name: `User #${assignedId}` }, ...current]
     )
     return String(assignedId)
   }
 
   function resetWorkflowStepForm() {
+    setChecklistItemDialogOpen(false)
+    setEditingChecklistItemIndex(null)
+    setChecklistItemForm({ name: "", description: "" })
     setWorkflowForm((prev) => ({
       ...prev,
       step_name: "",
       step_description: "",
+      step_checklist_items: [],
       step_type: "task",
       due_days: "1",
       is_required: "true",
       assigned_user_id: "",
-      assigned_role_id: "",
+      assigned_department_id: "",
     }))
   }
 
@@ -2160,11 +2266,12 @@ export function OnboardingView() {
       is_default: "false",
       step_name: "",
       step_description: "",
+      step_checklist_items: [],
       step_type: "task",
       due_days: "1",
       is_required: "true",
       assigned_user_id: "",
-      assigned_role_id: "",
+      assigned_department_id: "",
     })
     setWorkflowSteps([])
     setPersistedWorkflowStepIds([])
@@ -2203,6 +2310,7 @@ export function OnboardingView() {
   function resetTaskForm() {
     setTaskForm({
       title: "",
+      asset_items: [""],
       description: "",
       task_type: "general",
       assigned_company_user_id: "",
@@ -2239,43 +2347,100 @@ export function OnboardingView() {
 
   function buildStepFromWorkflowForm() {
     if (!workflowForm.step_name.trim()) {
-      return { error: "Step name is required.", step: null as AdminRecord | null }
+      return {
+        error: "Step name is required.",
+        step: null as AdminRecord | null,
+      }
     }
 
-    if (!workflowForm.step_description.trim()) {
-      return { error: "Step description is required.", step: null as AdminRecord | null }
+    const checklistItems: WorkflowChecklistItem[] =
+      workflowForm.step_type === "sign_off"
+        ? []
+        : workflowForm.step_checklist_items.map((item) => ({
+            name: item.name.trim(),
+            description: item.description.trim(),
+          }))
+    if (
+      workflowForm.step_type !== "sign_off" &&
+      (checklistItems.length === 0 || checklistItems.some((item) => !item.name))
+    ) {
+      return {
+        error: "Add at least one named checklist item.",
+        step: null as AdminRecord | null,
+      }
     }
 
     const dueDays = Number(workflowForm.due_days)
     if (!Number.isFinite(dueDays) || dueDays < 1) {
-      return { error: "Due days must be 1 or greater.", step: null as AdminRecord | null }
+      return {
+        error: "Due days must be 1 or greater.",
+        step: null as AdminRecord | null,
+      }
     }
 
-    const assignedRoleId = Number(workflowForm.assigned_role_id)
     const assignedUserId = Number(workflowForm.assigned_user_id)
-    const hasAssignedRole = Number.isFinite(assignedRoleId) && assignedRoleId > 0
+    const assignedDepartmentId = Number(workflowForm.assigned_department_id)
     const hasAssignedUser = Number.isFinite(assignedUserId) && assignedUserId > 0
+    const hasAssignedDepartment = Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0
 
-    if (!hasAssignedRole && !hasAssignedUser) {
-      return { error: "Select at least a role or a user for this step.", step: null as AdminRecord | null }
+    if (!hasAssignedDepartment) {
+      return {
+        error: "Select a department for this step.",
+        step: null as AdminRecord | null,
+      }
     }
 
     const stepPayload: OnboardingWorkflowStepDraft = {
       is_required: workflowForm.is_required === "true",
       name: workflowForm.step_name.trim(),
       description: workflowForm.step_description.trim(),
+      checklist_items: checklistItems,
       step_type: workflowForm.step_type.trim() || "task",
       due_days: dueDays,
     }
 
-    if (hasAssignedRole) {
-      stepPayload.assigned_role_id = assignedRoleId
-    }
     if (hasAssignedUser) {
       stepPayload.assigned_user_id = assignedUserId
     }
+    if (hasAssignedDepartment) {
+      stepPayload.assigned_department_id = assignedDepartmentId
+    }
 
     return { error: null, step: stepPayload }
+  }
+
+  function openCreateChecklistItemDialog() {
+    setEditingChecklistItemIndex(null)
+    setChecklistItemForm({ name: "", description: "" })
+    setChecklistItemDialogOpen(true)
+  }
+
+  function openEditChecklistItemDialog(item: WorkflowChecklistItem, index: number) {
+    setEditingChecklistItemIndex(index)
+    setChecklistItemForm({ ...item })
+    setChecklistItemDialogOpen(true)
+  }
+
+  function saveWorkflowChecklistItem() {
+    const name = checklistItemForm.name.trim()
+    if (!name) {
+      showErrorAlert("Checklist item name is required.")
+      return
+    }
+    const nextItem = {
+      name,
+      description: checklistItemForm.description.trim(),
+    }
+    setWorkflowForm((prev) => ({
+      ...prev,
+      step_checklist_items:
+        editingChecklistItemIndex === null
+          ? [...prev.step_checklist_items, nextItem]
+          : prev.step_checklist_items.map((item, index) => (index === editingChecklistItemIndex ? nextItem : item)),
+    }))
+    setChecklistItemDialogOpen(false)
+    setEditingChecklistItemIndex(null)
+    setChecklistItemForm({ name: "", description: "" })
   }
 
   function addWorkflowStep() {
@@ -2308,7 +2473,7 @@ export function OnboardingView() {
 
   function openCreateStepDialog() {
     void (async () => {
-      const loaded = await ensureLookups(["roles", "users"])
+      const loaded = await ensureLookups(["users", "departments"])
       if (!loaded) {
         return
       }
@@ -2325,23 +2490,25 @@ export function OnboardingView() {
 
   function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
     void (async () => {
-      const loaded = await ensureLookups(["roles", "users"])
+      const loaded = await ensureLookups(["users", "departments"])
       if (!loaded) {
         return
       }
       setEditingStepIndex(index)
       const assignedUserSelectValue = await hydrateAssignedUser(
-        typeof step.assigned_user_id === "number" ? step.assigned_user_id : null,
+        typeof step.assigned_user_id === "number" ? step.assigned_user_id : null
       )
       setWorkflowForm((prev) => ({
         ...prev,
         step_name: String(step.name ?? ""),
         step_description: String(step.description ?? ""),
+        step_checklist_items: step.checklist_items.map((item) => ({ ...item })),
         step_type: String(step.step_type ?? "task"),
         due_days: String(step.due_days ?? "1"),
         is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
         assigned_user_id: assignedUserSelectValue,
-        assigned_role_id: typeof step.assigned_role_id === "number" ? String(step.assigned_role_id) : "",
+        assigned_department_id:
+          typeof step.assigned_department_id === "number" ? String(step.assigned_department_id) : "",
       }))
       setStepDialogOpen(true)
     })()
@@ -2359,9 +2526,7 @@ export function OnboardingView() {
 
     // Prefer the full list row from state when the caller only passes an id.
     const resolvedListRow =
-      listRow ??
-      workflows.find((row) => readNumber(row, ["id", "workflow_id"]) === workflowId) ??
-      null
+      listRow ?? workflows.find((row) => readNumber(row, ["id", "workflow_id"]) === workflowId) ?? null
 
     // Prefill immediately from the table row so the sheet never looks like a blank create form.
     const listBasics = workflowFormFromRecord(resolvedListRow)
@@ -2377,22 +2542,21 @@ export function OnboardingView() {
       is_default: listBasics.is_default ?? "false",
       step_name: "",
       step_description: "",
+      step_checklist_items: [],
       step_type: "task",
       due_days: "1",
       is_required: "true",
       assigned_user_id: "",
-      assigned_role_id: "",
+      assigned_department_id: "",
     }))
     setWorkflowSteps(listSteps)
     setPersistedWorkflowStepIds(
-      listSteps
-        .map((step) => step.id)
-        .filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
+      listSteps.map((step) => step.id).filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
     )
     setWorkflowSheetOpen(true)
 
     // Lookups are only needed for step assignment dropdowns; don't block showing details.
-    void ensureLookups(["roles", "users"])
+    void ensureLookups(["users", "departments"])
 
     setSaving(true)
     setError(null)
@@ -2432,11 +2596,12 @@ export function OnboardingView() {
         is_default: detailBasics.is_default ?? listBasics.is_default ?? prev.is_default ?? "false",
         step_name: "",
         step_description: "",
+        step_checklist_items: [],
         step_type: "task",
         due_days: "1",
         is_required: "true",
         assigned_user_id: "",
-        assigned_role_id: "",
+        assigned_department_id: "",
       }))
       setWorkflowSteps(normalizedSteps)
       setPersistedWorkflowStepIds(
@@ -2460,7 +2625,7 @@ export function OnboardingView() {
       showErrorAlert("You do not have permission to create onboarding workflows.")
       return
     }
-    const loaded = await ensureLookups(["roles", "users"])
+    const loaded = await ensureLookups(["users", "departments"])
     if (!loaded) {
       return
     }
@@ -2531,8 +2696,7 @@ export function OnboardingView() {
     }
 
     const sourceName = readString(row, ["name", "title"])
-    const cloneName =
-      sourceName !== "-" ? `${sourceName} Copy` : `Workflow ${workflowId} Copy`
+    const cloneName = sourceName !== "-" ? `${sourceName} Copy` : `Workflow ${workflowId} Copy`
 
     setSaving(true)
     setError(null)
@@ -2694,8 +2858,9 @@ export function OnboardingView() {
     setError(null)
     try {
       const selectedEmployee =
-        employees.find((row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)) ??
-        null
+        employees.find(
+          (row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
+        ) ?? null
       const fallbackEmployeeNo = readString(selectedEmployee ?? {}, [
         "employee_no",
         "employee_number",
@@ -2731,27 +2896,19 @@ export function OnboardingView() {
           "workflow_status",
         ])
         let submittedRequest: unknown = createdRequest
-        if (
-          createdRequestId !== null &&
-          (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")
-        ) {
+        if (createdRequestId !== null && (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")) {
           submittedRequest = await submitOnboardingRequest(token, createdRequestId, {
-            ...(createdRecord ?? {}),
-            employee_id: Number(requestForm.employee_id),
-            ...(requestForm.workflow_id
-              ? { workflow_id: Number(requestForm.workflow_id) }
-              : {}),
+            allow_incomplete_employee_details: true,
           })
         }
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token,
           request: submittedRequest,
-          requesterName: selectedEmployee ? formatEmployeeOptionLabel(selectedEmployee, Number(requestForm.employee_id)) : undefined,
-          loadRequest:
-            createdRequestId === null
-              ? undefined
-              : () => getOnboardingRequest(token, createdRequestId),
+          requesterName: selectedEmployee
+            ? formatEmployeeOptionLabel(selectedEmployee, Number(requestForm.employee_id))
+            : undefined,
+          loadRequest: createdRequestId === null ? undefined : () => getOnboardingRequest(token, createdRequestId),
         })
       }
 
@@ -2810,15 +2967,9 @@ export function OnboardingView() {
           requests.find((row) => readNumber(row, ["id", "request_id"]) === requestId) ??
           selectedRequestRow ??
           selectedRequestDetails
-        const workflowId = readNumber(sourceRow ?? {}, ["workflow_id", "onboarding_workflow_id"])
-        const submittedRequest = await submitOnboardingRequest(
-          token,
-          requestId,
-          {
-            ...(sourceRow ?? {}),
-            ...(workflowId !== null ? { workflow_id: workflowId } : {}),
-          }
-        )
+        const submittedRequest = await submitOnboardingRequest(token, requestId, {
+          allow_incomplete_employee_details: allowIncompleteWorkflowStart,
+        })
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token,
@@ -2831,9 +2982,13 @@ export function OnboardingView() {
           comments: "Approved",
         })
       } else if (action === "reject") {
-        await rejectOnboardingRequest(token, requestId, { comments: "Rejected" })
+        await rejectOnboardingRequest(token, requestId, {
+          comments: "Rejected",
+        })
       } else if (action === "cancel") {
-        await cancelOnboardingRequest(token, requestId, { reason: "Cancelled by admin" })
+        await cancelOnboardingRequest(token, requestId, {
+          reason: "Cancelled by admin",
+        })
       } else if (action === "complete") {
         await completeOnboardingRequest(token, requestId)
       } else if (action === "delete") {
@@ -2846,9 +3001,7 @@ export function OnboardingView() {
         showSuccessAlert("Onboarding request submitted. It can now be approved.")
       } else {
         showSuccessAlert(
-          action === "delete"
-            ? "Onboarding request removed from list."
-            : `Onboarding request ${action}d successfully.`
+          action === "delete" ? "Onboarding request removed from list." : `Onboarding request ${action}d successfully.`
         )
       }
       await reloadAll(activeTab, true)
@@ -2889,10 +3042,7 @@ export function OnboardingView() {
         ? selectedWorkflowSteps
         : toRecordList(workflowRecord?.steps ?? workflowRecord?.workflow_steps ?? null)
     const requestSteps = toRecordList(
-      detailRecord.steps ??
-        detailRecord.workflow_steps ??
-        detailRecord.tasks ??
-        detailRecord.activities
+      detailRecord.steps ?? detailRecord.workflow_steps ?? detailRecord.tasks ?? detailRecord.activities
     )
 
     const seed = workflowSteps.length ? workflowSteps : progressSteps.length ? progressSteps : requestSteps
@@ -2914,8 +3064,7 @@ export function OnboardingView() {
     const nodes = seed.map((step, index) => {
       const stepIdKey = readString(step, ["id", "step_id", "task_id", "approval_level"]).toLowerCase()
       const stepNameKey = readString(step, ["step_name", "name", "title", "task_title"]).toLowerCase()
-      const matchedProgress =
-        progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
+      const matchedProgress = progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
       const source = matchedProgress ?? step
       const stepStatus = String(
         source.status ??
@@ -2926,7 +3075,8 @@ export function OnboardingView() {
       )
         .trim()
         .toLowerCase()
-      const owner = resolveResponsibleParty(source) !== "-" ? resolveResponsibleParty(source) : resolveResponsibleParty(step)
+      const owner =
+        resolveResponsibleParty(source) !== "-" ? resolveResponsibleParty(source) : resolveResponsibleParty(step)
       const actionLabel = readString(step, ["action_type", "task_type", "name", "title", "step_name"])
       return {
         key: `${readString(step, ["id", "step_id", "task_id"])}-${index}`,
@@ -2971,11 +3121,7 @@ export function OnboardingView() {
 
   const approvalSummary = React.useMemo(
     () =>
-      summarizeOnboardingApprovals(
-        [selectedRequestDetails, selectedRequestProgress, selectedRequestRow],
-        roles,
-        users
-      ),
+      summarizeOnboardingApprovals([selectedRequestDetails, selectedRequestProgress, selectedRequestRow], roles, users),
     [roles, selectedRequestDetails, selectedRequestProgress, selectedRequestRow, users]
   )
 
@@ -3008,65 +3154,58 @@ export function OnboardingView() {
           : [],
       branchAccessLabels:
         branchAccessIds.length > 0
-          ? branchAccessIds.map((id) =>
-              resolveProvisioningLabel(branches, id, ["id", "branch_id"], ["name", "title"])
-            )
+          ? branchAccessIds.map((id) => resolveProvisioningLabel(branches, id, ["id", "branch_id"], ["name", "title"]))
           : [],
       attendanceMode:
         provisioning?.attendance_mode && String(provisioning.attendance_mode).trim()
           ? toTitleCaseWords(String(provisioning.attendance_mode))
           : "-",
-      shiftLabel:
-        shiftAssignment?.shift_id
-          ? resolveProvisioningLabel(
-              shiftRecords,
-              shiftAssignment.shift_id,
-              ["id", "shift_id"],
-              ["name", "title", "code"]
-            )
-          : "-",
+      shiftLabel: shiftAssignment?.shift_id
+        ? resolveProvisioningLabel(
+            shiftRecords,
+            shiftAssignment.shift_id,
+            ["id", "shift_id"],
+            ["name", "title", "code"]
+          )
+        : "-",
       shiftEffectiveFrom: shiftAssignment?.effective_from || "-",
       shiftEffectiveTo: shiftAssignment?.effective_to || "-",
-      rotationGroupLabel:
-        shiftAssignment?.rotation_group_id
-          ? resolveProvisioningLabel(
-              rotationGroupRecords,
-              shiftAssignment.rotation_group_id,
-              ["id", "rotation_group_id", "rotationGroupId", "shift_rotation_group_id"],
-              ["name", "title", "rotation_group_name", "code"]
-            )
-          : "-",
-      timetableLabel:
-        timetableAssignment?.timetable_id
-          ? resolveProvisioningLabel(
-              timetableRecords,
-              timetableAssignment.timetable_id,
-              ["id", "timetable_id"],
-              ["name", "title", "code"]
-            )
-          : "-",
+      rotationGroupLabel: shiftAssignment?.rotation_group_id
+        ? resolveProvisioningLabel(
+            rotationGroupRecords,
+            shiftAssignment.rotation_group_id,
+            ["id", "rotation_group_id", "rotationGroupId", "shift_rotation_group_id"],
+            ["name", "title", "rotation_group_name", "code"]
+          )
+        : "-",
+      timetableLabel: timetableAssignment?.timetable_id
+        ? resolveProvisioningLabel(
+            timetableRecords,
+            timetableAssignment.timetable_id,
+            ["id", "timetable_id"],
+            ["name", "title", "code"]
+          )
+        : "-",
       timetableEffectiveFrom: timetableAssignment?.effective_from || "-",
       timetableEffectiveTo: timetableAssignment?.effective_to || "-",
       deviceConfigured: deviceAssignment ? "Configured" : "Not configured",
       deviceEmployeeNo: deviceAssignment?.employee_no || "-",
-      accessGroupLabel:
-        deviceAssignment?.access_group_id
-          ? resolveProvisioningLabel(
-              accessGroups,
-              deviceAssignment.access_group_id,
-              ["id", "access_group_id"],
-              ["name", "title"]
-            )
-          : "-",
-      organizationLabel:
-        deviceAssignment?.organization_id
-          ? resolveProvisioningLabel(
-              accessOrganizations,
-              deviceAssignment.organization_id,
-              ["id", "organization_id"],
-              ["name", "title"]
-            )
-          : "-",
+      accessGroupLabel: deviceAssignment?.access_group_id
+        ? resolveProvisioningLabel(
+            accessGroups,
+            deviceAssignment.access_group_id,
+            ["id", "access_group_id"],
+            ["name", "title"]
+          )
+        : "-",
+      organizationLabel: deviceAssignment?.organization_id
+        ? resolveProvisioningLabel(
+            accessOrganizations,
+            deviceAssignment.organization_id,
+            ["id", "organization_id"],
+            ["name", "title"]
+          )
+        : "-",
       validEnabled: deviceAssignment?.valid_enabled ? "Yes" : "No",
       validBeginTime: deviceAssignment?.valid_begin_time || "-",
       validEndTime: deviceAssignment?.valid_end_time || "-",
@@ -3074,13 +3213,9 @@ export function OnboardingView() {
       localUiRight: deviceAssignment?.local_ui_right ? "Yes" : "No",
       closeDelayEnabled: deviceAssignment?.close_delay_enabled ? "Yes" : "No",
       maxOpenDoorTime:
-        typeof deviceAssignment?.max_open_door_time === "number"
-          ? String(deviceAssignment.max_open_door_time)
-          : "-",
+        typeof deviceAssignment?.max_open_door_time === "number" ? String(deviceAssignment.max_open_door_time) : "-",
       openDoorTime:
-        typeof deviceAssignment?.open_door_time === "number"
-          ? String(deviceAssignment.open_door_time)
-          : "-",
+        typeof deviceAssignment?.open_door_time === "number" ? String(deviceAssignment.open_door_time) : "-",
       syncNow: deviceAssignment?.sync_now ? "Yes" : "No",
       continueOnError: deviceAssignment?.continue_on_error ? "Yes" : "No",
       deviceLabels:
@@ -3110,56 +3245,106 @@ export function OnboardingView() {
     timetableRecords,
   ])
 
-  const resolveRequestTaskOwner = React.useCallback((task: AdminRecord) => {
-    const nestedUser =
-      toRecord(task.assigned_company_user) ??
-      toRecord(task.assignee) ??
-      toRecord(task.user) ??
-      null
-    const nestedPerson = personDisplayName(nestedUser)
-    if (nestedPerson) {
-      return nestedPerson
-    }
-
-    const assignedUserId = readNumber(task, ["assigned_company_user_id", "assigned_user_id", "user_id"])
-    if (assignedUserId !== null) {
-      const userLabel = resolveOptionLabel(
-        users,
-        assignedUserId,
-        ["id", "company_user_id", "user_id"],
-        ["full_name", "name", "email"]
-      )
-      if (userLabel !== "-") {
-        return userLabel
+  const resolveRequestTaskOwner = React.useCallback(
+    (task: AdminRecord) => {
+      const nestedUser = toRecord(task.assigned_company_user) ?? toRecord(task.assignee) ?? toRecord(task.user) ?? null
+      const nestedPerson = personDisplayName(nestedUser)
+      if (nestedPerson) {
+        return nestedPerson
       }
-    }
 
-    const nestedDepartment = toRecord(task.assigned_department) ?? toRecord(task.department) ?? null
-    if (nestedDepartment) {
-      const nestedLabel = readString(nestedDepartment, ["name", "title"])
-      if (nestedLabel !== "-") {
-        return `Department: ${nestedLabel}`
+      const assignedUserId = readNumber(task, ["assigned_company_user_id", "assigned_user_id", "user_id"])
+      if (assignedUserId !== null) {
+        const userLabel = resolveOptionLabel(
+          users,
+          assignedUserId,
+          ["id", "company_user_id", "user_id"],
+          ["full_name", "name", "email"]
+        )
+        if (userLabel !== "-") {
+          return userLabel
+        }
       }
-    }
 
-    const assignedDepartmentId = readNumber(task, ["assigned_department_id", "department_id"])
-    if (assignedDepartmentId !== null) {
-      const departmentLabel = resolveOptionLabel(
-        departments,
-        assignedDepartmentId,
-        ["id", "department_id"],
-        ["name", "title"]
-      )
-      if (departmentLabel !== "-") {
-        return `Department: ${departmentLabel}`
+      const nestedDepartment = toRecord(task.assigned_department) ?? toRecord(task.department) ?? null
+      if (nestedDepartment) {
+        const nestedLabel = readString(nestedDepartment, ["name", "title"])
+        if (nestedLabel !== "-") {
+          return `Department: ${nestedLabel}`
+        }
       }
-    }
 
-    return "-"
-  }, [departments, users])
+      const assignedDepartmentId = readNumber(task, ["assigned_department_id", "department_id"])
+      if (assignedDepartmentId !== null) {
+        const departmentLabel = resolveOptionLabel(
+          departments,
+          assignedDepartmentId,
+          ["id", "department_id"],
+          ["name", "title"]
+        )
+        if (departmentLabel !== "-") {
+          return `Department: ${departmentLabel}`
+        }
+      }
+
+      return "-"
+    },
+    [departments, users]
+  )
 
   function readCurrentRequestId() {
     return readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["id", "request_id"])
+  }
+
+  const employeeDetailsReview = React.useMemo(() => {
+    const review = toRecord(selectedRequestDetails?.employee_details_review)
+    const sections = toRecordList(review?.sections)
+    return {
+      status: readString(review ?? {}, ["status"], "not_submitted").toLowerCase(),
+      submittedAt: readString(review ?? {}, ["submitted_at"]),
+      sections,
+    }
+  }, [selectedRequestDetails])
+  const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
+
+  async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to review employee details.")
+      return
+    }
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const sectionKey = currentEmployeeReviewSection ? readString(currentEmployeeReviewSection, ["key"]) : ""
+    const comment = employeeReviewComments[sectionKey]?.trim() ?? ""
+    if (!token || requestId === null || !sectionKey || sectionKey === "-") {
+      showErrorAlert("Missing employee review context.")
+      return
+    }
+    if (status === "changes_requested" && !comment) {
+      showErrorAlert("Explain what the employee needs to correct before returning this section.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await reviewOnboardingEmployeeDetails(token, requestId, [
+        {
+          section_key: sectionKey,
+          status,
+          comment: comment || undefined,
+        },
+      ])
+      showSuccessAlert(
+        status === "approved" ? "Section verified." : "Section returned to the employee with your reason."
+      )
+      const nextStep = Math.min(employeeReviewStep + 1, Math.max(employeeDetailsReview.sections.length - 1, 0))
+      await reloadCurrentRequestActivity(requestId)
+      setEmployeeReviewStep(nextStep)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to save the review decision.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function reloadCurrentRequestActivity(requestId?: number | null) {
@@ -3314,32 +3499,44 @@ export function OnboardingView() {
       showErrorAlert("Missing request context.")
       return
     }
-    if (!taskForm.title.trim()) {
+    const assetItems = taskForm.asset_items.map((item) => item.trim())
+    if (taskForm.task_type !== "asset" && !taskForm.title.trim()) {
       showErrorAlert("Task title is required.")
       return
     }
-    if (taskForm.task_type === "asset" && !taskForm.assigned_company_user_id) {
-      showErrorAlert("Select the provider who is allowed to mark this item as given.")
+    if (taskForm.task_type === "asset" && (assetItems.length === 0 || assetItems.some((item) => !item))) {
+      showErrorAlert("Enter a name for every item to provide.")
+      return
+    }
+    if (taskForm.task_type === "asset" && !taskForm.assigned_department_id) {
+      showErrorAlert("Select the department responsible for providing these items.")
       return
     }
 
     setSaving(true)
     try {
-      await createOnboardingTask(token, requestId, {
-        title: taskForm.title.trim(),
-        description: taskForm.description.trim() || undefined,
-        task_type: taskForm.task_type || "general",
-        assigned_company_user_id:
-          taskForm.assigned_company_user_id && Number(taskForm.assigned_company_user_id) > 0
-            ? Number(taskForm.assigned_company_user_id)
-            : undefined,
-        assigned_department_id:
-          taskForm.assigned_department_id && Number(taskForm.assigned_department_id) > 0
-            ? Number(taskForm.assigned_department_id)
-            : undefined,
-        due_date: taskForm.due_date || undefined,
-      })
-      showSuccessAlert("Onboarding task created.")
+      const titles = taskForm.task_type === "asset" ? assetItems : [taskForm.title.trim()]
+      for (const title of titles) {
+        await createOnboardingTask(token, requestId, {
+          title,
+          description: taskForm.description.trim() || undefined,
+          task_type: taskForm.task_type || "general",
+          assigned_company_user_id:
+            taskForm.assigned_company_user_id && Number(taskForm.assigned_company_user_id) > 0
+              ? Number(taskForm.assigned_company_user_id)
+              : undefined,
+          assigned_department_id:
+            taskForm.assigned_department_id && Number(taskForm.assigned_department_id) > 0
+              ? Number(taskForm.assigned_department_id)
+              : undefined,
+          due_date: taskForm.due_date || undefined,
+        })
+      }
+      showSuccessAlert(
+        taskForm.task_type === "asset"
+          ? `${titles.length} item${titles.length === 1 ? "" : "s"} added and assigned.`
+          : "Onboarding task created."
+      )
       resetTaskForm()
       setShowTaskComposer(false)
       await reloadCurrentRequestActivity(requestId)
@@ -3373,37 +3570,6 @@ export function OnboardingView() {
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function acknowledgeSelectedRequest() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
-    }
-    const version =
-      readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-        "employee_acknowledgement_version",
-        "acknowledgement_version",
-      ])
-    const acknowledgementVersion = version && version !== "-" ? version : "v1"
-    setSaving(true)
-    try {
-      await acknowledgeOnboardingRequest(token, requestId, {
-        accepted: true,
-        acknowledgement_version: acknowledgementVersion,
-      })
-      showSuccessAlert("Onboarding acknowledgement recorded.")
-      await reloadCurrentRequestActivity(requestId)
-      await reloadAll("requests", true)
-    } catch (errorObject) {
-      showErrorAlert(
-        errorObject instanceof Error ? errorObject.message : "Failed to acknowledge onboarding."
-      )
     } finally {
       setSaving(false)
     }
@@ -3457,6 +3623,9 @@ export function OnboardingView() {
     setSelectedRequestDocuments([])
     setSelectedRequestTasks([])
     setSelectedWorkflowSteps([])
+    setEmployeeReviewStep(0)
+    setEmployeeReviewComments({})
+    setAllowIncompleteWorkflowStart(false)
     setShowDocumentComposer(false)
     setShowTaskComposer(false)
     resetDocumentForm()
@@ -3466,18 +3635,13 @@ export function OnboardingView() {
       const lookupKeys: OnboardingLookupKey[] = []
       if (canReadRoles) lookupKeys.push("roles")
       if (canReadCompanyUsers) lookupKeys.push("users")
-      const lookupsPromise =
-        lookupKeys.length > 0 ? loadLookups(token, lookupKeys) : Promise.resolve()
+      const lookupsPromise = lookupKeys.length > 0 ? loadLookups(token, lookupKeys) : Promise.resolve()
       const [detail, progress, auditLogs, documents, tasks] = await Promise.all([
         getOnboardingRequest(token, requestId),
         getOnboardingProgress(token, requestId),
         getOnboardingAuditLogs(token, requestId),
-        canReadOnboardingDocuments
-          ? listOnboardingDocuments(token, requestId)
-          : Promise.resolve([]),
-        canReadOnboardingTasks
-          ? listOnboardingTasks(token, requestId)
-          : Promise.resolve([]),
+        canReadOnboardingDocuments ? listOnboardingDocuments(token, requestId) : Promise.resolve([]),
+        canReadOnboardingTasks ? listOnboardingTasks(token, requestId) : Promise.resolve([]),
       ])
       await lookupsPromise
       setSelectedRequestDetails(detail)
@@ -3485,10 +3649,19 @@ export function OnboardingView() {
       setSelectedRequestAuditLogs(auditLogs)
       setSelectedRequestDocuments(documents)
       setSelectedRequestTasks(tasks)
+      const detailReview = toRecord(detail?.employee_details_review)
+      const detailSections = toRecordList(detailReview?.sections)
+      setEmployeeReviewComments(
+        Object.fromEntries(
+          detailSections.map((section) => {
+            const key = readString(section, ["key"])
+            const comment = readString(section, ["comment"], "")
+            return [key, comment === "-" ? "" : comment]
+          })
+        )
+      )
 
-      const assignedWorkflow = detail
-        ? toRecord(detail.workflow ?? detail.assigned_workflow)
-        : null
+      const assignedWorkflow = detail ? toRecord(detail.workflow ?? detail.assigned_workflow) : null
       const workflowId =
         (detail ? readNumber(detail, ["workflow_id", "onboarding_workflow_id"]) : null) ??
         readNumber(row, ["workflow_id", "onboarding_workflow_id"]) ??
@@ -3520,10 +3693,9 @@ export function OnboardingView() {
       return
     }
 
-    const highlightedRow =
-      requests.find((row) =>
-        String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
-      ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
+    const highlightedRow = requests.find(
+      (row) => String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
+    ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
 
     openedHighlightedRequestRef.current = highlightedRequestId
     void openRequestDetails(highlightedRow)
@@ -3560,19 +3732,14 @@ export function OnboardingView() {
       !isCompleted &&
       allowedActions.has("reject")
     const canCancel =
-      !pendingEmployee &&
-      canCancelOnboardingRequests &&
-      !isCancelled &&
-      !isCompleted &&
-      allowedActions.has("cancel")
+      !pendingEmployee && canCancelOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("cancel")
     const canComplete =
       !pendingEmployee &&
       canCompleteOnboardingRequests &&
       !isCancelled &&
       !isCompleted &&
       allowedActions.has("complete")
-    const canDelete =
-      !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
+    const canDelete = !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
 
     return (
       <div
@@ -3681,13 +3848,7 @@ export function OnboardingView() {
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         ) : null}
-        {!pendingEmployee &&
-        !canSubmit &&
-        !canApprove &&
-        !canReject &&
-        !canCancel &&
-        !canComplete &&
-        !canDelete ? (
+        {!pendingEmployee && !canSubmit && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
           <span className="text-[11px] text-muted-foreground">No actions</span>
         ) : null}
       </div>
@@ -3725,10 +3886,7 @@ export function OnboardingView() {
             return (
               <span
                 key={channel}
-                className={cn(
-                  "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
-                  statusBadgeClass(status)
-                )}
+                className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(status))}
               >
                 {channel.toUpperCase()}: {toTitleCaseWords(status)}
               </span>
@@ -3788,9 +3946,7 @@ export function OnboardingView() {
         return (
           <div className="min-w-0">
             <p className="truncate text-xs font-medium">{requestId ?? "-"}</p>
-            {requestNo !== "-" ? (
-              <p className="truncate text-[11px] text-muted-foreground">{requestNo}</p>
-            ) : null}
+            {requestNo !== "-" ? <p className="truncate text-[11px] text-muted-foreground">{requestNo}</p> : null}
           </div>
         )
       },
@@ -3816,7 +3972,9 @@ export function OnboardingView() {
           readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
         ).toLowerCase()
         return (
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(requestStatus)}`}>
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(requestStatus)}`}
+          >
             {toTitleCaseWords(readString(row, ["status"]))}
           </span>
         )
@@ -3861,7 +4019,9 @@ export function OnboardingView() {
       render: (row) => {
         const workflowStatus = readString(row, ["status"])
         return (
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(workflowStatus)}`}>
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(workflowStatus)}`}
+          >
             {toTitleCaseWords(workflowStatus)}
           </span>
         )
@@ -3886,7 +4046,7 @@ export function OnboardingView() {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 className="h-7 w-7 px-0"
                 onClick={() => void openEditWorkflowSheet(workflowId, row)}
                 aria-label={`Edit workflow ${workflowId ?? ""}`}
@@ -3900,21 +4060,21 @@ export function OnboardingView() {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[11px]"
+                variant="ghost"
+                className="h-7 w-7 px-0"
                 onClick={() => void cloneWorkflow(workflowId, row)}
                 aria-label={`Clone workflow ${workflowId ?? ""}`}
                 title="Clone workflow"
                 disabled={saving}
               >
-                Copy
+                <Copy className="h-3.5 w-3.5" />
               </Button>
             ) : null}
             {canDeleteOnboardingWorkflows ? (
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 className="h-7 w-7 px-0 text-rose-600"
                 onClick={() => void removeWorkflow(workflowId)}
                 aria-label={`Delete workflow ${workflowId ?? ""}`}
@@ -3993,9 +4153,7 @@ export function OnboardingView() {
             enableAnimations
             itemsPerPage={15}
             showExport={false}
-            getRowId={(row, index) =>
-              String(readNumber(row, ["id", "invitation_id"]) ?? index)
-            }
+            getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
             onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
               <SearchToggleField
@@ -4043,7 +4201,7 @@ export function OnboardingView() {
                       ["Email", readString(selectedInvitation, ["email"])],
                       ["Phone", readString(selectedInvitation, ["phone"])],
                       ["Employment type", toTitleCaseWords(readString(selectedInvitation, ["employment_type"]))],
-                      ["Sent", formatInvitationDate(selectedInvitation.created_at ?? selectedInvitation.createdAt)],
+                      ["Created", formatInvitationDate(selectedInvitation.created_at ?? selectedInvitation.createdAt)],
                       ["Expires", formatInvitationDate(selectedInvitation.expires_at ?? selectedInvitation.expiresAt)],
                     ].map(([label, value]) => (
                       <div key={label} className="min-w-0">
@@ -4057,21 +4215,29 @@ export function OnboardingView() {
 
                   {(["email", "sms"] as const).map((channel) => {
                     const status = invitationDeliveryStatus(selectedInvitation, channel)
-                    const lastError = invitationDeliveryValue(selectedInvitation, channel, ["last_error", "lastError"])
+                    const lastError = formatInvitationDeliveryError(
+                      invitationDeliveryValue(selectedInvitation, channel, ["last_error", "lastError"])
+                    )
                     const messageId = invitationDeliveryValue(selectedInvitation, channel, ["message_id", "messageId"])
                     const transport = invitationDeliveryValue(selectedInvitation, channel, ["transport"])
                     const deliveryService =
                       transport === "system_smtp" || (transport === "-" && channel === "email")
                         ? "Platform SMTP (MAIL_*)"
-                        : transport === "sms_gateway" || (transport === "-" && channel === "sms")
-                          ? "SMS gateway"
-                          : transport
+                        : transport === "company_smtp"
+                          ? "Company SMTP"
+                          : transport === "sms_gateway" || (transport === "-" && channel === "sms")
+                            ? "SMS gateway"
+                            : transport
+                    const gatewayAccepted = channel === "sms" && ["accepted", "sent"].includes(status.toLowerCase())
+                    const statusLabel = gatewayAccepted ? "Accepted by gateway" : toTitleCaseWords(status)
                     const failureReason =
                       lastError !== "-"
                         ? lastError
                         : status.toLowerCase() === "failed"
                           ? "The current backend did not return the stored failure reason. Deploy the backend update, then resend to capture the latest provider error."
-                          : "No failure recorded."
+                          : gatewayAccepted
+                            ? "The SMS gateway accepted the request. Handset delivery is not confirmed because the gateway did not return a delivery receipt."
+                            : "No failure recorded."
                     return (
                       <section key={channel} className="space-y-2 rounded-lg border border-border p-3">
                         <div className="flex items-center justify-between gap-2">
@@ -4084,7 +4250,7 @@ export function OnboardingView() {
                               statusBadgeClass(status)
                             )}
                           >
-                            {toTitleCaseWords(status)}
+                            {statusLabel}
                           </span>
                         </div>
                         <dl className="grid gap-2 text-xs">
@@ -4097,7 +4263,9 @@ export function OnboardingView() {
                             <dd className="mt-0.5 break-all text-foreground">{messageId}</dd>
                           </div>
                           <div>
-                            <dt className="font-medium text-muted-foreground">Failure reason</dt>
+                            <dt className="font-medium text-muted-foreground">
+                              {gatewayAccepted ? "Delivery details" : "Failure reason"}
+                            </dt>
                             <dd
                               className={cn(
                                 "mt-0.5 whitespace-pre-wrap break-words",
@@ -4113,7 +4281,8 @@ export function OnboardingView() {
                   })}
 
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    Invitation emails use the platform SMTP connection, not a company report SMTP profile. You can test both from the dedicated{" "}
+                    Invitation emails use the platform SMTP connection configured with MAIL_* settings. You can test it
+                    from the dedicated{" "}
                     <Link href="/dashboard/smtp" className="font-semibold underline underline-offset-2">
                       SMTP page
                     </Link>
@@ -4250,8 +4419,8 @@ export function OnboardingView() {
                       Create Onboarding Request
                     </SheetTitle>
                     <SheetDescription className="sr-only">
-                      Start onboarding for an employee. Fill the basics first; add provisioning only if they need
-                      system access setup now.
+                      Start onboarding for an employee. Fill the basics first; add provisioning only if they need system
+                      access setup now.
                     </SheetDescription>
                     <Tooltip>
                       <TooltipTrigger
@@ -4294,7 +4463,12 @@ export function OnboardingView() {
                         <Input
                           className="h-9 bg-white text-slate-900 placeholder:text-slate-400"
                           value={requestForm.title}
-                          onChange={(event) => setRequestForm((prev) => ({ ...prev, title: event.target.value }))}
+                          onChange={(event) =>
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              title: event.target.value,
+                            }))
+                          }
                           placeholder="e.g. Onboarding for Jane Doe"
                         />
                       </label>
@@ -4303,7 +4477,12 @@ export function OnboardingView() {
                         Employee
                         <Select
                           value={requestForm.employee_id}
-                          onValueChange={(value) => setRequestForm((prev) => ({ ...prev, employee_id: value ?? "" }))}
+                          onValueChange={(value) =>
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              employee_id: value ?? "",
+                            }))
+                          }
                         >
                           <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                             <SelectValue placeholder="Select employee">
@@ -4358,7 +4537,12 @@ export function OnboardingView() {
                         Workflow
                         <Select
                           value={requestForm.workflow_id}
-                          onValueChange={(value) => setRequestForm((prev) => ({ ...prev, workflow_id: value ?? "" }))}
+                          onValueChange={(value) =>
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              workflow_id: value ?? "",
+                            }))
+                          }
                         >
                           <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                             <SelectValue placeholder="Optional">
@@ -4387,7 +4571,12 @@ export function OnboardingView() {
                         When to start
                         <Select
                           value={requestForm.submit}
-                          onValueChange={(value) => setRequestForm((prev) => ({ ...prev, submit: value ?? "true" }))}
+                          onValueChange={(value) =>
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              submit: value ?? "true",
+                            }))
+                          }
                         >
                           <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                             <SelectValue placeholder="Submission mode">
@@ -4395,8 +4584,12 @@ export function OnboardingView() {
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent className={selectPopupClassName}>
-                            <SelectItem value="true" className="text-slate-900">Submit immediately</SelectItem>
-                            <SelectItem value="false" className="text-slate-900">Save as draft</SelectItem>
+                            <SelectItem value="true" className="text-slate-900">
+                              Submit immediately
+                            </SelectItem>
+                            <SelectItem value="false" className="text-slate-900">
+                              Save as draft
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </label>
@@ -4408,7 +4601,10 @@ export function OnboardingView() {
                           type="date"
                           value={requestForm.planned_start_date}
                           onChange={(event) =>
-                            setRequestForm((prev) => ({ ...prev, planned_start_date: event.target.value }))
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              planned_start_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
@@ -4420,7 +4616,10 @@ export function OnboardingView() {
                           type="date"
                           value={requestForm.planned_completion_date}
                           onChange={(event) =>
-                            setRequestForm((prev) => ({ ...prev, planned_completion_date: event.target.value }))
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              planned_completion_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
@@ -4431,7 +4630,10 @@ export function OnboardingView() {
                           className="h-9"
                           value={requestForm.description}
                           onChange={(event) =>
-                            setRequestForm((prev) => ({ ...prev, description: event.target.value }))
+                            setRequestForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
                           }
                           placeholder="Optional notes for HR / managers"
                         />
@@ -4452,9 +4654,15 @@ export function OnboardingView() {
                             setRequestProvisioningEnabled(false)
                             setRequestProvisioning({
                               ...EMPTY_REQUEST_PROVISIONING,
-                              shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-                              timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-                              deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+                              shiftAssignment: {
+                                ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
+                              },
+                              timetableAssignment: {
+                                ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
+                              },
+                              deviceAssignment: {
+                                ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
+                              },
                             })
                           }}
                         />
@@ -4480,10 +4688,10 @@ export function OnboardingView() {
                           >
                             <p className="font-medium text-white">What does this mean?</p>
                             <p className="mt-1 text-slate-200">
-                              Provisioning means preparing the employee&apos;s access before or during onboarding:
-                              which roles they get, which branches they can work in, their shift or timetable, and
-                              which attendance/access devices they should appear on. Turn this on only if you want
-                              to set those up now; you can skip it and configure access later.
+                              Provisioning means preparing the employee&apos;s access before or during onboarding: which
+                              roles they get, which branches they can work in, their shift or timetable, and which
+                              attendance/access devices they should appear on. Turn this on only if you want to set
+                              those up now; you can skip it and configure access later.
                             </p>
                           </TooltipContent>
                         </Tooltip>
@@ -4535,9 +4743,15 @@ export function OnboardingView() {
                                   <SelectValue placeholder="Attendance mode" />
                                 </SelectTrigger>
                                 <SelectContent className={selectPopupClassName}>
-                                  <SelectItem value="none" className="text-slate-900">None for now</SelectItem>
-                                  <SelectItem value="shift" className="text-slate-900">Shift</SelectItem>
-                                  <SelectItem value="timetable" className="text-slate-900">Timetable</SelectItem>
+                                  <SelectItem value="none" className="text-slate-900">
+                                    None for now
+                                  </SelectItem>
+                                  <SelectItem value="shift" className="text-slate-900">
+                                    Shift
+                                  </SelectItem>
+                                  <SelectItem value="timetable" className="text-slate-900">
+                                    Timetable
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </label>
@@ -4559,9 +4773,15 @@ export function OnboardingView() {
                                       <SelectValue placeholder="Select shift" />
                                     </SelectTrigger>
                                     <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">Select shift</SelectItem>
+                                      <SelectItem value="none" className="text-slate-900">
+                                        Select shift
+                                      </SelectItem>
                                       {requestShiftOptions.map((option) => (
-                                        <SelectItem key={option.id} value={String(option.id)} className="text-slate-900">
+                                        <SelectItem
+                                          key={option.id}
+                                          value={String(option.id)}
+                                          className="text-slate-900"
+                                        >
                                           {option.label}
                                         </SelectItem>
                                       ))}
@@ -4605,12 +4825,12 @@ export function OnboardingView() {
                                       <SelectValue placeholder="Select rotation group">
                                         <span className="text-slate-900">
                                           {requestProvisioning.shiftAssignment.rotationGroupId
-                                            ? requestRotationGroupOptions.find(
+                                            ? (requestRotationGroupOptions.find(
                                                 (option) =>
                                                   String(option.id) ===
                                                   requestProvisioning.shiftAssignment.rotationGroupId
                                               )?.label ??
-                                              `Rotation group #${requestProvisioning.shiftAssignment.rotationGroupId}`
+                                              `Rotation group #${requestProvisioning.shiftAssignment.rotationGroupId}`)
                                             : "None"}
                                         </span>
                                       </SelectValue>
@@ -4651,9 +4871,15 @@ export function OnboardingView() {
                                       <SelectValue placeholder="Select timetable" />
                                     </SelectTrigger>
                                     <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">Select timetable</SelectItem>
+                                      <SelectItem value="none" className="text-slate-900">
+                                        Select timetable
+                                      </SelectItem>
                                       {requestTimetableOptions.map((option) => (
-                                        <SelectItem key={option.id} value={String(option.id)} className="text-slate-900">
+                                        <SelectItem
+                                          key={option.id}
+                                          value={String(option.id)}
+                                          className="text-slate-900"
+                                        >
                                           {option.label}
                                         </SelectItem>
                                       ))}
@@ -4738,9 +4964,15 @@ export function OnboardingView() {
                                       <SelectValue placeholder="Access group" />
                                     </SelectTrigger>
                                     <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">Select access group</SelectItem>
+                                      <SelectItem value="none" className="text-slate-900">
+                                        Select access group
+                                      </SelectItem>
                                       {requestAccessGroupOptions.map((option) => (
-                                        <SelectItem key={option.id} value={String(option.id)} className="text-slate-900">
+                                        <SelectItem
+                                          key={option.id}
+                                          value={String(option.id)}
+                                          className="text-slate-900"
+                                        >
                                           {option.label}
                                         </SelectItem>
                                       ))}
@@ -4762,9 +4994,15 @@ export function OnboardingView() {
                                       <SelectValue placeholder="Optional" />
                                     </SelectTrigger>
                                     <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">None</SelectItem>
+                                      <SelectItem value="none" className="text-slate-900">
+                                        None
+                                      </SelectItem>
                                       {requestAccessOrganizationOptions.map((option) => (
-                                        <SelectItem key={option.id} value={String(option.id)} className="text-slate-900">
+                                        <SelectItem
+                                          key={option.id}
+                                          value={String(option.id)}
+                                          className="text-slate-900"
+                                        >
                                           {option.label}
                                         </SelectItem>
                                       ))}
@@ -4796,12 +5034,15 @@ export function OnboardingView() {
                                     <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                                       <SelectValue placeholder="Select verify mode">
                                         {USER_VERIFY_MODE_OPTIONS.find(
-                                          (option) => option.value === requestProvisioning.deviceAssignment.userVerifyMode
+                                          (option) =>
+                                            option.value === requestProvisioning.deviceAssignment.userVerifyMode
                                         )?.label ?? "Select verify mode"}
                                       </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">Not set</SelectItem>
+                                      <SelectItem value="none" className="text-slate-900">
+                                        Not set
+                                      </SelectItem>
                                       {USER_VERIFY_MODE_OPTIONS.map((option) => (
                                         <SelectItem key={option.value} value={option.value} className="text-slate-900">
                                           {option.label}
@@ -4891,12 +5132,7 @@ export function OnboardingView() {
                   >
                     Cancel
                   </Button>
-                  <Button
-                    type="button"
-                    className="h-9 px-3"
-                    onClick={() => void submitRequest()}
-                    disabled={saving}
-                  >
+                  <Button type="button" className="h-9 px-3" onClick={() => void submitRequest()} disabled={saving}>
                     {saving ? "Creating…" : "Create Request"}
                   </Button>
                 </footer>
@@ -4905,7 +5141,10 @@ export function OnboardingView() {
           </Sheet>
 
           <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
-            <DialogPopup from="bottom" className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+            <DialogPopup
+              from="bottom"
+              className="h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-h-none max-w-none overflow-y-auto p-4 sm:h-[calc(100vh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-none sm:p-6"
+            >
               <DialogHeader>
                 <DialogTitle>Onboarding Request Activity</DialogTitle>
                 <DialogDescription>
@@ -4941,11 +5180,161 @@ export function OnboardingView() {
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Updated</p>
                       <p className="text-sm font-semibold text-slate-900">
-                        {toTimestamp(
-                          readString(selectedRequestRow ?? {}, ["updated_at", "modified_at", "created_at"])
-                        )}
+                        {toTimestamp(readString(selectedRequestRow ?? {}, ["updated_at", "modified_at", "created_at"]))}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-border bg-card">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Employee details review</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Verify each section. Return only the sections that need correction and include a reason.
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-medium",
+                          employeeDetailsReview.status === "approved"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : employeeDetailsReview.status === "changes_requested"
+                              ? "bg-rose-100 text-rose-700"
+                              : employeeDetailsReview.status === "submitted" ||
+                                  employeeDetailsReview.status === "in_review"
+                                ? "bg-sky-100 text-sky-700"
+                                : "bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        {toTitleCaseWords(employeeDetailsReview.status)}
+                      </span>
+                    </div>
+
+                    {employeeDetailsReview.sections.length === 0 ? (
+                      <div className="p-5 text-sm text-muted-foreground">
+                        Employee review details are not available yet.
+                      </div>
+                    ) : (
+                      <div className="grid min-h-[360px] lg:grid-cols-[260px_minmax(0,1fr)]">
+                        <nav className="border-b border-border bg-muted/20 p-3 lg:border-b-0 lg:border-r">
+                          <ol className="space-y-1">
+                            {employeeDetailsReview.sections.map((section, index) => {
+                              const sectionStatus = readString(section, ["status"], "pending").toLowerCase()
+                              const active = index === employeeReviewStep
+                              return (
+                                <li key={readString(section, ["key"], String(index))}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEmployeeReviewStep(index)}
+                                    className={cn(
+                                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition",
+                                      active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                                        active
+                                          ? "bg-white/20 text-white"
+                                          : sectionStatus === "approved"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : sectionStatus === "changes_requested"
+                                              ? "bg-rose-100 text-rose-700"
+                                              : "bg-slate-200 text-slate-700"
+                                      )}
+                                    >
+                                      {sectionStatus === "approved" ? "✓" : index + 1}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate font-medium">
+                                        {readString(section, ["label"], "Section")}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "block text-[11px]",
+                                          active ? "text-white/75" : "text-muted-foreground"
+                                        )}
+                                      >
+                                        {toTitleCaseWords(sectionStatus)}
+                                      </span>
+                                    </span>
+                                  </button>
+                                </li>
+                              )
+                            })}
+                          </ol>
+                        </nav>
+
+                        {currentEmployeeReviewSection ? (
+                          <div className="space-y-5 p-4 sm:p-6">
+                            <div>
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Step {employeeReviewStep + 1} of {employeeDetailsReview.sections.length}
+                              </p>
+                              <h3 className="mt-1 text-lg font-semibold text-foreground">
+                                {readString(currentEmployeeReviewSection, ["label"], "Employee details")}
+                              </h3>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              {toRecordList(currentEmployeeReviewSection.fields).map((reviewField, index) => (
+                                <div
+                                  key={`${readString(reviewField, ["label"])}-${index}`}
+                                  className="rounded-lg border border-border bg-background p-3"
+                                >
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                    {readString(reviewField, ["label"], "Field")}
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                                    {readString(reviewField, ["value"])}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                              Review note
+                              <textarea
+                                className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
+                                value={
+                                  employeeReviewComments[readString(currentEmployeeReviewSection, ["key"], "")] ?? ""
+                                }
+                                onChange={(event) => {
+                                  const key = readString(currentEmployeeReviewSection, ["key"], "")
+                                  setEmployeeReviewComments((current) => ({
+                                    ...current,
+                                    [key]: event.target.value,
+                                  }))
+                                }}
+                                placeholder="Required when returning this section; optional when verifying."
+                              />
+                            </label>
+
+                            {employeeDetailsReview.status === "submitted" ||
+                            employeeDetailsReview.status === "in_review" ||
+                            employeeDetailsReview.status === "changes_requested" ? (
+                              <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-4">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  disabled={saving}
+                                  onClick={() => void saveEmployeeDetailReview("changes_requested")}
+                                >
+                                  Return this section
+                                </Button>
+                                <Button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() => void saveEmployeeDetailReview("approved")}
+                                >
+                                  Verify and continue
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3 rounded-lg border border-border p-4">
@@ -4975,11 +5364,13 @@ export function OnboardingView() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Submission Mode</p>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Workflow stage</p>
                         <p className="text-sm text-slate-900">
-                          {resolveBooleanLabel(
-                            String(selectedRequestDetails?.submit ?? selectedRequestRow?.submit ?? "false")
-                          )}
+                          {isOnboardingDraftStatus(
+                            readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
+                          )
+                            ? "Waiting for HR to start"
+                            : "Workflow started"}
                         </p>
                       </div>
                       <div>
@@ -4992,8 +5383,7 @@ export function OnboardingView() {
                         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Planned Start</p>
                         <p className="text-sm text-slate-900">
                           {toTimestamp(
-                            selectedRequestDetails?.planned_start_date ??
-                              selectedRequestRow?.planned_start_date
+                            selectedRequestDetails?.planned_start_date ?? selectedRequestRow?.planned_start_date
                           )}
                         </p>
                       </div>
@@ -5016,15 +5406,10 @@ export function OnboardingView() {
                   </div>
 
                   {isOnboardingActableStatus(
-                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-                      "status",
-                      "request_status",
-                    ])
+                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
                   ) ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                      <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
-                        Pending approval
-                      </p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-amber-800">Pending approval</p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">{approvalSummary.waitingLabel}</p>
                       <p className="mt-1 text-xs text-slate-600">
                         Only the assigned approver for the current workflow level can approve or reject.
@@ -5033,10 +5418,10 @@ export function OnboardingView() {
                   ) : null}
 
                   {(() => {
-                    const acknowledgedAt = readString(
-                      selectedRequestDetails ?? selectedRequestRow ?? {},
-                      ["employee_acknowledged_at", "employeeAcknowledgedAt"]
-                    )
+                    const acknowledgedAt = readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                      "employee_acknowledged_at",
+                      "employeeAcknowledgedAt",
+                    ])
                     const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
                     return (
                       <div className="space-y-3 rounded-lg border border-border p-4">
@@ -5045,20 +5430,10 @@ export function OnboardingView() {
                             <p className="text-sm font-semibold text-slate-900">Employee acknowledgement</p>
                             <p className="text-xs text-muted-foreground">
                               {needsAcknowledgement
-                                ? "Record that the employee has reviewed this onboarding request."
+                                ? "Waiting for the employee to acknowledge this request from their onboarding dashboard."
                                 : `Acknowledged ${toTimestamp(acknowledgedAt)}.`}
                             </p>
                           </div>
-                          {needsAcknowledgement ? (
-                            <Button
-                              type="button"
-                              className="h-8 px-3 text-xs"
-                              disabled={saving}
-                              onClick={() => void acknowledgeSelectedRequest()}
-                            >
-                              Acknowledge
-                            </Button>
-                          ) : null}
                         </div>
                       </div>
                     )
@@ -5098,8 +5473,7 @@ export function OnboardingView() {
                               </span>
                             </div>
                             <p className="mt-1 text-xs text-slate-600">
-                              Approver:{" "}
-                              <span className="font-medium text-slate-800">{approval.name || "-"}</span>
+                              Approver: <span className="font-medium text-slate-800">{approval.name || "-"}</span>
                             </p>
                             {approval.comments ? (
                               <p className="mt-1 text-xs text-slate-600">{approval.comments}</p>
@@ -5141,24 +5515,24 @@ export function OnboardingView() {
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Attendance Mode</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.attendanceMode}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.attendanceMode}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.shiftLabel}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.shiftLabel}</p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift Effective From</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Shift Effective From
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.shiftEffectiveFrom}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift Effective To</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Shift Effective To
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.shiftEffectiveTo}
                           </p>
@@ -5171,18 +5545,20 @@ export function OnboardingView() {
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.timetableLabel}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.timetableLabel}</p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable Effective From</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Timetable Effective From
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.timetableEffectiveFrom}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable Effective To</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Timetable Effective To
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.timetableEffectiveTo}
                           </p>
@@ -5194,7 +5570,9 @@ export function OnboardingView() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Device Employee No</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Device Employee No
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.deviceEmployeeNo}
                           </p>
@@ -5221,63 +5599,51 @@ export function OnboardingView() {
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Validity Enabled</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.validEnabled}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validEnabled}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid Begin Time</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.validBeginTime}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validBeginTime}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid End Time</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.validEndTime}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validEndTime}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Verify Mode</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.userVerifyMode}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.userVerifyMode}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Local UI Right</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.localUiRight}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.localUiRight}</p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Close Delay Enabled</p>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Close Delay Enabled
+                          </p>
                           <p className="text-sm text-slate-900">
                             {selectedRequestProvisioningSummary.closeDelayEnabled}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Max Open Door Time</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.maxOpenDoorTime}
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Max Open Door Time
                           </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.maxOpenDoorTime}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Open Door Time</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.openDoorTime}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.openDoorTime}</p>
                         </div>
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Sync Now</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.syncNow}
-                          </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.syncNow}</p>
                         </div>
                         <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Continue On Error</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.continueOnError}
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Continue On Error
                           </p>
+                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.continueOnError}</p>
                         </div>
                       </div>
                     </div>
@@ -5309,7 +5675,12 @@ export function OnboardingView() {
                           <Input
                             className="h-9 bg-white text-slate-900"
                             value={documentForm.title}
-                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, title: event.target.value }))}
+                            onChange={(event) =>
+                              setDocumentForm((prev) => ({
+                                ...prev,
+                                title: event.target.value,
+                              }))
+                            }
                             placeholder="Document title"
                           />
                         </label>
@@ -5319,7 +5690,10 @@ export function OnboardingView() {
                             className="h-9 bg-white text-slate-900"
                             value={documentForm.document_type_code}
                             onChange={(event) =>
-                              setDocumentForm((prev) => ({ ...prev, document_type_code: event.target.value }))
+                              setDocumentForm((prev) => ({
+                                ...prev,
+                                document_type_code: event.target.value,
+                              }))
                             }
                             placeholder="Optional code"
                           />
@@ -5330,7 +5704,12 @@ export function OnboardingView() {
                             className="h-9 bg-white text-slate-900"
                             type="date"
                             value={documentForm.expiry_date}
-                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, expiry_date: event.target.value }))}
+                            onChange={(event) =>
+                              setDocumentForm((prev) => ({
+                                ...prev,
+                                expiry_date: event.target.value,
+                              }))
+                            }
                           />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
@@ -5346,7 +5725,12 @@ export function OnboardingView() {
                           <textarea
                             className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                             value={documentForm.description}
-                            onChange={(event) => setDocumentForm((prev) => ({ ...prev, description: event.target.value }))}
+                            onChange={(event) =>
+                              setDocumentForm((prev) => ({
+                                ...prev,
+                                description: event.target.value,
+                              }))
+                            }
                             placeholder="Optional document notes"
                           />
                         </label>
@@ -5392,7 +5776,9 @@ export function OnboardingView() {
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                  <p className="text-sm font-medium text-slate-900">{title !== "-" ? title : `Document #${documentId ?? index + 1}`}</p>
+                                  <p className="text-sm font-medium text-slate-900">
+                                    {title !== "-" ? title : `Document #${documentId ?? index + 1}`}
+                                  </p>
                                   <p className="text-xs text-slate-500">
                                     {typeCode !== "-" ? typeCode : "No type"} •{" "}
                                     {isVerified ? "Verified" : "Pending verification"}
@@ -5434,17 +5820,23 @@ export function OnboardingView() {
                               </div>
                               <div className="mt-2 grid gap-2 md:grid-cols-3">
                                 <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Expiry</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    Expiry
+                                  </p>
                                   <p className="text-sm text-slate-900">{toTimestamp(documentRow.expiry_date)}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Uploaded</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    Uploaded
+                                  </p>
                                   <p className="text-sm text-slate-900">
                                     {toTimestamp(documentRow.created_at ?? documentRow.uploaded_at)}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Description</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    Description
+                                  </p>
                                   <p className="text-sm text-slate-900">
                                     {readString(documentRow, ["description", "notes", "remarks"])}
                                   </p>
@@ -5482,7 +5874,10 @@ export function OnboardingView() {
                             onClick={() => {
                               void ensureLookups(["users", "departments"])
                               resetTaskForm()
-                              setTaskForm((current) => ({ ...current, task_type: "asset" }))
+                              setTaskForm((current) => ({
+                                ...current,
+                                task_type: "asset",
+                              }))
                               setShowTaskComposer(true)
                             }}
                             disabled={saving}
@@ -5495,21 +5890,91 @@ export function OnboardingView() {
 
                     {showTaskComposer ? (
                       <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          {taskForm.task_type === "asset" ? "Item to provide" : "Title"}
-                          <Input
-                            className="h-9 bg-white text-slate-900"
-                            value={taskForm.title}
-                            onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
-                            placeholder={taskForm.task_type === "asset" ? "e.g. Laptop, ID card, access badge" : "Task title"}
-                          />
-                        </label>
+                        {taskForm.task_type === "asset" ? (
+                          <div className="grid gap-2 md:col-span-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-slate-700">Items to provide</p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 px-2.5 text-xs"
+                                onClick={() =>
+                                  setTaskForm((prev) => ({
+                                    ...prev,
+                                    asset_items: [...prev.asset_items, ""],
+                                  }))
+                                }
+                              >
+                                <Plus className="mr-1 h-3.5 w-3.5" />
+                                Add another item
+                              </Button>
+                            </div>
+                            {taskForm.asset_items.map((item, index) => (
+                              <div key={`asset-item-${index}`} className="flex items-center gap-2">
+                                <span className="w-5 text-right text-xs font-semibold text-slate-500">
+                                  {index + 1}.
+                                </span>
+                                <Input
+                                  className="h-9 flex-1 bg-white text-slate-900"
+                                  value={item}
+                                  onChange={(event) =>
+                                    setTaskForm((prev) => ({
+                                      ...prev,
+                                      asset_items: prev.asset_items.map((entry, itemIndex) =>
+                                        itemIndex === index ? event.target.value : entry
+                                      ),
+                                    }))
+                                  }
+                                  placeholder={index === 0 ? "e.g. Laptop" : "Another item"}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-slate-500 hover:text-red-600"
+                                  onClick={() =>
+                                    setTaskForm((prev) => ({
+                                      ...prev,
+                                      asset_items:
+                                        prev.asset_items.length === 1
+                                          ? [""]
+                                          : prev.asset_items.filter((_, itemIndex) => itemIndex !== index),
+                                    }))
+                                  }
+                                  aria-label={`Remove item ${index + 1}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            Title
+                            <Input
+                              className="h-9 bg-white text-slate-900"
+                              value={taskForm.title}
+                              onChange={(event) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  title: event.target.value,
+                                }))
+                              }
+                              placeholder="Task title"
+                            />
+                          </label>
+                        )}
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Task type
                           <select
                             className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                             value={taskForm.task_type}
-                            onChange={(event) => setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                task_type: event.target.value,
+                              }))
+                            }
                           >
                             {ONBOARDING_TASK_TYPE_OPTIONS.map((type) => (
                               <option key={type} value={type}>
@@ -5519,46 +5984,80 @@ export function OnboardingView() {
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          {taskForm.task_type === "asset" ? "Provider (allowed to mark as given)" : "Assigned user"}
+                          Department{taskForm.task_type === "asset" ? " *" : ""}
                           <select
                             className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                            value={taskForm.assigned_company_user_id}
+                            value={taskForm.assigned_department_id}
                             onChange={(event) =>
-                              setTaskForm((prev) => ({ ...prev, assigned_company_user_id: event.target.value }))
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                assigned_department_id: event.target.value,
+                                assigned_company_user_id: "",
+                              }))
                             }
                           >
-                            <option value="">{taskForm.task_type === "asset" ? "Select provider" : "Optional user"}</option>
-                            {users.map((row, index) => {
-                              const userId = readNumber(row, ["id", "company_user_id", "user_id"])
-                              if (userId === null) return null
+                            <option value="">
+                              {taskForm.task_type === "asset" ? "Select department" : "Optional department"}
+                            </option>
+                            {departments.map((row, index) => {
+                              const departmentId = readNumber(row, ["id", "department_id"])
+                              if (departmentId === null) return null
                               return (
-                                <option key={`onboarding-task-user-${userId}-${index}`} value={String(userId)}>
-                                  {resolveOptionLabel(users, userId, ["id", "company_user_id", "user_id"], ["full_name", "name", "email"])}
+                                <option
+                                  key={`onboarding-task-dept-${departmentId}-${index}`}
+                                  value={String(departmentId)}
+                                >
+                                  {resolveOptionLabel(
+                                    departments,
+                                    departmentId,
+                                    ["id", "department_id"],
+                                    ["name", "title"]
+                                  )}
                                 </option>
                               )
                             })}
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Assigned department
+                          Specific person (optional)
                           <select
-                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                            value={taskForm.assigned_department_id}
+                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100"
+                            value={taskForm.assigned_company_user_id}
                             onChange={(event) =>
-                              setTaskForm((prev) => ({ ...prev, assigned_department_id: event.target.value }))
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                assigned_company_user_id: event.target.value,
+                              }))
                             }
+                            disabled={taskForm.task_type === "asset" && !taskForm.assigned_department_id}
                           >
-                            <option value="">Optional department</option>
-                            {departments.map((row, index) => {
-                              const departmentId = readNumber(row, ["id", "department_id"])
-                              if (departmentId === null) return null
+                            <option value="">
+                              {taskForm.assigned_department_id
+                                ? "Everyone in the department"
+                                : taskForm.task_type === "asset"
+                                  ? "Select a department first"
+                                  : "Optional user"}
+                            </option>
+                            {(taskForm.assigned_department_id ? taskAssignableUsers : users).map((row, index) => {
+                              const userId = preferredAssigneeId(row)
+                              if (userId === null) return null
                               return (
-                                <option key={`onboarding-task-dept-${departmentId}-${index}`} value={String(departmentId)}>
-                                  {resolveOptionLabel(departments, departmentId, ["id", "department_id"], ["name", "title"])}
+                                <option key={`onboarding-task-user-${userId}-${index}`} value={String(userId)}>
+                                  {resolveOptionLabel(
+                                    [row, ...users],
+                                    userId,
+                                    ["id", "company_user_id", "user_id"],
+                                    ["full_name", "name", "email"]
+                                  )}
                                 </option>
                               )
                             })}
                           </select>
+                          {taskForm.assigned_department_id ? (
+                            <span className="font-normal text-slate-500">
+                              Leave blank to notify and assign the whole department.
+                            </span>
+                          ) : null}
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Due date
@@ -5566,7 +6065,12 @@ export function OnboardingView() {
                             className="h-9 bg-white text-slate-900"
                             type="datetime-local"
                             value={taskForm.due_date}
-                            onChange={(event) => setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                due_date: event.target.value,
+                              }))
+                            }
                           />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
@@ -5574,7 +6078,12 @@ export function OnboardingView() {
                           <textarea
                             className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                             value={taskForm.description}
-                            onChange={(event) => setTaskForm((prev) => ({ ...prev, description: event.target.value }))}
+                            onChange={(event) =>
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                description: event.target.value,
+                              }))
+                            }
                             placeholder="Optional task instructions"
                           />
                         </label>
@@ -5596,14 +6105,16 @@ export function OnboardingView() {
                             onClick={() => void submitRequestTask()}
                             disabled={saving}
                           >
-                            {saving ? "Creating..." : taskForm.task_type === "asset" ? "Add item" : "Create task"}
+                            {saving ? "Creating..." : taskForm.task_type === "asset" ? "Add items" : "Create task"}
                           </Button>
                         </div>
                       </div>
                     ) : null}
 
                     {selectedRequestTasks.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No onboarding tasks have been created for this request.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No onboarding tasks have been created for this request.
+                      </p>
                     ) : (
                       <div className="space-y-2">
                         {selectedRequestTasks.map((taskRow, index) => {
@@ -5621,8 +6132,10 @@ export function OnboardingView() {
                                     {readString(taskRow, ["title", "name", "task_title"])}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Item handover" : toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
-                                    {taskStatus !== "-" ? toTitleCaseWords(taskStatus) : "Pending"}
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
+                                      ? "Item handover"
+                                      : toTitleCaseWords(readString(taskRow, ["task_type", "type"]))}{" "}
+                                    • {taskStatus !== "-" ? toTitleCaseWords(taskStatus) : "Pending"}
                                   </p>
                                 </div>
                                 {!isTaskClosed && (canUpdateOnboardingRequests || canCompleteOnboardingRequests) ? (
@@ -5633,14 +6146,18 @@ export function OnboardingView() {
                                     onClick={() => void completeRequestTask(taskRow)}
                                     disabled={saving}
                                   >
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Mark as given" : "Complete task"}
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
+                                      ? "Mark as given"
+                                      : "Complete task"}
                                   </Button>
                                 ) : null}
                               </div>
                               <div className="mt-2 grid gap-2 md:grid-cols-3">
                                 <div>
                                   <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset" ? "Provider" : "Owner"}
+                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
+                                      ? "Provider"
+                                      : "Owner"}
                                   </p>
                                   <p className="text-sm text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
                                 </div>
@@ -5649,11 +6166,15 @@ export function OnboardingView() {
                                   <p className="text-sm text-slate-900">{toTimestamp(taskRow.due_date)}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Completed</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    Completed
+                                  </p>
                                   <p className="text-sm text-slate-900">{toTimestamp(taskRow.completed_at)}</p>
                                 </div>
                                 <div className="md:col-span-3">
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Description</p>
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                    Description
+                                  </p>
                                   <p className="text-sm text-slate-900">
                                     {readString(taskRow, ["description", "completion_notes", "notes"])}
                                   </p>
@@ -5770,7 +6291,7 @@ export function OnboardingView() {
                 </div>
               )}
 
-              <DialogFooter>
+              <DialogFooter className="sticky bottom-0 z-10 border-t border-border bg-background/95 py-3 backdrop-blur">
                 {(() => {
                   const selectedStatus = String(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
@@ -5794,13 +6315,31 @@ export function OnboardingView() {
                         <p className="mr-auto text-xs text-muted-foreground">{approvalSummary.waitingLabel}</p>
                       ) : null}
                       {showSubmit ? (
-                        <Button
-                          type="button"
-                          disabled={saving || selectedId === null}
-                          onClick={() => void runRequestAction(selectedId, "submit")}
-                        >
-                          Submit request
-                        </Button>
+                        <div className="mr-auto flex flex-wrap items-center gap-3">
+                          {employeeDetailsReview.status !== "approved" ? (
+                            <label className="flex max-w-xl items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                              <Checkbox
+                                checked={allowIncompleteWorkflowStart}
+                                onCheckedChange={(value) => setAllowIncompleteWorkflowStart(Boolean(value))}
+                              />
+                              <span>
+                                Start before the employee finishes or HR verifies every section. The employee can
+                                continue updating details while the workflow runs.
+                              </span>
+                            </label>
+                          ) : null}
+                          <Button
+                            type="button"
+                            disabled={
+                              saving ||
+                              selectedId === null ||
+                              (employeeDetailsReview.status !== "approved" && !allowIncompleteWorkflowStart)
+                            }
+                            onClick={() => void runRequestAction(selectedId, "submit")}
+                          >
+                            Start onboarding workflow
+                          </Button>
+                        </div>
                       ) : null}
                       {showApprove ? (
                         <Button
@@ -5899,7 +6438,10 @@ export function OnboardingView() {
               }
             }}
           >
-            <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none">
+            <SheetContent
+              side="right"
+              className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none"
+            >
               <SheetHeader>
                 <SheetTitle>
                   {editingWorkflowId === null
@@ -5928,7 +6470,12 @@ export function OnboardingView() {
                     <Input
                       className="h-9 bg-white text-slate-900"
                       value={workflowForm.name}
-                      onChange={(event) => setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))}
+                      onChange={(event) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
                       placeholder="Workflow name"
                     />
                   </label>
@@ -5936,18 +6483,25 @@ export function OnboardingView() {
                     Status
                     <Select
                       value={workflowForm.status || "active"}
-                      onValueChange={(value) => setWorkflowForm((prev) => ({ ...prev, status: value ?? "active" }))}
+                      onValueChange={(value) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          status: value ?? "active",
+                        }))
+                      }
                     >
                       <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                         <SelectValue placeholder="Status">
-                          <span className="text-slate-900">
-                            {toTitleCaseWords(workflowForm.status || "active")}
-                          </span>
+                          <span className="text-slate-900">{toTitleCaseWords(workflowForm.status || "active")}</span>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="active" className="text-slate-900">Active</SelectItem>
-                        <SelectItem value="inactive" className="text-slate-900">Inactive</SelectItem>
+                        <SelectItem value="active" className="text-slate-900">
+                          Active
+                        </SelectItem>
+                        <SelectItem value="inactive" className="text-slate-900">
+                          Inactive
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </label>
@@ -5955,7 +6509,12 @@ export function OnboardingView() {
                     Default workflow
                     <Select
                       value={workflowForm.is_default || "false"}
-                      onValueChange={(value) => setWorkflowForm((prev) => ({ ...prev, is_default: value ?? "false" }))}
+                      onValueChange={(value) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          is_default: value ?? "false",
+                        }))
+                      }
                     >
                       <SelectTrigger className="h-9 w-full bg-white text-slate-900">
                         <SelectValue placeholder="Default workflow">
@@ -5965,8 +6524,12 @@ export function OnboardingView() {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="true" className="text-slate-900">Default</SelectItem>
-                        <SelectItem value="false" className="text-slate-900">Not default</SelectItem>
+                        <SelectItem value="true" className="text-slate-900">
+                          Default
+                        </SelectItem>
+                        <SelectItem value="false" className="text-slate-900">
+                          Not default
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </label>
@@ -5975,21 +6538,30 @@ export function OnboardingView() {
                     <Input
                       className="h-9 bg-white text-slate-900"
                       value={workflowForm.description}
-                      onChange={(event) => setWorkflowForm((prev) => ({ ...prev, description: event.target.value }))}
+                      onChange={(event) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          description: event.target.value,
+                        }))
+                      }
                       placeholder="Workflow description"
                     />
                   </label>
                   <div className="md:col-span-2 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={openCreateStepDialog} disabled={saving}>
+                    <Button
+                      type="button"
+                      onClick={openCreateStepDialog}
+                      disabled={saving}
+                      className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                    >
+                      <Plus className="h-4 w-4" />
                       Add Step
                     </Button>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-border p-4">
-                  <p className="mb-3 text-sm font-medium">
-                    Workflow Steps ({workflowSteps.length})
-                  </p>
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Workflow Steps ({workflowSteps.length})</p>
                   {workflowSteps.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       {editingWorkflowId === null
@@ -6004,12 +6576,12 @@ export function OnboardingView() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Step Name</TableHead>
-                            <TableHead>Description</TableHead>
+                            <TableHead>Checklist / Instructions</TableHead>
                             <TableHead>Step Type</TableHead>
                             <TableHead>Required</TableHead>
                             <TableHead>Due Days</TableHead>
-                            <TableHead>Role</TableHead>
-                            <TableHead>User</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Specific Person</TableHead>
                             <TableHead className="sticky right-0 z-10 bg-muted text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -6017,32 +6589,57 @@ export function OnboardingView() {
                           {workflowSteps.map((step, index) => (
                             <TableRow key={`step-${index}`}>
                               <TableCell className="font-medium">{step.name || `Step ${index + 1}`}</TableCell>
-                              <TableCell>{step.description || "-"}</TableCell>
+                              <TableCell className="min-w-64">
+                                {step.checklist_items.length > 0 ? (
+                                  <ol className="list-inside list-decimal space-y-0.5 text-sm">
+                                    {step.checklist_items.map((item, itemIndex) => (
+                                      <li key={`${index}-checklist-${itemIndex}`}>
+                                        <span className="font-medium">{item.name}</span>
+                                        {item.description ? (
+                                          <span className="text-muted-foreground"> — {item.description}</span>
+                                        ) : null}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                ) : (
+                                  <span className="text-muted-foreground">No checklist</span>
+                                )}
+                                {step.description ? (
+                                  <p className="mt-1 text-xs text-muted-foreground">{step.description}</p>
+                                ) : null}
+                              </TableCell>
                               <TableCell>{toTitleCaseWords(step.step_type || "task")}</TableCell>
                               <TableCell>{resolveYesNoLabel(step.is_required)}</TableCell>
                               <TableCell>{step.due_days ? `${String(step.due_days)} day(s)` : "-"}</TableCell>
                               <TableCell>
                                 {resolveOptionLabel(
-                                  roles,
-                                  step.assigned_role_id ?? null,
-                                  ["id", "role_id"],
-                                  ["display_name", "name", "title"]
+                                  departments,
+                                  step.assigned_department_id ?? null,
+                                  ["id", "department_id"],
+                                  ["name", "title", "code"]
                                 )}
                               </TableCell>
                               <TableCell>
-                                {resolveOptionLabel(
-                                  users,
-                                  step.assigned_user_id ?? null,
-                                  ["id", "user_id", "company_user_id"],
-                                  ["full_name", "name", "email"]
-                                )}
+                                {step.assigned_user_id
+                                  ? resolveOptionLabel(
+                                      users,
+                                      step.assigned_user_id,
+                                      ["id", "user_id", "company_user_id"],
+                                      ["full_name", "name", "email"]
+                                    )
+                                  : step.assigned_department_id
+                                    ? "Whole department"
+                                    : step.assigned_role_id
+                                      ? "Legacy role assignment"
+                                      : "-"}
                               </TableCell>
                               <TableCell className="sticky right-0 z-10 bg-background">
                                 <div className="flex items-center justify-end gap-2">
                                   <Button
                                     type="button"
                                     size="sm"
-                                    variant="outline"
+                                    variant="ghost"
+                                    className="h-8 w-8 px-0"
                                     onClick={() => editWorkflowStep(step, index)}
                                     aria-label={`Edit step ${index + 1}`}
                                     title="Edit step"
@@ -6052,7 +6649,8 @@ export function OnboardingView() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    variant="outline"
+                                    variant="ghost"
+                                    className="h-8 w-8 px-0 text-rose-600"
                                     onClick={() => removeWorkflowStep(index)}
                                     aria-label={`Remove step ${index + 1}`}
                                     title="Remove step"
@@ -6089,7 +6687,16 @@ export function OnboardingView() {
             </SheetContent>
           </Sheet>
 
-          <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
+          <Dialog
+            open={stepDialogOpen}
+            onOpenChange={(open) => {
+              setStepDialogOpen(open)
+              if (!open) {
+                setChecklistItemDialogOpen(false)
+                setEditingChecklistItemIndex(null)
+              }
+            }}
+          >
             <DialogPopup from="bottom" className="sm:max-w-[980px]">
               <DialogHeader>
                 <DialogTitle>{editingStepIndex === null ? "Add Workflow Step" : "Edit Workflow Step"}</DialogTitle>
@@ -6098,25 +6705,105 @@ export function OnboardingView() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 md:grid-cols-2">
-                <Input
-                  value={workflowForm.step_name}
-                  onChange={(event) => setWorkflowForm((prev) => ({ ...prev, step_name: event.target.value }))}
-                  placeholder="Step name"
-                  className="h-11"
-                />
-                <Input
-                  value={workflowForm.step_description}
-                  onChange={(event) =>
-                    setWorkflowForm((prev) => ({ ...prev, step_description: event.target.value }))
-                  }
-                  placeholder="Step description"
-                  className="h-11"
-                />
+                <label className="grid gap-1 text-xs font-medium text-foreground md:col-span-2">
+                  Step title
+                  <Input
+                    value={workflowForm.step_name}
+                    onChange={(event) =>
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        step_name: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g. Prepare employee workstation"
+                    className="h-11"
+                  />
+                </label>
+                {workflowForm.step_type !== "sign_off" ? (
+                  <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 md:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Checklist</p>
+                        <p className="text-xs text-muted-foreground">
+                          Each item becomes a separately trackable task when the workflow runs.
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={openCreateChecklistItemDialog}>
+                        <Plus className="h-4 w-4" />
+                        Add checklist item
+                      </Button>
+                    </div>
+                    {workflowForm.step_checklist_items.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border bg-background px-3 py-4 text-center text-xs text-muted-foreground">
+                        No checklist items yet. Add the first item to continue.
+                      </div>
+                    ) : (
+                      <ol className="grid gap-2">
+                        {workflowForm.step_checklist_items.map((item, itemIndex) => (
+                          <li
+                            key={`workflow-checklist-${itemIndex}`}
+                            className="flex items-start gap-3 rounded-md border border-border bg-background p-3"
+                          >
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                              {itemIndex + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-foreground">{item.name}</p>
+                              {item.description ? (
+                                <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+                                  {item.description}
+                                </p>
+                              ) : (
+                                <p className="mt-0.5 text-xs text-muted-foreground">No description</p>
+                              )}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => openEditChecklistItemDialog(item, itemIndex)}
+                                aria-label={`Edit checklist item ${itemIndex + 1}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() =>
+                                  setWorkflowForm((prev) => ({
+                                    ...prev,
+                                    step_checklist_items: prev.step_checklist_items.filter(
+                                      (_, index) => index !== itemIndex
+                                    ),
+                                  }))
+                                }
+                                aria-label={`Remove checklist item ${itemIndex + 1}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground md:col-span-2">
+                    Sign-off records one approval and does not create checklist tasks.
+                  </div>
+                )}
                 <div className="grid gap-1">
                   <Select
                     value={workflowForm.step_type}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, step_type: value ?? "task" }))
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        step_type: value ?? "task",
+                      }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
@@ -6137,7 +6824,10 @@ export function OnboardingView() {
                   <Select
                     value={workflowForm.is_required}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, is_required: value ?? "true" }))
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        is_required: value ?? "true",
+                      }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
@@ -6158,7 +6848,10 @@ export function OnboardingView() {
                     min={1}
                     value={workflowForm.due_days}
                     onChange={(event) =>
-                      setWorkflowForm((prev) => ({ ...prev, due_days: event.target.value }))
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        due_days: event.target.value,
+                      }))
                     }
                     placeholder="Due days"
                     className="h-11"
@@ -6169,53 +6862,46 @@ export function OnboardingView() {
                 </div>
                 <div className="grid gap-1">
                   <Select
-                    value={workflowForm.assigned_role_id || "none"}
+                    value={workflowForm.assigned_department_id || "none"}
                     onValueChange={(value) =>
-                      setWorkflowForm((prev) => {
-                        const nextRole = !value || value === "none" ? "" : value
-                        const nextRoleId = Number(nextRole)
-                        const selectedUserId = Number(prev.assigned_user_id)
-                        const selectedUser = findAssigneeRecord(users, selectedUserId)
-                        const keepUser =
-                          !nextRole ||
-                          !selectedUser ||
-                          Number.isNaN(selectedUserId) ||
-                          recordHasRole(selectedUser, nextRoleId)
-                        return {
-                          ...prev,
-                          assigned_role_id: nextRole,
-                          assigned_user_id: keepUser ? prev.assigned_user_id : "",
-                        }
-                      })
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        assigned_department_id: !value || value === "none" ? "" : value,
+                        assigned_user_id: "",
+                      }))
                     }
                   >
                     <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Assigned role (optional)">
-                        {workflowForm.assigned_role_id
-                          ? resolveOptionLabel(roles, Number(workflowForm.assigned_role_id), ["id", "role_id"], [
-                              "display_name",
-                              "name",
-                              "title",
-                            ])
-                          : "No role selected"}
+                      <SelectValue placeholder="Select department">
+                        {workflowForm.assigned_department_id
+                          ? resolveOptionLabel(
+                              departments,
+                              Number(workflowForm.assigned_department_id),
+                              ["id", "department_id"],
+                              ["name", "title", "code"]
+                            )
+                          : "Select department"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No role selected</SelectItem>
-                      {roles.map((row) => {
-                        const roleId = readNumber(row, ["id", "role_id"])
-                        if (roleId === null) return null
+                      <SelectItem value="none">Select department</SelectItem>
+                      {departments.map((row) => {
+                        const departmentId = readNumber(row, ["id", "department_id"])
+                        if (departmentId === null) return null
                         return (
-                          <SelectItem key={roleId} value={String(roleId)}>
-                            {resolveOptionLabel(roles, roleId, ["id", "role_id"], ["display_name", "name", "title"])}
+                          <SelectItem key={departmentId} value={String(departmentId)}>
+                            {resolveOptionLabel(
+                              departments,
+                              departmentId,
+                              ["id", "department_id"],
+                              ["name", "title", "code"]
+                            )}
                           </SelectItem>
                         )
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Assign a role if this step should be owned by a role-based queue. Choosing a role filters the user list to people in that role.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Choose the department responsible for this step.</p>
                 </div>
                 <div className="grid gap-1">
                   <Select
@@ -6226,9 +6912,10 @@ export function OnboardingView() {
                         assigned_user_id: !value || value === "none" ? "" : value,
                       }))
                     }
+                    disabled={!workflowForm.assigned_department_id}
                   >
                     <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Assigned user (optional)">
+                      <SelectValue placeholder="Specific person (optional)">
                         {workflowForm.assigned_user_id
                           ? resolveOptionLabel(
                               users,
@@ -6236,16 +6923,13 @@ export function OnboardingView() {
                               ["id", "company_user_id", "user_id"],
                               ["full_name", "name", "email"]
                             )
-                          : "No specific user"}
+                          : workflowForm.assigned_department_id
+                            ? "Whole department"
+                            : "Select department first"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No specific user</SelectItem>
-                      {roleUsersLoading ? (
-                        <SelectItem value="loading" disabled>
-                          Loading people in this role…
-                        </SelectItem>
-                      ) : null}
+                      <SelectItem value="none">Whole department</SelectItem>
                       {assignableUsers.map((row) => {
                         const userId = preferredAssigneeId(row)
                         if (userId === null) return null
@@ -6256,11 +6940,7 @@ export function OnboardingView() {
                           ["full_name", "name", "email"]
                         )
                         return (
-                          <SelectItem
-                            key={userId}
-                            value={String(userId)}
-                            data-search-text={`${label} ${userId}`}
-                          >
+                          <SelectItem key={userId} value={String(userId)} data-search-text={`${label} ${userId}`}>
                             {label}
                           </SelectItem>
                         )
@@ -6268,13 +6948,9 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {workflowForm.assigned_role_id
-                      ? roleUsersLoading
-                        ? "Loading people assigned to this role…"
-                        : roleUsers.length > 0
-                          ? "Showing people in the selected role. Use search in the list to find someone."
-                          : "Could not load that role’s members. Showing all company users so you can still pick someone."
-                      : "Assign a person if this step should go to someone specific. You can choose a role, a user, or both, but not neither."}
+                    Leave this blank to assign every active person in the selected department. When the workflow runs,
+                    they receive the task through each enabled notification channel and can track it under My Requests →
+                    To do.
                   </p>
                 </div>
               </div>
@@ -6290,8 +6966,77 @@ export function OnboardingView() {
                 >
                   Cancel
                 </Button>
-                <Button type="button" onClick={addWorkflowStep}>
+                <Button
+                  type="button"
+                  onClick={addWorkflowStep}
+                  className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                >
+                  <Plus className="h-4 w-4" />
                   {editingStepIndex === null ? "Add Step" : "Save Step"}
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+
+          <Dialog
+            open={checklistItemDialogOpen}
+            onOpenChange={(open) => {
+              setChecklistItemDialogOpen(open)
+              if (!open) {
+                setEditingChecklistItemIndex(null)
+                setChecklistItemForm({ name: "", description: "" })
+              }
+            }}
+          >
+            <DialogPopup from="bottom" className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingChecklistItemIndex === null ? "Add Checklist Item" : "Edit Checklist Item"}
+                </DialogTitle>
+                <DialogDescription>
+                  Give this item a clear name and add any instructions the assignee needs.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4">
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Checklist name
+                  <Input
+                    value={checklistItemForm.name}
+                    onChange={(event) =>
+                      setChecklistItemForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="e.g. Provide laptop"
+                    autoFocus
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Description (optional)
+                  <textarea
+                    value={checklistItemForm.description}
+                    onChange={(event) =>
+                      setChecklistItemForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Add specifications, access details, or other instructions"
+                    className="min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setChecklistItemDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={saveWorkflowChecklistItem}
+                  className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                >
+                  {editingChecklistItemIndex === null ? "Add Item" : "Save Item"}
                 </Button>
               </DialogFooter>
             </DialogPopup>

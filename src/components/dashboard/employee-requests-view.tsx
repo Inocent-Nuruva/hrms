@@ -33,6 +33,7 @@ import {
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   cancelMyProfileChangeRequest,
+  completeOnboardingTask,
   createMyProfileChangeRequest,
   deleteMyProfileChangeRequest,
   downloadMyDocument,
@@ -182,6 +183,16 @@ function collectChangePayload(requestType: string, form: Record<string, string>)
     if (value) payload[field.key] = value
   }
   return payload
+}
+
+function onboardingTaskActionRef(row: AdminRecord) {
+  const sourceType = readString(row, ["sourceEntityType", "source_entity_type"]).toUpperCase()
+  if (sourceType !== "ONBOARDING_TASK") return null
+
+  const metadata = row.metadata && typeof row.metadata === "object" ? (row.metadata as AdminRecord) : null
+  const requestId = readString(metadata, ["onboarding_request_id", "onboardingRequestId"], "")
+  const taskId = readString(row, ["sourceEntityId", "source_entity_id"], "")
+  return requestId && taskId ? { requestId, taskId } : null
 }
 
 export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab }) {
@@ -335,6 +346,26 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
       setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function completeAssignedOnboardingTask(row: AdminRecord) {
+    const accessToken = readStoredToken()
+    const reference = onboardingTaskActionRef(row)
+    if (!accessToken || !reference) return
+
+    const actionId = rowId(row)
+    setBusyId(`onboarding-${actionId}`)
+    try {
+      await completeOnboardingTask(accessToken, reference.requestId, reference.taskId, {
+        completion_notes: "Completed from My Requests",
+      })
+      toast.success("Onboarding task marked complete.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not complete the task.")
+    } finally {
+      setBusyId("")
     }
   }
 
@@ -558,7 +589,18 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
       {
         key: "item",
         label: "What to do",
-        render: (row) => readString(row, ["title", "summary", "name", "module"], `Task #${rowId(row)}`),
+        render: (row) => (
+          <div className="min-w-0">
+            <p className="font-medium">
+              {readString(row, ["title", "summary", "name", "module"], `Task #${rowId(row)}`)}
+            </p>
+            {readString(row, ["description"], "") ? (
+              <p className="mt-0.5 max-w-xl whitespace-normal text-xs text-muted-foreground">
+                {readString(row, ["description"], "")}
+              </p>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: "module",
@@ -572,8 +614,28 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
       },
       {
         key: "when",
-        label: "Updated",
-        render: (row) => formatDate(row.updatedAt ?? row.updated_at ?? row.createdAt ?? row.created_at),
+        label: "Due",
+        render: (row) => formatDate(row.dueAt ?? row.due_at ?? row.updatedAt ?? row.updated_at),
+      },
+      {
+        key: "actions",
+        label: "",
+        render: (row) => {
+          const reference = onboardingTaskActionRef(row)
+          const status = readString(row, ["status"], "OPEN").toUpperCase()
+          if (!reference || !["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)) return null
+          const actionId = rowId(row)
+          return (
+            <button
+              type="button"
+              className={actionButtonClass}
+              disabled={busyId === `onboarding-${actionId}`}
+              onClick={() => void completeAssignedOnboardingTask(row)}
+            >
+              {busyId === `onboarding-${actionId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Mark done"}
+            </button>
+          )
+        },
       },
     ]
   }, [activeTab, busyId, load])

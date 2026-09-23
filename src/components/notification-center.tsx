@@ -280,6 +280,8 @@ function resolveNotificationUrl(row: AdminRecord) {
     leave_request_submitted: "/dashboard/leave-management/requests",
     onboarding_request: "/dashboard/employees/onboarding",
     onboarding_request_submitted: "/dashboard/employees/onboarding",
+    onboarding_task: "/dashboard/me/requests/actions",
+    onboarding_task_assigned: "/dashboard/me/requests/actions",
     offboarding_request: "/dashboard/employees/offboarding",
     offboarding_request_submitted: "/dashboard/employees/offboarding",
   }

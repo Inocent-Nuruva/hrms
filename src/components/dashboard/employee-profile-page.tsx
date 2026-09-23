@@ -17,7 +17,8 @@ import {
 } from "lucide-react"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
-import * as FlagIcons from "country-flag-icons/react/3x2"
+
+import { CountryFlag } from "@/components/country-flag"
 
 import {
   AlertDialog,
@@ -1114,10 +1115,6 @@ function CountrySelectInput({
     return option.name.toLowerCase().includes(term) || option.code.toLowerCase().includes(term)
   })
 
-  const SelectedFlag = selected
-    ? (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[selected.code]
-    : null
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -1129,7 +1126,9 @@ function CountrySelectInput({
         }
       >
         <span className="flex items-center gap-2 truncate">
-          {SelectedFlag ? <SelectedFlag className="h-4 w-6 rounded-sm border border-slate-200" /> : null}
+          {selected ? (
+            <CountryFlag code={selected.code} className="h-4 w-6 rounded-sm border border-slate-200" />
+          ) : null}
           <span className="truncate text-slate-900">{selected?.name ?? "Select country"}</span>
         </span>
         <span className="text-slate-400">▼</span>
@@ -1143,7 +1142,6 @@ function CountrySelectInput({
         />
         <div className="max-h-56 overflow-auto">
           {filtered.map((option) => {
-            const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[option.code]
             return (
               <button
                 key={option.code}
@@ -1155,7 +1153,7 @@ function CountrySelectInput({
                   setSearch("")
                 }}
               >
-                {Flag ? <Flag className="h-4 w-6 rounded-sm border border-slate-200" /> : null}
+                <CountryFlag code={option.code} className="h-4 w-6 rounded-sm border border-slate-200" />
                 <span className="flex-1 truncate">{option.name}</span>
                 <span className="text-xs text-slate-500">{option.code}</span>
               </button>
@@ -1331,10 +1329,6 @@ function PhoneWithCountryCodeInput({
     )
   })
 
-  const SelectedFlag = selected
-    ? (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[selected.iso]
-    : null
-
   return (
     <div className="flex gap-2">
       <Popover open={open} onOpenChange={setOpen}>
@@ -1347,7 +1341,9 @@ function PhoneWithCountryCodeInput({
           }
         >
           <span className="flex items-center gap-2 truncate">
-            {SelectedFlag ? <SelectedFlag className="h-4 w-6 rounded-sm border border-slate-200" /> : null}
+            {selected ? (
+              <CountryFlag code={selected.iso} className="h-4 w-6 rounded-sm border border-slate-200" />
+            ) : null}
             <span className="truncate text-slate-900">{selected?.code ?? parsed.dialCode}</span>
           </span>
           <span className="text-slate-400">▼</span>
@@ -1361,7 +1357,6 @@ function PhoneWithCountryCodeInput({
           />
           <div className="max-h-56 overflow-auto">
             {filtered.map((option) => {
-              const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[option.iso]
               return (
                 <button
                   key={`${option.iso}-${option.code}`}
@@ -1373,7 +1368,7 @@ function PhoneWithCountryCodeInput({
                     setSearch("")
                   }}
                 >
-                  {Flag ? <Flag className="h-4 w-6 rounded-sm border border-slate-200" /> : null}
+                  <CountryFlag code={option.iso} className="h-4 w-6 rounded-sm border border-slate-200" />
                   <span className="font-medium text-slate-900">{option.code}</span>
                 </button>
               )
@@ -2117,8 +2112,12 @@ function Section({
                               if (!option) {
                                 return null
                               }
-                              const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[option.code]
-                              return Flag ? <Flag className="h-3 w-4 rounded-sm border border-border" /> : null
+                              return (
+                                <CountryFlag
+                                  code={option.code}
+                                  className="h-3 w-4 rounded-sm border border-border"
+                                />
+                              )
                             })()}
                             <span>{entry.value}</span>
                           </span>

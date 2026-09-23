@@ -35,7 +35,7 @@ describe("documented onboarding and offboarding leftovers", () => {
       .mockResolvedValueOnce(
         jsonResponse({
           data: { id: 2, status: "draft", employee_id: 139 },
-        }),
+        })
       )
       .mockResolvedValueOnce(
         jsonResponse(
@@ -43,8 +43,8 @@ describe("documented onboarding and offboarding leftovers", () => {
             statusCode: 409,
             message: "Employee already has active onboarding request ONB-2026-000001",
           },
-          { status: 409 },
-        ),
+          { status: 409 }
+        )
       )
     vi.stubGlobal("fetch", fetchMock)
 
@@ -72,7 +72,7 @@ describe("documented onboarding and offboarding leftovers", () => {
           title: "Onboarding for Damas Urio Damas",
           submit: false,
         }),
-      }),
+      })
     )
   })
 
@@ -91,12 +91,12 @@ describe("documented onboarding and offboarding leftovers", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://localhost:8888/api/me/onboarding",
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://localhost:8888/api/me/offboarding",
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({ method: "GET" })
     )
     expect(onboarding).toEqual([expect.objectContaining({ id: 11 })])
     expect(offboarding).toEqual([expect.objectContaining({ id: 22 })])
@@ -124,7 +124,7 @@ describe("documented onboarding and offboarding leftovers", () => {
           accepted: true,
           acknowledgement_version: "v1",
         }),
-      }),
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -135,93 +135,41 @@ describe("documented onboarding and offboarding leftovers", () => {
           delegate_company_user_id: 44,
           reason: "On leave",
         }),
-      }),
+      })
     )
   })
 
-  it("submits a draft by creating a new request with submit=true", async () => {
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      const method = String(init?.method ?? "GET").toUpperCase()
-      const path = String(url)
-      if (path.endsWith("/api/onboarding/requests/3") && method === "GET") {
-        return jsonResponse({
-          data: {
-            id: 3,
-            employee_id: 139,
-            workflow_id: 1,
-            title: "TEST",
-            description: "TEST",
-            status: "draft",
-          },
-        })
-      }
-      if (path.endsWith("/api/onboarding/requests") && method === "POST") {
-        return jsonResponse({ data: { id: 4, status: "submitted" } })
-      }
-      if (path.endsWith("/api/onboarding/requests/3/cancel") && method === "POST") {
-        return jsonResponse({ data: { ok: true } })
-      }
-      return jsonResponse({ data: {} })
-    })
+  it("submits a draft in place with the incomplete-details override", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { id: 3, status: "submitted" } }))
     vi.stubGlobal("fetch", fetchMock)
 
-    await submitOnboardingRequest("token", 3, { workflow_id: 9 })
+    await submitOnboardingRequest("token", 3, {
+      allow_incomplete_employee_details: true,
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests/3",
-      expect.objectContaining({ method: "GET" }),
-    )
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests",
+      "http://localhost:8888/api/onboarding/requests/3/submit",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          employee_id: 139,
-          submit: true,
-          title: "TEST",
-          workflow_id: 1,
-          description: "TEST",
+          allow_incomplete_employee_details: true,
         }),
-      }),
+      })
     )
   })
 
-  it("reads employee_id from nested employee when the GET envelope also has company", async () => {
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      const method = String(init?.method ?? "GET").toUpperCase()
-      const path = String(url)
-      if (path.endsWith("/api/onboarding/requests/3") && method === "GET") {
-        return jsonResponse({
-          data: {
-            id: 3,
-            title: "TEST",
-            status: "draft",
-            company: { id: 1, name: "Acme" },
-            employee: { id: 139, first_name: "Kevin", last_name: "Kiggundu" },
-            workflow: { id: 1, name: "General" },
-          },
-        })
-      }
-      if (path.endsWith("/api/onboarding/requests") && method === "POST") {
-        return jsonResponse({ data: { id: 4, status: "submitted" } })
-      }
-      return jsonResponse({ data: { ok: true } })
-    })
+  it("requires completed employee details by default when submitting a draft", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { id: 3, status: "submitted" } }))
     vi.stubGlobal("fetch", fetchMock)
 
-    await submitOnboardingRequest("token", 3, { employee_id: 139 })
+    await submitOnboardingRequest("token", 3)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8888/api/onboarding/requests",
+      "http://localhost:8888/api/onboarding/requests/3/submit",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({
-          employee_id: 139,
-          submit: true,
-          title: "TEST",
-          workflow_id: 1,
-        }),
-      }),
+        body: JSON.stringify({}),
+      })
     )
   })
 
@@ -243,7 +191,7 @@ describe("documented onboarding and offboarding leftovers", () => {
           approve: true,
           comments: "Approved",
         }),
-      }),
+      })
     )
   })
 
@@ -266,7 +214,7 @@ describe("documented onboarding and offboarding leftovers", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "completed" }),
-      }),
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -274,7 +222,7 @@ describe("documented onboarding and offboarding leftovers", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ status: "returned" }),
-      }),
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
@@ -285,7 +233,7 @@ describe("documented onboarding and offboarding leftovers", () => {
           owner_company_user_id: 15,
           remarks: "IT owner",
         }),
-      }),
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
@@ -293,12 +241,12 @@ describe("documented onboarding and offboarding leftovers", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ title: "Exit checklist" }),
-      }),
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
       "http://localhost:8888/api/offboarding/requests/9/documents/7",
-      expect.objectContaining({ method: "DELETE" }),
+      expect.objectContaining({ method: "DELETE" })
     )
   })
 })

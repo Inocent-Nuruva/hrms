@@ -7,10 +7,7 @@ import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SecurityScanLoader } from "@/components/ui/security-scan-loader";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  markDashboardFromLogin,
-  prefetchDashboardWarmCache,
-} from "@/lib/dashboard-warm-cache";
+import { markDashboardFromLogin } from "@/lib/dashboard-login-flag";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
 import type { AuthScope, DashboardType } from "@/types";
 import Link from "next/link";
@@ -87,7 +84,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
   }, []);
 
   const finishLogin = async (
-    accessToken: string,
+    _accessToken: string,
     normalizedEmail: string,
     redirect: string,
     dashboardType?: DashboardType,
@@ -103,25 +100,16 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       }
     }
 
-    // Hide form; keep loader only here while dashboard data is prefetched.
+    // Show the access loader, then open the app. Dashboard data loads on the
+    // destination page so sign-in does not compile or wait on the admin API.
     setIsDone(true);
     if (redirect === "/dashboard" && dashboardType !== "employee" && scope !== "platform") {
       markDashboardFromLogin();
     }
 
-    try {
-      // Cap wait so a slow network still opens the app; snapshot is best-effort.
-      if (redirect === "/dashboard" && dashboardType !== "employee" && scope !== "platform") {
-        await Promise.race([
-          prefetchDashboardWarmCache(accessToken),
-          new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 10_000);
-          }),
-        ]);
-      }
-    } catch {
-      // Still redirect — dashboard will load normally if warm cache failed.
-    }
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 400);
+    });
 
     if (onSuccess) onSuccess(redirect);
     else window.location.href = redirect;

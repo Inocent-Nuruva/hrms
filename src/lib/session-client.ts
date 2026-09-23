@@ -9,6 +9,8 @@ import {
 const ACCESS_TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_SESSION_TOKEN_KEY = "ess_auth_token"
 
+export const SESSION_CLEARED_EVENT = "hrms:session-cleared"
+
 type StoredTokens = {
   accessToken: string
   refreshToken: string
@@ -106,10 +108,9 @@ export function clearStoredSession() {
   void import("@/lib/forbidden-routes").then((mod) => {
     mod.clearDashboardRouteMemory()
   })
-  // Dynamic import avoids a circular dependency with the photo store module.
-  void import("@/lib/my-profile-photo").then((mod) => {
-    mod.invalidateMyProfilePhoto()
-  })
+  // The photo store listens for this. Importing it here would pull the full
+  // admin API client into every page that clears a session, including login.
+  window.dispatchEvent(new Event(SESSION_CLEARED_EVENT))
 }
 
 export function readJwtExpiry(token: string) {

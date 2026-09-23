@@ -6,7 +6,8 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
 import ReactFlagsSelect from "react-flags-select"
 import { countries as countryCodes } from "country-flag-icons"
-import * as FlagIcons from "country-flag-icons/react/3x2"
+
+import { CountryFlag } from "@/components/country-flag"
 import {
   BadgeCheckIcon,
   CalendarDaysIcon,
@@ -30,22 +31,20 @@ import {
   listDepartmentPositions,
   listDepartments,
   listEmployees,
+  listMyOnboardingRequests,
   listOnboardingWorkflows,
   listPositions,
   listShiftResources,
   listTimetableResources,
+  submitMyOnboardingDetails,
+  updateMyEmployeeProfile,
   type AdminRecord,
+  type CreateEmployeePayload,
   type CreateEmployeeResponse,
   type OnboardingAttendanceMode,
 } from "@/lib/admin-api"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
-import {
-  Tabs,
-  TabsContent,
-  TabsContents,
-  TabsList,
-  TabsTrigger,
-} from "@/components/animate-ui/components/animate/tabs"
+import { Tabs, TabsContent, TabsContents, TabsList, TabsTrigger } from "@/components/animate-ui/components/animate/tabs"
 import {
   Dialog,
   DialogClose,
@@ -69,23 +68,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -93,10 +81,7 @@ import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { cn } from "@/lib/utils"
 import { buildEmployeeOnboardingInput } from "@/lib/onboarding-provisioning"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import {
-  EMPLOYEE_REGISTRATION_PERMISSION,
-  hasPermission,
-} from "@/lib/dashboard-permissions"
+import { EMPLOYEE_REGISTRATION_PERMISSION, hasPermission } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token"
@@ -312,30 +297,10 @@ const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"]
 const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed"]
 const CONTACT_TYPE_OPTIONS = ["personal", "work"]
 const ADDRESS_TYPE_OPTIONS = ["home", "work", "other"]
-const RELATIONSHIP_OPTIONS = [
-  "parent",
-  "spouse",
-  "sibling",
-  "child",
-  "guardian",
-  "other",
-]
-const IDENTIFICATION_TYPE_OPTIONS = [
-  "national_id",
-  "passport",
-  "driving_license",
-  "voter_id",
-  "other",
-]
-const MOBILE_MONEY_PROVIDER_OPTIONS = [
-  "none",
-  "M-Pesa",
-  "Airtel Money",
-  "Tigo Pesa",
-  "Halopesa",
-]
-const DEFAULT_MOBILE_MONEY_PROVIDER =
-  MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
+const RELATIONSHIP_OPTIONS = ["parent", "spouse", "sibling", "child", "guardian", "other"]
+const IDENTIFICATION_TYPE_OPTIONS = ["national_id", "passport", "driving_license", "voter_id", "other"]
+const MOBILE_MONEY_PROVIDER_OPTIONS = ["none", "M-Pesa", "Airtel Money", "Tigo Pesa", "Halopesa"]
+const DEFAULT_MOBILE_MONEY_PROVIDER = MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
 const EMPTY_CONTACT: ContactFormState = {
   contactType: "personal",
   isPrimary: false,
@@ -505,7 +470,8 @@ const REGISTER_STEP_LABELS: Record<RegisterStep, string> = {
 }
 
 type RegisterStep = (typeof REGISTER_STEP_ORDER)[number]
-type DeleteEntityKind = "contact" | "address" | "relative" | "identification" | "bankAccount" | "academic" | "professional" | "experience"
+type DeleteEntityKind =
+  "contact" | "address" | "relative" | "identification" | "bankAccount" | "academic" | "professional" | "experience"
 
 type CountryIso = "TZ" | "KE" | "UG" | "RW" | "BI" | "ZM" | "ZA" | "GB" | "US"
 
@@ -554,9 +520,7 @@ function toAdminRecordArray(value: unknown): AdminRecord[] {
     return []
   }
 
-  return value
-    .map((entry) => asRecord(entry))
-    .filter((entry): entry is AdminRecord => entry !== null)
+  return value.map((entry) => asRecord(entry)).filter((entry): entry is AdminRecord => entry !== null)
 }
 
 function getDialCodeForCountry(isoCode: string) {
@@ -592,9 +556,7 @@ function normalizePhoneNumberForContact(phoneNumber: string, countryIso: Country
   return normalizedPhone.replace(/^\+\d{1,4}/, "").replace(/\D+/g, "")
 }
 
-function resolveInitialPrimaryContact(
-  sources: Array<AdminRecord | null>
-): ContactFormState | null {
+function resolveInitialPrimaryContact(sources: Array<AdminRecord | null>): ContactFormState | null {
   for (const source of sources) {
     if (!source) {
       continue
@@ -630,8 +592,7 @@ function resolveInitialPrimaryContact(
       countryIso,
       phoneNumber: normalizePhoneNumberForContact(rawPhone, countryIso),
       email,
-      notes:
-        readString(primaryContact, ["notes", "note"]) ?? "Prefilled from your primary employee contact.",
+      notes: readString(primaryContact, ["notes", "note"]) ?? "Prefilled from your primary employee contact.",
     }
   }
 
@@ -645,7 +606,10 @@ type RoleOption = {
 }
 
 function normalizeRoleText(value: string) {
-  return value.trim().toLowerCase().replace(/[\s_-]+/g, "")
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "")
 }
 
 function resolveDefaultRoleId(roleOptions: RoleOption[]) {
@@ -654,18 +618,14 @@ function resolveDefaultRoleId(roleOptions: RoleOption[]) {
   }
 
   const exactUser = roleOptions.find(
-    (role) =>
-      normalizeRoleText(role.name) === "user" ||
-      normalizeRoleText(role.label) === "user"
+    (role) => normalizeRoleText(role.name) === "user" || normalizeRoleText(role.label) === "user"
   )
   if (exactUser) {
     return exactUser.id
   }
 
   const includesUser = roleOptions.find(
-    (role) =>
-      normalizeRoleText(role.name).includes("user") ||
-      normalizeRoleText(role.label).includes("user")
+    (role) => normalizeRoleText(role.name).includes("user") || normalizeRoleText(role.label).includes("user")
   )
   if (includesUser) {
     return includesUser.id
@@ -712,7 +672,12 @@ function readNumberish(value: unknown) {
 
 function relatedDepartmentIds(record: AdminRecord) {
   const ids = new Set<number>()
-  for (const value of [record.department_id, record.departmentId, record.primary_department_id, record.primaryDepartmentId]) {
+  for (const value of [
+    record.department_id,
+    record.departmentId,
+    record.primary_department_id,
+    record.primaryDepartmentId,
+  ]) {
     const id = readNumberish(value)
     if (id !== null) ids.add(id)
   }
@@ -835,8 +800,7 @@ function uniqueOptionLabels(values: Array<string | null | undefined>) {
 
 function toRoleOption(record: AdminRecord): RoleOption | null {
   const idValue = record.id
-  const id =
-    typeof idValue === "number" || typeof idValue === "string" ? String(idValue) : null
+  const id = typeof idValue === "number" || typeof idValue === "string" ? String(idValue) : null
   if (!id) {
     return null
   }
@@ -877,7 +841,10 @@ async function fetchRolesDirect(accessToken: string) {
   }
 
   // Graceful fallback for environments where roles may be exposed without auth.
-  const directResponse = await fetch(endpoint, { method: "GET", cache: "no-store" })
+  const directResponse = await fetch(endpoint, {
+    method: "GET",
+    cache: "no-store",
+  })
   if (!directResponse.ok) {
     throw new Error(`Request failed with status ${authedResponse.status}`)
   }
@@ -915,10 +882,7 @@ function resolveAccessTokenFromStorage() {
         if (candidateRefresh && !authRefreshToken) {
           authRefreshToken = candidateRefresh
         }
-        if (
-          candidateAccess &&
-          !isLikelyRefreshToken(candidateAccess, candidateRefresh ?? authRefreshToken)
-        ) {
+        if (candidateAccess && !isLikelyRefreshToken(candidateAccess, candidateRefresh ?? authRefreshToken)) {
           authAccessToken = candidateAccess
           break
         }
@@ -931,12 +895,8 @@ function resolveAccessTokenFromStorage() {
 
   return (
     authAccessToken ||
-    (fromDedicatedKey && !isLikelyRefreshToken(fromDedicatedKey, authRefreshToken)
-      ? fromDedicatedKey
-      : "") ||
-    (legacySessionToken && !isLikelyRefreshToken(legacySessionToken, authRefreshToken)
-      ? legacySessionToken
-      : "")
+    (fromDedicatedKey && !isLikelyRefreshToken(fromDedicatedKey, authRefreshToken) ? fromDedicatedKey : "") ||
+    (legacySessionToken && !isLikelyRefreshToken(legacySessionToken, authRefreshToken) ? legacySessionToken : "")
   )
 }
 
@@ -1159,11 +1119,7 @@ const NATIONALITY_OPTIONS = (countryCodes as string[])
   .sort((left, right) => left.name.localeCompare(right.name))
 
 function NationalityFlag({ code }: { code: string }) {
-  const Flag = (
-    FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>
-  )[code]
-  if (!Flag) return null
-  return <Flag title={code} className="h-3.5 w-5 shrink-0 rounded-[2px] border border-border" />
+  return <CountryFlag code={code} className="h-3.5 w-5" />
 }
 
 function AnimatedField({
@@ -1176,10 +1132,7 @@ function AnimatedField({
   className?: string
 }) {
   return (
-    <div
-      className={cn("animate-fade-up", className)}
-      style={{ animationDelay: `${delayMs}ms`, opacity: 0 }}
-    >
+    <div className={cn("animate-fade-up", className)} style={{ animationDelay: `${delayMs}ms`, opacity: 0 }}>
       {children}
     </div>
   )
@@ -1210,9 +1163,7 @@ function Field({
         </Label>
         {children}
         {hint || reserveHintSpace ? (
-          <div className="min-h-3.5 text-[11px] leading-snug text-muted-foreground">
-            {hint}
-          </div>
+          <div className="min-h-3.5 text-[11px] leading-snug text-muted-foreground">{hint}</div>
         ) : null}
       </div>
     </AnimatedField>
@@ -1305,8 +1256,7 @@ function MultiSelectChecklist({
 
 export function EmployeeRegisterForm() {
   const actor = useDashboardActor()
-  const isRegisteringOthers =
-    actor.ready && hasPermission(actor.permissionLabels, EMPLOYEE_REGISTRATION_PERMISSION)
+  const isRegisteringOthers = actor.ready && hasPermission(actor.permissionLabels, EMPLOYEE_REGISTRATION_PERMISSION)
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
   const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
   const [form, setForm] = React.useState<RegisterFormState>(EMPTY_FORM)
@@ -1317,12 +1267,16 @@ export function EmployeeRegisterForm() {
   const [identifications, setIdentifications] = React.useState<IdentificationFormState[]>([])
   const [bankAccounts, setBankAccounts] = React.useState<BankAccountFormState[]>([])
   const [academicQualifications, setAcademicQualifications] = React.useState<AcademicQualificationFormState[]>([])
-  const [professionalQualifications, setProfessionalQualifications] = React.useState<ProfessionalQualificationFormState[]>([])
+  const [professionalQualifications, setProfessionalQualifications] = React.useState<
+    ProfessionalQualificationFormState[]
+  >([])
   const [experienceDetails, setExperienceDetails] = React.useState<ExperienceDetailFormState[]>([])
   const [hireDate, setHireDate] = React.useState<Date | undefined>(undefined)
   const [probationEndDate, setProbationEndDate] = React.useState<Date | undefined>(undefined)
   const [isContactDialogOpen, setIsContactDialogOpen] = React.useState(false)
-  const [draftContact, setDraftContact] = React.useState<ContactFormState>({ ...EMPTY_CONTACT })
+  const [draftContact, setDraftContact] = React.useState<ContactFormState>({
+    ...EMPTY_CONTACT,
+  })
   const [draftContactPhoneError, setDraftContactPhoneError] = React.useState("")
   const [draftContactEmailError, setDraftContactEmailError] = React.useState("")
   const [isInviteMode, setIsInviteMode] = React.useState(false)
@@ -1333,10 +1287,14 @@ export function EmployeeRegisterForm() {
   const [inviteEmailError, setInviteEmailError] = React.useState("")
   const [editingContactIndex, setEditingContactIndex] = React.useState<number | null>(null)
   const [isAddressDialogOpen, setIsAddressDialogOpen] = React.useState(false)
-  const [draftAddress, setDraftAddress] = React.useState<AddressFormState>({ ...EMPTY_ADDRESS })
+  const [draftAddress, setDraftAddress] = React.useState<AddressFormState>({
+    ...EMPTY_ADDRESS,
+  })
   const [editingAddressIndex, setEditingAddressIndex] = React.useState<number | null>(null)
   const [isRelativeDialogOpen, setIsRelativeDialogOpen] = React.useState(false)
-  const [draftRelative, setDraftRelative] = React.useState<RelativeFormState>({ ...EMPTY_RELATIVE })
+  const [draftRelative, setDraftRelative] = React.useState<RelativeFormState>({
+    ...EMPTY_RELATIVE,
+  })
   const [editingRelativeIndex, setEditingRelativeIndex] = React.useState<number | null>(null)
   const [isIdentificationDialogOpen, setIsIdentificationDialogOpen] = React.useState(false)
   const [draftIdentification, setDraftIdentification] = React.useState<IdentificationFormState>({
@@ -1354,7 +1312,9 @@ export function EmployeeRegisterForm() {
   const [editingAcademicIndex, setEditingAcademicIndex] = React.useState<number | null>(null)
 
   const [isProfessionalDialogOpen, setIsProfessionalDialogOpen] = React.useState(false)
-  const [draftProfessional, setDraftProfessional] = React.useState<ProfessionalQualificationFormState>({ ...EMPTY_PROFESSIONAL })
+  const [draftProfessional, setDraftProfessional] = React.useState<ProfessionalQualificationFormState>({
+    ...EMPTY_PROFESSIONAL,
+  })
   const [editingProfessionalIndex, setEditingProfessionalIndex] = React.useState<number | null>(null)
 
   const [isExperienceDialogOpen, setIsExperienceDialogOpen] = React.useState(false)
@@ -1388,9 +1348,8 @@ export function EmployeeRegisterForm() {
   const [employeeNoTouched, setEmployeeNoTouched] = React.useState(false)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [createdEmployeeResult, setCreatedEmployeeResult] = React.useState<CreateEmployeeResponse | null>(null)
-  const [initializedFields, setInitializedFields] = React.useState<InitializedRegistrationFields>(
-    EMPTY_INITIALIZED_FIELDS
-  )
+  const [initializedFields, setInitializedFields] =
+    React.useState<InitializedRegistrationFields>(EMPTY_INITIALIZED_FIELDS)
   const [registrationContextResolved, setRegistrationContextResolved] = React.useState(false)
   const [selfRegistrationStatus, setSelfRegistrationStatus] = React.useState("")
   const [savedRegisterDraft, setSavedRegisterDraft] = React.useState<StoredRegisterDraft | null>(null)
@@ -1425,10 +1384,7 @@ export function EmployeeRegisterForm() {
     () => findRecordByName(branchRecords, form.branch),
     [branchRecords, form.branch]
   )
-  const selectedBranchId = React.useMemo(
-    () => readRecordId(selectedBranchRecord),
-    [selectedBranchRecord]
-  )
+  const selectedBranchId = React.useMemo(() => readRecordId(selectedBranchRecord), [selectedBranchRecord])
   const departmentsForSelectedBranch = React.useMemo(() => {
     if (selectedBranchId === null) {
       return []
@@ -1453,10 +1409,7 @@ export function EmployeeRegisterForm() {
     () => findRecordByName(departmentsForSelectedBranch, form.department),
     [departmentsForSelectedBranch, form.department]
   )
-  const selectedDepartmentId = React.useMemo(
-    () => readRecordId(selectedDepartmentRecord),
-    [selectedDepartmentRecord]
-  )
+  const selectedDepartmentId = React.useMemo(() => readRecordId(selectedDepartmentRecord), [selectedDepartmentRecord])
 
   React.useEffect(() => {
     if (selectedDepartmentId === null) {
@@ -1542,13 +1495,7 @@ export function EmployeeRegisterForm() {
         .map((row) => recordOptionLabel(row, ["position_name", "positionName"]))
         .filter((name) => name !== null && name !== "-")
     )
-  }, [
-    departmentPositionRecords,
-    departmentPositionsLoaded,
-    positionRecords,
-    selectedBranchId,
-    selectedDepartmentId,
-  ])
+  }, [departmentPositionRecords, departmentPositionsLoaded, positionRecords, selectedBranchId, selectedDepartmentId])
   const reportsToOptions = React.useMemo(() => {
     return reportsToRecords
       .filter((row) => {
@@ -1581,14 +1528,13 @@ export function EmployeeRegisterForm() {
       .filter((o): o is { id: number; label: string } => o !== null)
   }, [reportsToRecords, selectedDepartmentId])
   const selectedReportsToLabel = React.useMemo(
-    () =>
-      reportsToOptions.find((option) => String(option.id) === String(form.reportsTo))?.label ?? "",
+    () => reportsToOptions.find((option) => String(option.id) === String(form.reportsTo))?.label ?? "",
     [form.reportsTo, reportsToOptions]
   )
   const selectedEmploymentTypeLabel = React.useMemo(
     () =>
-      EMPLOYMENT_TYPE_OPTIONS.find((option) => option.value === (form.employmentType || "full_time"))
-        ?.label ?? "Full Time",
+      EMPLOYMENT_TYPE_OPTIONS.find((option) => option.value === (form.employmentType || "full_time"))?.label ??
+      "Full Time",
     [form.employmentType]
   )
   React.useEffect(() => {
@@ -1610,10 +1556,7 @@ export function EmployeeRegisterForm() {
   }, [form.position, positionOptions])
 
   React.useEffect(() => {
-    if (
-      form.reportsTo &&
-      !reportsToOptions.some((option) => String(option.id) === String(form.reportsTo))
-    ) {
+    if (form.reportsTo && !reportsToOptions.some((option) => String(option.id) === String(form.reportsTo))) {
       updateField("reportsTo", "")
     }
   }, [form.reportsTo, reportsToOptions])
@@ -1753,24 +1696,27 @@ export function EmployeeRegisterForm() {
     [branchRecords]
   )
   const onboardingRoleOptions = React.useMemo(
-    () => roles.map((role) => ({ id: Number(role.id), label: role.label || role.name })).filter((role) => Number.isFinite(role.id)),
+    () =>
+      roles
+        .map((role) => ({
+          id: Number(role.id),
+          label: role.label || role.name,
+        }))
+        .filter((role) => Number.isFinite(role.id)),
     [roles]
   )
   const currentStepIndex = REGISTER_STEP_ORDER.indexOf(currentStep)
   const visibleRegisterSteps: readonly RegisterStep[] = isInviteMode ? ["details"] : REGISTER_STEP_ORDER
   const visibleCurrentStepIndex = visibleRegisterSteps.indexOf(currentStep as (typeof visibleRegisterSteps)[number])
   const currentVisibleStepIndex = visibleCurrentStepIndex === -1 ? 0 : visibleCurrentStepIndex
-  const previousVisibleStep =
-    currentVisibleStepIndex > 0 ? visibleRegisterSteps[currentVisibleStepIndex - 1] : null
+  const previousVisibleStep = currentVisibleStepIndex > 0 ? visibleRegisterSteps[currentVisibleStepIndex - 1] : null
   const nextVisibleStep =
     currentStepIndex < REGISTER_STEP_ORDER.length - 1
-      ? visibleRegisterSteps[currentVisibleStepIndex + 1] ?? null
+      ? (visibleRegisterSteps[currentVisibleStepIndex + 1] ?? null)
       : null
   const stepProgress =
     currentVisibleStepIndex >= 0
-      ? Math.round(
-          ((currentVisibleStepIndex + 1) / Math.max(visibleRegisterSteps.length, 1)) * 100
-        )
+      ? Math.round(((currentVisibleStepIndex + 1) / Math.max(visibleRegisterSteps.length, 1)) * 100)
       : 0
   const [animatedStepProgress, setAnimatedStepProgress] = React.useState(stepProgress)
   const animatedStepProgressRef = React.useRef(stepProgress)
@@ -1804,7 +1750,11 @@ export function EmployeeRegisterForm() {
   const isRegisterStepFilled = React.useCallback(
     (step: RegisterStep) => {
       const hasText = (...values: Array<string | number | null | undefined>) =>
-        values.some((value) => typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined && String(value).trim().length > 0)
+        values.some((value) =>
+          typeof value === "string"
+            ? value.trim().length > 0
+            : value !== null && value !== undefined && String(value).trim().length > 0
+        )
 
       switch (step) {
         case "details":
@@ -1823,7 +1773,10 @@ export function EmployeeRegisterForm() {
               form.employmentType,
               form.reportsTo,
               form.employeeNo
-            ) || Boolean(dob) || Boolean(hireDate) || Boolean(probationEndDate)
+            ) ||
+            Boolean(dob) ||
+            Boolean(hireDate) ||
+            Boolean(probationEndDate)
           )
         case "contacts":
           return contacts.length > 0
@@ -1885,20 +1838,14 @@ export function EmployeeRegisterForm() {
     [currentStep, tabDirection]
   )
 
-  const updateField = <K extends keyof RegisterFormState>(
-    field: K,
-    value: RegisterFormState[K]
-  ) => {
+  const updateField = <K extends keyof RegisterFormState>(field: K, value: RegisterFormState[K]) => {
     setForm((previous) => ({
       ...previous,
       [field]: value,
     }))
   }
 
-  const updateOnboardingField = <K extends keyof OnboardingFormState>(
-    field: K,
-    value: OnboardingFormState[K]
-  ) => {
+  const updateOnboardingField = <K extends keyof OnboardingFormState>(field: K, value: OnboardingFormState[K]) => {
     setOnboarding((previous) => ({
       ...previous,
       [field]: value,
@@ -1958,10 +1905,7 @@ export function EmployeeRegisterForm() {
     }))
   }
 
-  const updateDraftContact = <K extends keyof ContactFormState>(
-    field: K,
-    value: ContactFormState[K]
-  ) => {
+  const updateDraftContact = <K extends keyof ContactFormState>(field: K, value: ContactFormState[K]) => {
     setDraftContact((previous) => ({
       ...previous,
       [field]: value,
@@ -1985,10 +1929,7 @@ export function EmployeeRegisterForm() {
     }))
   }
 
-  const updateInviteContact = <K extends keyof InviteContactFormState>(
-    field: K,
-    value: InviteContactFormState[K]
-  ) => {
+  const updateInviteContact = <K extends keyof InviteContactFormState>(field: K, value: InviteContactFormState[K]) => {
     setInviteContact((previous) => ({
       ...previous,
       [field]: value,
@@ -2049,10 +1990,7 @@ export function EmployeeRegisterForm() {
       return
     }
 
-    if (
-      normalizedEmail &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
-    ) {
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setDraftContactEmailError("Enter a valid email address.")
       return
     }
@@ -2079,10 +2017,7 @@ export function EmployeeRegisterForm() {
     setContacts((previous) => previous.filter((_, currentIndex) => currentIndex !== index))
   }
 
-  const updateDraftAddress = <K extends keyof AddressFormState>(
-    field: K,
-    value: AddressFormState[K]
-  ) => {
+  const updateDraftAddress = <K extends keyof AddressFormState>(field: K, value: AddressFormState[K]) => {
     setDraftAddress((previous) => ({
       ...previous,
       [field]: value,
@@ -2120,10 +2055,7 @@ export function EmployeeRegisterForm() {
     setAddresses((previous) => previous.filter((_, currentIndex) => currentIndex !== index))
   }
 
-  const updateDraftRelative = <K extends keyof RelativeFormState>(
-    field: K,
-    value: RelativeFormState[K]
-  ) => {
+  const updateDraftRelative = <K extends keyof RelativeFormState>(field: K, value: RelativeFormState[K]) => {
     setDraftRelative((previous) => ({
       ...previous,
       [field]: value,
@@ -2191,9 +2123,7 @@ export function EmployeeRegisterForm() {
     setIdentifications((previous) =>
       editingIdentificationIndex === null
         ? [...previous, { ...draftIdentification }]
-        : previous.map((item, index) =>
-            index === editingIdentificationIndex ? { ...draftIdentification } : item
-          )
+        : previous.map((item, index) => (index === editingIdentificationIndex ? { ...draftIdentification } : item))
     )
     setIsIdentificationDialogOpen(false)
     setEditingIdentificationIndex(null)
@@ -2204,10 +2134,7 @@ export function EmployeeRegisterForm() {
     setIdentifications((previous) => previous.filter((_, currentIndex) => currentIndex !== index))
   }
 
-  const updateDraftBankAccount = <K extends keyof BankAccountFormState>(
-    field: K,
-    value: BankAccountFormState[K]
-  ) => {
+  const updateDraftBankAccount = <K extends keyof BankAccountFormState>(field: K, value: BankAccountFormState[K]) => {
     setDraftBankAccount((previous) => ({
       ...previous,
       [field]: value,
@@ -2251,10 +2178,7 @@ export function EmployeeRegisterForm() {
       return
     }
     const nextMode =
-      entry.paymentMode ??
-      (entry.mobileMoneyProvider && entry.mobileMoneyProvider !== "none"
-        ? "mobile_money"
-        : "bank")
+      entry.paymentMode ?? (entry.mobileMoneyProvider && entry.mobileMoneyProvider !== "none" ? "mobile_money" : "bank")
     setEditingBankIndex(index)
     setDraftBankAccount({
       ...entry,
@@ -2280,9 +2204,7 @@ export function EmployeeRegisterForm() {
     const normalizedDraft: BankAccountFormState = {
       ...draftBankAccount,
       paymentMode: isMobileMoneyMode ? "mobile_money" : "bank",
-      bankName: isMobileMoneyMode
-        ? mobileMoneyProvider
-        : draftBankAccount.bankName,
+      bankName: isMobileMoneyMode ? mobileMoneyProvider : draftBankAccount.bankName,
       accountNumber: draftBankAccount.accountNumber.trim(),
       branchName: isMobileMoneyMode ? "" : draftBankAccount.branchName,
       swiftCode: draftBankAccount.swiftCode.trim(),
@@ -2304,7 +2226,10 @@ export function EmployeeRegisterForm() {
   }
 
   // Academic helpers
-  const updateDraftAcademic = <K extends keyof AcademicQualificationFormState>(key: K, value: AcademicQualificationFormState[K]) => {
+  const updateDraftAcademic = <K extends keyof AcademicQualificationFormState>(
+    key: K,
+    value: AcademicQualificationFormState[K]
+  ) => {
     setDraftAcademic((previous) => ({ ...previous, [key]: value }))
   }
   const addAcademic = () => {
@@ -2322,7 +2247,9 @@ export function EmployeeRegisterForm() {
   const saveDraftAcademic = () => {
     const normalized = { ...draftAcademic }
     setAcademicQualifications((previous) =>
-      editingAcademicIndex === null ? [...previous, normalized] : previous.map((item, i) => (i === editingAcademicIndex ? normalized : item))
+      editingAcademicIndex === null
+        ? [...previous, normalized]
+        : previous.map((item, i) => (i === editingAcademicIndex ? normalized : item))
     )
     setIsAcademicDialogOpen(false)
     setEditingAcademicIndex(null)
@@ -2331,7 +2258,10 @@ export function EmployeeRegisterForm() {
   const removeAcademic = (index: number) => setAcademicQualifications((p) => p.filter((_, i) => i !== index))
 
   // Professional helpers
-  const updateDraftProfessional = <K extends keyof ProfessionalQualificationFormState>(key: K, value: ProfessionalQualificationFormState[K]) => {
+  const updateDraftProfessional = <K extends keyof ProfessionalQualificationFormState>(
+    key: K,
+    value: ProfessionalQualificationFormState[K]
+  ) => {
     setDraftProfessional((previous) => ({ ...previous, [key]: value }))
   }
   const addProfessional = () => {
@@ -2349,7 +2279,9 @@ export function EmployeeRegisterForm() {
   const saveDraftProfessional = () => {
     const normalized = { ...draftProfessional }
     setProfessionalQualifications((previous) =>
-      editingProfessionalIndex === null ? [...previous, normalized] : previous.map((item, i) => (i === editingProfessionalIndex ? normalized : item))
+      editingProfessionalIndex === null
+        ? [...previous, normalized]
+        : previous.map((item, i) => (i === editingProfessionalIndex ? normalized : item))
     )
     setIsProfessionalDialogOpen(false)
     setEditingProfessionalIndex(null)
@@ -2358,7 +2290,10 @@ export function EmployeeRegisterForm() {
   const removeProfessional = (index: number) => setProfessionalQualifications((p) => p.filter((_, i) => i !== index))
 
   // Experience helpers
-  const updateDraftExperience = <K extends keyof ExperienceDetailFormState>(key: K, value: ExperienceDetailFormState[K]) => {
+  const updateDraftExperience = <K extends keyof ExperienceDetailFormState>(
+    key: K,
+    value: ExperienceDetailFormState[K]
+  ) => {
     setDraftExperience((previous) => ({ ...previous, [key]: value }))
   }
   const addExperience = () => {
@@ -2376,7 +2311,9 @@ export function EmployeeRegisterForm() {
   const saveDraftExperience = () => {
     const normalized = { ...draftExperience }
     setExperienceDetails((previous) =>
-      editingExperienceIndex === null ? [...previous, normalized] : previous.map((item, i) => (i === editingExperienceIndex ? normalized : item))
+      editingExperienceIndex === null
+        ? [...previous, normalized]
+        : previous.map((item, i) => (i === editingExperienceIndex ? normalized : item))
     )
     setIsExperienceDialogOpen(false)
     setEditingExperienceIndex(null)
@@ -2444,31 +2381,63 @@ export function EmployeeRegisterForm() {
         listBranches(accessToken, { page: 1, limit: 100 }),
         listDepartments(accessToken, { page: 1, limit: 100 }),
         listPositions(accessToken, { page: 1, limit: 100 }),
-        listEmployees(accessToken, { page: 1, limit: 200, sortBy: "first_name", sortOrder: "ASC" }),
-        listOnboardingWorkflows(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listShiftResources(accessToken, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listEmployees(accessToken, {
+          page: 1,
+          limit: 200,
+          sortBy: "first_name",
+          sortOrder: "ASC",
+        }),
+        listOnboardingWorkflows(accessToken, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
+        listShiftResources(accessToken, "shifts", {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
         listShiftResources(accessToken, "shift-rotation-groups", {
           page: 1,
           limit: 100,
           sortBy: "created_at",
           sortOrder: "DESC",
         }),
-        listTimetableResources(accessToken, "timetables", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAccessControlResources(accessToken, "groups", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAccessControlResources(accessToken, "organizations", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
-        listAttendanceDevices(accessToken, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }),
+        listTimetableResources(accessToken, "timetables", {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
+        listAccessControlResources(accessToken, "groups", {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
+        listAccessControlResources(accessToken, "organizations", {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
+        listAttendanceDevices(accessToken, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        }),
       ])
-      const roleRecords =
-        roleRecordsResult.status === "fulfilled" ? roleRecordsResult.value : ([] as AdminRecord[])
+      const roleRecords = roleRecordsResult.status === "fulfilled" ? roleRecordsResult.value : ([] as AdminRecord[])
       const resolvedBranches = branchResult.status === "fulfilled" ? branchResult.value.rows : []
-      const resolvedDepartments =
-        departmentResult.status === "fulfilled" ? departmentResult.value.rows : []
+      const resolvedDepartments = departmentResult.status === "fulfilled" ? departmentResult.value.rows : []
       const resolvedPositions = positionResult.status === "fulfilled" ? positionResult.value.rows : []
       const resolvedReportsTo = employeesResult.status === "fulfilled" ? employeesResult.value.rows : []
       const resolvedWorkflows = workflowResult.status === "fulfilled" ? workflowResult.value.rows : []
       const resolvedShifts = shiftResult.status === "fulfilled" ? shiftResult.value.rows : []
-      const resolvedRotationGroups =
-        rotationGroupsResult.status === "fulfilled" ? rotationGroupsResult.value.rows : []
+      const resolvedRotationGroups = rotationGroupsResult.status === "fulfilled" ? rotationGroupsResult.value.rows : []
       const resolvedTimetables = timetableResult.status === "fulfilled" ? timetableResult.value.rows : []
       const resolvedAccessGroups = accessGroupsResult.status === "fulfilled" ? accessGroupsResult.value.rows : []
       const resolvedAccessOrganizations =
@@ -2505,9 +2474,7 @@ export function EmployeeRegisterForm() {
       })
     } catch (errorObject) {
       setRoles([])
-      setRolesError(
-        errorObject instanceof Error ? errorObject.message : "Failed to load registration data."
-      )
+      setRolesError(errorObject instanceof Error ? errorObject.message : "Failed to load registration data.")
     } finally {
       setRolesLoading(false)
     }
@@ -2546,10 +2513,8 @@ export function EmployeeRegisterForm() {
         return
       }
 
-      const currentAdmin =
-        currentAdminResult.status === "fulfilled" ? currentAdminResult.value : null
-      const currentEmployee =
-        currentEmployeeResult.status === "fulfilled" ? currentEmployeeResult.value : null
+      const currentAdmin = currentAdminResult.status === "fulfilled" ? currentAdminResult.value : null
+      const currentEmployee = currentEmployeeResult.status === "fulfilled" ? currentEmployeeResult.value : null
       const initializationSources: [AdminRecord | null, AdminRecord | null, AdminRecord | null] = [
         currentEmployee,
         currentAdmin,
@@ -2654,7 +2619,26 @@ export function EmployeeRegisterForm() {
       savedAt: new Date().toISOString(),
     }
     window.localStorage.setItem(REGISTER_DRAFT_STORAGE_KEY, JSON.stringify(payload))
-  }, [registerDraftReady, savedRegisterDraft, currentStep, isInviteMode, form, dob, hireDate, probationEndDate, inviteContact, contacts, addresses, relatives, identifications, bankAccounts, academicQualifications, professionalQualifications, experienceDetails, onboarding])
+  }, [
+    registerDraftReady,
+    savedRegisterDraft,
+    currentStep,
+    isInviteMode,
+    form,
+    dob,
+    hireDate,
+    probationEndDate,
+    inviteContact,
+    contacts,
+    addresses,
+    relatives,
+    identifications,
+    bankAccounts,
+    academicQualifications,
+    professionalQualifications,
+    experienceDetails,
+    onboarding,
+  ])
 
   const submitRegistration = async () => {
     if (isSubmitting) {
@@ -2736,10 +2720,7 @@ export function EmployeeRegisterForm() {
         .map((contact) => ({
           contact_type: contact.contactType.trim() || "personal",
           is_primary: contact.isPrimary,
-          phone_number: joinPhoneWithCountryCode(
-            getDialCodeForCountry(contact.countryIso),
-            contact.phoneNumber
-          ),
+          phone_number: joinPhoneWithCountryCode(getDialCodeForCountry(contact.countryIso), contact.phoneNumber),
           email: contact.email.trim().toLowerCase(),
           notes: contact.notes.trim(),
         }))
@@ -2805,13 +2786,7 @@ export function EmployeeRegisterForm() {
         issued_country: idDoc.issuedCountry.trim(),
         expiry_date: idDoc.expiryDate || "",
       }))
-      .filter(
-        (idDoc) =>
-          idDoc.identification_number ||
-          idDoc.issued_country ||
-          idDoc.expiry_date ||
-          idDoc.is_primary
-      )
+      .filter((idDoc) => idDoc.identification_number || idDoc.issued_country || idDoc.expiry_date || idDoc.is_primary)
 
     const normalizedBankAccounts = bankAccounts
       .map((bank) => ({
@@ -2821,8 +2796,7 @@ export function EmployeeRegisterForm() {
         account_number: bank.accountNumber.trim(),
         branch_name: bank.branchName.trim(),
         swift_code: bank.swiftCode.trim(),
-        mobile_money_provider:
-          bank.mobileMoneyProvider.trim() === "none" ? "" : bank.mobileMoneyProvider.trim(),
+        mobile_money_provider: bank.mobileMoneyProvider.trim() === "none" ? "" : bank.mobileMoneyProvider.trim(),
       }))
       .filter(
         (bank) =>
@@ -2833,7 +2807,7 @@ export function EmployeeRegisterForm() {
           bank.swift_code ||
           bank.mobile_money_provider ||
           bank.is_primary
-        )
+      )
 
     const normalizedAcademic = academicQualifications
       .map((a) => ({
@@ -2877,9 +2851,7 @@ export function EmployeeRegisterForm() {
       if (selectedBranchIdForSubmit === null) {
         return departmentRecords
       }
-      const matching = departmentRecords.filter(
-        (row) => relatedBranchId(row) === selectedBranchIdForSubmit
-      )
+      const matching = departmentRecords.filter((row) => relatedBranchId(row) === selectedBranchIdForSubmit)
       if (matching.length > 0) {
         return matching
       }
@@ -2887,27 +2859,28 @@ export function EmployeeRegisterForm() {
     })()
     const selectedDepartmentRecordForSubmit = findRecordByName(departmentsForSubmit, form.department)
     const selectedPositionRecord =
-      findRecordByName(departmentPositionRecords, form.position) ??
-      findRecordByName(positionRecords, form.position)
-    const selectedReportsToRecord = findRecordByName(reportsToRecords, form.reportsTo) || reportsToRecords.find((r) => String(readRecordId(r)) === String(form.reportsTo))
+      findRecordByName(departmentPositionRecords, form.position) ?? findRecordByName(positionRecords, form.position)
+    const selectedReportsToRecord =
+      findRecordByName(reportsToRecords, form.reportsTo) ||
+      reportsToRecords.find((r) => String(readRecordId(r)) === String(form.reportsTo))
     const selectedBranchId = selectedBranchIdForSubmit
     const selectedDepartmentId = readRecordId(selectedDepartmentRecordForSubmit)
     const selectedPositionId = readRecordId(selectedPositionRecord)
-    const selectedReportsToId = readRecordId(selectedReportsToRecord ?? null) ?? (form.reportsTo ? (Number(form.reportsTo) || null) : null)
+    const selectedReportsToId =
+      readRecordId(selectedReportsToRecord ?? null) ?? (form.reportsTo ? Number(form.reportsTo) || null : null)
 
-    const { error: onboardingError, onboarding: onboardingPayload } =
-      buildEmployeeOnboardingInput({
-        enabled: onboarding.enabled,
-        autoStart: onboarding.autoStart,
-        workflowId: onboarding.workflowId,
-        title: onboarding.title,
-        description: onboarding.description,
-        plannedStartDate: onboarding.plannedStartDate,
-        plannedCompletionDate: onboarding.plannedCompletionDate,
-        submit: onboarding.submit,
-        fallbackEmployeeNo: employeeNoForCreate,
-        provisioningDraft: onboarding,
-      })
+    const { error: onboardingError, onboarding: onboardingPayload } = buildEmployeeOnboardingInput({
+      enabled: onboarding.enabled,
+      autoStart: onboarding.autoStart,
+      workflowId: onboarding.workflowId,
+      title: onboarding.title,
+      description: onboarding.description,
+      plannedStartDate: onboarding.plannedStartDate,
+      plannedCompletionDate: onboarding.plannedCompletionDate,
+      submit: onboarding.submit,
+      fallbackEmployeeNo: employeeNoForCreate,
+      provisioningDraft: onboarding,
+    })
     if (onboardingError) {
       toast.error(onboardingError)
       return
@@ -2915,7 +2888,7 @@ export function EmployeeRegisterForm() {
 
     setIsSubmitting(true)
     try {
-      const response = await createEmployeeProfile(accessToken, {
+      const employeePayload: CreateEmployeePayload = {
         employee_no: employeeNoForCreate,
         primary_branch_id: selectedBranchId ?? undefined,
         primary_department_id: selectedDepartmentId ?? undefined,
@@ -2923,12 +2896,7 @@ export function EmployeeRegisterForm() {
         position_id: selectedPositionId ?? undefined,
         employment_status: "onboarding",
         employment_type: (form.employmentType || "full_time") as
-          | "full_time"
-          | "part_time"
-          | "contract"
-          | "intern"
-          | "consultant"
-          | "temporary",
+          "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary",
         reports_to: selectedReportsToId ?? undefined,
         first_name: form.firstName.trim(),
         middle_name: form.middleName.trim(),
@@ -2965,14 +2933,45 @@ export function EmployeeRegisterForm() {
           role_id: form.roleId || undefined,
           registration_mode: isInviteMode ? "send_invite" : "full_registration",
         },
-      })
-      const createdEmployeeId = readRecordId(response)
-      let onboardingRequest = response.onboarding_request ?? null
+      }
+      const response = isRegisteringOthers
+        ? await createEmployeeProfile(accessToken, employeePayload)
+        : await updateMyEmployeeProfile(accessToken, {
+            first_name: employeePayload.first_name,
+            middle_name: employeePayload.middle_name,
+            last_name: employeePayload.last_name,
+            preferred_name: employeePayload.preferred_name,
+            gender: employeePayload.gender,
+            date_of_birth: employeePayload.date_of_birth,
+            marital_status: employeePayload.marital_status,
+            nationality: employeePayload.nationality,
+            profile_photo_url: employeePayload.profile_photo_url,
+            contacts: employeePayload.contacts,
+            addresses: employeePayload.addresses,
+            relatives: employeePayload.relatives,
+            identifications: employeePayload.identifications,
+            bank_accounts: employeePayload.bank_accounts,
+            academic_qualifications: employeePayload.academic_qualifications,
+            professional_qualifications: employeePayload.professional_qualifications,
+            experience_details: employeePayload.experience_details,
+            metadata: employeePayload.metadata,
+          })
+      const normalizedResponse = response as CreateEmployeeResponse
+      if (!isRegisteringOthers) {
+        const myRequests = await listMyOnboardingRequests(accessToken)
+        const draftRequest = myRequests.find((row) =>
+          ["draft", "changes_requested"].includes(String(row.status ?? "").toLowerCase())
+        )
+        const draftRequestId = readRecordId(draftRequest ?? null)
+        if (draftRequestId !== null) {
+          await submitMyOnboardingDetails(accessToken, draftRequestId)
+        }
+      }
+      const createdEmployeeId = readRecordId(normalizedResponse)
+      let onboardingRequest = normalizedResponse.onboarding_request ?? null
       if (!onboardingRequest && createdEmployeeId !== null && isRegisteringOthers) {
         const selectedWorkflowId =
-          onboarding.workflowId && onboarding.workflowId !== "none"
-            ? Number(onboarding.workflowId)
-            : null
+          onboarding.workflowId && onboarding.workflowId !== "none" ? Number(onboarding.workflowId) : null
         const defaultWorkflow =
           onboardingWorkflows.find((row) => row.is_default === true || row.isDefault === true) ??
           onboardingWorkflows[0] ??
@@ -2996,7 +2995,7 @@ export function EmployeeRegisterForm() {
           toast.message(
             onboardingError instanceof Error
               ? `Employee saved, but onboarding could not be started. ${onboardingError.message}`
-              : "Employee saved, but onboarding could not be started from this page.",
+              : "Employee saved, but onboarding could not be started from this page."
           )
         }
       }
@@ -3011,27 +3010,26 @@ export function EmployeeRegisterForm() {
             .filter(Boolean)
             .join(" "),
           loadRequest:
-            onboardingRequestId === null
-              ? undefined
-              : () => getOnboardingRequest(accessToken, onboardingRequestId),
+            onboardingRequestId === null ? undefined : () => getOnboardingRequest(accessToken, onboardingRequestId),
         })
       }
       setCreatedEmployeeResult({
-        ...response,
-        onboarding_request: onboardingRequest ?? response.onboarding_request,
+        ...normalizedResponse,
+        onboarding_request: onboardingRequest ?? normalizedResponse.onboarding_request,
       })
-      const createWarning =
-        typeof response.warning === "string" ? response.warning.trim() : ""
+      const createWarning = typeof normalizedResponse.warning === "string" ? normalizedResponse.warning.trim() : ""
       showSuccessAlert(
-        createWarning
-          ? `Employee saved. ${createWarning}`
-          : onboardingRequest
-            ? onboardingPayload?.submit
-              ? "Employee created and onboarding started."
-              : "Employee saved. Onboarding is listed as a draft request."
-            : isInviteMode
-              ? "Employee invite saved successfully."
-              : "Employee saved successfully."
+        !isRegisteringOthers
+          ? "Your details were submitted to HR for review."
+          : createWarning
+            ? `Employee saved. ${createWarning}`
+            : onboardingRequest
+              ? onboardingPayload?.submit
+                ? "Employee created and onboarding started."
+                : "Employee saved. Onboarding is listed as a draft request."
+              : isInviteMode
+                ? "Employee invite saved successfully."
+                : "Employee saved successfully."
       )
       clearForm()
     } catch (errorObject) {
@@ -3146,8 +3144,14 @@ export function EmployeeRegisterForm() {
       setOnboarding((previous) => ({
         ...previous,
         ...draftOnboarding,
-        shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT, ...draftOnboarding.shiftAssignment },
-        timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT, ...draftOnboarding.timetableAssignment },
+        shiftAssignment: {
+          ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
+          ...draftOnboarding.shiftAssignment,
+        },
+        timetableAssignment: {
+          ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
+          ...draftOnboarding.timetableAssignment,
+        },
         deviceAssignment: {
           ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
           ...draftOnboarding.deviceAssignment,
@@ -3177,11 +3181,7 @@ export function EmployeeRegisterForm() {
     )
   }
 
-  if (
-    !isRegisteringOthers &&
-    actor.accessMode === "employee" &&
-    selfRegistrationStatus !== "onboarding"
-  ) {
+  if (!isRegisteringOthers && actor.accessMode === "employee" && selfRegistrationStatus !== "onboarding") {
     return (
       <div className="rounded-lg border border-border bg-card px-3 py-4">
         <p className="text-sm font-medium text-foreground">Self registration unavailable</p>
@@ -3246,9 +3246,7 @@ export function EmployeeRegisterForm() {
                 <p className="text-[11px] font-medium text-muted-foreground">
                   Step {Math.max(currentVisibleStepIndex + 1, 1)} of {visibleRegisterSteps.length}
                   <span className="mx-1.5 text-muted-foreground/50">·</span>
-                  <span className="text-foreground">
-                    {REGISTER_STEP_LABELS[currentStep] ?? "Details"}
-                  </span>
+                  <span className="text-foreground">{REGISTER_STEP_LABELS[currentStep] ?? "Details"}</span>
                 </p>
                 <p
                   key={stepProgress}
@@ -3408,16 +3406,12 @@ export function EmployeeRegisterForm() {
                         disabled={!form.branch}
                       >
                         <SelectTrigger id="department" className="w-full">
-                          <SelectValue
-                            placeholder={form.branch ? "Select department" : "Select branch first"}
-                          />
+                          <SelectValue placeholder={form.branch ? "Select department" : "Select branch first"} />
                         </SelectTrigger>
                         <SelectContent>
                           {departmentOptions.length === 0 ? (
                             <div className="px-2 py-2 text-xs text-muted-foreground">
-                              {form.branch
-                                ? "No departments for this branch"
-                                : "Select a branch first"}
+                              {form.branch ? "No departments for this branch" : "Select a branch first"}
                             </div>
                           ) : null}
                           {departmentOptions.map((option) => (
@@ -3489,13 +3483,18 @@ export function EmployeeRegisterForm() {
                   </Field>
 
                   <Field label="Employment Type" htmlFor="employmentType" delayMs={258}>
-                    <Select value={form.employmentType || "full_time"} onValueChange={(value) => updateField("employmentType", value ?? "full_time")}>
+                    <Select
+                      value={form.employmentType || "full_time"}
+                      onValueChange={(value) => updateField("employmentType", value ?? "full_time")}
+                    >
                       <SelectTrigger id="employmentType" className="w-full">
                         <SelectValue>{selectedEmploymentTypeLabel}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {EMPLOYMENT_TYPE_OPTIONS.map((et) => (
-                          <SelectItem key={et.value} value={et.value}>{et.label}</SelectItem>
+                          <SelectItem key={et.value} value={et.value}>
+                            {et.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -3729,9 +3728,7 @@ export function EmployeeRegisterForm() {
                           checked={onboarding.enabled}
                           onCheckedChange={(checked) =>
                             setOnboarding((previous) => ({
-                              ...(checked
-                                ? previous
-                                : createEmptyOnboardingForm()),
+                              ...(checked ? previous : createEmptyOnboardingForm()),
                               enabled: checked,
                             }))
                           }
@@ -3782,9 +3779,7 @@ export function EmployeeRegisterForm() {
                               id="onboarding-start-date"
                               type="date"
                               value={onboarding.plannedStartDate}
-                              onChange={(event) =>
-                                updateOnboardingField("plannedStartDate", event.target.value)
-                              }
+                              onChange={(event) => updateOnboardingField("plannedStartDate", event.target.value)}
                             />
                           </Field>
 
@@ -3793,9 +3788,7 @@ export function EmployeeRegisterForm() {
                               id="onboarding-end-date"
                               type="date"
                               value={onboarding.plannedCompletionDate}
-                              onChange={(event) =>
-                                updateOnboardingField("plannedCompletionDate", event.target.value)
-                              }
+                              onChange={(event) => updateOnboardingField("plannedCompletionDate", event.target.value)}
                             />
                           </Field>
 
@@ -3803,9 +3796,7 @@ export function EmployeeRegisterForm() {
                             <Label>Start onboarding automatically</Label>
                             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-foreground">
-                                  Auto-start onboarding request
-                                </p>
+                                <p className="text-sm font-medium text-foreground">Auto-start onboarding request</p>
                                 <InfoTooltip
                                   label="Auto-start onboarding help"
                                   content="Creates the onboarding request during employee registration."
@@ -3822,9 +3813,7 @@ export function EmployeeRegisterForm() {
                             <Label>Submit immediately</Label>
                             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-foreground">
-                                  Submit onboarding after creation
-                                </p>
+                                <p className="text-sm font-medium text-foreground">Submit onboarding after creation</p>
                                 <InfoTooltip
                                   label="Submit immediately help"
                                   content="Leave this off unless the workflow already has eligible approvers on every required step. Turned off, the employee is saved and onboarding stays a draft."
@@ -3855,10 +3844,7 @@ export function EmployeeRegisterForm() {
                             options={onboardingRoleOptions}
                             selectedIds={onboarding.roleIds}
                             onToggle={(id, checked) =>
-                              updateOnboardingField(
-                                "roleIds",
-                                toggleNumericId(onboarding.roleIds, id, checked)
-                              )
+                              updateOnboardingField("roleIds", toggleNumericId(onboarding.roleIds, id, checked))
                             }
                             emptyText="No roles available."
                             hint="Optional roles to provision automatically when onboarding completes."
@@ -3891,10 +3877,7 @@ export function EmployeeRegisterForm() {
                               <Select
                                 value={onboarding.shiftAssignment.shiftId || "none"}
                                 onValueChange={(value) =>
-                                  updateShiftAssignmentField(
-                                    "shiftId",
-                                    value === "none" ? "" : value ?? ""
-                                  )
+                                  updateShiftAssignmentField("shiftId", value === "none" ? "" : (value ?? ""))
                                 }
                               >
                                 <SelectTrigger id="provisioning-shift" className="w-full">
@@ -3915,9 +3898,7 @@ export function EmployeeRegisterForm() {
                                 id="provisioning-shift-from"
                                 type="date"
                                 value={onboarding.shiftAssignment.effectiveFrom}
-                                onChange={(event) =>
-                                  updateShiftAssignmentField("effectiveFrom", event.target.value)
-                                }
+                                onChange={(event) => updateShiftAssignmentField("effectiveFrom", event.target.value)}
                               />
                             </Field>
                             <Field label="Effective To" htmlFor="provisioning-shift-to" delayMs={100}>
@@ -3925,9 +3906,7 @@ export function EmployeeRegisterForm() {
                                 id="provisioning-shift-to"
                                 type="date"
                                 value={onboarding.shiftAssignment.effectiveTo}
-                                onChange={(event) =>
-                                  updateShiftAssignmentField("effectiveTo", event.target.value)
-                                }
+                                onChange={(event) => updateShiftAssignmentField("effectiveTo", event.target.value)}
                               />
                             </Field>
                             <Field
@@ -3949,11 +3928,9 @@ export function EmployeeRegisterForm() {
                                 <SelectTrigger id="provisioning-rotation-group" className="w-full">
                                   <SelectValue placeholder="None">
                                     {onboarding.shiftAssignment.rotationGroupId
-                                      ? rotationGroupOptions.find(
-                                          (option) =>
-                                            String(option.id) === onboarding.shiftAssignment.rotationGroupId
-                                        )?.label ??
-                                        `Rotation group #${onboarding.shiftAssignment.rotationGroupId}`
+                                      ? (rotationGroupOptions.find(
+                                          (option) => String(option.id) === onboarding.shiftAssignment.rotationGroupId
+                                        )?.label ?? `Rotation group #${onboarding.shiftAssignment.rotationGroupId}`)
                                       : "None"}
                                   </SelectValue>
                                 </SelectTrigger>
@@ -3976,9 +3953,7 @@ export function EmployeeRegisterForm() {
                               </div>
                               <Switch
                                 checked={onboarding.shiftAssignment.isPrimary}
-                                onCheckedChange={(checked) =>
-                                  updateShiftAssignmentField("isPrimary", checked)
-                                }
+                                onCheckedChange={(checked) => updateShiftAssignmentField("isPrimary", checked)}
                               />
                             </div>
                           </div>
@@ -3996,10 +3971,7 @@ export function EmployeeRegisterForm() {
                               <Select
                                 value={onboarding.timetableAssignment.timetableId || "none"}
                                 onValueChange={(value) =>
-                                  updateTimetableAssignmentField(
-                                    "timetableId",
-                                    value === "none" ? "" : value ?? ""
-                                  )
+                                  updateTimetableAssignmentField("timetableId", value === "none" ? "" : (value ?? ""))
                                 }
                               >
                                 <SelectTrigger id="provisioning-timetable" className="w-full">
@@ -4007,8 +3979,7 @@ export function EmployeeRegisterForm() {
                                     {onboarding.timetableAssignment.timetableId
                                       ? timetableOptions.find(
                                           (option) =>
-                                            String(option.id) ===
-                                            String(onboarding.timetableAssignment.timetableId)
+                                            String(option.id) === String(onboarding.timetableAssignment.timetableId)
                                         )?.label || "Selected timetable"
                                       : "Select timetable"}
                                   </SelectValue>
@@ -4038,9 +4009,7 @@ export function EmployeeRegisterForm() {
                                 id="provisioning-timetable-to"
                                 type="date"
                                 value={onboarding.timetableAssignment.effectiveTo}
-                                onChange={(event) =>
-                                  updateTimetableAssignmentField("effectiveTo", event.target.value)
-                                }
+                                onChange={(event) => updateTimetableAssignmentField("effectiveTo", event.target.value)}
                               />
                             </Field>
                           </div>
@@ -4066,7 +4035,10 @@ export function EmployeeRegisterForm() {
                                           ...previous.deviceAssignment,
                                           enabled: true,
                                         }
-                                      : { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT, enabled: false },
+                                      : {
+                                          ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
+                                          enabled: false,
+                                        },
                                   }))
                                 }
                               />
@@ -4079,10 +4051,7 @@ export function EmployeeRegisterForm() {
                                 <Select
                                   value={onboarding.deviceAssignment.accessGroupId || "none"}
                                   onValueChange={(value) =>
-                                    updateDeviceAssignmentField(
-                                      "accessGroupId",
-                                      value === "none" ? "" : value ?? ""
-                                    )
+                                    updateDeviceAssignmentField("accessGroupId", value === "none" ? "" : (value ?? ""))
                                   }
                                 >
                                   <SelectTrigger id="device-access-group" className="w-full">
@@ -4103,10 +4072,7 @@ export function EmployeeRegisterForm() {
                                 <Select
                                   value={onboarding.deviceAssignment.organizationId || "none"}
                                   onValueChange={(value) =>
-                                    updateDeviceAssignmentField(
-                                      "organizationId",
-                                      value === "none" ? "" : value ?? ""
-                                    )
+                                    updateDeviceAssignmentField("organizationId", value === "none" ? "" : (value ?? ""))
                                   }
                                 >
                                   <SelectTrigger id="device-organization" className="w-full">
@@ -4127,9 +4093,7 @@ export function EmployeeRegisterForm() {
                                 <Input
                                   id="device-employee-no"
                                   value={onboarding.deviceAssignment.employeeNo}
-                                  onChange={(event) =>
-                                    updateDeviceAssignmentField("employeeNo", event.target.value)
-                                  }
+                                  onChange={(event) => updateDeviceAssignmentField("employeeNo", event.target.value)}
                                   placeholder="Optional override for access device employee number"
                                 />
                               </Field>
@@ -4161,9 +4125,7 @@ export function EmployeeRegisterForm() {
                                   id="device-valid-end"
                                   type="datetime-local"
                                   value={onboarding.deviceAssignment.validEndTime}
-                                  onChange={(event) =>
-                                    updateDeviceAssignmentField("validEndTime", event.target.value)
-                                  }
+                                  onChange={(event) => updateDeviceAssignmentField("validEndTime", event.target.value)}
                                 />
                               </Field>
 
@@ -4216,12 +4178,10 @@ export function EmployeeRegisterForm() {
                               <div className="grid gap-3 md:col-span-2 md:grid-cols-2 xl:grid-cols-4">
                                 <div className="md:col-span-2 xl:col-span-4">
                                   <p className="text-xs text-muted-foreground">
-                                    Choose only the controls needed for this employee:
-                                    {" "}enable validity dates to enforce an active period,
-                                    {" "}local UI right for device-side controls,
-                                    {" "}close delay for delayed door closing,
-                                    {" "}sync now to push immediately,
-                                    {" "}and continue on error to keep syncing other devices if one fails.
+                                    Choose only the controls needed for this employee: enable validity dates to enforce
+                                    an active period, local UI right for device-side controls, close delay for delayed
+                                    door closing, sync now to push immediately, and continue on error to keep syncing
+                                    other devices if one fails.
                                   </p>
                                 </div>
                                 {[
@@ -4266,9 +4226,7 @@ export function EmployeeRegisterForm() {
                                     </div>
                                     <Switch
                                       checked={item.checked}
-                                      onCheckedChange={(checked) =>
-                                        updateDeviceAssignmentField(item.field, checked)
-                                      }
+                                      onCheckedChange={(checked) => updateDeviceAssignmentField(item.field, checked)}
                                     />
                                   </div>
                                 ))}
@@ -4522,13 +4480,7 @@ export function EmployeeRegisterForm() {
                   {identifications.length === 0 ? (
                     <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center">
                       <p className="text-sm text-muted-foreground">No identifications added.</p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="mt-3"
-                        onClick={addIdentification}
-                      >
+                      <Button type="button" size="sm" variant="outline" className="mt-3" onClick={addIdentification}>
                         <PlusIcon />
                         Add Identification
                       </Button>
@@ -4569,9 +4521,7 @@ export function EmployeeRegisterForm() {
                               size="icon-sm"
                               variant="outline"
                               className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                              onClick={() =>
-                                requestDelete("identification", index, `Identification ${index + 1}`)
-                              }
+                              onClick={() => requestDelete("identification", index, `Identification ${index + 1}`)}
                               aria-label={`Delete identification ${index + 1}`}
                               title="Delete"
                             >
@@ -4668,18 +4618,34 @@ export function EmployeeRegisterForm() {
                     </Button>
                   </div>
                   {academicQualifications.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">No academic qualifications. Add using the button above to include full details from the API payload.</div>
+                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                      No academic qualifications. Add using the button above to include full details from the API
+                      payload.
+                    </div>
                   ) : (
                     academicQualifications.map((a, index) => (
                       <div key={`acad-${index}`} className="rounded-md border border-border/80 bg-card p-3 text-sm">
                         <div className="flex justify-between">
                           <div>
-                            <div className="font-medium">{a.institutionName || "Institution"} — {a.degreeOrCertificate || "Qualification"}</div>
-                            <div className="text-xs text-muted-foreground">{a.fieldOfStudy} {a.startDate ? `(${a.startDate} - ${a.endDate || "present"})` : ""}</div>
+                            <div className="font-medium">
+                              {a.institutionName || "Institution"} — {a.degreeOrCertificate || "Qualification"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {a.fieldOfStudy} {a.startDate ? `(${a.startDate} - ${a.endDate || "present"})` : ""}
+                            </div>
                           </div>
                           <div className="flex gap-1">
-                            <Button size="icon-sm" variant="outline" onClick={() => openEditAcademic(index)}><PencilIcon /></Button>
-                            <Button size="icon-sm" variant="outline" className="border-destructive/30 text-destructive" onClick={() => requestDelete("academic", index, `Academic ${index + 1}`)}><Trash2Icon /></Button>
+                            <Button size="icon-sm" variant="outline" onClick={() => openEditAcademic(index)}>
+                              <PencilIcon />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="outline"
+                              className="border-destructive/30 text-destructive"
+                              onClick={() => requestDelete("academic", index, `Academic ${index + 1}`)}
+                            >
+                              <Trash2Icon />
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -4697,7 +4663,9 @@ export function EmployeeRegisterForm() {
                     </Button>
                   </div>
                   {professionalQualifications.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">No professional qualifications added.</div>
+                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                      No professional qualifications added.
+                    </div>
                   ) : (
                     professionalQualifications.map((p, index) => (
                       <div key={`prof-${index}`} className="rounded-md border border-border/80 bg-card p-3 text-sm">
@@ -4707,8 +4675,17 @@ export function EmployeeRegisterForm() {
                             <div className="text-xs text-muted-foreground">{p.institutionName}</div>
                           </div>
                           <div className="flex gap-1">
-                            <Button size="icon-sm" variant="outline" onClick={() => openEditProfessional(index)}><PencilIcon /></Button>
-                            <Button size="icon-sm" variant="outline" className="border-destructive/30 text-destructive" onClick={() => requestDelete("professional", index, `Professional ${index + 1}`)}><Trash2Icon /></Button>
+                            <Button size="icon-sm" variant="outline" onClick={() => openEditProfessional(index)}>
+                              <PencilIcon />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="outline"
+                              className="border-destructive/30 text-destructive"
+                              onClick={() => requestDelete("professional", index, `Professional ${index + 1}`)}
+                            >
+                              <Trash2Icon />
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -4726,18 +4703,33 @@ export function EmployeeRegisterForm() {
                     </Button>
                   </div>
                   {experienceDetails.length === 0 ? (
-                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">No prior experience entries.</div>
+                    <div className="rounded-md border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                      No prior experience entries.
+                    </div>
                   ) : (
                     experienceDetails.map((e, index) => (
                       <div key={`exp-${index}`} className="rounded-md border border-border/80 bg-card p-3 text-sm">
                         <div className="flex justify-between">
                           <div>
-                            <div className="font-medium">{e.jobTitle || "Role"} @ {e.companyName || "Company"}</div>
-                            <div className="text-xs text-muted-foreground">{e.startDate} {e.currentlyWorking ? "(current)" : ` - ${e.endDate}`}</div>
+                            <div className="font-medium">
+                              {e.jobTitle || "Role"} @ {e.companyName || "Company"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {e.startDate} {e.currentlyWorking ? "(current)" : ` - ${e.endDate}`}
+                            </div>
                           </div>
                           <div className="flex gap-1">
-                            <Button size="icon-sm" variant="outline" onClick={() => openEditExperience(index)}><PencilIcon /></Button>
-                            <Button size="icon-sm" variant="outline" className="border-destructive/30 text-destructive" onClick={() => requestDelete("experience", index, `Experience ${index + 1}`)}><Trash2Icon /></Button>
+                            <Button size="icon-sm" variant="outline" onClick={() => openEditExperience(index)}>
+                              <PencilIcon />
+                            </Button>
+                            <Button
+                              size="icon-sm"
+                              variant="outline"
+                              className="border-destructive/30 text-destructive"
+                              onClick={() => requestDelete("experience", index, `Experience ${index + 1}`)}
+                            >
+                              <Trash2Icon />
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -4804,25 +4796,33 @@ export function EmployeeRegisterForm() {
           </CardHeader>
           <CardContent className="grid gap-3 pb-6 md:grid-cols-2 xl:grid-cols-4">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Onboarding No</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Onboarding No
+              </p>
               <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.onboarding_no ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Status</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Status
+              </p>
               <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.status ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Title</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Title
+              </p>
               <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.title ?? "-"}
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Progress</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                Progress
+              </p>
               <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
                 {createdEmployeeResult.onboarding_request.progress_percentage ?? "0%"}
               </p>
@@ -4997,13 +4997,13 @@ export function EmployeeRegisterForm() {
               <Label htmlFor="draft-relative-phone">Phone</Label>
               <div className="grid gap-2 sm:grid-cols-[220px_minmax(0,1fr)]">
                 <Select
-                  value={draftRelative.phone.startsWith("+")
-                    ? (Object.keys(COUNTRY_DIAL_BY_ISO).find((iso) =>
-                        draftRelative.phone.startsWith(
-                          COUNTRY_DIAL_BY_ISO[iso as keyof typeof COUNTRY_DIAL_BY_ISO]
-                        )
-                      ) ?? "TZ")
-                    : "TZ"}
+                  value={
+                    draftRelative.phone.startsWith("+")
+                      ? (Object.keys(COUNTRY_DIAL_BY_ISO).find((iso) =>
+                          draftRelative.phone.startsWith(COUNTRY_DIAL_BY_ISO[iso as keyof typeof COUNTRY_DIAL_BY_ISO])
+                        ) ?? "TZ")
+                      : "TZ"
+                  }
                   onValueChange={(isoCode) => {
                     const safeIsoCode = isoCode ?? "TZ"
                     const dial = getDialCodeForCountry(safeIsoCode)
@@ -5029,9 +5029,7 @@ export function EmployeeRegisterForm() {
                     const digits = event.target.value.replace(/\D/g, "")
                     const iso =
                       (Object.keys(COUNTRY_DIAL_BY_ISO).find((code) =>
-                        draftRelative.phone.startsWith(
-                          COUNTRY_DIAL_BY_ISO[code as keyof typeof COUNTRY_DIAL_BY_ISO]
-                        )
+                        draftRelative.phone.startsWith(COUNTRY_DIAL_BY_ISO[code as keyof typeof COUNTRY_DIAL_BY_ISO])
                       ) as CountryIso | undefined) ?? "TZ"
                     updateDraftRelative("phone", `${getDialCodeForCountry(iso)}${digits}`)
                   }}
@@ -5108,9 +5106,7 @@ export function EmployeeRegisterForm() {
               <Label htmlFor="draft-identification-type">Identification Type</Label>
               <Select
                 value={draftIdentification.identificationType}
-                onValueChange={(value) =>
-                  updateDraftIdentification("identificationType", value ?? "national_id")
-                }
+                onValueChange={(value) => updateDraftIdentification("identificationType", value ?? "national_id")}
               >
                 <SelectTrigger id="draft-identification-type">
                   <SelectValue placeholder="Select type" />
@@ -5189,15 +5185,12 @@ export function EmployeeRegisterForm() {
               </Label>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="draft-bank-name">
-                {isDraftBankMobileMoney ? "Mobile Money Provider" : "Bank Name"}
-              </Label>
+              <Label htmlFor="draft-bank-name">{isDraftBankMobileMoney ? "Mobile Money Provider" : "Bank Name"}</Label>
               {isDraftBankMobileMoney ? (
                 <Select
                   value={draftBankAccount.mobileMoneyProvider}
                   onValueChange={(value) => {
-                    const nextProvider =
-                      value && value !== "none" ? value : DEFAULT_MOBILE_MONEY_PROVIDER
+                    const nextProvider = value && value !== "none" ? value : DEFAULT_MOBILE_MONEY_PROVIDER
                     updateDraftBankAccount("mobileMoneyProvider", nextProvider)
                     updateDraftBankAccount("bankName", nextProvider)
                   }}
@@ -5243,9 +5236,7 @@ export function EmployeeRegisterForm() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="draft-bank-branch">
-                Branch Name{isDraftBankMobileMoney ? " (optional)" : ""}
-              </Label>
+              <Label htmlFor="draft-bank-branch">Branch Name{isDraftBankMobileMoney ? " (optional)" : ""}</Label>
               <Input
                 id="draft-bank-branch"
                 value={draftBankAccount.branchName}
@@ -5284,21 +5275,75 @@ export function EmployeeRegisterForm() {
       <Dialog open={isAcademicDialogOpen} onOpenChange={setIsAcademicDialogOpen}>
         <DialogPopup from="right" className="sm:max-w-[620px]">
           <DialogHeader>
-            <DialogTitle>{editingAcademicIndex === null ? "Add Academic Qualification" : "Edit Academic Qualification"}</DialogTitle>
+            <DialogTitle>
+              {editingAcademicIndex === null ? "Add Academic Qualification" : "Edit Academic Qualification"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div><Label>Country</Label><Input value={draftAcademic.countryOfResidence} onChange={e => updateDraftAcademic("countryOfResidence", e.target.value)} /></div>
-            <div><Label>Education Level</Label><Input value={draftAcademic.educationLevel} onChange={e => updateDraftAcademic("educationLevel", e.target.value)} /></div>
-            <div className="md:col-span-2"><Label>Institution</Label><Input value={draftAcademic.institutionName} onChange={e => updateDraftAcademic("institutionName", e.target.value)} /></div>
-            <div><Label>Degree / Certificate</Label><Input value={draftAcademic.degreeOrCertificate} onChange={e => updateDraftAcademic("degreeOrCertificate", e.target.value)} /></div>
-            <div><Label>Field of Study</Label><Input value={draftAcademic.fieldOfStudy} onChange={e => updateDraftAcademic("fieldOfStudy", e.target.value)} /></div>
-            <div><Label>Start Date</Label><Input value={draftAcademic.startDate} onChange={e => updateDraftAcademic("startDate", e.target.value)} placeholder="YYYY-MM-DD" /></div>
-            <div><Label>End Date</Label><Input value={draftAcademic.endDate} onChange={e => updateDraftAcademic("endDate", e.target.value)} placeholder="YYYY-MM-DD" /></div>
-            <div className="md:col-span-2"><Label>Certificate Document URL</Label><Input value={draftAcademic.certificateUrl} onChange={e => updateDraftAcademic("certificateUrl", e.target.value)} /></div>
+            <div>
+              <Label>Country</Label>
+              <Input
+                value={draftAcademic.countryOfResidence}
+                onChange={(e) => updateDraftAcademic("countryOfResidence", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Education Level</Label>
+              <Input
+                value={draftAcademic.educationLevel}
+                onChange={(e) => updateDraftAcademic("educationLevel", e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Institution</Label>
+              <Input
+                value={draftAcademic.institutionName}
+                onChange={(e) => updateDraftAcademic("institutionName", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Degree / Certificate</Label>
+              <Input
+                value={draftAcademic.degreeOrCertificate}
+                onChange={(e) => updateDraftAcademic("degreeOrCertificate", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Field of Study</Label>
+              <Input
+                value={draftAcademic.fieldOfStudy}
+                onChange={(e) => updateDraftAcademic("fieldOfStudy", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Start Date</Label>
+              <Input
+                value={draftAcademic.startDate}
+                onChange={(e) => updateDraftAcademic("startDate", e.target.value)}
+                placeholder="YYYY-MM-DD"
+              />
+            </div>
+            <div>
+              <Label>End Date</Label>
+              <Input
+                value={draftAcademic.endDate}
+                onChange={(e) => updateDraftAcademic("endDate", e.target.value)}
+                placeholder="YYYY-MM-DD"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Certificate Document URL</Label>
+              <Input
+                value={draftAcademic.certificateUrl}
+                onChange={(e) => updateDraftAcademic("certificateUrl", e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button type="button" onClick={saveDraftAcademic}>{editingAcademicIndex === null ? "Save" : "Update"}</Button>
+            <Button type="button" onClick={saveDraftAcademic}>
+              {editingAcademicIndex === null ? "Save" : "Update"}
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -5310,17 +5355,61 @@ export function EmployeeRegisterForm() {
             <DialogTitle>{editingProfessionalIndex === null ? "Add Professional Qualification" : "Edit"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
-            <div><Label>Country</Label><Input value={draftProfessional.countryOfResidence} onChange={e => updateDraftProfessional("countryOfResidence", e.target.value)} /></div>
-            <div className="md:col-span-2"><Label>Institution</Label><Input value={draftProfessional.institutionName} onChange={e => updateDraftProfessional("institutionName", e.target.value)} /></div>
-            <div><Label>Programme</Label><Input value={draftProfessional.programmeName} onChange={e => updateDraftProfessional("programmeName", e.target.value)} /></div>
-            <div><Label>Issuing Organization</Label><Input value={draftProfessional.issuingOrganization} onChange={e => updateDraftProfessional("issuingOrganization", e.target.value)} /></div>
-            <div><Label>Issue Date</Label><Input value={draftProfessional.issueDate} onChange={e => updateDraftProfessional("issueDate", e.target.value)} /></div>
-            <div><Label>Expiry Date</Label><Input value={draftProfessional.expiryDate} onChange={e => updateDraftProfessional("expiryDate", e.target.value)} /></div>
-            <div className="md:col-span-2"><Label>Certificate URL</Label><Input value={draftProfessional.certificateUrl} onChange={e => updateDraftProfessional("certificateUrl", e.target.value)} /></div>
+            <div>
+              <Label>Country</Label>
+              <Input
+                value={draftProfessional.countryOfResidence}
+                onChange={(e) => updateDraftProfessional("countryOfResidence", e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Institution</Label>
+              <Input
+                value={draftProfessional.institutionName}
+                onChange={(e) => updateDraftProfessional("institutionName", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Programme</Label>
+              <Input
+                value={draftProfessional.programmeName}
+                onChange={(e) => updateDraftProfessional("programmeName", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Issuing Organization</Label>
+              <Input
+                value={draftProfessional.issuingOrganization}
+                onChange={(e) => updateDraftProfessional("issuingOrganization", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Issue Date</Label>
+              <Input
+                value={draftProfessional.issueDate}
+                onChange={(e) => updateDraftProfessional("issueDate", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Expiry Date</Label>
+              <Input
+                value={draftProfessional.expiryDate}
+                onChange={(e) => updateDraftProfessional("expiryDate", e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Certificate URL</Label>
+              <Input
+                value={draftProfessional.certificateUrl}
+                onChange={(e) => updateDraftProfessional("certificateUrl", e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button type="button" onClick={saveDraftProfessional}>{editingProfessionalIndex === null ? "Save" : "Update"}</Button>
+            <Button type="button" onClick={saveDraftProfessional}>
+              {editingProfessionalIndex === null ? "Save" : "Update"}
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -5332,18 +5421,57 @@ export function EmployeeRegisterForm() {
             <DialogTitle>{editingExperienceIndex === null ? "Add Experience" : "Edit Experience"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
-            <div><Label>Company</Label><Input value={draftExperience.companyName} onChange={e => updateDraftExperience("companyName", e.target.value)} /></div>
-            <div><Label>Job Title</Label><Input value={draftExperience.jobTitle} onChange={e => updateDraftExperience("jobTitle", e.target.value)} /></div>
-            <div><Label>Responsibilities</Label><Textarea value={draftExperience.responsibilities} onChange={e => updateDraftExperience("responsibilities", e.target.value)} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Start</Label><Input value={draftExperience.startDate} onChange={e => updateDraftExperience("startDate", e.target.value)} /></div>
-              <div><Label>End</Label><Input value={draftExperience.endDate} onChange={e => updateDraftExperience("endDate", e.target.value)} disabled={draftExperience.currentlyWorking} /></div>
+            <div>
+              <Label>Company</Label>
+              <Input
+                value={draftExperience.companyName}
+                onChange={(e) => updateDraftExperience("companyName", e.target.value)}
+              />
             </div>
-            <label className="flex items-center gap-2 text-sm"><Checkbox checked={draftExperience.currentlyWorking} onCheckedChange={v => updateDraftExperience("currentlyWorking", Boolean(v))} /> Currently working here</label>
+            <div>
+              <Label>Job Title</Label>
+              <Input
+                value={draftExperience.jobTitle}
+                onChange={(e) => updateDraftExperience("jobTitle", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Responsibilities</Label>
+              <Textarea
+                value={draftExperience.responsibilities}
+                onChange={(e) => updateDraftExperience("responsibilities", e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Start</Label>
+                <Input
+                  value={draftExperience.startDate}
+                  onChange={(e) => updateDraftExperience("startDate", e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>End</Label>
+                <Input
+                  value={draftExperience.endDate}
+                  onChange={(e) => updateDraftExperience("endDate", e.target.value)}
+                  disabled={draftExperience.currentlyWorking}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={draftExperience.currentlyWorking}
+                onCheckedChange={(v) => updateDraftExperience("currentlyWorking", Boolean(v))}
+              />{" "}
+              Currently working here
+            </label>
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button type="button" onClick={saveDraftExperience}>{editingExperienceIndex === null ? "Save" : "Update"}</Button>
+            <Button type="button" onClick={saveDraftExperience}>
+              {editingExperienceIndex === null ? "Save" : "Update"}
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -5416,9 +5544,7 @@ export function EmployeeRegisterForm() {
                   placeholder="712345678"
                 />
               </div>
-              {draftContactPhoneError ? (
-                <p className="text-xs text-destructive">{draftContactPhoneError}</p>
-              ) : null}
+              {draftContactPhoneError ? <p className="text-xs text-destructive">{draftContactPhoneError}</p> : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-contact-email">Email</Label>
@@ -5442,9 +5568,7 @@ export function EmployeeRegisterForm() {
                 }}
                 placeholder="user@example.com"
               />
-              {draftContactEmailError ? (
-                <p className="text-xs text-destructive">{draftContactEmailError}</p>
-              ) : null}
+              {draftContactEmailError ? <p className="text-xs text-destructive">{draftContactEmailError}</p> : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="draft-contact-notes">Notes (optional)</Label>

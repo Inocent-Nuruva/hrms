@@ -36,7 +36,8 @@ import {
   Wifi,
 } from "lucide-react"
 import { countries as countryCodes } from "country-flag-icons"
-import * as FlagIcons from "country-flag-icons/react/3x2"
+
+import { CountryFlag } from "@/components/country-flag"
 import { LumaSpin } from "@/components/ui/luma-spin"
 
 
@@ -960,15 +961,6 @@ function formatGenderLabel(value?: string | null) {
     .join(" ")
 }
 
-/** Regional-indicator emoji fallback when the SVG flag component is unavailable. */
-function flagEmojiFromIso(code: string) {
-  const upper = code.toUpperCase()
-  if (!/^[A-Z]{2}$/.test(upper)) return null
-  return Array.from(upper)
-    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-    .join("")
-}
-
 function NationalityFlag({
   code,
   className,
@@ -976,30 +968,7 @@ function NationalityFlag({
   code: string | null
   className?: string
 }) {
-  if (!code) return null
-  const Flag = (FlagIcons as Record<string, React.ComponentType<{ title?: string; className?: string }>>)[
-    code.toUpperCase()
-  ]
-  if (Flag) {
-    return (
-      <span
-        className={cn(
-          "inline-flex h-3.5 w-5 shrink-0 overflow-hidden rounded-[2px] border border-border/70 bg-muted shadow-sm",
-          className
-        )}
-        title={code.toUpperCase()}
-      >
-        <Flag title={code.toUpperCase()} className="h-full w-full object-cover" />
-      </span>
-    )
-  }
-  const emoji = flagEmojiFromIso(code)
-  if (!emoji) return null
-  return (
-    <span className={cn("inline-flex shrink-0 text-sm leading-none", className)} title={code.toUpperCase()}>
-      {emoji}
-    </span>
-  )
+  return <CountryFlag code={code} className={cn("h-3.5 w-5 border-border/70 shadow-sm", className)} />
 }
 
 function initialsFor(name: string) {

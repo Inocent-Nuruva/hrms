@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import * as FlagIcons from "country-flag-icons/react/3x2"
 
+import { CountryFlag } from "@/components/country-flag"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import {
@@ -16,11 +16,6 @@ import {
   parseRecipientPhoneInput,
   splitNationalDigits,
 } from "@/components/dashboard/sms-recipient-phone-utils"
-
-const FLAG_COMPONENTS = FlagIcons as Record<
-  string,
-  React.ComponentType<{ title?: string; className?: string }>
->
 
 const COUNTRY_OPTIONS = listSmsCountryOptions()
 
@@ -37,7 +32,7 @@ export function SmsRecipientPhoneInput({
 }) {
   const dialDigits = digitsOnly(countryCode) || DEFAULT_SMS_DIAL_DIGITS
   const iso = isoFromDialDigits(dialDigits)
-  const Flag = iso ? FLAG_COMPONENTS[iso] : null
+  const flagCode = iso
   const boxes = splitNationalDigits(nationalDigits)
   const boxRefs = React.useRef<Array<HTMLInputElement | null>>([])
   const [countryOpen, setCountryOpen] = React.useState(false)
@@ -95,9 +90,9 @@ export function SmsRecipientPhoneInput({
                   />
                 }
               >
-                {Flag ? (
-                  <Flag
-                    title={iso ?? undefined}
+                {flagCode ? (
+                  <CountryFlag
+                    code={flagCode}
                     className="h-4 w-6 rounded-sm border border-border"
                   />
                 ) : (
@@ -114,7 +109,6 @@ export function SmsRecipientPhoneInput({
                 />
                 <div className="max-h-56 overflow-auto">
                   {filteredCountries.map((option) => {
-                    const OptionFlag = FLAG_COMPONENTS[option.iso]
                     const selected = option.dial === dialDigits
                     return (
                       <button
@@ -136,11 +130,10 @@ export function SmsRecipientPhoneInput({
                           setCountryQuery("")
                         }}
                       >
-                        {OptionFlag ? (
-                          <OptionFlag className="h-4 w-6 shrink-0 rounded-sm border border-border" />
-                        ) : (
-                          <span className="h-4 w-6 shrink-0 rounded-sm border border-dashed border-border" />
-                        )}
+                        <CountryFlag
+                          code={option.iso}
+                          className="h-4 w-6 shrink-0 rounded-sm border border-border"
+                        />
                         <span className="min-w-0 flex-1 truncate text-foreground">
                           {option.name}
                         </span>

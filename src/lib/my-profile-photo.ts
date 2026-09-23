@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { readStoredSessionTokens } from "@/lib/session-client"
+import { readStoredSessionTokens, SESSION_CLEARED_EVENT } from "@/lib/session-client"
 
 type Listener = () => void
 
@@ -53,6 +53,12 @@ export function invalidateMyProfilePhoto() {
   photoRevision += 1
   preferLocalUntil = 0
   emit()
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener(SESSION_CLEARED_EVENT, () => {
+    invalidateMyProfilePhoto()
+  })
 }
 
 export function subscribeMyProfilePhoto(listener: Listener) {

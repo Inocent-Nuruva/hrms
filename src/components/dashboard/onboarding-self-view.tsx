@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { CheckIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -56,7 +57,9 @@ function needsAck(row: AdminRecord | null) {
     "employee_acknowledged_at",
     "employeeAcknowledgedAt",
   ])
-  return !acknowledged && ["SUBMITTED", "IN_PROGRESS", "PENDING_ACKNOWLEDGEMENT", "ACKNOWLEDGEMENT_PENDING"].includes(status)
+  return (
+    !acknowledged && ["SUBMITTED", "IN_PROGRESS", "PENDING_ACKNOWLEDGEMENT", "ACKNOWLEDGEMENT_PENDING"].includes(status)
+  )
 }
 
 export function OnboardingSelfView() {
@@ -102,17 +105,11 @@ export function OnboardingSelfView() {
         listOnboardingDocuments(access, nextId),
       ])
       const request = rows.find((row) => rowId(row) === nextId) ?? null
-      setProgress(progressResult.status === "fulfilled" ? progressResult.value : asRecord(request?.progress) ?? request)
-      setTasks(
-        taskResult.status === "fulfilled"
-          ? taskResult.value
-          : asRecordArray(request?.tasks ?? request?.items),
+      setProgress(
+        progressResult.status === "fulfilled" ? progressResult.value : (asRecord(request?.progress) ?? request)
       )
-      setDocuments(
-        documentResult.status === "fulfilled"
-          ? documentResult.value
-          : asRecordArray(request?.documents),
-      )
+      setTasks(taskResult.status === "fulfilled" ? taskResult.value : asRecordArray(request?.tasks ?? request?.items))
+      setDocuments(documentResult.status === "fulfilled" ? documentResult.value : asRecordArray(request?.documents))
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) return
       setError(errorObject instanceof Error ? errorObject.message : "Could not load your onboarding.")
@@ -133,15 +130,25 @@ export function OnboardingSelfView() {
     const access = token()
     if (!access) return
     void Promise.allSettled([
-      getOnboardingProgress(access, selectedId).then(setProgress).catch(() => undefined),
-      listOnboardingTasks(access, selectedId).then(setTasks).catch(() => undefined),
-      listOnboardingDocuments(access, selectedId).then(setDocuments).catch(() => undefined),
+      getOnboardingProgress(access, selectedId)
+        .then(setProgress)
+        .catch(() => undefined),
+      listOnboardingTasks(access, selectedId)
+        .then(setTasks)
+        .catch(() => undefined),
+      listOnboardingDocuments(access, selectedId)
+        .then(setDocuments)
+        .catch(() => undefined),
     ])
   }, [selectedId])
 
   const motionProps = reduceMotion
     ? {}
-    : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 } }
+    : {
+        initial: { opacity: 0, y: 10 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+      }
 
   const percent = readNumber(progress ?? selected, [
     "percent_complete",
@@ -210,13 +217,38 @@ export function OnboardingSelfView() {
   }
 
   const doneCount = tasks.filter((task) => /complete|done|verified/i.test(readString(task, ["status"]))).length
+  const employeeDetailsReview = React.useMemo(() => {
+    const direct = asRecord(selected?.employee_details_review)
+    const metadata = asRecord(selected?.metadata)
+    const review = direct ?? asRecord(metadata?.employee_details_review)
+    const rawSections = review?.sections
+    const sections = Array.isArray(rawSections)
+      ? asRecordArray(rawSections)
+      : rawSections && typeof rawSections === "object"
+        ? Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => ({
+            key,
+            ...(asRecord(value) ?? {}),
+          }))
+        : []
+    return {
+      status: readString(review ?? {}, ["status"], "not_submitted").toLowerCase(),
+      sections,
+    }
+  }, [selected])
+  const returnedDetailSections = employeeDetailsReview.sections.filter(
+    (section) => readString(section, ["status"]).toLowerCase() === "changes_requested"
+  )
 
   return (
     <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My onboarding"
-        title={selected ? readString(selected, ["title", "workflow_name", "workflowName"], "Your joining checklist") : "Nothing to complete"}
+        title={
+          selected
+            ? readString(selected, ["title", "workflow_name", "workflowName"], "Your joining checklist")
+            : "Nothing to complete"
+        }
         description={
           selected
             ? "Acknowledge your offer, finish the tasks assigned to you, and attach anything HR still needs."
@@ -229,7 +261,11 @@ export function OnboardingSelfView() {
             onClick={() => void load()}
             disabled={mounted ? loading : undefined}
           >
-            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {mounted && loading ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-4" />
+            )}
             Refresh
           </button>
         }
@@ -238,6 +274,40 @@ export function OnboardingSelfView() {
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {error}
+        </div>
+      ) : null}
+
+      {returnedDetailSections.length > 0 ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="text-sm font-semibold">HR returned some details for correction</p>
+          <p className="mt-1 text-xs opacity-80">
+            Update the sections below, then submit the registration form again for review.
+          </p>
+          <div className="mt-3 space-y-2">
+            {returnedDetailSections.map((section) => (
+              <div
+                key={readString(section, ["key"])}
+                className="rounded-lg border border-amber-200 bg-white/70 p-3 dark:border-amber-900 dark:bg-black/10"
+              >
+                <p className="text-sm font-medium">{prettify(readString(section, ["key"], "Details"))}</p>
+                <p className="mt-1 text-xs">{readString(section, ["comment"], "HR requested an update.")}</p>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/dashboard/employees/registration"
+            className="mt-3 inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+          >
+            Correct my details
+          </Link>
+        </div>
+      ) : employeeDetailsReview.status === "submitted" || employeeDetailsReview.status === "in_review" ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
+          Your employee details are with HR for review. The workflow has not started yet.
+        </div>
+      ) : employeeDetailsReview.status === "approved" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+          HR verified your employee details. The onboarding workflow can now be started.
         </div>
       ) : null}
 
@@ -255,7 +325,7 @@ export function OnboardingSelfView() {
                   "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
                   active
                     ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
                 {readString(row, ["title", "workflow_name", "request_no"], `Request #${id}`)}
@@ -266,13 +336,24 @@ export function OnboardingSelfView() {
       ) : null}
 
       <AnimatePresence mode="wait">
-        <motion.div key={rowId(selected) || "empty"} className="w-full min-w-0 space-y-4" {...motionProps} transition={{ duration: 0.22 }}>
+        <motion.div
+          key={rowId(selected) || "empty"}
+          className="w-full min-w-0 space-y-4"
+          {...motionProps}
+          transition={{ duration: 0.22 }}
+        >
           {selected ? (
             <>
               <CompactStatStrip
                 items={[
-                  { label: "Status", value: loading ? "…" : prettify(statusOf(selected)) },
-                  { label: "Tasks done", value: loading ? "…" : `${doneCount}/${tasks.length}` },
+                  {
+                    label: "Status",
+                    value: loading ? "…" : prettify(statusOf(selected)),
+                  },
+                  {
+                    label: "Tasks done",
+                    value: loading ? "…" : `${doneCount}/${tasks.length}`,
+                  },
                   {
                     label: "Progress",
                     value: loading ? "…" : percent !== null ? `${Math.round(percent)}%` : "—",
@@ -287,7 +368,10 @@ export function OnboardingSelfView() {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Your tasks</p>
                     <p className="text-xs text-muted-foreground">
-                      Started {formatDate(selected.started_at ?? selected.startedAt ?? selected.created_at ?? selected.createdAt)}
+                      Started{" "}
+                      {formatDate(
+                        selected.started_at ?? selected.startedAt ?? selected.created_at ?? selected.createdAt
+                      )}
                     </p>
                   </div>
                   <StatusChip value={statusOf(selected)} />
@@ -302,17 +386,24 @@ export function OnboardingSelfView() {
                       const id = rowId(task)
                       const done = /complete|done|verified/i.test(readString(task, ["status"]))
                       return (
-                        <li key={id || readString(task, ["title", "name"])} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <li
+                          key={id || readString(task, ["title", "name"])}
+                          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                        >
                           <div className="flex min-w-0 items-center gap-3">
                             <span
                               className={cn(
                                 "flex size-6 shrink-0 items-center justify-center rounded-full border",
                                 done
                                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
-                                  : "border-border text-muted-foreground",
+                                  : "border-border text-muted-foreground"
                               )}
                             >
-                              {done ? <CheckIcon className="size-3.5" /> : <span className="size-1.5 rounded-full bg-muted-foreground/50" />}
+                              {done ? (
+                                <CheckIcon className="size-3.5" />
+                              ) : (
+                                <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+                              )}
                             </span>
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">
@@ -352,7 +443,11 @@ export function OnboardingSelfView() {
                     disabled={busy === "upload"}
                     onClick={() => fileRef.current?.click()}
                   >
-                    {busy === "upload" ? <Loader2Icon className="size-3.5 animate-spin" /> : <PaperclipIcon className="size-3.5" />}
+                    {busy === "upload" ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      <PaperclipIcon className="size-3.5" />
+                    )}
                     Attach
                   </button>
                   <input
@@ -373,7 +468,10 @@ export function OnboardingSelfView() {
                 ) : (
                   <ul className="divide-y divide-border/70">
                     {documents.map((doc) => (
-                      <li key={rowId(doc) || readString(doc, ["name", "file_name"])} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <li
+                        key={rowId(doc) || readString(doc, ["name", "file_name"])}
+                        className="flex items-center justify-between gap-3 px-4 py-3"
+                      >
                         <span className="truncate text-sm font-medium text-foreground">
                           {readString(doc, ["name", "file_name", "original_name", "document_type"], "Document")}
                         </span>
@@ -399,8 +497,7 @@ export function OnboardingSelfView() {
                     disabled={busy === "ack" || !ackNote.trim()}
                     onClick={() => void acknowledge()}
                   >
-                    {busy === "ack" ? <Loader2Icon className="size-4 animate-spin" /> : null}
-                    I accept
+                    {busy === "ack" ? <Loader2Icon className="size-4 animate-spin" /> : null}I accept
                   </button>
                 </div>
               ) : null}

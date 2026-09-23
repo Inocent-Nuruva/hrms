@@ -7,9 +7,19 @@ import {
   listOnboardingRequests,
   type AdminRecord,
 } from "@/lib/admin-api"
+import {
+  clearDashboardFromLoginFlag,
+  isDashboardFromLogin,
+  markDashboardFromLogin,
+} from "@/lib/dashboard-login-flag"
+
+export {
+  clearDashboardFromLoginFlag,
+  isDashboardFromLogin,
+  markDashboardFromLogin,
+}
 
 const WARM_SNAPSHOT_KEY = "hrms.dashboard.warmSnapshot"
-const FROM_LOGIN_FLAG_KEY = "hrms.dashboard.fromLogin"
 /** How long a post-login snapshot stays valid for first paint. */
 const WARM_TTL_MS = 90_000
 const PREFETCH_CACHE_TTL_MS = 30_000
@@ -41,34 +51,6 @@ function defaultDateRange() {
   return {
     fromDate: formatInputDate(shiftDays(new Date(), -30)),
     toDate: formatInputDate(new Date()),
-  }
-}
-
-/** Set before redirect so dashboard shells can skip skeleton flash. */
-export function markDashboardFromLogin() {
-  if (typeof window === "undefined") return
-  try {
-    window.sessionStorage.setItem(FROM_LOGIN_FLAG_KEY, "1")
-  } catch {
-    // ignore quota / private mode
-  }
-}
-
-export function isDashboardFromLogin(): boolean {
-  if (typeof window === "undefined") return false
-  try {
-    return window.sessionStorage.getItem(FROM_LOGIN_FLAG_KEY) === "1"
-  } catch {
-    return false
-  }
-}
-
-export function clearDashboardFromLoginFlag() {
-  if (typeof window === "undefined") return
-  try {
-    window.sessionStorage.removeItem(FROM_LOGIN_FLAG_KEY)
-  } catch {
-    // ignore
   }
 }
 
