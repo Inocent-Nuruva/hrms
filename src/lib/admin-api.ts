@@ -6870,7 +6870,8 @@ export async function getEmployeeMovement(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/employee-movements/${id}`, {
     token,
   });
-  return normalizeSingle(payload);
+  // The movement nests snapshots and the employee; keep the root record.
+  return unwrapRootRecord(payload, "id");
 }
 
 export async function listEmployeeMovementOperations(
@@ -8359,7 +8360,7 @@ export async function getMyMovement(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/me/movements/${id}`, {
     token,
   });
-  return normalizeSingle(payload);
+  return unwrapRootRecord(payload, "id");
 }
 
 export async function acknowledgeMyMovement(
@@ -15514,22 +15515,25 @@ export async function postPayrollSource(token: string, id: string | number) {
 
 export async function listPayrollOvertimeApprovals(
   token: string,
-  params: PayrollListParams & { start_date?: string; end_date?: string } = {},
 ) {
   return listPayrollCollection(
-    "/api/payroll/overtime-approvals",
+    "/api/payroll/overtime-requests/payroll",
     token,
-    params,
+    { page: 1, limit: 100 },
   );
 }
 
-export async function approvePayrollOvertime(
+export async function listMyOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/me", { token });
+  return normalizeList(payload);
+}
+
+export async function createMyOvertimeRequest(
   token: string,
-  id: string | number,
-  data: AdminRecord = {},
+  data: { work_date: string; requested_minutes: number; reason: string },
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/payroll/overtime-approvals/${id}/approve`,
+    "/api/payroll/overtime-requests/me",
     {
       method: "POST",
       token,
@@ -15539,17 +15543,29 @@ export async function approvePayrollOvertime(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function rejectPayrollOvertime(
+export async function listManagerOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/manager", { token });
+  return normalizeList(payload);
+}
+
+export async function listHrOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/hr", { token });
+  return normalizeList(payload);
+}
+
+export async function decideOvertimeRequest(
   token: string,
+  stage: "manager" | "hr",
   id: string | number,
-  data: AdminRecord = {},
+  decision: "approve" | "reject",
+  comments?: string,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/payroll/overtime-approvals/${id}/reject`,
+    `/api/payroll/overtime-requests/${stage}/${id}/${decision}`,
     {
       method: "POST",
       token,
-      body: data,
+      body: comments ? { comments } : {},
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
@@ -15651,7 +15667,7 @@ export async function getPayrollSalaryStructure(
       token,
     },
   );
-  return normalizeSingle(payload);
+  return unwrapRootRecord(payload, "components");
 }
 
 export async function createPayrollSalaryStructure(
@@ -15663,6 +15679,131 @@ export async function createPayrollSalaryStructure(
     token,
     body: data,
   });
+}
+
+export async function updatePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function deletePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function activatePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/activate`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
+export async function retirePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/retire`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
+export async function createPayrollSalaryStructureVersion(
+  token: string,
+  id: string | number,
+  data: { effective_from: string; name?: string },
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/versions`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listPayrollSalaryStructureEmployees(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/employees`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function getEmployeePayrollSalary(
+  token: string,
+  employeeId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/employees/${employeeId}/salary`,
+    {
+      token,
+    },
+  );
+  return unwrapRootRecord(payload, "employee");
+}
+
+export async function assignEmployeePayrollSalary(
+  token: string,
+  employeeId: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/employees/${employeeId}/salary`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return unwrapRootRecord(payload, "employee");
+}
+
+/**
+ * For payloads whose root record holds nested objects, where normalizeSingle
+ * would return a child record instead of the root.
+ */
+function unwrapRootRecord(
+  payload: unknown,
+  markerKey: string,
+): AdminRecord | null {
+  const record = asRecord(payload);
+  if (!record) return null;
+  const data = asRecord(record.data);
+  return data && markerKey in data ? data : record;
 }
 
 export async function listPayrollStatutorySchemes(token: string) {

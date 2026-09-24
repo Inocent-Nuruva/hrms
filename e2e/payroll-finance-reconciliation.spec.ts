@@ -1,16 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-import { loginAs, readTestUsers } from "./helpers/auth";
+import { loginAs, readTestUser } from "./helpers/auth";
 
 test.describe("payroll and employee-finance reconciliation routes", () => {
   test("admin can reach payroll reconciliation controls", async ({ page }) => {
-    const { admin } = readTestUsers();
+    const admin = readTestUser("admin");
     await loginAs(page, admin);
 
     await page.goto("/dashboard/operations/payroll", {
       waitUntil: "domcontentloaded",
     });
     await expect(page.locator("body")).not.toContainText(/next\.js error/i);
+    await page.getByRole("button", { name: "Reports", exact: true }).click();
     await expect(page.getByText("Run reconciliation")).toBeVisible();
     await expect(
       page.getByRole("button", { name: /reconcile run/i }),
@@ -20,7 +21,7 @@ test.describe("payroll and employee-finance reconciliation routes", () => {
   test("admin can reach finance statement and reconciliation routes", async ({
     page,
   }) => {
-    const { admin } = readTestUsers();
+    const admin = readTestUser("admin");
     await loginAs(page, admin);
 
     await page.goto("/dashboard/finance/accounts", {

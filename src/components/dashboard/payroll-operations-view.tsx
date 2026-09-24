@@ -18,7 +18,6 @@ import {
 } from "@/components/dashboard/admin-view-shared";
 import {
   approvePayrollInput,
-  approvePayrollOvertime,
   approvePayrollRun,
   approvePayrollSource,
   closePayrollRun,
@@ -33,7 +32,13 @@ import {
   createPayrollLeaveRule,
   createPayrollOvertimePolicy,
   createPayrollRun,
+  activatePayrollSalaryStructure,
   createPayrollSalaryStructure,
+  createPayrollSalaryStructureVersion,
+  deletePayrollSalaryStructure,
+  listPayrollSalaryStructureEmployees,
+  retirePayrollSalaryStructure,
+  updatePayrollSalaryStructure,
   createPayrollSource,
   generatePayrollSources,
   createPayrollStatutoryRule,
@@ -80,7 +85,6 @@ import {
   postPayrollAccountingJournal,
   postPayrollSource,
   reconcilePayrollPayment,
-  rejectPayrollOvertime,
   rejectPayrollSource,
   reversePayrollAccountingJournal,
   validatePayrollRun,
@@ -101,6 +105,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
 
 type PayrollTab =
   | "overview"
@@ -150,7 +155,7 @@ const TABS: Array<{ id: PayrollTab; label: string }> = [
   { id: "runs", label: "Runs" },
   { id: "inputs", label: "Inputs" },
   { id: "sources", label: "Sources" },
-  { id: "overtimeApprovals", label: "OT approvals" },
+  { id: "overtimeApprovals", label: "Approved OT" },
   { id: "profiles", label: "Profiles" },
   { id: "periods", label: "Periods" },
   { id: "reports", label: "Reports" },
@@ -743,6 +748,7 @@ function emptyStructureForm() {
   return {
     code: "",
     name: "",
+    description: "",
     currency: "TZS",
     effectiveFrom: "",
     effectiveTo: "",
@@ -1479,15 +1485,29 @@ function PayrollDetailsContent({
 
   if (configTab === "structures") {
     const lines = asRecordArray(row.components);
+    const versions = asRecordArray(row.versions);
+    const employees = asRecordArray(row.assigned_employees);
     return (
       <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-base font-semibold text-foreground">
-            {optionLabel(row)}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-base font-semibold text-foreground">
+              {optionLabel(row)}
+            </div>
+            <Badge variant="outline" className={cn("capitalize", statusClass)}>
+              {prettify(status)}
+            </Badge>
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
+            {readString(row, ["code"])} · v
+            {readString(row, ["versionNumber", "version_number"], "1")} ·{" "}
             {readString(row, ["currency"], currency)}
           </div>
+          {readString(row, ["description"]) ? (
+            <p className="mt-2 text-sm text-foreground">
+              {readString(row, ["description"])}
+            </p>
+          ) : null}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1499,7 +1519,12 @@ function PayrollDetailsContent({
             label="Effective to"
             value={formatAdminValue(row.effective_to ?? row.effectiveTo)}
           />
-          <PayrollDetailField label="Components" value={String(lines.length)} />
+          <PayrollDetailField
+            label="Employees"
+            value={String(
+              readNumber(row, ["assigned_employee_count"]) ?? employees.length,
+            )}
+          />
           <PayrollDetailField label="Updated" value={updatedAt} />
         </div>
 
@@ -1520,10 +1545,15 @@ function PayrollDetailsContent({
                       ["name", "title", "code"],
                       readString(
                         line,
-                        ["component_code", "componentCode"],
+                        ["component_name", "component_code", "componentCode"],
                         `Component ${index + 1}`,
                       ),
                     )}
+                    {readString(line, ["component_code"]) === "BASIC" ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        Paid from employee base salary
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Amount:{" "}
@@ -1541,6 +1571,71 @@ function PayrollDetailsContent({
             </div>
           </div>
         ) : null}
+
+        {versions.length > 1 ? (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground">Versions</h3>
+            <div className="mt-3 grid gap-2">
+              {versions.map((version) => (
+                <div
+                  key={rowId(version)}
+                  className="grid gap-2 rounded-xl bg-muted/40 px-3 py-2 text-xs md:grid-cols-3"
+                >
+                  <span className="font-medium text-foreground">
+                    v{readString(version, ["versionNumber", "version_number"])}
+                    {rowId(version) === rowId(row) ? " (this)" : ""}
+                  </span>
+                  <span>{prettify(readStatus(version))}</span>
+                  <span>
+                    {formatAdminValue(version.effectiveFrom)} →{" "}
+                    {formatAdminValue(version.effectiveTo)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground">
+            Assigned employees
+          </h3>
+          {employees.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No employees are paid on this structure yet. Assign it from a
+              payroll profile&apos;s Salary action, or with a salary revision
+              movement.
+            </p>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {employees.map((employee) => (
+                <div
+                  key={readString(employee, ["compensation_id"])}
+                  className="grid gap-2 rounded-xl bg-muted/40 px-3 py-2 text-xs md:grid-cols-[minmax(0,1fr)_140px_140px]"
+                >
+                  <span className="text-sm font-medium text-foreground">
+                    {readString(employee, ["employee_name"], "Employee")}
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {readString(employee, ["employee_no"])}
+                    </span>
+                    {readBoolean(employee, ["has_overrides"]) ? (
+                      <Badge variant="outline" className="ml-2">
+                        Overrides
+                      </Badge>
+                    ) : null}
+                  </span>
+                  <span>
+                    {formatCurrencyAmount(
+                      employee.base_salary,
+                      readString(employee, ["currency"], currency),
+                    )}
+                  </span>
+                  <span>From {formatAdminValue(employee.effective_from)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -1728,6 +1823,17 @@ export function PayrollOperationsView() {
   const [componentForm, setComponentForm] = React.useState(emptyComponentForm);
   const [calendarForm, setCalendarForm] = React.useState(emptyCalendarForm);
   const [structureForm, setStructureForm] = React.useState(emptyStructureForm);
+  const [editingStructure, setEditingStructure] =
+    React.useState<AdminRecord | null>(null);
+  const [structureActionId, setStructureActionId] = React.useState("");
+  const [versionTarget, setVersionTarget] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [versionEffectiveFrom, setVersionEffectiveFrom] = React.useState("");
+  const [salaryTarget, setSalaryTarget] = React.useState<{
+    employeeId: string;
+    label: string;
+  } | null>(null);
   const [schemeForm, setSchemeForm] = React.useState(emptySchemeForm);
   const [ruleForm, setRuleForm] = React.useState(emptyRuleForm);
   const [mappingForm, setMappingForm] = React.useState(emptyMappingForm);
@@ -1747,7 +1853,6 @@ export function PayrollOperationsView() {
   const [journalRunId, setJournalRunId] = React.useState("");
   const [approvingInputId, setApprovingInputId] = React.useState("");
   const [sourceActionId, setSourceActionId] = React.useState("");
-  const [overtimeActionId, setOvertimeActionId] = React.useState("");
   const requestIdRef = React.useRef(0);
   const lookupsCacheRef = React.useRef<{
     dashboard: AdminRecord | null;
@@ -1952,11 +2057,7 @@ export function PayrollOperationsView() {
         }
 
         if (tab === "overtimeApprovals") {
-          const result = await listPayrollOvertimeApprovals(token, {
-            page: 1,
-            limit: 100,
-            status: statusFilter || "PENDING",
-          });
+          const result = await listPayrollOvertimeApprovals(token);
           if (requestIdRef.current === requestId) setRows(result.rows);
           return;
         }
@@ -2078,8 +2179,125 @@ export function PayrollOperationsView() {
     ) {
       setAdvancedForm(emptyAdvancedPayrollForm());
     }
+    if (mode === "structure" && editingStructure) {
+      setEditingStructure(null);
+      setStructureForm(emptyStructureForm());
+    }
     setCreateOpen(true);
   };
+
+  const openEditStructure = async (row: AdminRecord) => {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setStructureActionId(id);
+    try {
+      const detail = (await getPayrollSalaryStructure(token, id)) ?? row;
+      const lines = asRecordArray(detail.components);
+      setStructureForm({
+        code: readString(detail, ["code"]),
+        name: readString(detail, ["name"]),
+        description: readString(detail, ["description"]),
+        currency: readString(detail, ["currency"], "TZS"),
+        effectiveFrom: readString(detail, ["effectiveFrom", "effective_from"]),
+        effectiveTo: readString(detail, ["effectiveTo", "effective_to"]),
+        components: lines.length
+          ? lines.map((line) => ({
+              componentId: readString(line, ["componentId", "component_id"]),
+              defaultAmount: readString(line, [
+                "defaultAmount",
+                "default_amount",
+              ]),
+              defaultRate: readString(line, ["defaultRate", "default_rate"]),
+              calculationOrder: readString(
+                line,
+                ["calculationOrder", "calculation_order"],
+                "1",
+              ),
+            }))
+          : [emptyStructureLine()],
+      });
+      setEditingStructure(detail);
+      setFormError(null);
+      setCreateMode("structure");
+      setCreateOpen(true);
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to load structure.",
+      );
+    } finally {
+      setStructureActionId("");
+    }
+  };
+
+  async function runStructureAction(
+    row: AdminRecord,
+    action: "activate" | "retire" | "delete",
+  ) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    const label = `${readString(row, ["code"])} v${readString(row, ["versionNumber", "version_number"], "1")}`;
+    if (
+      action !== "activate" &&
+      !window.confirm(
+        action === "delete"
+          ? `Delete draft structure ${label}? This cannot be undone.`
+          : `Retire structure ${label}? It stops applying after today.`,
+      )
+    ) {
+      return;
+    }
+    setStructureActionId(id);
+    try {
+      if (action === "activate") {
+        await activatePayrollSalaryStructure(token, id);
+        toast.success(`Structure ${label} activated.`);
+      } else if (action === "retire") {
+        await retirePayrollSalaryStructure(token, id);
+        toast.success(`Structure ${label} retired.`);
+      } else {
+        await deletePayrollSalaryStructure(token, id);
+        toast.success(`Structure ${label} deleted.`);
+      }
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Salary structure action failed.",
+      );
+    } finally {
+      setStructureActionId("");
+    }
+  }
+
+  async function onCreateStructureVersion() {
+    const token = readStoredToken();
+    const id = rowId(versionTarget);
+    if (!token || !id || !versionEffectiveFrom) return;
+    setStructureActionId(id);
+    try {
+      await createPayrollSalaryStructureVersion(token, id, {
+        effective_from: versionEffectiveFrom,
+      });
+      toast.success(
+        "Draft version created. Review its lines, then activate it.",
+      );
+      setVersionTarget(null);
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create version.",
+      );
+    } finally {
+      setStructureActionId("");
+    }
+  }
 
   const openRuleDialog = () => {
     setFormError(null);
@@ -2098,7 +2316,7 @@ export function PayrollOperationsView() {
             : tab === "sources"
               ? "Payroll source records"
               : tab === "overtimeApprovals"
-                ? "Overtime approvals"
+                ? "Approved overtime"
                 : tab === "periods"
                   ? "Payroll periods"
                   : tab === "reports"
@@ -2113,6 +2331,16 @@ export function PayrollOperationsView() {
       "payroll_inputs:create",
       "payroll_configuration:create",
       "manage_payroll",
+      "payroll:config",
+      "payroll:profiles",
+      "payroll:periods",
+      "payroll:inputs",
+      "payroll:runs",
+      "payroll:runs:process",
+      "payroll:payslips",
+      "payroll:banking",
+      "payroll:accounting",
+      "payroll:final-settlements",
     ],
     mode: "any",
   });
@@ -2123,6 +2351,9 @@ export function PayrollOperationsView() {
       "payroll_runs:approve",
       "payroll_inputs:approve",
       "manage_payroll",
+      "payroll:runs:approve",
+      "payroll:runs:lock",
+      "payroll:inputs:approve",
     ],
     mode: "any",
   });
@@ -2159,7 +2390,9 @@ export function PayrollOperationsView() {
               : createMode === "calendar"
                 ? "New calendar"
                 : createMode === "structure"
-                  ? "New structure"
+                  ? editingStructure
+                    ? "Edit structure"
+                    : "New structure"
                   : createMode === "scheme"
                     ? "New scheme"
                     : createMode === "mapping"
@@ -2689,31 +2922,24 @@ export function PayrollOperationsView() {
         },
         {
           key: "attendance_date",
-          label: "Date",
+          label: "Work date",
           render: (row) =>
-            formatAdminValue(row.attendance_date ?? row.attendanceDate),
+            formatAdminValue(row.work_date ?? row.workDate),
         },
         {
           key: "minutes",
-          label: "Minutes",
-          render: (row) =>
-            readString(row, ["overtime_minutes", "overtimeMinutes"], "0"),
+          label: "Requested / recorded / payable",
+          render: (row) => {
+            const requested = readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0;
+            const recorded = readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
+            return `${requested} / ${recorded} / ${Math.min(requested, recorded)} min`;
+          },
         },
         {
           key: "status",
           label: "Status",
           render: (row) => {
-            const flags =
-              typeof row.flags === "object" && row.flags
-                ? (row.flags as AdminRecord)
-                : {};
-            const status = readString(
-              flags,
-              ["otApprovalStatus"],
-              readBoolean(flags, ["overtimeApproved", "otApproved"])
-                ? "APPROVED"
-                : "PENDING",
-            );
+            const status = readString(row, ["status"], "APPROVED");
             return (
               <Badge
                 variant="outline"
@@ -2741,36 +2967,6 @@ export function PayrollOperationsView() {
                 >
                   View
                 </button>
-                {canApprovePayroll ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={overtimeActionId === id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onApproveOvertime(row);
-                    }}
-                  >
-                    {overtimeActionId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
-                    ) : (
-                      "Approve"
-                    )}
-                  </button>
-                ) : null}
-                {canApprovePayroll ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={overtimeActionId === id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onRejectOvertime(row);
-                    }}
-                  >
-                    Reject
-                  </button>
-                ) : null}
               </div>
             );
           },
@@ -2842,6 +3038,42 @@ export function PayrollOperationsView() {
               </p>
             </div>
           ),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const employeeId = readString(row, ["employeeId", "employee_id"]);
+            return (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openDetail(row);
+                  }}
+                >
+                  View
+                </button>
+                {employeeId ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSalaryTarget({
+                        employeeId,
+                        label: readEmployeeLabel(row),
+                      });
+                    }}
+                  >
+                    Salary
+                  </button>
+                ) : null}
+              </div>
+            );
+          },
         },
       ];
     }
@@ -2995,23 +3227,143 @@ export function PayrollOperationsView() {
             <div className="space-y-0.5">
               <p className="font-medium">{optionLabel(row)}</p>
               <p className="text-xs text-muted-foreground">
+                {readString(row, ["code"])} · v
+                {readString(row, ["versionNumber", "version_number"], "1")} ·{" "}
                 {readString(row, ["currency"], "TZS")}
               </p>
             </div>
           ),
         },
         {
-          key: "effective_from",
-          label: "Effective from",
-          render: (row) =>
-            formatAdminValue(row.effective_from ?? row.effectiveFrom),
+          key: "status",
+          label: "Status",
+          render: (row) => (
+            <Badge
+              variant="outline"
+              className={cn("capitalize", statusTone(readStatus(row)))}
+            >
+              {prettify(readStatus(row))}
+            </Badge>
+          ),
+        },
+        {
+          key: "effective",
+          label: "Effective",
+          render: (row) => (
+            <div className="space-y-0.5 text-xs">
+              <p>{formatAdminValue(row.effective_from ?? row.effectiveFrom)}</p>
+              <p className="text-muted-foreground">
+                To {formatAdminValue(row.effective_to ?? row.effectiveTo)}
+              </p>
+            </div>
+          ),
         },
         {
           key: "components",
-          label: "Components",
+          label: "Lines",
+          render: (row) =>
+            String(
+              readNumber(row, ["component_count"]) ??
+                asRecordArray(row.components).length,
+            ),
+        },
+        {
+          key: "employees",
+          label: "Employees",
+          render: (row) =>
+            String(readNumber(row, ["assigned_employee_count"]) ?? 0),
+        },
+        {
+          key: "actions",
+          label: "Actions",
           render: (row) => {
-            const lines = asRecordArray(row.components);
-            return String(lines.length || 0);
+            const id = rowId(row);
+            const status = readStatus(row).toUpperCase();
+            const busy = structureActionId === id;
+            return (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void openDetail(row);
+                  }}
+                >
+                  View
+                </button>
+                {canMutatePayroll && status !== "RETIRED" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void openEditStructure(row);
+                    }}
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                {canMutatePayroll && status === "DRAFT" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void runStructureAction(row, "activate");
+                    }}
+                  >
+                    {busy ? (
+                      <Loader2Icon className="size-3.5 animate-spin" />
+                    ) : (
+                      "Activate"
+                    )}
+                  </button>
+                ) : null}
+                {canMutatePayroll && status !== "DRAFT" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setVersionEffectiveFrom("");
+                      setVersionTarget(row);
+                    }}
+                  >
+                    New version
+                  </button>
+                ) : null}
+                {canMutatePayroll && status === "ACTIVE" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void runStructureAction(row, "retire");
+                    }}
+                  >
+                    Retire
+                  </button>
+                ) : null}
+                {canMutatePayroll && status === "DRAFT" ? (
+                  <button
+                    type="button"
+                    className={cn(actionButtonClass, "text-rose-600")}
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void runStructureAction(row, "delete");
+                    }}
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
+            );
           },
         },
       ];
@@ -3252,12 +3604,12 @@ export function PayrollOperationsView() {
     configTab,
     journalRunId,
     lockingRunId,
-    overtimeActionId,
     payslipRunId,
     canApprovePayroll,
     canMutatePayroll,
     processingRunId,
     sourceActionId,
+    structureActionId,
     tab,
   ]);
 
@@ -3284,7 +3636,14 @@ export function PayrollOperationsView() {
           payslips,
         });
       } else if (tab === "configuration" && configTab === "structures" && id) {
-        setDetailRecord((await getPayrollSalaryStructure(token, id)) ?? row);
+        const [structureDetail, assignedEmployees] = await Promise.all([
+          getPayrollSalaryStructure(token, id),
+          listPayrollSalaryStructureEmployees(token, id).catch(() => []),
+        ]);
+        setDetailRecord({
+          ...(structureDetail ?? row),
+          assigned_employees: assignedEmployees,
+        });
       } else {
         setDetailRecord(row);
       }
@@ -3916,46 +4275,6 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onApproveOvertime(row: AdminRecord) {
-    const token = readStoredToken();
-    const id = rowId(row);
-    if (!token || !id) return;
-    setOvertimeActionId(id);
-    try {
-      await approvePayrollOvertime(token, id);
-      toast.success("Overtime approved for payroll.");
-      await loadRows({ refreshLookups: true });
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to approve overtime.",
-      );
-    } finally {
-      setOvertimeActionId("");
-    }
-  }
-
-  async function onRejectOvertime(row: AdminRecord) {
-    const token = readStoredToken();
-    const id = rowId(row);
-    if (!token || !id) return;
-    setOvertimeActionId(id);
-    try {
-      await rejectPayrollOvertime(token, id);
-      toast.success("Overtime rejected.");
-      await loadRows({ refreshLookups: true });
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to reject overtime.",
-      );
-    } finally {
-      setOvertimeActionId("");
-    }
-  }
-
   async function onCreate() {
     const token = readStoredToken();
     if (!token) {
@@ -4177,14 +4496,34 @@ export function PayrollOperationsView() {
             "Code, name, effective from, and at least one component line are required.",
           );
         }
-        await createPayrollSalaryStructure(token, {
-          code: structureForm.code.trim(),
-          name: structureForm.name.trim(),
-          currency: structureForm.currency.trim() || undefined,
-          effective_from: structureForm.effectiveFrom,
-          effective_to: structureForm.effectiveTo || undefined,
-          components: lines,
-        });
+        const editingId = rowId(editingStructure);
+        if (editingId) {
+          const isActive =
+            readStatus(editingStructure).toUpperCase() === "ACTIVE";
+          await updatePayrollSalaryStructure(token, editingId, {
+            name: structureForm.name.trim(),
+            description: structureForm.description.trim() || null,
+            effective_to: structureForm.effectiveTo || null,
+            ...(isActive
+              ? {}
+              : {
+                  currency: structureForm.currency.trim() || undefined,
+                  effective_from: structureForm.effectiveFrom,
+                  components: lines,
+                }),
+          });
+          setEditingStructure(null);
+        } else {
+          await createPayrollSalaryStructure(token, {
+            code: structureForm.code.trim(),
+            name: structureForm.name.trim(),
+            description: structureForm.description.trim() || undefined,
+            currency: structureForm.currency.trim() || undefined,
+            effective_from: structureForm.effectiveFrom,
+            effective_to: structureForm.effectiveTo || undefined,
+            components: lines,
+          });
+        }
       } else if (createMode === "scheme") {
         if (!schemeForm.code.trim() || !schemeForm.name.trim()) {
           throw new Error("Code and name are required.");
@@ -6330,12 +6669,22 @@ export function PayrollOperationsView() {
     }
 
     if (createMode === "structure") {
+      const linesLocked =
+        readStatus(editingStructure).toUpperCase() === "ACTIVE";
       return (
         <div className="space-y-4">
+          {linesLocked ? (
+            <p className="rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+              This version is active. Only name, description and effective to
+              can change. Use &ldquo;New version&rdquo; to change lines,
+              currency or start date.
+            </p>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Code">
               <input
                 className={inputClass}
+                disabled={Boolean(editingStructure)}
                 value={structureForm.code}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -6360,6 +6709,7 @@ export function PayrollOperationsView() {
             <Field label="Currency">
               <input
                 className={inputClass}
+                disabled={linesLocked}
                 value={structureForm.currency}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -6373,6 +6723,7 @@ export function PayrollOperationsView() {
               <input
                 className={inputClass}
                 type="date"
+                disabled={linesLocked}
                 value={structureForm.effectiveFrom}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -6395,8 +6746,23 @@ export function PayrollOperationsView() {
                 }
               />
             </Field>
+            <Field label="Description" className="md:col-span-2">
+              <textarea
+                className={textareaClass}
+                value={structureForm.description}
+                onChange={(event) =>
+                  setStructureForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </Field>
           </div>
-          <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-3">
+          <fieldset
+            disabled={linesLocked}
+            className="space-y-3 rounded-lg border border-border bg-muted/10 p-3 disabled:opacity-60"
+          >
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-medium">Component lines</p>
@@ -6528,7 +6894,7 @@ export function PayrollOperationsView() {
                 ) : null}
               </div>
             ))}
-          </div>
+          </fieldset>
         </div>
       );
     }
@@ -8782,7 +9148,6 @@ export function PayrollOperationsView() {
                 "runs",
                 "inputs",
                 "sources",
-                "overtimeApprovals",
                 "profiles",
                 "periods",
               ].includes(tab) ? (
@@ -8989,6 +9354,64 @@ export function PayrollOperationsView() {
               }}
             >
               Close
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <PayrollEmployeeSalaryDialog
+        open={Boolean(salaryTarget)}
+        onOpenChange={(open) => {
+          if (!open) setSalaryTarget(null);
+        }}
+        employeeId={salaryTarget?.employeeId ?? ""}
+        employeeLabel={salaryTarget?.label ?? ""}
+        structures={structures}
+        canEdit={canMutatePayroll}
+        onChanged={() => void loadRows({ refreshLookups: true })}
+      />
+
+      <Dialog
+        open={Boolean(versionTarget)}
+        onOpenChange={(open) => {
+          if (!open) setVersionTarget(null);
+        }}
+      >
+        <DialogPopup className="w-[min(480px,96vw)]">
+          <DialogHeader>
+            <DialogTitle>New structure version</DialogTitle>
+            <DialogDescription>
+              Copies {versionTarget ? optionLabel(versionTarget) : ""} into a
+              draft version. Employees on this code move to it automatically
+              once it is activated and its start date is reached.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="Effective from">
+            <input
+              type="date"
+              className={inputClass}
+              value={versionEffectiveFrom}
+              onChange={(event) => setVersionEffectiveFrom(event.target.value)}
+            />
+          </Field>
+          <DialogFooter>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setVersionTarget(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={
+                !versionEffectiveFrom ||
+                structureActionId === rowId(versionTarget)
+              }
+              onClick={() => void onCreateStructureVersion()}
+            >
+              Create draft
             </button>
           </DialogFooter>
         </DialogPopup>

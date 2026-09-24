@@ -98,6 +98,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
+import { OvertimeRequestsPanel } from "@/components/dashboard/overtime-requests-panel"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -5225,6 +5226,7 @@ export function EmployeePayrollView() {
           </button>
         }
       />
+      <OvertimeRequestsPanel token={token} />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <CompactStatStrip
         items={[

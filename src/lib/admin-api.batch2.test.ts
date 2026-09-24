@@ -516,3 +516,47 @@ describe("batch 2 admin API helpers", () => {
     expect(result.totalPages).toBe(1)
   })
 })
+
+describe("employee movement detail unwrapping", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it("returns the movement itself, not a nested snapshot or employee", async () => {
+    const movementPayload = {
+      id: 17,
+      movementNo: "MOV-2026-000017",
+      employeeId: 120,
+      currentSnapshot: { branch_id: 1, base_salary: "2000000.00" },
+      proposedSnapshot: { branch_id: 1, base_salary: "2500000.00" },
+      employee: { id: 120, first_name: "Asha" },
+      changes: [
+        {
+          field: "BASE_SALARY",
+          newValue: {
+            amount: "2500000.00",
+            component_overrides: { HOUSING: { amount: "500000.00" } },
+          },
+        },
+      ],
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(movementPayload))
+        .mockResolvedValueOnce(jsonResponse(movementPayload)),
+    )
+
+    const movement = await getEmployeeMovement("token", 17)
+    const mine = await getMyMovement("token", 17)
+
+    for (const record of [movement, mine]) {
+      expect(record).toEqual(
+        expect.objectContaining({ id: 17, movementNo: "MOV-2026-000017" }),
+      )
+      expect(record?.changes).toHaveLength(1)
+    }
+  })
+})

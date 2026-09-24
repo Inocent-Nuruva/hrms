@@ -48,6 +48,30 @@ describe("payroll route access", () => {
     ).toBe(true)
   })
 
+  it("opens payroll and finance routes for the backend-seeded permission labels", () => {
+    for (const label of ["payroll:runs:read", "payroll:config:read", "payroll:reports"]) {
+      expect(canAccessDashboardRoute("/dashboard/operations/payroll", [label], "admin")).toBe(true)
+    }
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/products", ["employee_finance:products:read"], "admin"),
+    ).toBe(true)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/accounts", ["employee_finance:accounts:read"], "admin"),
+    ).toBe(true)
+  })
+
+  it("keeps self-service labels out of the payroll and finance admin routes", () => {
+    expect(
+      canAccessDashboardRoute("/dashboard/operations/payroll", ["payroll:payslips:self"], "admin"),
+    ).toBe(false)
+    expect(
+      canAccessDashboardRoute("/dashboard/finance/overview", ["employee_finance:applications:self"], "admin"),
+    ).toBe(false)
+  })
+
   it("leaves personal payroll available without payroll admin permissions", () => {
     expect(canAccessDashboardRoute("/dashboard/me/payroll", [], "employee")).toBe(true)
     expect(canAccessDashboardRoute("/dashboard/me/finance/payroll", [], "employee")).toBe(true)

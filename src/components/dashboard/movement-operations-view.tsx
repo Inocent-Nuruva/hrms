@@ -54,6 +54,7 @@ import {
   listEmployeeMovementOperations,
   listEmployeeMovements,
   listEmployees,
+  listPayrollSalaryStructures,
   listPositions,
   rejectEmployeeMovement,
   retryEmployeeMovementOperation,
@@ -69,6 +70,11 @@ import {
 } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import {
+  MovementSalaryOverridesEditor,
+  type SalaryOverridesState,
+  type StoredSalaryOverrides,
+} from "@/components/dashboard/movement-salary-overrides-editor"
 
 export type MovementOpsTab = "overview" | "cases" | "operations"
 type MovementWorkspace = "hr" | "team"
@@ -164,6 +170,28 @@ function changedSnapshotValue(row: AdminRecord, key: string) {
     recordValue(row, ["proposedSnapshot", "proposed_snapshot"]),
   )
   return proposed[key] !== current[key] ? proposed[key] : undefined
+}
+
+/**
+ * Overrides saved on a movement salary change: undefined when the change does
+ * not set them (they carry over), {} when it clears them.
+ */
+function movementSalaryOverrides(
+  row: AdminRecord,
+): StoredSalaryOverrides | undefined {
+  const salaryChange = Array.isArray(row.changes)
+    ? row.changes.find(
+        (entry) =>
+          readString(asPlainRecord(entry), ["field"], "").toUpperCase() ===
+          "BASE_SALARY",
+      )
+    : undefined
+  const newValue = asPlainRecord(
+    recordValue(asPlainRecord(salaryChange), ["newValue", "new_value"]),
+  )
+  if (!Object.prototype.hasOwnProperty.call(newValue, "component_overrides"))
+    return undefined
+  return asPlainRecord(newValue.component_overrides) as StoredSalaryOverrides
 }
 
 function buildMovementForm(row: AdminRecord): Record<string, string> {
@@ -291,6 +319,28 @@ export function MovementOperationsView({
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
   const [grades, setGrades] = React.useState<AdminRecord[]>([])
   const [costCenters, setCostCenters] = React.useState<AdminRecord[]>([])
+  const [salaryStructures, setSalaryStructures] = React.useState<
+    AdminRecord[]
+  >([])
+  const salaryStructureCodes = React.useMemo(() => {
+    const byCode = new Map<string, string>()
+    for (const row of salaryStructures) {
+      if (String(row.status ?? "").toUpperCase() !== "ACTIVE") continue
+      byCode.set(String(row.code), String(row.name ?? row.code))
+    }
+    return [...byCode].map(([code, name]) => ({ code, name }))
+  }, [salaryStructures])
+  // Overrides saved on the movement being edited, and whose they are.
+  const [initialSalaryOverrides, setInitialSalaryOverrides] = React.useState<{
+    employeeId: string
+    overrides: StoredSalaryOverrides | undefined
+  } | null>(null)
+  const [salaryOverrides, setSalaryOverrides] =
+    React.useState<SalaryOverridesState>({
+      overrides: null,
+      pending: false,
+      error: null,
+    })
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -341,6 +391,10 @@ export function MovementOperationsView({
         listCostCenters(token)
           .then(setCostCenters)
           .catch(() => setCostCenters([])),
+        // Needs payroll config read access; the form falls back to free text.
+        listPayrollSalaryStructures(token)
+          .then(setSalaryStructures)
+          .catch(() => setSalaryStructures([])),
       )
     }
     const results = await Promise.allSettled(tasks)
@@ -432,7 +486,12 @@ export function MovementOperationsView({
       const movement = await getEmployeeMovement(token, id)
       if (!movement) throw new Error("Movement was not found.")
       setCreateMode("edit")
-      setForm(buildMovementForm(movement))
+      const movementForm = buildMovementForm(movement)
+      setForm(movementForm)
+      setInitialSalaryOverrides({
+        employeeId: movementForm.employee_id,
+        overrides: movementSalaryOverrides(movement),
+      })
       setFormError(null)
       setCreateOpen(true)
     } catch (errorObject) {
@@ -510,10 +569,21 @@ export function MovementOperationsView({
           if (!form.base_salary || !form.currency || !form.justification) {
             throw new Error("Salary, currency, and justification are required.")
           }
+          if (salaryOverrides.pending) {
+            throw new Error(
+              "Structure lines are still loading. Try again in a moment.",
+            )
+          }
+          if (salaryOverrides.error) throw new Error(salaryOverrides.error)
           payload.salary_revision = {
             base_salary: form.base_salary,
             currency: form.currency,
             salary_structure_code: form.salary_structure_code || undefined,
+            // Omitted until overrides are edited: the backend then keeps the
+            // ones saved on the movement, or carries current ones over.
+            ...(salaryOverrides.overrides !== null
+              ? { component_overrides: salaryOverrides.overrides }
+              : {}),
             justification: form.justification,
           }
         }
@@ -976,6 +1046,7 @@ export function MovementOperationsView({
                 className={primaryButtonClass}
                 onClick={() => {
                   setCreateMode("create")
+                  setInitialSalaryOverrides(null)
                   setForm({
                     movement_type: "DEPARTMENT_TRANSFER",
                     effective_date: new Date().toISOString().slice(0, 10),
@@ -1347,18 +1418,51 @@ export function MovementOperationsView({
                       />
                     </label>
                     <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Salary structure code</span>
-                      <input
-                        className={inputClass}
-                        value={form.salary_structure_code ?? ""}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            salary_structure_code: event.target.value,
-                          }))
-                        }
-                      />
+                      <span className="font-medium">Salary structure</span>
+                      {salaryStructureCodes.length > 0 ? (
+                        <select
+                          className={inputClass}
+                          value={form.salary_structure_code ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              salary_structure_code: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Keep current structure</option>
+                          {salaryStructureCodes.map((item) => (
+                            <option key={item.code} value={item.code}>
+                              {item.code} · {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className={inputClass}
+                          placeholder="Leave blank to keep current structure"
+                          value={form.salary_structure_code ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              salary_structure_code: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
                     </label>
+                    <MovementSalaryOverridesEditor
+                      employeeId={form.employee_id ?? ""}
+                      targetStructureCode={form.salary_structure_code ?? ""}
+                      effectiveDate={form.effective_date ?? ""}
+                      structures={salaryStructures}
+                      initialOverrides={
+                        initialSalaryOverrides?.employeeId === form.employee_id
+                          ? initialSalaryOverrides.overrides
+                          : undefined
+                      }
+                      onChange={setSalaryOverrides}
+                    />
                     <label className="grid gap-1.5 text-sm">
                       <span className="font-medium">Justification</span>
                       <textarea
