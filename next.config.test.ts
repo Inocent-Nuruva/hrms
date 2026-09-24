@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import nextConfig from "./next.config";
 
-describe("next socket rewrites", () => {
-  it("proxies the Socket.IO engine path to the backend origin", async () => {
+describe("next rewrites", () => {
+  it("proxies Socket.IO and same-origin API paths to the backend origin", async () => {
     const rewrites = await nextConfig.rewrites?.();
     expect(rewrites).toEqual(
       expect.arrayContaining([
@@ -14,6 +14,10 @@ describe("next socket rewrites", () => {
         {
           source: "/socket.io/:path*",
           destination: "http://localhost:8888/socket.io/:path*",
+        },
+        {
+          source: "/api/:path*",
+          destination: "http://localhost:8888/api/:path*",
         },
       ]),
     );
