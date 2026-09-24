@@ -34,7 +34,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      actions: write
     environment:
       name: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'hrms-frontend-production' || 'hrms-frontend-uat' }}
     concurrency:
@@ -113,12 +112,75 @@ jobs:
             echo "Configured NEXT_PUBLIC_API_BASE_URL was not embedded in the build."
             exit 1
           }
-      - name: Build release artifact
-        if: >-
-          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
-          (github.event_name == 'workflow_dispatch' &&
-           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
-            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
+
+  deploy:
+    name: Deploy HRMS frontend
+    needs: validate-and-package
+    if: >-
+      needs.validate-and-package.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+       (github.event_name == 'workflow_dispatch' &&
+        ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+         (github.ref == 'refs/heads/master' && inputs.environment == 'production'))))
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    environment:
+      name: ${{ github.ref_name == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}
+    concurrency:
+      group: hrms-frontend-${{ github.event_name == 'push' && 'uat' || inputs.environment }}-deploy
+      cancel-in-progress: false
+    outputs:
+      require_ssl: ${{ steps.deployment-policy.outputs.require_ssl }}
+    env:
+      TARGET_ENV: ${{ github.event_name == 'push' && 'uat' || inputs.environment }}
+      BASE_DIR: ${{ vars.BASE_DIR }}
+      PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
+      APP_ENV: ${{ vars.APP_ENV }}
+      APP_HOST: ${{ vars.APP_HOST }}
+      APP_PORT: ${{ vars.APP_PORT }}
+      HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
+      KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
+      DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
+      REQUIRE_SSL: ${{ vars.REQUIRE_SSL || 'false' }}
+      FRONTEND_PUBLIC_IP: ${{ vars.FRONTEND_PUBLIC_IP }}
+      CI: true
+      NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME || 'HRMS' }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+      NEXT_PUBLIC_USE_MOCK_AUTH: ${{ vars.NEXT_PUBLIC_USE_MOCK_AUTH || 'false' }}
+      COUNTRIES_API_BASE_URL: ${{ vars.COUNTRIES_API_BASE_URL || 'https://countriesnow.space/api/v0.1' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1, persist-credentials: false }
+      - name: Pin API origin port for environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "$TARGET_ENV" == "production" ]]; then
+            port=8888
+          else
+            port=9999
+          fi
+          current="${NEXT_PUBLIC_API_BASE_URL:-}"
+          if [[ -z "$current" ]]; then
+            current="http://127.0.0.1:${port}"
+          elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
+            current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
+          fi
+          echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
+          echo "Using API origin ${current} (UAT=9999, production=8888)"
+      - name: Validate build runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (( $(node -p "process.versions.node.split('.')[0]") >= 22 ))
+          npm --version
+      - name: Exclude desktop and e2e-only tooling
+        run: npm pkg delete 'devDependencies.@playwright/test' devDependencies.electron devDependencies.electron-builder --package-lock=false
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build frontend
+        run: npm run build
+      - name: Build release artifact locally
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -152,105 +214,6 @@ jobs:
           printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
           tar -C "$release" -czf "$archive" .
           (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
-      - name: Prune old release artifacts before upload
-        if: >-
-          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
-          (github.event_name == 'workflow_dispatch' &&
-           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
-            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -Eeuo pipefail
-          repo="${{ github.repository }}"
-          mapfile -t ids < <(
-            gh api "repos/${repo}/actions/artifacts" --paginate -q \
-              '.artifacts[] | select(.name | startswith("hrms-frontend-release-")) | .id'
-          )
-          if [[ ${#ids[@]} -eq 0 ]]; then
-            echo "No old frontend release artifacts to delete."
-            exit 0
-          fi
-          echo "Deleting ${#ids[@]} old frontend release artifact(s) before upload."
-          for id in "${ids[@]}"; do
-            gh api -X DELETE "repos/${repo}/actions/artifacts/${id}" && echo "Deleted artifact $id" || echo "Failed to delete artifact $id" >&2
-          done
-      - name: Upload frontend artifact
-        if: >-
-          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
-          (github.event_name == 'workflow_dispatch' &&
-           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
-            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
-        uses: actions/upload-artifact@v4
-        with:
-          name: hrms-frontend-release-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/hrms-frontend-release.tar.gz
-            ${{ runner.temp }}/hrms-frontend-release.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
-      - name: Prune old release artifacts
-        if: always()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -Eeuo pipefail
-          keep=2
-          repo="${{ github.repository }}"
-          mapfile -t ids < <(
-            gh api "repos/${repo}/actions/artifacts" --paginate -q \
-              '.artifacts[] | select(.name | startswith("hrms-frontend-release-")) | [.created_at, .id] | @tsv' \
-              | sort -r | tail -n +$((keep + 1)) | cut -f2
-          )
-          if [[ ${#ids[@]} -eq 0 ]]; then
-            echo "Nothing to prune, ${keep} or fewer artifacts exist."
-            exit 0
-          fi
-          echo "Deleting ${#ids[@]} artifact(s) beyond the newest ${keep}."
-          for id in "${ids[@]}"; do
-            gh api -X DELETE "repos/${repo}/actions/artifacts/${id}" && echo "Deleted artifact $id" || echo "Failed to delete artifact $id" >&2
-          done
-
-  deploy:
-    name: Deploy HRMS frontend
-    needs: validate-and-package
-    if: >-
-      needs.validate-and-package.result == 'success' &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
-       (github.event_name == 'workflow_dispatch' &&
-        ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
-         (github.ref == 'refs/heads/master' && inputs.environment == 'production'))))
-    runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 20
-    environment:
-      name: ${{ github.ref_name == 'uat' && 'hrms-frontend-uat' || 'hrms-frontend-production' }}
-    concurrency:
-      group: hrms-frontend-${{ github.event_name == 'push' && 'uat' || inputs.environment }}-deploy
-      cancel-in-progress: false
-    outputs:
-      require_ssl: ${{ steps.deployment-policy.outputs.require_ssl }}
-    env:
-      TARGET_ENV: ${{ github.event_name == 'push' && 'uat' || inputs.environment }}
-      BASE_DIR: ${{ vars.BASE_DIR }}
-      PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
-      APP_ENV: ${{ vars.APP_ENV }}
-      APP_HOST: ${{ vars.APP_HOST }}
-      APP_PORT: ${{ vars.APP_PORT }}
-      HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
-      KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
-      DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
-      REQUIRE_SSL: ${{ vars.REQUIRE_SSL || 'false' }}
-      FRONTEND_PUBLIC_IP: ${{ vars.FRONTEND_PUBLIC_IP }}
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1, persist-credentials: false }
-      - uses: actions/download-artifact@v4
-        with:
-          name: hrms-frontend-release-${{ github.sha }}
-          path: ${{ runner.temp }}/hrms-frontend-artifact
       - name: Validate configuration and artifact
         id: deployment-policy
         shell: bash
@@ -264,12 +227,12 @@ jobs:
           echo "require_ssl=$REQUIRE_SSL" >> "$GITHUB_OUTPUT"
           [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]
           echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
-          cd "$RUNNER_TEMP/hrms-frontend-artifact"; sha256sum --check hrms-frontend-release.tar.gz.sha256
+          cd "$RUNNER_TEMP"; sha256sum --check hrms-frontend-release.tar.gz.sha256
       - name: Deploy release locally
         shell: bash
         run: |
           set -Eeuo pipefail
-          archive="$RUNNER_TEMP/hrms-frontend-artifact/hrms-frontend-release.tar.gz"
+          archive="$RUNNER_TEMP/hrms-frontend-release.tar.gz"
           stage="$RUNNER_TEMP/stage-hrms-frontend-$GITHUB_SHA.sh"
           install -m 0750 deploy/hrms-frontend/stage-release.sh "$stage"
           bash "$stage" "$GITHUB_SHA" "$archive"
