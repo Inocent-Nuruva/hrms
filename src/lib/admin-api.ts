@@ -15471,22 +15471,25 @@ export async function postPayrollSource(token: string, id: string | number) {
 
 export async function listPayrollOvertimeApprovals(
   token: string,
-  params: PayrollListParams & { start_date?: string; end_date?: string } = {},
 ) {
   return listPayrollCollection(
-    "/api/payroll/overtime-approvals",
+    "/api/payroll/overtime-requests/payroll",
     token,
-    params,
+    { page: 1, limit: 100 },
   );
 }
 
-export async function approvePayrollOvertime(
+export async function listMyOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/me", { token });
+  return normalizeList(payload);
+}
+
+export async function createMyOvertimeRequest(
   token: string,
-  id: string | number,
-  data: AdminRecord = {},
+  data: { work_date: string; requested_minutes: number; reason: string },
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/payroll/overtime-approvals/${id}/approve`,
+    "/api/payroll/overtime-requests/me",
     {
       method: "POST",
       token,
@@ -15496,17 +15499,29 @@ export async function approvePayrollOvertime(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function rejectPayrollOvertime(
+export async function listManagerOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/manager", { token });
+  return normalizeList(payload);
+}
+
+export async function listHrOvertimeRequests(token: string) {
+  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/hr", { token });
+  return normalizeList(payload);
+}
+
+export async function decideOvertimeRequest(
   token: string,
+  stage: "manager" | "hr",
   id: string | number,
-  data: AdminRecord = {},
+  decision: "approve" | "reject",
+  comments?: string,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/payroll/overtime-approvals/${id}/reject`,
+    `/api/payroll/overtime-requests/${stage}/${id}/${decision}`,
     {
       method: "POST",
       token,
-      body: data,
+      body: comments ? { comments } : {},
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);

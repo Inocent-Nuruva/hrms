@@ -18,7 +18,6 @@ import {
 } from "@/components/dashboard/admin-view-shared";
 import {
   approvePayrollInput,
-  approvePayrollOvertime,
   approvePayrollRun,
   approvePayrollSource,
   closePayrollRun,
@@ -86,7 +85,6 @@ import {
   postPayrollAccountingJournal,
   postPayrollSource,
   reconcilePayrollPayment,
-  rejectPayrollOvertime,
   rejectPayrollSource,
   reversePayrollAccountingJournal,
   validatePayrollRun,
@@ -157,7 +155,7 @@ const TABS: Array<{ id: PayrollTab; label: string }> = [
   { id: "runs", label: "Runs" },
   { id: "inputs", label: "Inputs" },
   { id: "sources", label: "Sources" },
-  { id: "overtimeApprovals", label: "OT approvals" },
+  { id: "overtimeApprovals", label: "Approved OT" },
   { id: "profiles", label: "Profiles" },
   { id: "periods", label: "Periods" },
   { id: "reports", label: "Reports" },
@@ -1855,7 +1853,6 @@ export function PayrollOperationsView() {
   const [journalRunId, setJournalRunId] = React.useState("");
   const [approvingInputId, setApprovingInputId] = React.useState("");
   const [sourceActionId, setSourceActionId] = React.useState("");
-  const [overtimeActionId, setOvertimeActionId] = React.useState("");
   const requestIdRef = React.useRef(0);
   const lookupsCacheRef = React.useRef<{
     dashboard: AdminRecord | null;
@@ -2060,11 +2057,7 @@ export function PayrollOperationsView() {
         }
 
         if (tab === "overtimeApprovals") {
-          const result = await listPayrollOvertimeApprovals(token, {
-            page: 1,
-            limit: 100,
-            status: statusFilter || "PENDING",
-          });
+          const result = await listPayrollOvertimeApprovals(token);
           if (requestIdRef.current === requestId) setRows(result.rows);
           return;
         }
@@ -2323,7 +2316,7 @@ export function PayrollOperationsView() {
             : tab === "sources"
               ? "Payroll source records"
               : tab === "overtimeApprovals"
-                ? "Overtime approvals"
+                ? "Approved overtime"
                 : tab === "periods"
                   ? "Payroll periods"
                   : tab === "reports"
@@ -2929,31 +2922,24 @@ export function PayrollOperationsView() {
         },
         {
           key: "attendance_date",
-          label: "Date",
+          label: "Work date",
           render: (row) =>
-            formatAdminValue(row.attendance_date ?? row.attendanceDate),
+            formatAdminValue(row.work_date ?? row.workDate),
         },
         {
           key: "minutes",
-          label: "Minutes",
-          render: (row) =>
-            readString(row, ["overtime_minutes", "overtimeMinutes"], "0"),
+          label: "Requested / recorded / payable",
+          render: (row) => {
+            const requested = readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0;
+            const recorded = readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
+            return `${requested} / ${recorded} / ${Math.min(requested, recorded)} min`;
+          },
         },
         {
           key: "status",
           label: "Status",
           render: (row) => {
-            const flags =
-              typeof row.flags === "object" && row.flags
-                ? (row.flags as AdminRecord)
-                : {};
-            const status = readString(
-              flags,
-              ["otApprovalStatus"],
-              readBoolean(flags, ["overtimeApproved", "otApproved"])
-                ? "APPROVED"
-                : "PENDING",
-            );
+            const status = readString(row, ["status"], "APPROVED");
             return (
               <Badge
                 variant="outline"
@@ -2981,36 +2967,6 @@ export function PayrollOperationsView() {
                 >
                   View
                 </button>
-                {canApprovePayroll ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={overtimeActionId === id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onApproveOvertime(row);
-                    }}
-                  >
-                    {overtimeActionId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
-                    ) : (
-                      "Approve"
-                    )}
-                  </button>
-                ) : null}
-                {canApprovePayroll ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={overtimeActionId === id}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onRejectOvertime(row);
-                    }}
-                  >
-                    Reject
-                  </button>
-                ) : null}
               </div>
             );
           },
@@ -3648,7 +3604,6 @@ export function PayrollOperationsView() {
     configTab,
     journalRunId,
     lockingRunId,
-    overtimeActionId,
     payslipRunId,
     canApprovePayroll,
     canMutatePayroll,
@@ -4317,46 +4272,6 @@ export function PayrollOperationsView() {
       );
     } finally {
       setSourceActionId("");
-    }
-  }
-
-  async function onApproveOvertime(row: AdminRecord) {
-    const token = readStoredToken();
-    const id = rowId(row);
-    if (!token || !id) return;
-    setOvertimeActionId(id);
-    try {
-      await approvePayrollOvertime(token, id);
-      toast.success("Overtime approved for payroll.");
-      await loadRows({ refreshLookups: true });
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to approve overtime.",
-      );
-    } finally {
-      setOvertimeActionId("");
-    }
-  }
-
-  async function onRejectOvertime(row: AdminRecord) {
-    const token = readStoredToken();
-    const id = rowId(row);
-    if (!token || !id) return;
-    setOvertimeActionId(id);
-    try {
-      await rejectPayrollOvertime(token, id);
-      toast.success("Overtime rejected.");
-      await loadRows({ refreshLookups: true });
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Failed to reject overtime.",
-      );
-    } finally {
-      setOvertimeActionId("");
     }
   }
 
@@ -9233,7 +9148,6 @@ export function PayrollOperationsView() {
                 "runs",
                 "inputs",
                 "sources",
-                "overtimeApprovals",
                 "profiles",
                 "periods",
               ].includes(tab) ? (
