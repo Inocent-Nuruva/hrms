@@ -17183,10 +17183,15 @@ export async function listHrFieldVisits(
   return normalizeList(payload);
 }
 
-export async function getHrFieldVisitsMap(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/field-visits/map", {
-    token,
-  });
+// The backend requires a purpose for every location-map view (it is written to the access log).
+export async function getHrFieldVisitsMap(
+  token: string,
+  purpose = "HR field visit oversight",
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/field-visits/map${buildRecordQuery({ purpose })}`,
+    { token },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -17347,12 +17352,13 @@ export async function reviewManagerFieldVisitPlan(
   });
 }
 
-export async function getManagerFieldVisitMap(token: string) {
+export async function getManagerFieldVisitMap(
+  token: string,
+  purpose = "Manager team field visit review",
+) {
   const payload = await adminRequest<unknown>(
-    "/api/manager/field-visits/map/view",
-    {
-      token,
-    },
+    `/api/manager/field-visits/map/view${buildRecordQuery({ purpose })}`,
+    { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
