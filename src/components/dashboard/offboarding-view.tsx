@@ -1886,24 +1886,29 @@ export function OffboardingView() {
             selfEmployeeId)))
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          {isEmployeeMode ? "My Offboarding" : "Offboarding"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {canManage
-            ? "Review exit requests, approvals, tasks, and manage workflows."
-            : "Submit and track your exit request, plus any tasks or clearances assigned to you."}
-        </p>
+    <section className="flex w-full min-w-0 flex-col overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            {isEmployeeMode ? "My Offboarding" : "Offboarding"}
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            {canManage
+              ? "Review exit requests, approvals, tasks, and manage workflows."
+              : "Submit and track your exit request, plus any tasks or clearances assigned to you."}
+          </p>
+        </div>
+        <span className="text-[10px] font-medium text-muted-foreground">
+          {requests.length} {requests.length === 1 ? "request" : "requests"}
+        </span>
       </div>
 
-      <div className="inline-flex w-fit flex-wrap items-center gap-1 border-b border-border">
+      <div className="inline-flex w-full flex-wrap items-center gap-1 border-b border-border bg-muted/[0.12] px-3">
         <button
           type="button"
           onClick={() => setTab("requests")}
           className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "requests"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1915,7 +1920,7 @@ export function OffboardingView() {
           type="button"
           onClick={() => setTab("my-approvals")}
           className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-approvals"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1927,7 +1932,7 @@ export function OffboardingView() {
           type="button"
           onClick={() => setTab("my-tasks")}
           className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-tasks"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1939,7 +1944,7 @@ export function OffboardingView() {
           type="button"
           onClick={() => setTab("my-clearances")}
           className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-clearances"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1952,7 +1957,7 @@ export function OffboardingView() {
             type="button"
             onClick={() => setTab("workflows")}
             className={cn(
-              "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
               tab === "workflows"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -1964,13 +1969,13 @@ export function OffboardingView() {
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="border-b border-destructive/20 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
 
       {tab === "requests" ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground">
               {isEmployeeMode ? "Your offboarding requests" : "Offboarding requests"}
@@ -2017,6 +2022,8 @@ export function OffboardingView() {
                 loading={loading}
                 showExport={false}
                 storageKey="offboarding-requests-v2"
+                compact
+                frameClassName="rounded-none border border-border shadow-none"
                 onRowSelect={(_, row) => {
                   if (row) void openRequestDetails(row)
                 }}
@@ -2289,7 +2296,7 @@ export function OffboardingView() {
       ) : null}
 
       {tab === "my-approvals" ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground">Approvals waiting on you</p>
             <button
@@ -2318,6 +2325,8 @@ export function OffboardingView() {
                 loading={loading}
                 showExport={false}
                 storageKey="offboarding-my-approvals-v1"
+                compact
+                frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {
                     key: "request",
@@ -2379,7 +2388,7 @@ export function OffboardingView() {
       ) : null}
 
       {tab === "my-tasks" ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground">Tasks assigned to you</p>
             <button
@@ -2408,6 +2417,8 @@ export function OffboardingView() {
                 loading={loading}
                 showExport={false}
                 storageKey="offboarding-my-tasks-v1"
+                compact
+                frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {
                     key: "task",
@@ -2453,7 +2464,7 @@ export function OffboardingView() {
       ) : null}
 
       {tab === "my-clearances" ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground">Clearances assigned to you</p>
             <button
@@ -2482,6 +2493,8 @@ export function OffboardingView() {
                 loading={loading}
                 showExport={false}
                 storageKey="offboarding-my-clearances-v1"
+                compact
+                frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {
                     key: "name",
@@ -2510,7 +2523,7 @@ export function OffboardingView() {
       ) : null}
 
       {tab === "workflows" && canViewWorkflows ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">Exit workflows</p>
@@ -4715,6 +4728,6 @@ export function OffboardingView() {
           </DialogFooter>
         </DialogPopup>
       </Dialog>
-    </div>
+    </section>
   )
 }

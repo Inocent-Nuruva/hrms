@@ -12443,14 +12443,24 @@ export async function getMyProfilePhotoUrl(
         ? Number((errorObject as { status?: number }).status)
         : null;
     if (status === 404 || status === 204) {
-      return null;
+      try {
+        const account = await adminRequest<unknown>("/api/users/me", {
+          token,
+          cacheTtlMs: 0,
+          dedupe: false,
+        });
+        return extractProfilePhotoUrl(account);
+      } catch {
+        return null;
+      }
     }
     throw errorObject;
   }
 }
 
 /**
- * Upload the signed-in user's profile picture.
+ * Upload the signed-in user's profile picture. The backend applies HR uploads
+ * immediately and routes other employee uploads through HR approval.
  * POST /api/me/profile/photo (multipart/form-data, field: file) → 201
  */
 export async function uploadMyProfilePhoto(
@@ -12488,6 +12498,39 @@ export async function uploadMyProfilePhoto(
   }
 
   if (!response.ok) {
+    if (response.status === 404) {
+      const accountResponse = await fetch(buildUrl("/api/users/me/profile-photo"), {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+        cache: "no-store",
+      });
+      invalidateAdminGetCache();
+      const accountText = await accountResponse.text();
+      let accountPayload: unknown = null;
+      if (accountText) {
+        try {
+          accountPayload = JSON.parse(accountText) as unknown;
+        } catch {
+          accountPayload = { message: accountText };
+        }
+      }
+      if (!accountResponse.ok) {
+        const accountError = new Error(
+          extractMessage(accountPayload, accountResponse.status),
+        ) as Error & { status?: number; payload?: unknown };
+        accountError.status = accountResponse.status;
+        accountError.payload = accountPayload;
+        throw accountError;
+      }
+      const accountUrl = extractProfilePhotoUrl(accountPayload);
+      return {
+        ...(asRecord(accountPayload) ?? {}),
+        ...(accountUrl ? { profile_photo_url: accountUrl } : {}),
+        approval_required: false,
+        applied_immediately: true,
+      };
+    }
     const error = new Error(
       extractMessage(payload, response.status),
     ) as Error & {
@@ -18356,6 +18399,21 @@ export async function addManagerActivityComment(
       method: "POST",
       token,
       body: { body },
+    },
+  );
+}
+
+export async function updateManagerActivitySchedule(
+  token: string,
+  entryId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/manager/activities/entries/${entryId}/schedule`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
     },
   );
 }

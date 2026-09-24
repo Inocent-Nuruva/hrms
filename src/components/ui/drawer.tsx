@@ -37,7 +37,7 @@ function DrawerOverlay({
     <DrawerPrimitive.Overlay
       data-slot="drawer-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-slate-950/18 supports-backdrop-filter:backdrop-blur-sm data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 z-50 bg-black/30 supports-backdrop-filter:backdrop-blur-[2px] data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -56,12 +56,12 @@ function DrawerContent({
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(
-          "group/drawer-content fixed z-50 flex h-auto min-h-0 touch-pan-y flex-col overscroll-contain border border-slate-200/80 bg-white text-sm text-slate-700 shadow-[0_-18px_60px_rgba(15,23,42,0.12)] [scrollbar-gutter:stable] data-[vaul-drawer-direction=bottom]:inset-x-2 data-[vaul-drawer-direction=bottom]:bottom-2 data-[vaul-drawer-direction=bottom]:mx-auto data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=bottom]:max-w-3xl data-[vaul-drawer-direction=bottom]:overflow-y-auto data-[vaul-drawer-direction=bottom]:rounded-[24px] data-[vaul-drawer-direction=left]:inset-y-2 data-[vaul-drawer-direction=left]:left-2 data-[vaul-drawer-direction=left]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=left]:overflow-y-auto data-[vaul-drawer-direction=left]:rounded-[24px] data-[vaul-drawer-direction=right]:inset-y-2 data-[vaul-drawer-direction=right]:right-2 data-[vaul-drawer-direction=right]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=right]:overflow-y-auto data-[vaul-drawer-direction=right]:rounded-[24px] data-[vaul-drawer-direction=top]:inset-x-2 data-[vaul-drawer-direction=top]:top-2 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=top]:overflow-y-auto data-[vaul-drawer-direction=top]:rounded-[24px] data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=right]:sm:max-w-sm",
+          "group/drawer-content fixed z-50 flex h-auto min-h-0 touch-pan-y flex-col overscroll-contain border border-border bg-background text-sm text-foreground shadow-2xl [scrollbar-gutter:stable] data-[vaul-drawer-direction=bottom]:inset-x-2 data-[vaul-drawer-direction=bottom]:bottom-2 data-[vaul-drawer-direction=bottom]:mx-auto data-[vaul-drawer-direction=bottom]:mt-24 data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=bottom]:max-w-3xl data-[vaul-drawer-direction=bottom]:overflow-y-auto data-[vaul-drawer-direction=bottom]:rounded-md data-[vaul-drawer-direction=left]:inset-y-2 data-[vaul-drawer-direction=left]:left-2 data-[vaul-drawer-direction=left]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=left]:overflow-y-auto data-[vaul-drawer-direction=left]:rounded-md data-[vaul-drawer-direction=right]:inset-y-2 data-[vaul-drawer-direction=right]:right-2 data-[vaul-drawer-direction=right]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=right]:overflow-y-auto data-[vaul-drawer-direction=right]:rounded-md data-[vaul-drawer-direction=top]:inset-x-2 data-[vaul-drawer-direction=top]:top-2 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[calc(100dvh-1rem)] data-[vaul-drawer-direction=top]:overflow-y-auto data-[vaul-drawer-direction=top]:rounded-md data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=right]:sm:max-w-sm",
           className
         )}
         {...props}
       >
-        <div className="mx-auto mt-4 hidden h-1.5 w-16 shrink-0 rounded-full bg-slate-200 group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
+        <div className="mx-auto mt-3 hidden h-1 w-14 shrink-0 rounded-full bg-muted-foreground/25 group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
@@ -73,7 +73,7 @@ function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="drawer-header"
       className={cn(
-        "flex flex-col gap-1 border-b border-slate-100 px-5 pb-4 pt-3 group-data-[vaul-drawer-direction=bottom]/drawer-content:text-center group-data-[vaul-drawer-direction=top]/drawer-content:text-center md:text-left",
+        "flex flex-col gap-1 border-b border-border px-5 pb-4 pt-3 group-data-[vaul-drawer-direction=bottom]/drawer-content:text-center group-data-[vaul-drawer-direction=top]/drawer-content:text-center md:text-left",
         className
       )}
       {...props}
@@ -85,7 +85,7 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="drawer-footer"
-      className={cn("mt-auto flex flex-col gap-2 border-t border-slate-100 px-5 py-4", className)}
+      className={cn("mt-auto flex flex-col gap-2 border-t border-border bg-muted/20 px-5 py-4", className)}
       {...props}
     />
   )
@@ -99,7 +99,7 @@ function DrawerTitle({
     <DrawerPrimitive.Title
       data-slot="drawer-title"
       className={cn(
-        "font-heading text-lg font-semibold text-slate-900",
+        "font-heading text-lg font-semibold text-foreground",
         className
       )}
       {...props}
@@ -114,7 +114,7 @@ function DrawerDescription({
   return (
     <DrawerPrimitive.Description
       data-slot="drawer-description"
-      className={cn("text-sm leading-6 text-slate-500", className)}
+      className={cn("text-sm leading-6 text-muted-foreground", className)}
       {...props}
     />
   )

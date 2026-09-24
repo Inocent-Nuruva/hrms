@@ -52,6 +52,21 @@ describe("activity section navigation", () => {
 })
 
 describe("employee section navigation", () => {
+  it("separates personal employee pages from permission-controlled management", () => {
+    expect(employeeSectionTabGroups.map((group) => group.title)).toEqual([
+      "My employee workspace",
+      "Employee management",
+    ])
+    expect(employeeSectionTabGroups[0]?.items).toContainEqual({
+      title: "Profile",
+      url: "/dashboard/me/profile",
+    })
+    expect(employeeSectionTabGroups[1]?.items).toContainEqual({
+      title: "All Employees",
+      url: "/dashboard/employees/all",
+    })
+  })
+
   it("keeps promotion outside the employee tab groups", () => {
     const urls = employeeSectionTabGroups.flatMap((group) =>
       group.items.map((item) => item.url),

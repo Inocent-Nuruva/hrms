@@ -202,6 +202,118 @@ type HistorySummary = {
   invalidRows: number | null;
 };
 
+type ImportWizardStep = "upload" | "configure" | "review";
+
+const IMPORT_WIZARD_STEPS: Array<{
+  id: ImportWizardStep;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "upload",
+    label: "Upload file",
+    description: "Choose the Excel workbook",
+  },
+  { id: "configure", label: "Configure", description: "Set import behavior" },
+  {
+    id: "review",
+    label: "Review & import",
+    description: "Validate rows and confirm",
+  },
+];
+
+function ImportWizardStepper({
+  currentStep,
+  selectedFile,
+  reviewReady,
+  onStepChange,
+}: {
+  currentStep: ImportWizardStep;
+  selectedFile: File | null;
+  reviewReady: boolean;
+  onStepChange: (step: ImportWizardStep) => void;
+}) {
+  const currentIndex = IMPORT_WIZARD_STEPS.findIndex(
+    (step) => step.id === currentStep,
+  );
+
+  return (
+    <ol
+      className="grid grid-cols-3 border-b border-border bg-muted/[0.12]"
+      aria-label="Bulk import steps"
+    >
+      {IMPORT_WIZARD_STEPS.map((step, index) => {
+        const unlocked =
+          index === 0 ||
+          (index === 1 && Boolean(selectedFile)) ||
+          (index === 2 && reviewReady);
+        const complete =
+          index < currentIndex ||
+          (step.id === "upload" && Boolean(selectedFile) && currentIndex > 0);
+        const active = step.id === currentStep;
+
+        return (
+          <li key={step.id} className="relative min-w-0">
+            {index > 0 ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute left-0 top-1/2 h-px w-3 -translate-x-1/2",
+                  complete || active ? "bg-primary/60" : "bg-border",
+                )}
+              />
+            ) : null}
+            <button
+              type="button"
+              className={cn(
+                "flex w-full min-w-0 items-center gap-2 px-2.5 py-2 text-left transition-colors sm:px-3",
+                active
+                  ? "bg-primary/[0.06]"
+                  : unlocked
+                    ? "hover:bg-muted/50"
+                    : "cursor-not-allowed opacity-45",
+              )}
+              disabled={!unlocked}
+              aria-current={active ? "step" : undefined}
+              onClick={() => onStepChange(step.id)}
+            >
+              <span
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
+                  complete
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : active
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground",
+                )}
+              >
+                {complete ? (
+                  <CheckCircle2Icon className="size-3.5" />
+                ) : (
+                  index + 1
+                )}
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block truncate text-[11px] font-semibold",
+                    active ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {step.label}
+                </span>
+                <span className="hidden truncate text-[10px] text-muted-foreground sm:block">
+                  {step.description}
+                </span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function readStoredToken(): string {
   return readStoredSessionTokens().accessToken.trim();
 }
@@ -1875,6 +1987,8 @@ export function EmployeeImportView() {
     React.useState<EmployeeImportExecutionMode>("NORMAL");
   const [processValidRowsOnly, setProcessValidRowsOnly] = React.useState(true);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [wizardStep, setWizardStep] =
+    React.useState<ImportWizardStep>("upload");
   const [previewDetails, setPreviewDetails] =
     React.useState<PreviewDetails | null>(null);
   const [latestBatch, setLatestBatch] = React.useState<BatchDetails | null>(
@@ -2289,6 +2403,7 @@ export function EmployeeImportView() {
       const nextFile = event.target.files?.[0] ?? null;
       if (!isSupportedEmployeeImportFile(nextFile)) {
         setSelectedFile(null);
+        setWizardStep("upload");
         setPreviewDetails(null);
         setLatestBatch(null);
         if (fileInputRef.current) {
@@ -2302,6 +2417,7 @@ export function EmployeeImportView() {
       }
 
       setSelectedFile(nextFile);
+      setWizardStep("upload");
       setPreviewDetails(null);
       setLatestBatch(null);
       setError((currentError) =>
@@ -2348,6 +2464,7 @@ export function EmployeeImportView() {
           .map((row) => row.rowId as number) ?? [],
       );
       setPreviewStatusFilter("ALL");
+      setWizardStep("review");
       setFlowDialogOpen(true);
       setMessage("File checked. Review the preview dialog.");
     } catch (previewError) {
@@ -2648,6 +2765,7 @@ export function EmployeeImportView() {
 
   const clearSelectedFile = React.useCallback(() => {
     setSelectedFile(null);
+    setWizardStep("upload");
     setPreviewDetails(null);
     setSelectedPreviewRowIds([]);
     setPreviewStatusFilter("ALL");
@@ -2660,13 +2778,13 @@ export function EmployeeImportView() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <Card className="min-w-0">
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-border/50 pb-4">
+      <Card className="min-w-0 gap-0 rounded-none border-border py-0 shadow-none">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-border/70 px-3 py-2.5">
           <div className="min-w-0 space-y-1">
-            <CardTitle className="text-base font-semibold tracking-tight">
+            <CardTitle className="text-sm font-semibold tracking-tight">
               Bulk import
             </CardTitle>
-            <CardDescription className="text-[13px] leading-relaxed">
+            <CardDescription className="text-[11px] leading-relaxed">
               Upload one Excel file to add or update many employees at once.
             </CardDescription>
           </div>
@@ -2687,7 +2805,7 @@ export function EmployeeImportView() {
           </Button>
         </CardHeader>
 
-        <CardContent className="space-y-5 pt-1">
+        <CardContent className="space-y-4 px-3 py-3">
           <input
             ref={fileInputRef}
             id="employee-import-file"
@@ -2697,198 +2815,302 @@ export function EmployeeImportView() {
             onChange={handleFileSelection}
           />
 
+          <ImportWizardStepper
+            currentStep={wizardStep}
+            selectedFile={selectedFile}
+            reviewReady={hasPreview || hasBatch}
+            onStepChange={setWizardStep}
+          />
+
           {/* File picker */}
-          <div
-            className={cn(
-              "rounded-2xl px-4 py-4 transition-colors",
-              selectedFile
-                ? "bg-muted/40 ring-1 ring-border/60"
-                : "bg-muted/25 ring-1 ring-dashed ring-border/70",
-            )}
-          >
-            {selectedFile ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
+          {wizardStep === "upload" ? (
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "rounded-md px-3 py-3 transition-colors",
+                  selectedFile
+                    ? "bg-muted/40 ring-1 ring-border/60"
+                    : "bg-muted/25 ring-1 ring-dashed ring-border/70",
+                )}
+              >
+                {selectedFile ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[#1D6F42]/10 text-[#1D6F42] dark:bg-emerald-500/10 dark:text-emerald-400">
+                        <FileSpreadsheetIcon className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium tracking-tight">
+                          {selectedFile.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {(selectedFile.size / 1024).toFixed(1)} KB · ready to
+                          validate
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Change
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-muted-foreground"
+                        onClick={clearSelectedFile}
+                        aria-label="Clear selected file"
+                      >
+                        <XIcon className="size-3.5" />
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 py-1 text-center sm:flex-row sm:py-0 sm:text-left">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border/60">
+                      <UploadIcon className="size-5" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-sm font-medium tracking-tight">
+                        Choose an Excel file
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Download the template first so columns match. Accepts
+                        .xlsx only.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 shrink-0"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <UploadIcon className="size-3.5" />
+                      Select file
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+                <p className="text-xs text-muted-foreground">
+                  {selectedFile
+                    ? "Workbook selected. Continue to choose how it should be processed."
+                    : "Select the completed employee template to continue."}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  disabled={!selectedFile}
+                  onClick={() => setWizardStep("configure")}
+                >
+                  Continue
+                  <ArrowRightIcon className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Options */}
+          {wizardStep === "configure" ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="employee-import-mode"
+                    className="text-[13px] font-medium"
+                  >
+                    Import mode
+                  </Label>
+                  <Select
+                    value={importMode}
+                    onValueChange={(value) =>
+                      setImportMode(value as EmployeeImportMode)
+                    }
+                  >
+                    <SelectTrigger
+                      id="employee-import-mode"
+                      className="h-9 w-full"
+                    >
+                      <SelectValue placeholder="Choose mode">
+                        {selectedMode?.label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {IMPORT_MODES.map((mode) => (
+                        <SelectItem key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {selectedMode?.hint}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="employee-import-execution-mode"
+                    className="text-[13px] font-medium"
+                  >
+                    Processing
+                  </Label>
+                  <Select
+                    value={executionMode}
+                    onValueChange={(value) =>
+                      setExecutionMode(value as EmployeeImportExecutionMode)
+                    }
+                  >
+                    <SelectTrigger
+                      id="employee-import-execution-mode"
+                      className="h-9 w-full"
+                    >
+                      <SelectValue placeholder="Choose processing mode">
+                        {selectedExecutionMode?.label}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {IMPORT_EXECUTION_MODES.map((mode) => (
+                        <SelectItem key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {selectedExecutionMode?.hint}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="employee-import-skip-bad-rows"
+                    className="text-[13px] font-medium"
+                  >
+                    Skip bad rows
+                  </Label>
+                  <div className="flex h-9 items-center gap-3">
+                    <Switch
+                      id="employee-import-skip-bad-rows"
+                      checked={processValidRowsOnly}
+                      onCheckedChange={(checked) =>
+                        setProcessValidRowsOnly(checked)
+                      }
+                      aria-label="Skip bad rows"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {processValidRowsOnly
+                        ? "On — import valid rows only"
+                        : "Off — fail if any row is invalid"}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Keep valid people even when a few rows fail validation
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => setWizardStep("upload")}
+                >
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  onClick={handlePreview}
+                  disabled={previewing || !token || !selectedFile}
+                >
+                  {previewing ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : (
+                    <FileSearchIcon className="size-3.5" />
+                  )}
+                  Validate & review
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {wizardStep === "review" ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#1D6F42]/10 text-[#1D6F42] dark:bg-emerald-500/10 dark:text-emerald-400">
-                    <FileSpreadsheetIcon className="size-5" />
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                    <FileSpreadsheetIcon className="size-4.5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium tracking-tight">
-                      {selectedFile.name}
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {selectedFile?.name ?? "Employee import"}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · ready to
-                      validate
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {selectedMode?.label} · {selectedExecutionMode?.label} ·{" "}
+                      {processValidRowsOnly
+                        ? "Skip invalid rows"
+                        : "Stop on invalid rows"}
                     </p>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                {latestBatch?.overview || previewDetails?.overview ? (
+                  <OverviewStatChips
+                    overview={
+                      (latestBatch?.overview ?? previewDetails?.overview)!
+                    }
+                    selectedCount={
+                      hasPreview ? selectedPreviewCount : undefined
+                    }
+                    variant={hasBatch ? "result" : "preview"}
+                  />
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => setWizardStep("configure")}
+                >
+                  Back to options
+                </Button>
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-8"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={clearSelectedFile}
                   >
-                    Change
+                    Start another
                   </Button>
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    className="h-8 text-muted-foreground"
-                    onClick={clearSelectedFile}
-                    aria-label="Clear selected file"
+                    className="h-8"
+                    onClick={() => setFlowDialogOpen(true)}
                   >
-                    <XIcon className="size-3.5" />
-                    Clear
+                    <FileSearchIcon className="size-3.5" />
+                    {hasBatch ? "Open result" : "Open review"}
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 py-1 text-center sm:flex-row sm:py-0 sm:text-left">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-background text-muted-foreground ring-1 ring-border/60">
-                  <UploadIcon className="size-5" />
-                </div>
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="text-sm font-medium tracking-tight">
-                    Choose an Excel file
-                  </p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Download the template first so columns match. Accepts .xlsx
-                    only.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <UploadIcon className="size-3.5" />
-                  Select file
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Options */}
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="space-y-2">
-              <Label
-                htmlFor="employee-import-mode"
-                className="text-[13px] font-medium"
-              >
-                Import mode
-              </Label>
-              <Select
-                value={importMode}
-                onValueChange={(value) =>
-                  setImportMode(value as EmployeeImportMode)
-                }
-              >
-                <SelectTrigger id="employee-import-mode" className="h-9 w-full">
-                  <SelectValue placeholder="Choose mode">
-                    {selectedMode?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {IMPORT_MODES.map((mode) => (
-                    <SelectItem key={mode.value} value={mode.value}>
-                      {mode.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {selectedMode?.hint}
-              </p>
             </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="employee-import-execution-mode"
-                className="text-[13px] font-medium"
-              >
-                Processing
-              </Label>
-              <Select
-                value={executionMode}
-                onValueChange={(value) =>
-                  setExecutionMode(value as EmployeeImportExecutionMode)
-                }
-              >
-                <SelectTrigger
-                  id="employee-import-execution-mode"
-                  className="h-9 w-full"
-                >
-                  <SelectValue placeholder="Choose processing mode">
-                    {selectedExecutionMode?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {IMPORT_EXECUTION_MODES.map((mode) => (
-                    <SelectItem key={mode.value} value={mode.value}>
-                      {mode.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {selectedExecutionMode?.hint}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="employee-import-skip-bad-rows"
-                className="text-[13px] font-medium"
-              >
-                Skip bad rows
-              </Label>
-              <div className="flex h-9 items-center gap-3">
-                <Switch
-                  id="employee-import-skip-bad-rows"
-                  checked={processValidRowsOnly}
-                  onCheckedChange={(checked) =>
-                    setProcessValidRowsOnly(checked)
-                  }
-                  aria-label="Skip bad rows"
-                />
-                <span className="text-xs text-muted-foreground">
-                  {processValidRowsOnly
-                    ? "On — import valid rows only"
-                    : "Off — fail if any row is invalid"}
-                </span>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Keep valid people even when a few rows fail validation
-              </p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-4">
-            <Button
-              type="button"
-              size="sm"
-              className="h-8"
-              onClick={handlePreview}
-              disabled={previewing || !token || !selectedFile}
-            >
-              {previewing ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <FileSearchIcon className="size-3.5" />
-              )}
-              Check file
-            </Button>
-            {!selectedFile ? (
-              <span className="ml-0.5 text-xs text-muted-foreground">
-                Select a file to continue
-              </span>
-            ) : null}
-          </div>
+          ) : null}
 
           {message ? (
             <div className="flex items-start gap-2.5 rounded-xl bg-emerald-500/[0.07] px-3.5 py-2.5 text-sm text-emerald-800 ring-1 ring-emerald-500/15 dark:text-emerald-200">
@@ -2905,32 +3127,6 @@ export function EmployeeImportView() {
           ) : null}
         </CardContent>
       </Card>
-
-      {/* Re-open flow dialogs after dismiss */}
-      {!flowDialogOpen && (hasPreview || hasBatch) ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onClick={() => setFlowDialogOpen(true)}
-          >
-            {hasPreview && hasBatch
-              ? "Open preview & result"
-              : hasPreview
-                ? "Open file check"
-                : "Open last import"}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {hasPreview && hasBatch
-              ? "Preview → result dialogs"
-              : hasPreview
-                ? "File check is ready to review"
-                : "Import result is ready to review"}
-          </span>
-        </div>
-      ) : null}
 
       {/* Modal flow: Preview dialog → Result dialog (compact, scannable) */}
       {showFlowDialog ? (
@@ -3632,6 +3828,9 @@ export function EmployeeImportView() {
           itemsPerPage={historyLimit}
           showCheckboxes={false}
           enableAnimations
+          compact
+          toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+          frameClassName="rounded-none border border-border shadow-none"
           getRowId={(row) => row.id}
           onRowSelect={(id) => {
             if (!id || id.startsWith("import-row-")) return;

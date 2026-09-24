@@ -5,13 +5,22 @@ import {
   CalendarDaysIcon,
   CheckCircle2Icon,
   CircleDotIcon,
+  Clock3Icon,
   ClipboardListIcon,
+  Columns3Icon,
   FileTextIcon,
+  GripVerticalIcon,
+  HistoryIcon,
+  InboxIcon,
+  ListIcon,
   Loader2Icon,
   MessageSquareIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
+  SlidersHorizontalIcon,
+  SparklesIcon,
   XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -20,17 +29,15 @@ import {
   asRecord,
   asRecordArray,
   formatDate,
-  HeroBand,
-  heroGhostButtonClass,
   inputClass,
   optionLabel,
   primaryButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
-  TalentDoodleSprites,
 } from "@/components/dashboard/talent-visuals"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { TimeClockPicker } from "@/components/ui/time-clock-picker"
 import {
   addIsoDays,
   canCloseReport,
@@ -65,18 +72,45 @@ import {
   listMyActivityTasks,
   listMyEmployeeKpis,
   submitMyActivityReport,
+  updateManagerActivitySchedule,
   updateMyActivityEntry,
   extractProfilePhotoUrl,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
+import { hasPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
+import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 type WorkspaceMode = "self" | "manager"
 type ListTab = "today" | "upcoming" | "history" | "assigned" | "tasks"
+type WorkspaceView = "timeline" | "board" | "list"
+type TimelineDrag = {
+  key: string
+  task: AdminRecord
+  originX: number
+  trackWidth: number
+  originalStart: number
+  originalEnd: number
+  previewStart: number
+  previewEnd: number
+}
 
 const statusLabel: Record<string, string> = {
   PLANNED: "Not started",
@@ -184,6 +218,33 @@ function dueMeta(value: unknown) {
   return { label: formatDate(value), tone: "muted" as const }
 }
 
+function plannedDateTimeOf(task: AdminRecord, kind: "start" | "end") {
+  const value = kind === "start"
+    ? readString(task, ["plannedStartTime", "planned_start_time"])
+    : readString(task, ["plannedEndTime", "planned_end_time"])
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function minutesOfDay(value: Date) {
+  return value.getHours() * 60 + value.getMinutes()
+}
+
+function formatTimelineTime(value: Date) {
+  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
+function localTaskDateTime(date: string, time: string) {
+  const parsed = new Date(`${date}T${time}:00`)
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString()
+}
+
+function timeFromMinutes(value: number) {
+  const safe = Math.max(0, Math.min(23 * 60 + 59, Math.round(value)))
+  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`
+}
+
 function entriesFromReports(reports: AdminRecord[]): AdminRecord[] {
   return reports.flatMap((report) =>
     asRecordArray(report.entries ?? report.items ?? report.activities).map((entry) => ({
@@ -263,6 +324,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const leaveIfForbidden = useLeaveIfForbidden()
   const { url: myPhotoUrl } = useMyProfilePhoto()
   const [tab, setTab] = React.useState<ListTab>(mode === "manager" ? "tasks" : "today")
+  const [workspaceView, setWorkspaceView] = React.useState<WorkspaceView>("timeline")
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [reports, setReports] = React.useState<AdminRecord[]>([])
   const [team, setTeam] = React.useState<AdminRecord[]>([])
@@ -274,7 +336,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [reviewFilter, setReviewFilter] = React.useState("ALL")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [form, setForm] = React.useState<Record<string, string>>({ activity_date: today(), priority: "MEDIUM" })
+  const [form, setForm] = React.useState<Record<string, string>>({
+    activity_date: today(),
+    start_time: "09:00",
+    end_time: "10:00",
+    priority: "MEDIUM",
+  })
   const [checklistDraft, setChecklistDraft] = React.useState("")
   const [checklistItems, setChecklistItems] = React.useState<string[]>([])
   const [saving, setSaving] = React.useState(false)
@@ -293,6 +360,14 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [audience, setAudience] = React.useState<"employee" | "self">(mode === "manager" ? "employee" : "self")
   const [updatingChecklistId, setUpdatingChecklistId] = React.useState<string | null>(null)
   const [updatingTaskId, setUpdatingTaskId] = React.useState<string | null>(null)
+  const [scheduleTarget, setScheduleTarget] = React.useState<AdminRecord | null>(null)
+  const [scheduleForm, setScheduleForm] = React.useState({ date: today(), start: "09:00", end: "10:00" })
+  const [scheduleSaving, setScheduleSaving] = React.useState(false)
+  const [timelineDrag, setTimelineDrag] = React.useState<TimelineDrag | null>(null)
+  const [timelineSavingId, setTimelineSavingId] = React.useState<string | null>(null)
+  const [unscheduledOpen, setUnscheduledOpen] = React.useState(false)
+  const timelineDragRef = React.useRef<TimelineDrag | null>(null)
+  const timelineMovedRef = React.useRef(false)
   const openedFocusRef = React.useRef<string | null>(null)
   const resumeCloseDayRef = React.useRef<string | null>(null)
 
@@ -405,6 +480,63 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     })
   }, [groupedTasks.today, groupedTasks.upcoming, historyReports, myEmployeeId, priorityFilter, query, reviewFilter, statusFilter, tab, tasks])
 
+  const boardColumns = React.useMemo(() => {
+    const columns = [
+      { id: "todo", label: "To-do", tone: "text-slate-600", rows: [] as AdminRecord[] },
+      { id: "progress", label: "In progress", tone: "text-sky-700", rows: [] as AdminRecord[] },
+      { id: "review", label: "On review", tone: "text-amber-700", rows: [] as AdminRecord[] },
+      { id: "complete", label: "Complete", tone: "text-emerald-700", rows: [] as AdminRecord[] },
+    ]
+    visibleRows.forEach((task) => {
+      const status = taskStatus(task)
+      const reviewStatus = taskReviewStatus(task)
+      if (["PENDING", "SUBMITTED", "UNDER_REVIEW"].includes(status) || reviewStatus === "PENDING") {
+        columns[2].rows.push(task)
+      } else if (["COMPLETED", "APPROVED", "CLOSED"].includes(status) || reviewStatus === "APPROVED") {
+        columns[3].rows.push(task)
+      } else if (status === "IN_PROGRESS") {
+        columns[1].rows.push(task)
+      } else {
+        columns[0].rows.push(task)
+      }
+    })
+    return columns
+  }, [visibleRows])
+
+  const timeline = React.useMemo(() => {
+    const rows = visibleRows
+      .filter((task) => !task.is_report_row)
+      .map((task) => {
+        const start = plannedDateTimeOf(task, "start")
+        const end = plannedDateTimeOf(task, "end")
+        return { task, start, end }
+      })
+      .sort((left, right) => (left.start?.getTime() ?? 0) - (right.start?.getTime() ?? 0))
+
+    const scheduled = rows.filter(
+      (row): row is { task: AdminRecord; start: Date; end: Date } => Boolean(row.start && row.end)
+    )
+    const unscheduled = rows.filter((row) => !row.start || !row.end)
+    const firstMinute = scheduled.length
+      ? Math.min(...scheduled.map((row) => minutesOfDay(row.start)))
+      : 8 * 60
+    const lastMinute = scheduled.length
+      ? Math.max(...scheduled.map((row) => minutesOfDay(row.end)))
+      : 17 * 60
+    const startHour = Math.max(0, Math.min(8, Math.floor(firstMinute / 60)))
+    const endHour = Math.min(24, Math.max(18, Math.ceil(lastMinute / 60)))
+    const totalMinutes = Math.max(60, (endHour - startHour) * 60)
+
+    return {
+      rows: scheduled,
+      unscheduled,
+      startHour,
+      endHour,
+      totalMinutes,
+      hours: Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index),
+    }
+  }, [visibleRows])
+
   const canAssign = team.length > 0
   const filteredTeam = React.useMemo(() => {
     const needle = teamQuery.trim().toLowerCase()
@@ -500,7 +632,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   }
 
   function resetComposer() {
-    setForm({ activity_date: defaultCreateDate(), priority: "MEDIUM" })
+    setForm({
+      activity_date: defaultCreateDate(),
+      start_time: "09:00",
+      end_time: "10:00",
+      priority: "MEDIUM",
+    })
     setChecklistDraft("")
     setChecklistItems([])
     setEmployeeIds([])
@@ -515,7 +652,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     setSelected(null)
     setAudience("self")
     setAddWorkReason(reason)
-    setForm({ activity_date: day, priority: "MEDIUM" })
+    setForm({ activity_date: day, start_time: "09:00", end_time: "10:00", priority: "MEDIUM" })
     setChecklistDraft("")
     setChecklistItems([])
     if (mode === "self") setTab("today")
@@ -531,6 +668,16 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         throw new Error("Task name and notes are required.")
       }
       const targetDate = form.activity_date || today()
+      const startTime = form.start_time || "09:00"
+      const endTime = form.end_time || "10:00"
+      const plannedStart = localTaskDateTime(targetDate, startTime)
+      const plannedEnd = localTaskDateTime(targetDate, endTime)
+      if (!plannedStart || !plannedEnd) {
+        throw new Error("Choose a valid start and end time.")
+      }
+      if (new Date(plannedEnd).getTime() <= new Date(plannedStart).getTime()) {
+        throw new Error("End time must be later than start time.")
+      }
       const existing = reportForDate(reports, targetDate)
       if (existing && isClosedReportStatus(reportStatusOf(existing))) {
         throw new Error("That day is already closed. Pick another date.")
@@ -544,8 +691,8 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         activity_date: targetDate,
         title: form.title.trim(),
         description: form.description.trim(),
-        planned_start_time: `${targetDate}T09:00:00.000Z`,
-        planned_end_time: form.due_date ? `${form.due_date}T17:00:00.000Z` : undefined,
+        planned_start_time: plannedStart,
+        planned_end_time: plannedEnd,
         due_date: form.due_date || undefined,
         expected_result: form.expected_result?.trim() || undefined,
         employee_kpi_id: canLinkRelatedKpi ? Number(form.employee_kpi_id) : undefined,
@@ -594,8 +741,157 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     return isDraftReportStatus(status)
   }
 
-  async function toggleRowComplete(task: AdminRecord, event: React.MouseEvent) {
-    event.stopPropagation()
+  function canScheduleTask(task: AdminRecord) {
+    if (task.is_report_row) return false
+    if (mode === "self") return canEditTask(task)
+    if (!hasPermission(actor.permissionLabels, "work_activities:manager:review")) return false
+    const status = reportStatusOf(task)
+    return !status || isDraftReportStatus(status)
+  }
+
+  function openScheduleTask(task: AdminRecord) {
+    const start = plannedDateTimeOf(task, "start")
+    const end = plannedDateTimeOf(task, "end")
+    setScheduleTarget(task)
+    setScheduleForm({
+      date: reportDateOf(task) || taskDate(task) || today(),
+      start: start ? timeFromMinutes(minutesOfDay(start)) : "09:00",
+      end: end ? timeFromMinutes(minutesOfDay(end)) : "10:00",
+    })
+  }
+
+  async function persistTimelinePosition(
+    task: AdminRecord,
+    date: string,
+    startMinute: number,
+    endMinute: number,
+  ) {
+    const accessToken = token()
+    const entryId = entryIdOf(task)
+    if (!accessToken || !entryId) {
+      throw new Error("This task is missing its activity link. Refresh and try again.")
+    }
+    const plannedStart = localTaskDateTime(date, timeFromMinutes(startMinute))
+    const plannedEnd = localTaskDateTime(date, timeFromMinutes(endMinute))
+    if (!plannedStart || !plannedEnd || new Date(plannedEnd).getTime() <= new Date(plannedStart).getTime()) {
+      throw new Error("End time must be later than start time.")
+    }
+    const payload = {
+      planned_start_time: plannedStart,
+      planned_end_time: plannedEnd,
+    }
+    if (mode === "manager") {
+      await updateManagerActivitySchedule(accessToken, entryId, payload)
+    } else {
+      await patchEntry(task, payload)
+    }
+  }
+
+  async function saveSchedule() {
+    if (!scheduleTarget || !canScheduleTask(scheduleTarget)) return
+    const start = localTaskDateTime(scheduleForm.date, scheduleForm.start)
+    const end = localTaskDateTime(scheduleForm.date, scheduleForm.end)
+    if (!start || !end || new Date(end).getTime() <= new Date(start).getTime()) {
+      toast.error("End time must be later than start time.")
+      return
+    }
+    setScheduleSaving(true)
+    try {
+      await persistTimelinePosition(
+        scheduleTarget,
+        scheduleForm.date,
+        minutesOfDay(new Date(start)),
+        minutesOfDay(new Date(end)),
+      )
+      toast.success("Task added to the timeline.")
+      setScheduleTarget(null)
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not schedule the task.")
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
+
+  function beginTimelineDrag(
+    event: React.PointerEvent<HTMLButtonElement>,
+    task: AdminRecord,
+    startMinute: number,
+    endMinute: number,
+  ) {
+    if (!canScheduleTask(task)) return
+    const track = event.currentTarget.parentElement
+    if (!track) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const next: TimelineDrag = {
+      key: entryIdOf(task) || rowId(task),
+      task,
+      originX: event.clientX,
+      trackWidth: track.getBoundingClientRect().width,
+      originalStart: startMinute,
+      originalEnd: endMinute,
+      previewStart: startMinute,
+      previewEnd: endMinute,
+    }
+    timelineMovedRef.current = false
+    timelineDragRef.current = next
+    setTimelineDrag(next)
+  }
+
+  function moveTimelineDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = timelineDragRef.current
+    if (!current || current.trackWidth <= 0) return
+    const delta = ((event.clientX - current.originX) / current.trackWidth) * timeline.totalMinutes
+    const snappedDelta = Math.round(delta / 15) * 15
+    const duration = current.originalEnd - current.originalStart
+    const minimum = timeline.startHour * 60
+    const maximum = timeline.endHour * 60 - duration
+    const nextStart = Math.max(minimum, Math.min(maximum, current.originalStart + snappedDelta))
+    const next = { ...current, previewStart: nextStart, previewEnd: nextStart + duration }
+    if (nextStart !== current.originalStart) timelineMovedRef.current = true
+    timelineDragRef.current = next
+    setTimelineDrag(next)
+  }
+
+  async function endTimelineDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = timelineDragRef.current
+    if (!current) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    timelineDragRef.current = null
+    setTimelineDrag(null)
+    if (!timelineMovedRef.current) return
+
+    const entryId = entryIdOf(current.task)
+    setTimelineSavingId(entryId)
+    setTasks((items) => items.map((item) => entryIdOf(item) === entryId ? {
+      ...item,
+      planned_start_time: localTaskDateTime(reportDateOf(item) || taskDate(item) || today(), timeFromMinutes(current.previewStart)),
+      planned_end_time: localTaskDateTime(reportDateOf(item) || taskDate(item) || today(), timeFromMinutes(current.previewEnd)),
+      plannedStartTime: localTaskDateTime(reportDateOf(item) || taskDate(item) || today(), timeFromMinutes(current.previewStart)),
+      plannedEndTime: localTaskDateTime(reportDateOf(item) || taskDate(item) || today(), timeFromMinutes(current.previewEnd)),
+    } : item))
+    try {
+      await persistTimelinePosition(
+        current.task,
+        reportDateOf(current.task) || taskDate(current.task) || today(),
+        current.previewStart,
+        current.previewEnd,
+      )
+      toast.success(`Moved to ${timeFromMinutes(current.previewStart)}–${timeFromMinutes(current.previewEnd)}.`)
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not move the task.")
+      await load()
+    } finally {
+      setTimelineSavingId(null)
+    }
+  }
+
+  async function toggleRowComplete(task: AdminRecord, event?: { stopPropagation: () => void }) {
+    event?.stopPropagation()
     if (!canEditTask(task)) return
     const entryId = entryIdOf(task)
     const next = taskStatus(task) === "COMPLETED" ? "PLANNED" : "COMPLETED"
@@ -761,19 +1057,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   }
 
   const assignedCount = tasks.filter((task) => isManagerAssignedActivity(task, myEmployeeId)).length
-  const tabs: Array<[ListTab, string]> = mode === "self"
+  const tabs: Array<{ value: ListTab; label: string; count: number; icon: React.ReactNode }> = mode === "self"
     ? [
-        ["today", "Today"],
-        ["assigned", `Assigned to me (${assignedCount})`],
-        ["upcoming", `Upcoming (${groupedTasks.upcoming.length})`],
-        ["history", `History (${historyReports.length})`],
+        { value: "today", label: "Today", count: groupedTasks.today.length, icon: <CalendarDaysIcon className="size-3.5" /> },
+        { value: "assigned", label: "Assigned to me", count: assignedCount, icon: <InboxIcon className="size-3.5" /> },
+        { value: "upcoming", label: "Upcoming", count: groupedTasks.upcoming.length, icon: <Clock3Icon className="size-3.5" /> },
+        { value: "history", label: "History", count: historyReports.length, icon: <HistoryIcon className="size-3.5" /> },
       ]
-    : [["tasks", "Team work"]]
+    : [{ value: "tasks", label: "Team work", count: tasks.length, icon: <ClipboardListIcon className="size-3.5" /> }]
 
   const todayCompleted = groupedTasks.today.filter((task) => taskStatus(task) === "COMPLETED").length
   const todayStatus = reportStatusOf(todayReport) || (groupedTasks.today.length ? "DRAFT" : "")
   const showTaskFilters = tab !== "history"
   const todayClosed = Boolean(todayReport) && !canCloseReport(todayReport)
+  const currentMinute = minutesOfDay(new Date())
+  const currentTimeLeft = ((currentMinute - timeline.startHour * 60) / timeline.totalMinutes) * 100
+  const showCurrentTime = tab === "today" && currentTimeLeft >= 0 && currentTimeLeft <= 100
 
   const heroDescription = mode === "manager"
     ? "Work you assigned to your team. Their personal daily items stay in My activities."
@@ -789,30 +1088,33 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
 
   return (
     <section className="min-w-0 space-y-4">
-      <TalentDoodleSprites />
-      <HeroBand
-        eyebrow={mode === "manager" ? "Team activities" : "My activities"}
-        title={mode === "manager" ? "Team activities" : tab === "upcoming" ? "Upcoming work" : tab === "assigned" ? "Assigned to me" : tab === "history" ? "History" : "Today's work"}
-        description={heroDescription}
-        actions={
-          <>
-            {mode === "self" && tab === "today" ? (
-              <button type="button" className={heroGhostButtonClass} onClick={() => void closeOnScreenDay()} disabled={submitting || todayClosed}>
-                {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
-                {todayClosed ? "Today closed" : "Close today"}
-              </button>
-            ) : null}
-            <button type="button" className={heroGhostButtonClass} onClick={() => void load()}>
-              <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
-              <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
+      <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+            {mode === "manager" ? "Team activities" : "My activities"}
+          </p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
+            {mode === "manager" ? "All team work" : tab === "upcoming" ? "Upcoming work" : tab === "assigned" ? "Assigned to me" : tab === "history" ? "Activity history" : "All tasks"}
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{heroDescription}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {mode === "self" && tab === "today" ? (
+            <button type="button" className={secondaryButtonClass} onClick={() => void closeOnScreenDay()} disabled={submitting || todayClosed}>
+              {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+              {todayClosed ? "Today closed" : "Close today"}
             </button>
-          </>
-        }
-      />
+          ) : null}
+          <button type="button" className={secondaryButtonClass} onClick={() => void load()}>
+            <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
+            <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
+          </button>
+        </div>
+      </header>
 
-      <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
-        <div className="flex shrink-0 items-center gap-2">
-          {tabs.map(([value, label]) => {
+      <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card p-2.5 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/45 p-1">
+          {tabs.map(({ value, label, count, icon }) => {
             const active = tab === value
             return (
               <button
@@ -820,79 +1122,441 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 type="button"
                 onClick={() => setTab(value)}
                 className={cn(
-                  "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition",
-                  active ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                  "group inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold transition",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background hover:text-foreground",
                 )}
               >
-                {label}
+                <span className={cn(
+                  "inline-flex size-6 items-center justify-center rounded-md transition",
+                  active ? "bg-primary-foreground/15" : "bg-background text-muted-foreground group-hover:text-primary",
+                )}>
+                  {icon}
+                </span>
+                <span>{label}</span>
+                <span className={cn(
+                  "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
+                  active ? "bg-primary-foreground/15 text-primary-foreground" : "bg-background text-muted-foreground",
+                )}>
+                  {count}
+                </span>
               </button>
             )
           })}
         </div>
-        <div className="flex min-w-0 flex-nowrap items-center gap-2">
-          <div className="relative w-44 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+          {tab !== "history" ? (
+            <div className="flex shrink-0 items-center rounded-lg border border-border bg-muted/50 p-1">
+              {(["timeline", "board", "list"] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setWorkspaceView(view)}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-semibold capitalize transition",
+                    workspaceView === view
+                      ? "bg-background text-primary shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {view === "timeline" ? <Clock3Icon className="size-3.5" /> : view === "board" ? <Columns3Icon className="size-3.5" /> : <ListIcon className="size-3.5" />}
+                  {view}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="relative min-w-44 flex-1 xl:w-56 xl:flex-none">
             <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "history" ? "Search days..." : "Search work..."} />
+            <input className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-xs text-foreground outline-none transition focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "history" ? "Search days..." : "Search work..."} />
           </div>
           {showTaskFilters ? (
-            <>
-              <select
-                className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
-                value={priorityFilter}
-                onChange={(event) => setPriorityFilter(event.target.value)}
-              >
-                <option value="ALL">Priority</option>
-                <option value="URGENT">Urgent</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
-              </select>
-              <select
-                className="h-9 w-24 max-w-24 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="ALL">Status</option>
-                <option value="PLANNED">Not started</option>
-                <option value="IN_PROGRESS">In progress</option>
-                <option value="COMPLETED">Completed</option>
-              </select>
-              <select
-                className="h-9 w-32 max-w-32 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-foreground outline-none [field-sizing:fixed] focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
-                value={reviewFilter}
-                onChange={(event) => setReviewFilter(event.target.value)}
-              >
-                <option value="ALL">Review status</option>
-                <option value="NOT_REQUIRED">No review</option>
-                <option value="PENDING">Pending</option>
-                <option value="APPROVED">Approved</option>
-                <option value="RETURNED">Returned</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-            </>
+            <Popover>
+              <PopoverTrigger className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/30 hover:text-primary">
+                <SlidersHorizontalIcon className="size-3.5" />
+                Filters
+                {[priorityFilter, statusFilter, reviewFilter].filter((value) => value !== "ALL").length ? (
+                  <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                    {[priorityFilter, statusFilter, reviewFilter].filter((value) => value !== "ALL").length}
+                  </span>
+                ) : null}
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 space-y-3 p-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Filter work</p>
+                  <p className="text-xs text-muted-foreground">Narrow the board without hiding these controls.</p>
+                </div>
+                <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                  Priority
+                  <select className={inputClass} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
+                    <option value="ALL">All priorities</option>
+                    <option value="URGENT">Urgent</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                  Status
+                  <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value="ALL">All statuses</option>
+                    <option value="PLANNED">Not started</option>
+                    <option value="IN_PROGRESS">In progress</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                  Review status
+                  <select className={inputClass} value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value)}>
+                    <option value="ALL">All review statuses</option>
+                    <option value="NOT_REQUIRED">No review</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="RETURNED">Returned</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-full items-center justify-center rounded-md border border-border text-xs font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    setPriorityFilter("ALL")
+                    setStatusFilter("ALL")
+                    setReviewFilter("ALL")
+                  }}
+                >
+                  Clear filters
+                </button>
+              </PopoverContent>
+            </Popover>
+          ) : null}
+          {tab !== "history" ? (
+            <button
+              type="button"
+              className={primaryButtonClass}
+              onClick={() => {
+                setAudience(mode === "manager" ? "employee" : "self")
+                setForm({
+                  activity_date: defaultCreateDate(),
+                  start_time: "09:00",
+                  end_time: "10:00",
+                  priority: "MEDIUM",
+                })
+                setChecklistDraft("")
+                setChecklistItems([])
+                setCreateOpen(true)
+              }}
+            >
+              <PlusIcon className="size-4" /> {mode === "self" ? "Add work" : "Create task"}
+            </button>
           ) : null}
         </div>
       </div>
 
-      {tab !== "history" ? (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => {
-              setAudience(mode === "manager" ? "employee" : "self")
-              setForm((current) => ({ ...current, activity_date: defaultCreateDate(), priority: current.priority || "MEDIUM" }))
-              setCreateOpen(true)
-            }}
-          >
-            <PlusIcon className="size-4" /> {mode === "self" ? "Add work" : "Create task"}
-          </button>
-        </div>
-      ) : null}
-
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {tab !== "history" && workspaceView === "timeline" ? (
+        <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Work timeline</h2>
+              <p className="text-xs text-muted-foreground">Scheduled work appears at its planned start and end time.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {timeline.unscheduled.length ? (
+                <Popover open={unscheduledOpen} onOpenChange={setUnscheduledOpen}>
+                  <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[11px] font-semibold text-foreground shadow-xs transition hover:border-primary/35 hover:text-primary">
+                    <PlusIcon className="size-3.5" /> Add unscheduled
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                      {timeline.unscheduled.length}
+                    </span>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 p-0">
+                    <div className="border-b border-border px-3 py-2.5">
+                      <p className="text-sm font-semibold text-foreground">Unscheduled work</p>
+                      <p className="text-[11px] text-muted-foreground">Choose a task, then set its time.</p>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto p-1.5">
+                      {timeline.unscheduled.map(({ task }, index) => {
+                        const editable = canScheduleTask(task)
+                        return (
+                          <div key={entryIdOf(task) || rowId(task) || index} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-muted/60">
+                            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <ClipboardListIcon className="size-4" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-semibold text-foreground">{readString(task, ["title"], "Untitled task")}</p>
+                              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{formatDate(reportDateOf(task) || taskDate(task))}</p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!editable}
+                              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-[10px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45"
+                              onClick={() => {
+                                setUnscheduledOpen(false)
+                                openScheduleTask(task)
+                              }}
+                              title={editable ? "Add to timeline" : "This task can no longer be rescheduled"}
+                            >
+                              <PlusIcon className="size-3" /> Add
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+              <span className="inline-flex h-8 w-fit items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 text-[11px] font-semibold text-primary">
+                <Clock3Icon className="size-3.5" /> {timeline.rows.length} scheduled
+              </span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[820px]">
+              <div className="grid grid-cols-[180px_minmax(640px,1fr)] border-b border-border bg-muted/30">
+                <div className="flex items-center px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Task details
+                </div>
+                <div className="relative h-12 border-l border-border">
+                  {timeline.hours.map((hour) => {
+                    const left = ((hour - timeline.startHour) * 60 / timeline.totalMinutes) * 100
+                    return (
+                      <span
+                        key={hour}
+                        className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-medium tabular-nums text-muted-foreground"
+                        style={{ left: `${left}%` }}
+                      >
+                        {new Date(2000, 0, 1, hour).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )
+                  })}
+                  {showCurrentTime ? (
+                    <span
+                      className="absolute inset-y-0 z-10 w-px bg-primary/70"
+                      style={{ left: `${currentTimeLeft}%` }}
+                    >
+                      <span className="absolute left-1/2 top-1 -translate-x-1/2 rounded-full bg-primary px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm">
+                        Now
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {timeline.rows.map(({ task, start, end }, index) => {
+                const key = entryIdOf(task) || rowId(task) || String(index)
+                const activeDrag = timelineDrag?.key === key ? timelineDrag : null
+                const startMinute = activeDrag?.previewStart ?? minutesOfDay(start)
+                const endMinute = activeDrag?.previewEnd ?? Math.max(startMinute + 15, minutesOfDay(end))
+                const left = Math.max(0, Math.min(100, ((startMinute - timeline.startHour * 60) / timeline.totalMinutes) * 100))
+                const width = Math.max(3, Math.min(100 - left, ((endMinute - startMinute) / timeline.totalMinutes) * 100))
+                const who = mode === "manager" ? personName(task.employee) : assignedBy(task)
+                const priority = taskPriority(task)
+                const editable = canScheduleTask(task)
+                const savingPosition = timelineSavingId === entryIdOf(task)
+                return (
+                  <div
+                    key={key}
+                    className="grid min-h-16 grid-cols-[180px_minmax(640px,1fr)] border-b border-border last:border-b-0"
+                  >
+                    <button type="button" className="min-w-0 px-4 py-2.5 text-left transition hover:bg-muted/40" onClick={() => void openTask(task)}>
+                      <span className="block truncate text-xs font-semibold text-foreground">{readString(task, ["title"], "Untitled task")}</span>
+                      <span className="mt-1 block truncate text-[10px] text-muted-foreground">
+                        {who} · {formatDate(reportDateOf(task) || taskDate(task))}
+                      </span>
+                    </button>
+                    <div
+                      className="relative border-l border-border bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px)]"
+                      style={{ backgroundSize: `${100 / Math.max(1, timeline.endHour - timeline.startHour)}% 100%` }}
+                    >
+                      {showCurrentTime ? (
+                        <span className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-primary/35" style={{ left: `${currentTimeLeft}%` }} />
+                      ) : null}
+                      <button
+                        type="button"
+                        className={cn(
+                          "absolute top-2.5 flex h-11 min-w-20 touch-none items-center gap-1.5 overflow-hidden rounded-lg border border-primary/25 bg-primary/10 px-2 text-left text-primary shadow-xs transition-[border-color,background-color,box-shadow] hover:border-primary/50 hover:bg-primary/15",
+                          editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                          activeDrag && "z-10 border-primary bg-primary/20 shadow-lg ring-2 ring-primary/20",
+                        )}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                        onPointerDown={(event) => beginTimelineDrag(event, task, startMinute, endMinute)}
+                        onPointerMove={moveTimelineDrag}
+                        onPointerUp={(event) => void endTimelineDrag(event)}
+                        onPointerCancel={() => {
+                          timelineDragRef.current = null
+                          setTimelineDrag(null)
+                        }}
+                        onClick={(event) => {
+                          if (timelineMovedRef.current) {
+                            event.preventDefault()
+                            timelineMovedRef.current = false
+                            return
+                          }
+                          void openTask(task)
+                        }}
+                        title={editable ? "Drag to change the scheduled time" : "Open task"}
+                      >
+                        <span className={cn("h-6 w-1 shrink-0 rounded-full", priority === "URGENT" || priority === "HIGH" ? "bg-rose-500" : priority === "MEDIUM" ? "bg-amber-500" : "bg-primary")} />
+                        {editable ? <GripVerticalIcon className="size-3.5 shrink-0 opacity-55" /> : null}
+                        <span className="min-w-0">
+                          <span className="block truncate text-[11px] font-semibold">{readString(task, ["title"], "Untitled task")}</span>
+                          <span className="block truncate text-[9px] text-foreground/60">
+                            {savingPosition ? "Saving…" : `${timeFromMinutes(startMinute)} – ${timeFromMinutes(endMinute)}`}
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {!loading && timeline.rows.length === 0 ? (
+                <div className="flex min-h-40 flex-col items-center justify-center gap-2 px-4 text-center">
+                  <Clock3Icon className="size-7 text-muted-foreground/50" />
+                  <p className="text-sm font-medium text-foreground">No scheduled work in this view</p>
+                  <p className="text-xs text-muted-foreground">Add a task with a start and end time to place it on the timeline.</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : tab !== "history" && workspaceView === "board" ? (
+        <div className="overflow-x-auto pb-2">
+          <div className="grid min-w-[980px] grid-cols-4 items-start gap-3">
+            {boardColumns.map((column) => (
+              <section key={column.id} className="min-w-0 rounded-xl border border-border bg-muted/25 p-2.5">
+                <div className="flex items-center justify-between gap-2 px-1 pb-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CircleDotIcon className={cn("size-4 shrink-0", column.tone)} />
+                    <h2 className="truncate text-sm font-semibold text-foreground">{column.label}</h2>
+                    <span className="text-xs tabular-nums text-muted-foreground">({column.rows.length})</span>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
+                      aria-label={`${column.label} column actions`}
+                    >
+                      <MoreHorizontalIcon className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setStatusFilter(column.id === "progress" ? "IN_PROGRESS" : column.id === "complete" ? "COMPLETED" : column.id === "todo" ? "PLANNED" : "ALL")
+                          setReviewFilter(column.id === "review" ? "PENDING" : "ALL")
+                        }}
+                      >
+                        <SparklesIcon className="size-3.5" /> Show only this column
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setStatusFilter("ALL")
+                          setReviewFilter("ALL")
+                        }}
+                      >
+                        <Columns3Icon className="size-3.5" /> Show all columns
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="space-y-2.5">
+                  {column.rows.map((task) => {
+                    const status = taskStatus(task)
+                    const priority = taskPriority(task)
+                    const due = dueMeta(plannedDueDateOf(task) || taskDate(task))
+                    const assigned = isManagerAssigned(task)
+                    const who = mode === "manager" ? personName(task.employee) : assignedBy(task)
+                    const progress = checklistProgress(task)
+                    const editable = canEditTask(task)
+                    const scheduled = Boolean(plannedDateTimeOf(task, "start") && plannedDateTimeOf(task, "end"))
+                    const taskKey = entryIdOf(task) || reportIdOf(task) || `${readString(task, ["title"])}-${String(taskDate(task))}`
+                    return (
+                      <article key={taskKey} className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:border-primary/30 hover:shadow-md">
+                        <div className="absolute right-2.5 top-2.5 z-10">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              className="inline-flex size-7 items-center justify-center rounded-md bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                              aria-label="Task actions"
+                            >
+                              <MoreHorizontalIcon className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-40">
+                              <DropdownMenuItem onClick={() => void openTask(task)}>
+                                <FileTextIcon className="size-3.5" /> View details
+                              </DropdownMenuItem>
+                              {!scheduled ? (
+                                <DropdownMenuItem
+                                  disabled={!canScheduleTask(task)}
+                                  onClick={() => openScheduleTask(task)}
+                                >
+                                  <Clock3Icon className="size-3.5" /> Add to timeline
+                                </DropdownMenuItem>
+                              ) : null}
+                              <DropdownMenuItem
+                                disabled={!editable || updatingTaskId === entryIdOf(task)}
+                                onClick={(event) => void toggleRowComplete(task, event)}
+                              >
+                                <CheckCircle2Icon className="size-3.5" />
+                                {status === "COMPLETED" ? "Reopen task" : "Mark complete"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <button type="button" className="block w-full p-3.5 pr-11 text-left" onClick={() => void openTask(task)}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold capitalize",
+                              priority === "URGENT" || priority === "HIGH"
+                                ? "bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                                : priority === "MEDIUM"
+                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                  : "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+                            )}>
+                              <PriorityDot priority={priority} /> {priority.toLowerCase()}
+                            </span>
+                            {progress ? <span className="mr-1 text-[10px] text-muted-foreground">Checklist {progress.label}</span> : null}
+                          </div>
+                          <h3 className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-foreground">
+                            {readString(task, ["title"], "Untitled task")}
+                          </h3>
+                          <p className="mt-1.5 line-clamp-3 min-h-12 text-xs leading-4 text-muted-foreground">
+                            {readString(task, ["description", "expectedResult", "expected_result"], "No additional instructions.")}
+                          </p>
+                        </button>
+                        <div className="mx-3.5 flex items-center justify-between gap-2 border-t border-border py-2.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Avatar name={who} photoUrl={photoForAssignee(task, who)} className="size-6 text-[9px]" />
+                            <span className="truncate text-[10px] text-muted-foreground">{who}</span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className={cn("inline-flex items-center gap-1 text-[10px]", due.tone === "danger" ? "text-rose-600" : due.tone === "warn" ? "text-amber-600" : "text-muted-foreground")}>
+                              <CalendarDaysIcon className="size-3" /> {due.label}
+                            </span>
+                            <button
+                              type="button"
+                              className="inline-flex size-6 items-center justify-center rounded-md border border-border text-primary transition hover:bg-primary/10 disabled:opacity-50"
+                              aria-label={status === "COMPLETED" ? "Mark not started" : "Mark complete"}
+                              disabled={!editable || updatingTaskId === entryIdOf(task)}
+                              onClick={(event) => void toggleRowComplete(task, event)}
+                            >
+                              {updatingTaskId === entryIdOf(task) ? <Loader2Icon className="size-3 animate-spin" /> : <CheckCircle2Icon className="size-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  })}
+                  {!loading && column.rows.length === 0 ? (
+                    <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-border bg-background/50 px-3 text-center text-xs text-muted-foreground">
+                      No tasks in {column.label.toLowerCase()}.
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      ) : (
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-border dark:bg-card">
         {tab === "history" ? (
           <div className="hidden grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.4fr)_88px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 lg:grid">
             <span>Date</span>
@@ -1014,27 +1678,83 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           </div>
         )}
       </div>
+      )}
+
+      {scheduleTarget ? (
+        <Dialog open={Boolean(scheduleTarget)} onOpenChange={(open) => !open && setScheduleTarget(null)}>
+          <DialogPopup from="bottom" className="max-w-md overflow-hidden p-0" showCloseButton>
+            <DialogHeader className="mb-0 border-b border-border px-4 pb-3 pt-4 sm:px-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Timeline</p>
+              <DialogTitle className="pr-8 text-lg">Schedule this task</DialogTitle>
+              <DialogDescription className="line-clamp-2">
+                {readString(scheduleTarget, ["title"], "Untitled task")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/35 px-3 py-2.5">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CalendarDaysIcon className="size-4" />
+                </span>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Work day</p>
+                  <p className="text-sm font-semibold text-foreground">{formatDate(scheduleForm.date)}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid min-w-0 gap-1.5 text-xs font-medium text-foreground">
+                  Starts at
+                  <TimeClockPicker
+                    value={scheduleForm.start}
+                    onChange={(value) => setScheduleForm((current) => ({ ...current, start: value }))}
+                    placeholder="Start time"
+                    aria-label="Timeline start time"
+                    className="h-10 rounded-lg px-3 text-sm"
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1.5 text-xs font-medium text-foreground">
+                  Ends at
+                  <TimeClockPicker
+                    value={scheduleForm.end}
+                    onChange={(value) => setScheduleForm((current) => ({ ...current, end: value }))}
+                    placeholder="End time"
+                    aria-label="Timeline end time"
+                    className="h-10 rounded-lg px-3 text-sm"
+                  />
+                </label>
+              </div>
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                After adding it, drag the task bar left or right to adjust the time in 15-minute steps.
+              </p>
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+              <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setScheduleTarget(null)}>Cancel</button>
+              <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveSchedule()} disabled={scheduleSaving}>
+                {scheduleSaving ? <Loader2Icon className="size-4 animate-spin" /> : <Clock3Icon className="size-4" />}
+                Add to timeline
+              </button>
+            </div>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
 
       {createOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4" onClick={() => setCreateOpen(false)}>
-          <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">{mode === "self" ? "Add work" : "Create task"}</p>
-                <h2 className="mt-1 text-xl font-semibold text-slate-900">{audience === "employee" ? "Assign planned work" : mode === "self" ? "Add work to a day" : "Create a task"}</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {addWorkReason === "close"
-                    ? `Add at least one work item for ${formatDate(form.activity_date || today())}, then you can close that day.`
-                    : mode === "self"
-                    ? "This item is added to that day's report. Closing a day only submits that date."
-                    : "Assign the same task to one person or several people on your team."}
-                </p>
-              </div>
-              <button type="button" className="rounded-md p-2 text-slate-500 hover:bg-slate-100" onClick={() => setCreateOpen(false)}><XIcon className="size-5" /></button>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogPopup from="bottom" className="flex max-h-[min(94dvh,52rem)] max-w-2xl flex-col overflow-hidden p-0" showCloseButton>
+            <DialogHeader className="mb-0 px-4 pb-3 pt-4 sm:px-5 sm:pt-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">{mode === "self" ? "Add work" : "Create task"}</p>
+              <DialogTitle className="pr-8 text-lg sm:text-xl">{audience === "employee" ? "Assign planned work" : mode === "self" ? "Add work to a day" : "Create a task"}</DialogTitle>
+              <DialogDescription>
+                {addWorkReason === "close"
+                  ? `Add at least one work item for ${formatDate(form.activity_date || today())}, then you can close that day.`
+                  : mode === "self"
+                  ? "Set the work day and time range so it appears correctly on your timeline."
+                  : "Assign the task, its time window, and checklist to one or several people."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              <div className="grid gap-4 sm:grid-cols-2">
               {audience === "employee" ? (
-                <div className="grid gap-1.5 text-sm md:col-span-2">
+                <div className="grid gap-1.5 text-sm sm:col-span-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">Assign to</span>
                     <span className="text-xs text-slate-500">{employeeIds.length ? `${employeeIds.length} of ${team.length} selected` : `Select one, several, or all ${team.length} people`}</span>
@@ -1043,10 +1763,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">No employees in your reporting scope</p>
                   ) : (
                     <div className="overflow-hidden rounded-md border border-slate-300">
-                      <div className="flex items-center gap-2 border-b border-slate-200 px-2 py-1.5">
+                      <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-1.5">
                         <SearchIcon className="size-4 shrink-0 text-slate-400" />
                         <input
-                          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                          className="min-w-28 flex-1 bg-transparent text-sm outline-none"
                           value={teamQuery}
                           onChange={(event) => setTeamQuery(event.target.value)}
                           placeholder="Search team members"
@@ -1106,6 +1826,28 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 <span className="font-medium">{mode === "self" ? "Which day is this for?" : "Start date"}</span>
                 <DatePickerPresets value={form.activity_date ?? today()} onChange={(value) => setForm((current) => ({ ...current, activity_date: value }))} placeholder="Select the day" />
               </label>
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+                <label className="grid min-w-0 gap-1.5 text-sm">
+                  <span className="font-medium">Starts at</span>
+                  <TimeClockPicker
+                    value={form.start_time ?? "09:00"}
+                    onChange={(value) => setForm((current) => ({ ...current, start_time: value }))}
+                    placeholder="Start time"
+                    aria-label="Task start time"
+                    className="h-10 rounded-md px-3 text-sm"
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1.5 text-sm">
+                  <span className="font-medium">Ends at</span>
+                  <TimeClockPicker
+                    value={form.end_time ?? "10:00"}
+                    onChange={(value) => setForm((current) => ({ ...current, end_time: value }))}
+                    placeholder="End time"
+                    aria-label="Task end time"
+                    className="h-10 rounded-md px-3 text-sm"
+                  />
+                </label>
+              </div>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Due date <span className="font-normal text-slate-500">(optional)</span></span>
                 <DatePickerPresets value={form.due_date ?? ""} onChange={(value) => setForm((current) => ({ ...current, due_date: value }))} placeholder="Select due date" />
@@ -1137,15 +1879,15 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   <option value="URGENT">Urgent</option>
                 </select>
               </label>
-              <label className="grid gap-1.5 text-sm md:col-span-2">
+              <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Notes</span>
                 <textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
               </label>
-              <label className="grid gap-1.5 text-sm md:col-span-2">
+              <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Expected result <span className="font-normal text-slate-500">(optional)</span></span>
                 <textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
               </label>
-              <div className="grid content-start gap-1.5 text-sm md:col-span-2">
+              <div className="grid content-start gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Checklist <span className="font-normal text-slate-500">(optional)</span></span>
                 <div className="flex min-w-0 gap-2">
                   <input
@@ -1174,16 +1916,17 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   </div>
                 ))}
               </div>
+              </div>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button type="button" className={primaryButtonClass} onClick={() => void saveTask()} disabled={saving}>
+            <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+              <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setCreateOpen(false)}>Cancel</button>
+              <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveTask()} disabled={saving}>
                 {saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                 {audience === "employee" ? (employeeIds.length > 1 ? `Assign to ${employeeIds.length} people` : "Assign task") : "Create task"}
               </button>
             </div>
-          </div>
-        </div>
+          </DialogPopup>
+        </Dialog>
       ) : null}
 
       {previewReport ? (
@@ -1282,18 +2025,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/20" onClick={() => setSelected(null)}>
-          <aside className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null) }}>
+          <DialogPopup from="bottom" className="flex max-h-[min(90dvh,50rem)] max-w-2xl flex-col overflow-hidden p-0" showCloseButton>
+            <DialogHeader className="mb-0 gap-2 px-5 pb-4 pt-5">
               <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide", selected.is_report_row ? "bg-amber-50 text-amber-800" : isManagerAssigned(selected) ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700")}>
                 {selected.is_report_row ? "Daily report" : isManagerAssigned(selected) ? "Assigned task" : "My work"}
               </span>
-              <button type="button" className="rounded-md p-2 text-slate-500 hover:bg-slate-100" onClick={() => setSelected(null)}><XIcon className="size-5" /></button>
-            </div>
-            <div className="space-y-6 px-5 py-5">
+              <DialogTitle className="pr-8 text-xl">
+                {readString(selected, ["title"], "Untitled task")}
+              </DialogTitle>
+              <DialogDescription>
+                Review the assignment, update its progress, and keep the activity trail together.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 overflow-y-auto px-5 py-5">
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{readString(selected, ["title"], "Untitled task")}</h2>
-                <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Avatar
                     name={mode === "manager" ? personName(selected.employee) : assignedBy(selected)}
                     photoUrl={photoForAssignee(selected, mode === "manager" ? personName(selected.employee) : assignedBy(selected))}
@@ -1338,7 +2085,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <label className="grid gap-1 text-xs font-medium text-slate-500">
                       Status
                       {mode === "self" && canEditTask(selected) ? (
@@ -1374,6 +2121,33 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     ) : (
                       <div />
                     )}
+                    {plannedDateTimeOf(selected, "start") && plannedDateTimeOf(selected, "end") ? (
+                      <div className="grid gap-1 text-xs font-medium text-muted-foreground sm:col-span-2">
+                        Scheduled time
+                        <span className="flex h-10 items-center gap-1.5 text-sm text-foreground">
+                          <Clock3Icon className="size-4 text-muted-foreground" />
+                          {formatTimelineTime(plannedDateTimeOf(selected, "start")!)} – {formatTimelineTime(plannedDateTimeOf(selected, "end")!)}
+                        </span>
+                      </div>
+                    ) : canScheduleTask(selected) ? (
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2.5 sm:col-span-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground">Not on the timeline</p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">Set a start and end time to schedule it.</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-primary-foreground"
+                          onClick={() => {
+                            const task = selected
+                            setSelected(null)
+                            openScheduleTask(task)
+                          }}
+                        >
+                          <PlusIcon className="size-3.5" /> Add to timeline
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {mode === "self" && canEditTask(selected) ? (
                     <div className="space-y-3">
@@ -1467,8 +2241,8 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 </>
               )}
             </div>
-          </aside>
-        </div>
+          </DialogPopup>
+        </Dialog>
       ) : null}
     </section>
   )

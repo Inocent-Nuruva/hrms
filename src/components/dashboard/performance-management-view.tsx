@@ -2,22 +2,23 @@
 
 import * as React from "react"
 import {
+  CalendarDaysIcon,
+  CheckCircle2Icon,
+  Clock3Icon,
+  GaugeIcon,
+  ListChecksIcon,
   Loader2Icon,
   PlusIcon,
   RefreshCwIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
-  CycleRail,
-  HeroBand,
-  MetricTile,
-  ScoreRing,
   StatusChip,
-  StatusStack,
-  TalentDoodleSprites,
   actionButtonClass,
   asRecord,
   asRecordArray,
@@ -31,7 +32,6 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-  statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
 import {
@@ -98,6 +98,7 @@ import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-p
 import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { cn } from "@/lib/utils"
 
 export type PerformanceHrTab = "overview" | "setup" | "plans" | "development" | "reviews" | "improvement" | "reports" | "calibration"
 
@@ -146,16 +147,14 @@ const SETUP_TABS: Array<{ id: SetupTab; label: string }> = [
   { id: "workflows", label: "Workflows" },
 ]
 
-const PERIOD_CYCLE = [
-  "DRAFT",
-  "OPEN",
-  "ACHIEVEMENT_ENTRY",
-  "SELF_REVIEW",
-  "MANAGER_REVIEW",
-  "HR_REVIEW",
-  "MODERATION",
-  "APPROVED",
-]
+const PERFORMANCE_TIMELINE_STAGES = [
+  { label: "Draft", statuses: ["DRAFT"] },
+  { label: "Open", statuses: ["OPEN", "ACTIVE"] },
+  { label: "Employee review", statuses: ["ACHIEVEMENT_ENTRY", "SELF_REVIEW"] },
+  { label: "Manager review", statuses: ["MANAGER_REVIEW"] },
+  { label: "HR review", statuses: ["HR_REVIEW", "MODERATION"] },
+  { label: "Approved", statuses: ["APPROVED", "CLOSED", "COMPLETED"] },
+] as const
 
 const AGGREGATION_METHODS = [
   "SIMPLE_MONTHLY_AVERAGE",
@@ -517,6 +516,8 @@ export function PerformanceManagementView({
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
+  const [overviewSearch, setOverviewSearch] = React.useState("")
+  const [overviewStatus, setOverviewStatus] = React.useState("ALL")
   const [detailOpen, setDetailOpen] = React.useState(false)
   const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -542,14 +543,22 @@ export function PerformanceManagementView({
         promise.catch(() => fallback)
 
       if (activeTab === "overview") {
-        const [summary, yearRows, periodRows] = await Promise.all([
+        const [summary, yearRows, periodRows, planRows, developmentRows, pipRows, appealRows] = await Promise.all([
           optional(getPerformanceDashboard(token), null),
           optional(listPerformanceFinancialYears(token), [] as AdminRecord[]),
           optional(listPerformancePeriods(token), [] as AdminRecord[]),
+          optional(listPerformancePlans(token), [] as AdminRecord[]),
+          optional(listPerformanceDevelopmentPlans(token), [] as AdminRecord[]),
+          optional(listPerformanceImprovementPlans(token), [] as AdminRecord[]),
+          optional(listPerformanceAppeals(token), [] as AdminRecord[]),
         ])
         setDashboard(summary)
         setYears(yearRows)
         setPeriods(periodRows)
+        setPlans(planRows)
+        setDevelopmentPlans(developmentRows)
+        setPips(pipRows)
+        setAppeals(appealRows)
       } else if (activeTab === "setup") {
         if (setupTab === "years") {
           setYears(await listPerformanceFinancialYears(token))
@@ -651,6 +660,29 @@ export function PerformanceManagementView({
     readNumber(dashboard, ["pending_feedback_360", "pendingFeedback360"]) ?? 0
 
   const currentPeriod = periods[0] ?? null
+  const overviewRecords = React.useMemo(() => {
+    const tagged: AdminRecord[] = [
+      ...periods.map((row) => ({ ...row, dashboard_kind: "Review period" })),
+      ...plans.map((row) => ({ ...row, dashboard_kind: "Performance plan" })),
+      ...developmentPlans.map((row) => ({ ...row, dashboard_kind: "Development plan" })),
+      ...pips.map((row) => ({ ...row, dashboard_kind: "Improvement plan" })),
+      ...appeals.map((row) => ({ ...row, dashboard_kind: "Appeal" })),
+    ]
+    const needle = overviewSearch.trim().toLowerCase()
+    return tagged.filter((row) => {
+      const status = readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()
+      if (overviewStatus !== "ALL" && status !== overviewStatus) return false
+      return !needle || JSON.stringify(row).toLowerCase().includes(needle)
+    })
+  }, [appeals, developmentPlans, overviewSearch, overviewStatus, periods, pips, plans])
+  const overviewStatuses = React.useMemo(
+    () => Array.from(new Set(
+      [periods, plans, developmentPlans, pips, appeals]
+        .flat()
+        .map((row) => readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()),
+    )).sort(),
+    [appeals, developmentPlans, periods, pips, plans],
+  )
   const visibleRows = React.useMemo(() => {
     const source =
       activeTab === "plans"
@@ -1662,60 +1694,178 @@ export function PerformanceManagementView({
 
   return (
     <section className="space-y-4">
-      <TalentDoodleSprites />
       {activeTab === "overview" ? (
         <>
-          <HeroBand
-            eyebrow="Performance"
-            title="Company review cycle"
-            description="Scores, cycle progress, and the work still waiting on HR — same chrome as the rest of the dashboard."
-            actions={
+          <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Performance</p>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">Overview</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Monitor review cycles, employee plans, and performance work in one place.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative hidden sm:block">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={overviewSearch}
+                  onChange={(event) => setOverviewSearch(event.target.value)}
+                  placeholder="Find performance work"
+                  className="h-9 w-56 rounded-lg border border-border bg-muted/30 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-primary"
+                />
+              </label>
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
                 {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
-            }
-          />
+            </div>
+          </header>
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
               {error}
             </div>
           ) : null}
-          <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <ScoreRing value={averageScore} label="Average score" />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricTile label="Open reviews" value={openReviews} hint="Waiting on a cycle step" />
-              <MetricTile
-                label="Completion"
-                value={completionRate === null ? "—" : `${Math.round(completionRate)}%`}
-                hint="Published versus assigned"
-              />
-              <MetricTile label="Plans" value={plans.length || years.length} hint="Active employee plans" />
-              <MetricTile label="Improvement plans" value={pipCount} hint="Open PIPs" />
-              <MetricTile label="Development" value={developmentPlanCount} hint="Active development plans" />
-              <MetricTile label="360 feedback" value={pendingFeedbackCount} hint="Feedback requests pending" />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Average score", value: averageScore === null ? "—" : `${Math.round(averageScore)}%`, hint: "Across published reviews", icon: GaugeIcon },
+              { label: "Open reviews", value: openReviews, hint: "Waiting on a cycle step", icon: Clock3Icon },
+              { label: "Completed", value: completionRate === null ? "—" : `${Math.round(completionRate)}%`, hint: "Published versus assigned", icon: CheckCircle2Icon },
+              { label: "Improvement plans", value: pipCount, hint: `${developmentPlanCount} development · ${pendingFeedbackCount} feedback`, icon: ListChecksIcon },
+            ].map((metric) => {
+              const Icon = metric.icon
+              return (
+                <article key={metric.label} className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/15 bg-primary/[0.07] text-primary">
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="size-1.5 rounded-full bg-primary" />
+                  </div>
+                  <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{metric.label}</p>
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground">{metric.hint}</p>
+                </article>
+              )
+            })}
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Period mix</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Where the current review periods sit in the cycle.</p>
-              <div className="mt-4">
-                <StatusStack items={statusChartItems(periods)} />
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Performance timeline</h2>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {currentPeriod ? `Current cycle · ${optionLabel(currentPeriod)}` : "Review periods across the company cycle"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" className={secondaryButtonClass} onClick={() => setOverviewStatus("ALL")}>
+                  <SlidersHorizontalIcon className="size-4" /> Clear filter
+                </button>
+                {canCreatePerformance ? (
+                  <button type="button" className={primaryButtonClass} onClick={() => window.location.assign("/dashboard/performance/plans")}>
+                    <PlusIcon className="size-4" /> New plan
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">Current cycle</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {optionLabel(currentPeriod) === "—" ? "No period loaded yet." : optionLabel(currentPeriod)}
-              </p>
-              <div className="mt-4">
-                <CycleRail steps={PERIOD_CYCLE} current={readString(currentPeriod, ["status"], "DRAFT")} />
+            <div className="overflow-x-auto p-3">
+              <div className="min-w-[900px] overflow-hidden rounded-lg border border-border">
+                <div className="grid grid-cols-[180px_repeat(6,minmax(110px,1fr))] bg-muted/35 text-[10px] font-medium text-muted-foreground">
+                  <div className="px-3 py-2.5">Review period</div>
+                  {PERFORMANCE_TIMELINE_STAGES.map((stage) => (
+                    <div key={stage.label} className="border-l border-border px-2 py-2.5 text-center">{stage.label}</div>
+                  ))}
+                </div>
+                {(periods.length > 0 ? periods.slice(0, 7) : [currentPeriod].filter(Boolean) as AdminRecord[]).map((period) => {
+                  const status = readString(period, ["status"], "DRAFT").toUpperCase()
+                  return (
+                    <button
+                      type="button"
+                      key={rowId(period) || optionLabel(period)}
+                      onClick={() => { setDetailRecord(period); setDetailOpen(true) }}
+                      className="grid w-full grid-cols-[180px_repeat(6,minmax(110px,1fr))] border-t border-border text-left transition first:border-t-0 hover:bg-primary/[0.03]"
+                    >
+                      <div className="min-w-0 px-3 py-3">
+                        <p className="truncate text-xs font-semibold text-foreground">{optionLabel(period)}</p>
+                        <p className="mt-0.5 truncate text-[9px] text-muted-foreground">{formatDate(period.startDate ?? period.start_date)} – {formatDate(period.endDate ?? period.end_date)}</p>
+                      </div>
+                      {PERFORMANCE_TIMELINE_STAGES.map((stage) => {
+                        const active = stage.statuses.includes(status as never)
+                        return (
+                          <div key={stage.label} className="flex items-center justify-center border-l border-border px-2 py-2">
+                            {active ? (
+                              <span className="inline-flex w-full items-center justify-center rounded-md border border-primary/25 bg-primary/10 px-2 py-2 text-[10px] font-semibold text-primary">
+                                {prettify(status)}
+                              </span>
+                            ) : (
+                              <span className="h-px w-full bg-border" />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </button>
+                  )
+                })}
+                {!loading && periods.length === 0 ? (
+                  <div className="flex min-h-28 items-center justify-center border-t border-border px-4 text-xs text-muted-foreground">No performance periods are available yet.</div>
+                ) : null}
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Performance work list</h2>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Periods, plans, development work, improvement plans, and appeals.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="relative sm:hidden">
+                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none focus:border-primary" />
+                </label>
+                <select value={overviewStatus} onChange={(event) => setOverviewStatus(event.target.value)} className="h-8 rounded-lg border border-border bg-background px-2 text-[10px] text-foreground outline-none focus:border-primary">
+                  <option value="ALL">All statuses</option>
+                  {overviewStatuses.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left">
+                <thead className="bg-muted/30 text-[10px] text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Name</th>
+                    <th className="px-3 py-2.5 font-medium">Type</th>
+                    <th className="px-3 py-2.5 font-medium">Due date</th>
+                    <th className="px-3 py-2.5 font-medium">Progress</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {overviewRecords.slice(0, 12).map((row, index) => {
+                    const status = readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()
+                    const progressValue = readNumber(row, ["progress", "progress_percentage", "completion_rate", "completionRate"])
+                      ?? (["APPROVED", "COMPLETED", "CLOSED"].includes(status) ? 100 : 0)
+                    return (
+                      <tr key={`${readString(row, ["dashboard_kind"])}-${rowId(row) || index}`} className="cursor-pointer text-xs transition hover:bg-primary/[0.03]" onClick={() => { setDetailRecord(row); setDetailOpen(true) }}>
+                        <td className="px-4 py-3 font-medium text-foreground">{optionLabel(row)}</td>
+                        <td className="px-3 py-3 text-muted-foreground">{readString(row, ["dashboard_kind"], "Performance item")}</td>
+                        <td className="px-3 py-3 text-muted-foreground"><span className="inline-flex items-center gap-1"><CalendarDaysIcon className="size-3" />{formatDate(row["dueDate"] ?? row["due_date"] ?? row["endDate"] ?? row["end_date"])}</span></td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, progressValue))}%` }} /></div>
+                            <span className="text-[10px] tabular-nums text-muted-foreground">{Math.round(progressValue)}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><StatusChip value={status} /></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {!loading && overviewRecords.length === 0 ? (
+                <div className="flex min-h-36 items-center justify-center px-4 text-center text-xs text-muted-foreground">No performance work matches the current search and filter.</div>
+              ) : null}
+            </div>
+          </section>
         </>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

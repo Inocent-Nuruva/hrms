@@ -1,16 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { CheckCircle2Icon, InfoIcon, Loader2Icon, PlusIcon, RefreshCwIcon, UserRoundIcon, XIcon } from "lucide-react"
+import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   MetricTile,
   StatusChip,
-  TalentDoodleSprites,
-  heroPanelClass,
-  pageBleedClass,
   actionButtonClass,
   asRecord,
   asRecordArray,
@@ -23,7 +20,6 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-  statusChartItems,
   textareaClass,
 } from "@/components/dashboard/talent-visuals"
 import { cn } from "@/lib/utils"
@@ -65,9 +61,7 @@ import {
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
-import { Button } from "@/components/ui/button"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export type PerformanceSelfTab =
   | "overview"
@@ -112,106 +106,6 @@ const PERFORMANCE_CYCLE_STEPS = [
   },
 ] as const
 
-function PerformancePrimaryCard({
-  title,
-  aside,
-  fields,
-  emptyMessage,
-  heading = "h2",
-  tone = "primary",
-}: {
-  title: string
-  aside?: React.ReactNode
-  fields: Array<{ label: string; value: string; hint?: string; muted?: boolean }>
-  emptyMessage?: string
-  heading?: "h1" | "h2"
-  tone?: "primary" | "plain"
-}) {
-  const Heading = heading
-  const isPrimary = tone === "primary"
-  return (
-    <div
-      className={cn(
-        isPrimary
-          ? cn(heroPanelClass, pageBleedClass, "text-white")
-          : "relative overflow-hidden rounded-none border border-border bg-card p-4 text-foreground md:p-5",
-      )}
-      style={isPrimary ? { backgroundColor: "var(--primary)" } : undefined}
-    >
-      <div className="relative z-10 space-y-4">
-        <div className="min-w-0 space-y-2">
-          <Heading
-            className={cn(
-              "text-xl font-semibold tracking-tight md:text-2xl",
-              isPrimary ? "text-white" : "text-foreground"
-            )}
-          >
-            {title}
-          </Heading>
-          {aside}
-        </div>
-        {fields.length > 0 ? (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
-            {fields.map((field) => (
-              <div key={field.label} className="min-w-0">
-                <p
-                  className={cn(
-                    "flex min-w-0 items-center gap-1 text-[9px] font-semibold uppercase tracking-wide",
-                    isPrimary ? "text-white/50" : "text-muted-foreground"
-                  )}
-                >
-                  <span className="min-w-0 truncate">{field.label}</span>
-                  {field.hint ? (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <button
-                            type="button"
-                            className={cn(
-                              "inline-flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                              isPrimary
-                                ? "text-white/70 hover:text-white"
-                                : "text-muted-foreground hover:text-foreground"
-                            )}
-                            aria-label={field.hint}
-                          />
-                        }
-                      >
-                        <InfoIcon className="size-3" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="start" className="max-w-56 text-left leading-relaxed">
-                        {field.hint}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                </p>
-                <p
-                  className={cn(
-                    "text-xs font-semibold leading-tight",
-                    isPrimary
-                      ? field.muted
-                        ? "text-white/60"
-                        : "text-white"
-                      : field.muted
-                        ? "text-muted-foreground"
-                        : "text-foreground"
-                  )}
-                >
-                  {field.value}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : emptyMessage ? (
-          <p className={cn("text-xs font-semibold", isPrimary ? "text-white/70" : "text-muted-foreground")}>
-            {emptyMessage}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
 }
@@ -241,6 +135,8 @@ export function PerformanceSelfView({
   const [teamAchievements, setTeamAchievements] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [overviewSearch, setOverviewSearch] = React.useState("")
+  const [overviewStatus, setOverviewStatus] = React.useState("ALL")
   const [managerError, setManagerError] = React.useState<string | null>(null)
   const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(null)
   const [detailOpen, setDetailOpen] = React.useState(false)
@@ -352,6 +248,30 @@ export function PerformanceSelfView({
   const cycleStepIndex = Math.max(
     0,
     PERFORMANCE_CYCLE_STEPS.findIndex((step) => step.key === cycleStatus),
+  )
+  const overviewItems = React.useMemo(() => {
+    const tagged: AdminRecord[] = [
+      ...assignments.map((row) => ({ ...row, dashboard_kind: "Assignment" })),
+      ...activityTasks.map((row) => ({ ...row, dashboard_kind: "Activity" })),
+      ...reviews.map((row) => ({ ...row, dashboard_kind: "Review" })),
+      ...developmentPlans.map((row) => ({ ...row, dashboard_kind: "Development" })),
+      ...achievements.map((row) => ({ ...row, dashboard_kind: "Achievement" })),
+      ...pips.map((row) => ({ ...row, dashboard_kind: "Improvement" })),
+    ]
+    const needle = overviewSearch.trim().toLowerCase()
+    return tagged.filter((row) => {
+      const status = readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()
+      if (overviewStatus !== "ALL" && status !== overviewStatus) return false
+      return !needle || JSON.stringify(row).toLowerCase().includes(needle)
+    })
+  }, [achievements, activityTasks, assignments, developmentPlans, overviewSearch, overviewStatus, pips, reviews])
+  const overviewStatuses = React.useMemo(
+    () => Array.from(new Set(
+      [assignments, activityTasks, reviews, developmentPlans, achievements, pips]
+        .flat()
+        .map((row) => readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()),
+    )).sort(),
+    [achievements, activityTasks, assignments, developmentPlans, pips, reviews],
   )
 
   const rows =
@@ -846,76 +766,100 @@ export function PerformanceSelfView({
 
   return (
     <section className="space-y-4">
-      <TalentDoodleSprites />
       {activeTab === "overview" ? (
         <>
-          <PerformancePrimaryCard
-            heading="h1"
-            title="My performance"
-            aside={
-              <div className="flex min-w-0 items-center gap-2">
-                <p className="min-w-0 truncate text-xs font-semibold text-white/90">
-                  Current review cycle
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 shrink-0 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                  onClick={() => void load()}
-                  disabled={loading}
-                >
-                  {loading ? <Loader2Icon className="size-3.5 animate-spin" /> : <RefreshCwIcon className="size-3.5" />}
-                  Refresh
-                </Button>
-              </div>
-            }
-            fields={[
-              { label: "Score", value: score === null || score === undefined ? "—" : String(score) },
-              { label: "Review assignments", value: String(assignments.length) },
-              { label: "Assigned work", value: String(activityTasks.length) },
-              { label: "Reviews", value: String(reviews.length) },
-              { label: "Feedback", value: String(feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length) },
-              { label: "Development", value: String(developmentPlans.length || readNumber(summary, ["development_plans", "developmentPlans"]) || 0) },
-              { label: "Achievements", value: String(achievements.length) },
-              { label: "Improvement", value: String(pips.length) },
-            ]}
-          />
+          <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Performance</p>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">My performance overview</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Track your current review cycle, assigned work, achievements, and development.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative hidden sm:block">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Find performance work" className="h-9 w-56 rounded-lg border border-border bg-muted/30 pl-9 pr-3 text-xs outline-none focus:border-primary" />
+              </label>
+              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
+                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} Refresh
+              </button>
+            </div>
+          </header>
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
               {error}
             </div>
           ) : null}
-          <div className="grid gap-4 xl:grid-cols-2">
-            <PerformancePrimaryCard
-              tone="plain"
-              title="Assigned work"
-              fields={statusChartItems(activityTasks).map((item) => ({
-                label: item.label,
-                value: String(item.value),
-              }))}
-              emptyMessage="No assigned activity tasks yet."
-            />
-            <PerformancePrimaryCard
-              tone="plain"
-              title="Review"
-              fields={statusChartItems(reviews).map((item) => ({
-                label: item.label,
-                value: String(item.value),
-              }))}
-              emptyMessage="No reviews in this cycle yet."
-            />
-            <PerformancePrimaryCard
-              tone="plain"
-              title="Review cycle"
-              fields={PERFORMANCE_CYCLE_STEPS.map((step, index) => ({
-                label: step.label,
-                value: index < cycleStepIndex ? "Done" : index === cycleStepIndex ? "Current" : "Coming up",
-                hint: step.hint,
-                muted: index > cycleStepIndex,
-              }))}
-            />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Current score", value: score === null || score === undefined ? "—" : String(score), hint: "Latest published result", icon: GaugeIcon },
+              { label: "Assigned work", value: activityTasks.length, hint: `${assignments.length} review assignments`, icon: ListChecksIcon },
+              { label: "Reviews", value: reviews.length, hint: `${feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length} feedback pending`, icon: Clock3Icon },
+              { label: "Achievements", value: achievements.length, hint: `${developmentPlans.length} development · ${pips.length} improvement`, icon: CheckCircle2Icon },
+            ].map((metric) => {
+              const Icon = metric.icon
+              return (
+                <article key={metric.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                  <span className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/15 bg-primary/[0.07] text-primary"><Icon className="size-4" /></span>
+                  <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{metric.label}</p>
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground">{metric.hint}</p>
+                </article>
+              )
+            })}
           </div>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div><h2 className="text-sm font-semibold">Review timeline</h2><p className="mt-0.5 text-[10px] text-muted-foreground">Your current cycle from start to published result.</p></div>
+              <span className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary">{prettify(cycleStatus)}</span>
+            </div>
+            <div className="overflow-x-auto p-4">
+              <div className="grid min-w-[720px] grid-cols-5 gap-0">
+                {PERFORMANCE_CYCLE_STEPS.map((step, index) => {
+                  const state = index < cycleStepIndex ? "done" : index === cycleStepIndex ? "current" : "upcoming"
+                  return (
+                    <div key={step.key} className="relative px-2 text-center">
+                      <div className={cn("absolute left-0 right-0 top-3 h-0.5", index === 0 ? "left-1/2" : "", index === PERFORMANCE_CYCLE_STEPS.length - 1 ? "right-1/2" : "", state === "upcoming" ? "bg-border" : "bg-primary")} />
+                      <span className={cn("relative mx-auto flex size-6 items-center justify-center rounded-full border text-[10px] font-semibold", state === "done" ? "border-primary bg-primary text-primary-foreground" : state === "current" ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground")}>
+                        {state === "done" ? <CheckCircle2Icon className="size-3.5" /> : index + 1}
+                      </span>
+                      <p className="mt-3 text-xs font-semibold text-foreground">{step.label}</p>
+                      <p className="mt-1 text-[9px] leading-4 text-muted-foreground">{step.hint}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div><h2 className="text-sm font-semibold">Performance work list</h2><p className="mt-0.5 text-[10px] text-muted-foreground">Everything contributing to your current performance cycle.</p></div>
+              <div className="flex items-center gap-2">
+                <label className="relative sm:hidden"><SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none" /></label>
+                <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
+                <select value={overviewStatus} onChange={(event) => setOverviewStatus(event.target.value)} className="h-8 rounded-lg border border-border bg-background px-2 text-[10px] outline-none"><option value="ALL">All statuses</option>{overviewStatuses.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}</select>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left">
+                <thead className="bg-muted/30 text-[10px] text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">Name</th><th className="px-3 py-2.5 font-medium">Type</th><th className="px-3 py-2.5 font-medium">Due date</th><th className="px-3 py-2.5 font-medium">Progress</th><th className="px-4 py-2.5 font-medium">Status</th></tr></thead>
+                <tbody className="divide-y divide-border">
+                  {overviewItems.slice(0, 12).map((row, index) => {
+                    const status = readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()
+                    const progress = readNumber(row, ["progress", "progress_percentage", "completion_rate", "completionRate"]) ?? (["APPROVED", "COMPLETED", "PUBLISHED"].includes(status) ? 100 : 0)
+                    return (
+                      <tr key={`${readString(row, ["dashboard_kind"])}-${rowId(row) || index}`} className="cursor-pointer text-xs hover:bg-primary/[0.03]" onClick={() => { setDetailRecord(row); setDetailOpen(true) }}>
+                        <td className="px-4 py-3 font-medium">{optionLabel(row)}</td><td className="px-3 py-3 text-muted-foreground">{readString(row, ["dashboard_kind"], "Performance item")}</td><td className="px-3 py-3 text-muted-foreground"><span className="inline-flex items-center gap-1"><CalendarDaysIcon className="size-3" />{readString(row, ["due_date", "dueDate", "end_date", "endDate"], "—")}</span></td>
+                        <td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div><span className="text-[10px] text-muted-foreground">{Math.round(progress)}%</span></div></td><td className="px-4 py-3"><StatusChip value={status} /></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {!loading && overviewItems.length === 0 ? <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">No performance work matches the current search and filter.</div> : null}
+            </div>
+          </section>
         </>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -20,13 +20,21 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import {
+  extractDefaultAvatarImageUrl,
   extractBackupCodes,
+  extractProfilePhotoUrl,
+  listSelectableAvatarsForMe,
   listMyNotificationPreferences,
+  readDefaultAvatarId,
+  selectMyUserAvatar,
   setMyNotificationPreference,
+  uploadMyProfilePhoto,
+  type AdminRecord,
   type NotificationChannel,
   type NotificationPreference,
   type NotificationPreferenceType,
 } from "@/lib/admin-api"
+import { setMyProfilePhotoUrl } from "@/lib/my-profile-photo"
 import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { authService } from "@/services/authService"
@@ -50,6 +58,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/animate-ui/components/base/dialog"
 import {
   Tooltip,
   TooltipContent,
@@ -329,6 +345,16 @@ function AccountSettingsPanelContent({
   const [notificationPreferencesLoading, setNotificationPreferencesLoading] = React.useState(false)
   const [notificationPreferencesError, setNotificationPreferencesError] = React.useState<string | null>(null)
   const [notificationPreferenceBusyKey, setNotificationPreferenceBusyKey] = React.useState<string | null>(null)
+  const [profilePictureOpen, setProfilePictureOpen] = React.useState(false)
+  const [profilePictureSaving, setProfilePictureSaving] = React.useState(false)
+  const [profilePictureError, setProfilePictureError] = React.useState<string | null>(null)
+  const [profilePicturePreview, setProfilePicturePreview] = React.useState("")
+  const [profilePictureFile, setProfilePictureFile] = React.useState<File | null>(null)
+  const [profilePictureFileName, setProfilePictureFileName] = React.useState("")
+  const [defaultAvatars, setDefaultAvatars] = React.useState<AdminRecord[]>([])
+  const [defaultAvatarsLoading, setDefaultAvatarsLoading] = React.useState(false)
+  const [selectedDefaultAvatarId, setSelectedDefaultAvatarId] = React.useState<number | null>(null)
+  const profilePictureInputRef = React.useRef<HTMLInputElement | null>(null)
   const canManageDefaultAvatars =
     actor.ready &&
     canAccessDashboardRoute(
@@ -347,6 +373,90 @@ function AccountSettingsPanelContent({
     }
     setActiveTab(securityTabFromQuery(searchParams?.get("tab") ?? null))
   }, [hasHydrated, searchParams])
+
+  React.useEffect(() => {
+    if (!profilePictureOpen) return
+    const accessToken = resolveFreshAccessToken(token)
+    setProfilePictureError(null)
+    setProfilePicturePreview(profilePhotoUrl ?? "")
+    setProfilePictureFile(null)
+    setProfilePictureFileName("")
+    setSelectedDefaultAvatarId(null)
+    if (!accessToken) return
+
+    let cancelled = false
+    setDefaultAvatarsLoading(true)
+    void listSelectableAvatarsForMe(accessToken)
+      .then((rows) => {
+        if (!cancelled) setDefaultAvatars(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setDefaultAvatars([])
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultAvatarsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [profilePictureOpen, profilePhotoUrl, token])
+
+  const handleProfilePictureFile = React.useCallback((file: File | null) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      setProfilePictureError("Please choose a PNG, JPG, or WEBP image.")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProfilePictureError("Please choose an image smaller than 5 MB.")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const preview = typeof reader.result === "string" ? reader.result : ""
+      if (!preview) {
+        setProfilePictureError("We couldn't read that image. Please choose another file.")
+        return
+      }
+      setProfilePictureError(null)
+      setProfilePictureFile(file)
+      setProfilePictureFileName(file.name)
+      setSelectedDefaultAvatarId(null)
+      setProfilePicturePreview(preview)
+    }
+    reader.onerror = () => setProfilePictureError("We couldn't read that image. Please choose another file.")
+    reader.readAsDataURL(file)
+  }, [])
+
+  const saveProfilePicture = React.useCallback(async () => {
+    const accessToken = resolveFreshAccessToken(token)
+    if (!accessToken) {
+      setProfilePictureError("Session expired. Please sign in again.")
+      return
+    }
+    if (!profilePictureFile && selectedDefaultAvatarId == null) {
+      setProfilePictureError("Choose a default avatar or upload an image first.")
+      return
+    }
+
+    setProfilePictureSaving(true)
+    setProfilePictureError(null)
+    try {
+      const result = profilePictureFile
+        ? await uploadMyProfilePhoto(accessToken, profilePictureFile)
+        : await selectMyUserAvatar(accessToken, selectedDefaultAvatarId!)
+      const savedUrl = extractProfilePhotoUrl(result) || profilePicturePreview
+      if (savedUrl) setMyProfilePhotoUrl(savedUrl)
+      toast.success(profilePictureFile ? "Profile picture updated." : "Default avatar applied.")
+      setProfilePictureOpen(false)
+    } catch (errorObject) {
+      setProfilePictureError(
+        errorObject instanceof Error ? errorObject.message : "Could not update your profile picture."
+      )
+    } finally {
+      setProfilePictureSaving(false)
+    }
+  }, [profilePictureFile, profilePicturePreview, selectedDefaultAvatarId, token])
 
   React.useEffect(() => {
     if (!hasHydrated) {
@@ -822,16 +932,132 @@ function AccountSettingsPanelContent({
                 </p>
               </div>
             </div>
-            <Link
-              href={profilePictureHref}
-              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground self-start sm:self-auto"
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start sm:self-auto"
+              onClick={() => setProfilePictureOpen(true)}
             >
               <ImageIcon className="size-4" />
               Change Profile Picture
-            </Link>
+            </Button>
           </CardContent>
         </Card>
       ) : null}
+      <Dialog open={profilePictureOpen} onOpenChange={setProfilePictureOpen}>
+        <DialogPopup from="bottom" className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Edit Profile Picture</DialogTitle>
+            <DialogDescription>
+              Pick a default avatar or upload your own image. The saved picture updates across the dashboard and account menu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-3">
+              <Avatar className="size-16 ring-2 ring-background shadow-sm" size="lg">
+                {profilePicturePreview ? (
+                  <AvatarImage src={profilePicturePreview} alt="Selected profile picture" />
+                ) : null}
+                <AvatarFallback className="text-lg font-semibold">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {profilePictureFileName || "Current profile picture"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  PNG, JPG, or WEBP up to 5 MB. Administrator uploads apply immediately.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label>Default avatars</Label>
+                {defaultAvatarsLoading ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" /> Loading
+                  </span>
+                ) : null}
+              </div>
+              {!defaultAvatarsLoading && defaultAvatars.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                  No default avatars are available yet. You can upload your own image below.
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {defaultAvatars.map((avatar) => {
+                    const id = readDefaultAvatarId(avatar)
+                    const imageUrl = extractDefaultAvatarImageUrl(avatar)
+                    if (id == null || !imageUrl) return null
+                    const selected = selectedDefaultAvatarId === Number(id)
+                    return (
+                      <button
+                        key={String(id)}
+                        type="button"
+                        className={`relative aspect-square overflow-hidden rounded-lg border-2 transition ${selected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-primary/30"}`}
+                        onClick={() => {
+                          setSelectedDefaultAvatarId(Number(id))
+                          setProfilePictureFile(null)
+                          setProfilePictureFileName(
+                            typeof avatar.avatar_name === "string" ? avatar.avatar_name : "Default avatar"
+                          )
+                          setProfilePicturePreview(imageUrl)
+                          setProfilePictureError(null)
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={imageUrl} alt="Default avatar" className="size-full object-cover" />
+                        {selected ? (
+                          <span className="absolute bottom-1 right-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <CheckCircle2 className="size-3.5" />
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="account-profile-picture">Upload your own image</Label>
+              <input
+                ref={profilePictureInputRef}
+                id="account-profile-picture"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                onChange={(event) => handleProfilePictureFile(event.target.files?.[0] ?? null)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-center"
+                onClick={() => profilePictureInputRef.current?.click()}
+              >
+                <ImageIcon className="size-4" /> Choose image
+              </Button>
+            </div>
+
+            {profilePictureError ? (
+              <div role="alert" className="rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                {profilePictureError}
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setProfilePictureOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveProfilePicture()} disabled={profilePictureSaving}>
+              {profilePictureSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+              Save picture
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
       {canManageDefaultAvatars ? (
         <Card>
           <CardHeader>

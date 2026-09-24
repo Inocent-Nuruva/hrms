@@ -41,9 +41,9 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm whitespace-nowrap outline-none transition select-none",
-        "hover:border-slate-300 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20",
-        "data-placeholder:font-medium data-placeholder:text-slate-400",
+        "flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-sm text-foreground whitespace-nowrap shadow-xs outline-none transition-colors select-none",
+        "hover:border-foreground/20 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15",
+        "data-placeholder:font-medium data-placeholder:text-muted-foreground",
         "not-data-placeholder:border-primary/50 not-data-placeholder:bg-primary/5 not-data-placeholder:font-semibold not-data-placeholder:text-primary",
         "data-popup-open:border-primary data-popup-open:ring-2 data-popup-open:ring-primary/20",
         "disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
@@ -131,19 +131,19 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "relative isolate z-[300] max-h-(--available-height) w-(--anchor-width) min-w-[min(100vw-2rem,16rem)] max-w-[calc(100vw-1.25rem)] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border border-slate-200 bg-popover text-popover-foreground shadow-xl duration-200 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "relative isolate z-[300] max-h-(--available-height) w-(--anchor-width) min-w-[min(100vw-2rem,16rem)] max-w-[calc(100vw-1.25rem)] origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-xl duration-150 ease-out data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
         >
           <div
-            className="sticky top-0 z-20 border-b border-slate-100 bg-popover p-2"
+            className="sticky top-0 z-20 border-b border-border bg-popover p-2"
             onKeyDown={(event) => event.stopPropagation()}
             onKeyUp={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div className="relative">
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-400" />
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 ref={searchInputRef}
                 value={query}
@@ -162,7 +162,7 @@ function SelectContent({
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                className="h-9 w-full rounded-md bg-slate-50 pr-3 pl-8 text-sm text-slate-900 outline-none ring-1 ring-slate-200 placeholder:text-slate-400 focus:bg-white focus:ring-primary/35"
+                className="h-8 w-full rounded-sm border border-input bg-muted/35 pr-3 pl-8 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/15"
               />
             </div>
           </div>
@@ -222,9 +222,9 @@ function SelectItem({
       data-slot="select-item"
       data-search-text={resolvedSearchText}
       className={cn(
-        "relative flex min-h-10 w-full cursor-default items-center gap-1.5 rounded-lg py-2 pr-8 pl-3 text-sm font-medium outline-hidden select-none",
-        "text-slate-800 hover:bg-slate-100",
-        "data-highlighted:bg-slate-100 data-highlighted:text-slate-900",
+        "relative flex min-h-9 w-full cursor-default items-center gap-1.5 rounded-md py-2 pr-8 pl-3 text-sm font-medium outline-hidden select-none",
+        "text-popover-foreground hover:bg-muted",
+        "data-highlighted:bg-muted data-highlighted:text-foreground",
         "data-selected:bg-primary data-selected:font-semibold data-selected:text-white",
         "data-selected:data-highlighted:bg-primary data-selected:data-highlighted:text-white",
         "data-disabled:pointer-events-none data-disabled:opacity-50",

@@ -397,6 +397,12 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   toolbarStart?: React.ReactNode;
   /** Extra actions rendered before Sort/Export (e.g. filter, refresh). */
   toolbarActions?: React.ReactNode;
+  /** Optional page-specific styling for the toolbar row. */
+  toolbarClassName?: string;
+  /** Optional page-specific styling for the bordered table frame. */
+  frameClassName?: string;
+  /** Use denser typography and row spacing for operational workspaces. */
+  compact?: boolean;
   enableColumnVisibility?: boolean;
   hiddenColumnKeys?: string[];
   storageKey?: string;
@@ -457,6 +463,9 @@ export function ResizableTable<T = Record<string, unknown>>({
   showToolbar = true,
   toolbarStart,
   toolbarActions,
+  toolbarClassName,
+  frameClassName,
+  compact = false,
   enableColumnVisibility = false,
   hiddenColumnKeys = [],
   storageKey
@@ -1046,12 +1055,17 @@ export function ResizableTable<T = Record<string, unknown>>({
   const sortableColumns = visibleTableColumns.filter((c) => c.sortable !== false);
 
   const toolbarButtonClass =
-    "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-medium text-foreground transition hover:bg-muted";
+    "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground shadow-xs transition-colors hover:border-primary/30 hover:bg-muted";
 
   return (
     <div className={`w-full min-w-0 max-w-full ${className}`}>
       {showToolbar ? (
-        <div className="mb-2 flex min-w-0 max-w-full items-center justify-between gap-1.5">
+        <div
+          className={cn(
+            "mb-2 flex min-w-0 max-w-full items-center justify-between gap-1.5",
+            toolbarClassName,
+          )}
+        >
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
             {toolbarStart}
           </div>
@@ -1201,7 +1215,12 @@ export function ResizableTable<T = Record<string, unknown>>({
         </div>
       ) : null}
 
-      <div className="relative max-w-full overflow-hidden rounded-lg border border-border/50 bg-background">
+      <div
+        className={cn(
+          "relative max-w-full overflow-hidden rounded-md border border-border bg-background shadow-xs",
+          frameClassName,
+        )}
+      >
         {/* overflow-y-clip: overflow-x-auto alone promotes y to auto and flashes a scrollbar during row enter animations */}
         <div
           className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
@@ -1212,7 +1231,12 @@ export function ResizableTable<T = Record<string, unknown>>({
             style={{ width: tableContentWidth > 0 ? tableContentWidth : undefined }}
           >
             {/* Header */}
-            <div className="flex py-1 text-base font-bold text-foreground bg-muted/5 border-b border-border w-full">
+            <div
+              className={cn(
+                "flex w-full border-b border-border bg-muted/5 py-1 text-base font-bold text-foreground",
+                compact && "min-h-9 bg-muted/20 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em]",
+              )}
+            >
               {showCheckboxes && (
                 <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
                   <input
@@ -1247,7 +1271,8 @@ export function ResizableTable<T = Record<string, unknown>>({
                 >
                   <div
                     className={cn(
-                      "relative flex flex-shrink-0 items-center border-r border-border px-1.5 text-base",
+                      "relative flex flex-shrink-0 items-center border-r border-border px-1.5",
+                      compact ? "text-[11px]" : "text-base",
                       isActions ? "justify-end overflow-visible" : "overflow-hidden",
                       canSort && "cursor-pointer select-none hover:text-foreground"
                     )}
@@ -1289,7 +1314,8 @@ export function ResizableTable<T = Record<string, unknown>>({
                       <div
                         key={rowId}
                         className={cn(
-                          "group relative flex w-full cursor-pointer border-b border-border py-1",
+                          "group relative flex w-full cursor-pointer border-b border-border",
+                          compact ? "min-h-11 py-0.5" : "py-1",
                           isSelected
                             ? "bg-muted/30"
                             : index % 2 === 1

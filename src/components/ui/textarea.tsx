@@ -23,10 +23,10 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         ref={ref}
         data-slot="textarea"
         className={cn(
-          "w-full resize-none rounded-md border border-gray-alpha-400 bg-background-100 font-sans text-geist-foreground outline-none duration-150 placeholder:text-gray-900 hover:border-gray-alpha-500 hover:ring-0",
+          "w-full resize-none rounded-md border border-input bg-background font-sans text-foreground shadow-xs outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-foreground/20 hover:ring-0",
           sizeClasses[size],
-          disabled && "cursor-not-allowed bg-gray-100 text-gray-700 placeholder:text-gray-700 placeholder:opacity-50",
-          error ? "border-red-900 text-error ring-4 ring-red-300" : "focus:border-gray-alpha-600 focus:shadow-focus-input",
+          disabled && "cursor-not-allowed bg-muted text-muted-foreground placeholder:text-muted-foreground placeholder:opacity-50",
+          error ? "border-destructive text-destructive ring-2 ring-destructive/15" : "focus:border-primary focus:ring-2 focus:ring-primary/15",
           className
         )}
         autoComplete="off"

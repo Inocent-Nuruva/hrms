@@ -39,7 +39,7 @@ function DialogBackdrop({ className, ...props }: DialogPrimitive.Backdrop.Props)
     <DialogPrimitive.Backdrop
       data-slot="dialog-backdrop"
       className={cn(
-        "fixed inset-0 z-50 bg-black/10 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 z-50 bg-black/30 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-[2px]",
         className
       )}
       {...props}
@@ -65,7 +65,7 @@ function DialogPopup({
       <DialogPrimitive.Popup
         data-slot="dialog-popup"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 touch-pan-y overscroll-contain overflow-y-auto rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl [scrollbar-gutter:stable] transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 sm:max-h-[min(90dvh,calc(100vh-1.5rem))] sm:w-[calc(100%-2rem)] sm:p-5",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 touch-pan-y overscroll-contain overflow-y-auto rounded-md border border-border bg-background p-4 text-foreground shadow-2xl [scrollbar-gutter:stable] transition duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 sm:max-h-[min(90dvh,calc(100vh-1.5rem))] sm:w-[calc(100%-2rem)] sm:p-5",
           fromClassName[from],
           className
         )}
@@ -78,7 +78,7 @@ function DialogPopup({
             render={
               <button
                 type="button"
-                className="absolute top-3 right-3 inline-flex size-7 items-center justify-center rounded-[min(var(--radius-md),12px)] bg-transparent text-[var(--primary)] transition hover:bg-[color:rgb(var(--primary-rgb)/0.08)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-[#eef2ff] dark:hover:bg-[#2a336d]"
+                className="absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-xs transition-colors hover:border-primary/30 hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
               />
             }
           >
@@ -95,7 +95,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("mb-4 flex flex-col gap-1.5 text-start", className)}
+      className={cn("mb-4 flex flex-col gap-1.5 border-b border-border pb-3 pr-9 text-start", className)}
       {...props}
     />
   )

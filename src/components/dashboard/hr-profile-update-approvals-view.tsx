@@ -1016,31 +1016,37 @@ export function HrProfileUpdateApprovalsView() {
     : ""
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <h2 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
-          Profile Update Approvals
-        </h2>
+    <section className="w-full min-w-0 max-w-full overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Profile updates
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Review employee updates before they are applied to official records
+          </p>
+        </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold !text-white"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-primary transition-colors hover:bg-muted disabled:opacity-60"
             onClick={() => void loadRequests()}
             disabled={loading}
+            aria-label="Refresh profile update requests"
+            title="Refresh"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
-            Refresh
           </button>
         </div>
       </div>
 
       {error ? (
-        <div className="rounded-lg bg-rose-500/[0.07] px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-500/15 dark:text-rose-300">
+        <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">
           {error}
         </div>
       ) : null}
 
-      <div className="min-w-0 max-w-full space-y-2">
+      <div className="min-w-0 max-w-full space-y-2 p-3">
         <div className="flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0 max-w-full">
             <h3 className="text-sm font-semibold tracking-tight text-foreground">Requests</h3>
@@ -1161,6 +1167,8 @@ export function HrProfileUpdateApprovalsView() {
             loading={loading}
             storageKey="hr-profile-update-approval-requests"
             showToolbar={false}
+            compact
+            frameClassName="rounded-none border border-border shadow-none"
             getRowId={(row) => getRequestId(row) || String(row.id ?? "")}
             onRowSelect={(id) => {
               if (id) openReview(id)
@@ -1358,6 +1366,6 @@ export function HrProfileUpdateApprovalsView() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </section>
   )
 }

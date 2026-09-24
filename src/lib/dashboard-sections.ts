@@ -15,7 +15,7 @@ export type DashboardSectionTabGroup = {
 
 const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    title: "People operations",
+    title: "Employee management",
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
       { title: "Inactive Employees", url: "/dashboard/employees/inactive" },
@@ -30,36 +30,21 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
 
 export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    title: "My details",
+    title: "My employee workspace",
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
       { title: "Organization", url: "/dashboard/me/organization" },
-    ],
-  },
-  {
-    title: "My requests",
-    items: [
       { title: "To do", url: "/dashboard/me/requests/actions" },
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
       { title: "Update details", url: "/dashboard/me/requests/profile-changes" },
       { title: "Resignation", url: "/dashboard/me/requests/resignation" },
-    ],
-  },
-  {
-    title: "My journey",
-    items: [
       { title: "Onboarding", url: "/dashboard/me/onboarding" },
       { title: "Offboarding", url: "/dashboard/me/offboarding" },
-    ],
-  },
-  {
-    title: "My team",
-    items: [
-      { title: "Overview", url: "/dashboard/me/team/overview" },
-      { title: "Members", url: "/dashboard/me/team/members" },
-      { title: "Attendance", url: "/dashboard/me/team/attendance" },
-      { title: "Actions", url: "/dashboard/me/team/actions" },
+      { title: "Team overview", url: "/dashboard/me/team/overview" },
+      { title: "Team members", url: "/dashboard/me/team/members" },
+      { title: "Team attendance", url: "/dashboard/me/team/attendance" },
+      { title: "Team actions", url: "/dashboard/me/team/actions" },
     ],
   },
 ]
@@ -95,11 +80,12 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Shift Management",
     items: [
+      { title: "Shift Schedules", url: "/dashboard/attendance/shift-schedules" },
       { title: "Shifts", url: "/dashboard/attendance/shifts" },
       { title: "Shift Breaks", url: "/dashboard/attendance/shift-breaks" },
       { title: "Shift Assignments", url: "/dashboard/attendance/shift-assignments" },
-      { title: "Shift Schedules", url: "/dashboard/attendance/shift-schedules" },
-      { title: "Rotation Groups and Rules", url: "/dashboard/attendance/shift-rotation-groups" },
+      { title: "Rotation Groups", url: "/dashboard/attendance/shift-rotation-groups" },
+      { title: "Rotation Rules", url: "/dashboard/attendance/shift-rotation-rules" },
     ],
   },
   {

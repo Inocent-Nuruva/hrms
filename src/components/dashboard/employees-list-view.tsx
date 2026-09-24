@@ -16,6 +16,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   EmployeeAccessRemovalDialog,
@@ -30,6 +40,7 @@ import {
   listEmployees,
   readTwoFactorEnabled,
   resetUserPassword,
+  resolveBackendMediaUrl,
   withNormalizedTwoFactorFields,
   type AdminRecord,
   type EmployeesQueryParams,
@@ -49,7 +60,14 @@ import {
 } from "@/lib/dashboard-permissions";
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import { env } from "@/lib/env";
-import { KeyRound, Trash2 } from "lucide-react";
+import {
+  KeyRound,
+  PlusIcon,
+  RefreshCwIcon,
+  SlidersHorizontalIcon,
+  Trash2,
+  UsersIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
@@ -57,6 +75,7 @@ const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt";
 const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated";
 const EMPLOYEE_LIST_CACHE_PREFIX = "hrms.employees.list";
 const EMPLOYEE_LIST_CACHE_TTL_MS = env.NEXT_PUBLIC_LIST_CACHE_TTL_LONG_MS;
+const ALL_STATUSES_VALUE = "__all_statuses__";
 const DEFAULT_QUERY: Required<
   Omit<EmployeesQueryParams, "employment_status">
 > & {
@@ -195,6 +214,81 @@ function employeeDisplayName(row: AdminRecord) {
   );
 }
 
+function employeeInitials(row: AdminRecord) {
+  return employeeDisplayName(row)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "E";
+}
+
+function employeePhotoUrl(row: AdminRecord) {
+  const user = asRecord(row.user) ?? asRecord(row.company_user);
+  const nestedUser = asRecord(user?.user);
+  const candidates = [
+    readString(row, [
+      "profile_photo_url",
+      "profilePhotoUrl",
+      "avatar_url",
+      "avatarUrl",
+      "photo_url",
+    ]),
+    (user
+      ? readString(user, [
+          "profile_photo_url",
+          "profilePhotoUrl",
+          "avatar_url",
+          "avatarUrl",
+          "photo_url",
+        ])
+      : ""),
+    (nestedUser
+      ? readString(nestedUser, [
+          "profile_photo_url",
+          "profilePhotoUrl",
+          "avatar_url",
+          "avatarUrl",
+          "photo_url",
+        ])
+      : ""),
+  ];
+  const value = candidates.find((candidate) => candidate && candidate !== "-") ?? "";
+
+  return value ? resolveBackendMediaUrl(value) : null;
+}
+
+function employeeNumber(row: AdminRecord) {
+  return readString(row, [
+    "employee_no",
+    "employeeNo",
+    "user_no",
+    "employee_number",
+    "employeeNumber",
+  ]);
+}
+
+function employeeDepartment(row: AdminRecord) {
+  const direct = readString(row, ["department_name", "departmentName"]);
+  if (direct !== "-") return direct;
+  const primary = readNestedName(row.primary_department);
+  return primary !== "—" ? primary : readNestedName(row.department);
+}
+
+function employeePosition(row: AdminRecord) {
+  const direct = readString(row, ["position_name", "positionName"]);
+  if (direct !== "-") return direct;
+  const primary = readNestedName(row.primary_position);
+  return primary !== "—" ? primary : readNestedName(row.position);
+}
+
+function employeeBranch(row: AdminRecord) {
+  const direct = readString(row, ["branch_name", "branchName"]);
+  if (direct !== "-") return direct;
+  const primary = readNestedName(row.primary_branch);
+  return primary !== "—" ? primary : readNestedName(row.branch);
+}
+
 function employeeRecordId(row: AdminRecord): number | null {
   const idRaw = row.id ?? row.employee_id ?? row.employeeId;
   if (typeof idRaw === "number" && Number.isFinite(idRaw)) {
@@ -331,6 +425,30 @@ export function EmployeesListView({
   const canArchiveEmployees =
     directoryMode === "current" &&
     canPerformPermission(actor.permissionLabels, "employees:delete");
+  const canAddEmployee =
+    directoryMode === "current" &&
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/employees/registration",
+      actor.permissionLabels,
+      actor.accessMode,
+    );
+  const directoryStats = React.useMemo(() => {
+    let active = 0;
+    let onboarding = 0;
+    let inactive = 0;
+
+    rows.forEach((row) => {
+      const status = employeeEmploymentStatus(row);
+      if (status === "active") active += 1;
+      else if (status === "onboarding") onboarding += 1;
+      else if (["inactive", "terminated", "offboarding"].includes(status)) {
+        inactive += 1;
+      }
+    });
+
+    return { active, onboarding, inactive };
+  }, [rows]);
 
   // Defense in depth: never render the company directory for employee shell users.
   React.useEffect(() => {
@@ -803,70 +921,63 @@ export function EmployeesListView({
   const employeeColumns = React.useMemo<Column<AdminRecord>[]>(
     () => [
       {
-        key: "employee_no",
-        label: "No",
-        defaultWidth: 80,
+        key: "employee",
+        label: "Employee details",
+        defaultWidth: 240,
         sortable: true,
-        render: (row: AdminRecord) =>
-          readString(row, [
-            "employee_no",
-            "employeeNo",
-            "user_no",
-            "employee_number",
-            "employeeNumber",
-          ]),
-      },
-      {
-        key: "name",
-        label: "Name",
-        defaultWidth: 120,
-        sortable: true,
-        render: (row: AdminRecord) => employeeDisplayName(row),
+        sortValue: (row: AdminRecord) => employeeDisplayName(row),
+        render: (row: AdminRecord) => {
+          const name = employeeDisplayName(row);
+          const position = employeePosition(row);
+          const number = employeeNumber(row);
+          const photoUrl = employeePhotoUrl(row);
+          return (
+            <div className="flex min-w-0 items-center gap-2.5 py-1">
+              <Avatar className="size-8 shrink-0 ring-1 ring-border">
+                {photoUrl ? <AvatarImage src={photoUrl} alt={name} /> : null}
+                <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">
+                  {employeeInitials(row)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-foreground">{name}</p>
+                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                  {position !== "—" && position !== "-" ? position : "Position not assigned"}
+                  {number !== "-" ? ` · ${number}` : ""}
+                </p>
+              </div>
+            </div>
+          );
+        },
       },
       {
         key: "department",
-        label: "Dept",
-        defaultWidth: 90,
+        label: "Department",
+        defaultWidth: 145,
         sortable: true,
-        render: (row: AdminRecord) => {
-          const directDepartmentName = readString(row, [
-            "department_name",
-            "departmentName",
-          ]);
-          if (directDepartmentName !== "-") {
-            return directDepartmentName;
-          }
-          const primaryDepartmentName = readNestedName(row.primary_department);
-          if (primaryDepartmentName !== "—") {
-            return primaryDepartmentName;
-          }
-          return readNestedName(row.department);
-        },
+        sortValue: employeeDepartment,
+        render: (row: AdminRecord) => (
+          <span className="truncate text-xs font-medium text-foreground/85">
+            {employeeDepartment(row)}
+          </span>
+        ),
       },
       {
-        key: "position",
-        label: "Position",
-        defaultWidth: 100,
+        key: "branch",
+        label: "Location",
+        defaultWidth: 125,
         sortable: true,
-        render: (row: AdminRecord) => {
-          const directPositionName = readString(row, [
-            "position_name",
-            "positionName",
-          ]);
-          if (directPositionName !== "-") {
-            return directPositionName;
-          }
-          const primaryPositionName = readNestedName(row.primary_position);
-          if (primaryPositionName !== "—") {
-            return primaryPositionName;
-          }
-          return readNestedName(row.position);
-        },
+        sortValue: employeeBranch,
+        render: (row: AdminRecord) => (
+          <span className="truncate text-xs text-muted-foreground">
+            {employeeBranch(row)}
+          </span>
+        ),
       },
       {
         key: "hireDate",
         label: "Hired",
-        defaultWidth: 70,
+        defaultWidth: 105,
         sortable: true,
         render: (row: AdminRecord) => {
           const raw = readString(row, [
@@ -885,7 +996,7 @@ export function EmployeesListView({
       {
         key: "status",
         label: "Status",
-        defaultWidth: 130,
+        defaultWidth: 105,
         sortable: true,
         render: (row: AdminRecord) => {
           const s = (
@@ -930,14 +1041,14 @@ export function EmployeesListView({
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 80,
+        defaultWidth: 175,
         sortable: false,
         render: (row: AdminRecord) => (
           <div
             className="flex items-center justify-end gap-2"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-[10px] font-medium text-muted-foreground">
               2FA
             </span>
             <Switch
@@ -959,7 +1070,7 @@ export function EmployeesListView({
             />
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canManageTwoFactor || employeeUserId(row) == null}
               title={
                 !canManageTwoFactor
@@ -979,7 +1090,7 @@ export function EmployeesListView({
             {canRemoveEmployee ? (
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50"
+                className="inline-flex size-7 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
                 title="Remove / disable access"
                 aria-label="Remove or disable access"
                 onClick={(event) => {
@@ -1004,11 +1115,49 @@ export function EmployeesListView({
   );
 
   return (
-    <div className="space-y-2">
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+    <section className="overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            {directoryMode === "inactive" ? "Inactive employees" : "All employees"}
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            {directoryMode === "inactive"
+              ? "Review former employees and retained employment records"
+              : "Manage employee records, account security, and workforce access"}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+            <UsersIcon className="size-3.5 text-primary" />
+            {total ?? rows.length} {(total ?? rows.length) === 1 ? "person" : "people"}
+          </span>
+          <span>{rows.length} shown</span>
+          {directoryMode === "current" ? (
+            <>
+              <span className="text-emerald-600 dark:text-emerald-400">
+                {directoryStats.active} active
+              </span>
+              <span className="text-sky-600 dark:text-sky-400">
+                {directoryStats.onboarding} onboarding
+              </span>
+            </>
+          ) : (
+            <span className="text-rose-600 dark:text-rose-400">
+              {directoryStats.inactive} inactive
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error ? (
+        <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">
+          {error}
+        </div>
+      ) : null}
 
       <ResizableTable
-        title={directoryMode === "inactive" ? "Inactive Employees" : "Employees"}
+        title="Employee"
         data={rows}
         columns={employeeColumns}
         onRowSelect={(id, row) => {
@@ -1021,16 +1170,24 @@ export function EmployeesListView({
         loading={loading}
         storageKey="employees"
         enableAnimations
+        enableColumnVisibility
+        compact
         itemsPerPage={query.limit}
         page={page}
         totalPages={totalPages}
         totalItems={total}
         onPageChange={setPage}
+        className="[&>div:last-child]:mb-2"
+        toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+        frameClassName="rounded-none border-0 shadow-none"
         toolbarStart={
           <>
+            <span className="hidden shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:flex">
+              <SlidersHorizontalIcon className="size-3" /> Filters
+            </span>
             <SearchToggleField
-              className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
-              placeholder="Search name, email, phone, or employee no"
+              className="min-w-0 !w-auto !max-w-[15rem] !flex-none"
+              placeholder="Search employees"
               value={query.search}
               onChange={(value) => {
                 setPage(1);
@@ -1038,41 +1195,73 @@ export function EmployeesListView({
               }}
             />
             {directoryMode === "current" ? (
-              <select
-                className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-                value={query.employment_status}
-                onChange={(event) => {
+              <Select
+                value={query.employment_status || ALL_STATUSES_VALUE}
+                onValueChange={(value) => {
                   setPage(1);
                   setQuery((previous) => ({
                     ...previous,
-                    employment_status: event.target
-                      .value as typeof previous.employment_status,
+                    employment_status:
+                      value === ALL_STATUSES_VALUE
+                        ? ""
+                        : (value as typeof previous.employment_status),
                   }));
                 }}
-                aria-label="Filter employment status"
               >
-                <option value="">All statuses</option>
-                <option value="onboarding">Onboarding</option>
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-              </select>
+                <SelectTrigger size="sm" className="w-36 bg-background" aria-label="Filter employment status">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
+                    <SelectItem value="onboarding">Onboarding</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             ) : null}
           </>
         }
         toolbarActions={
-          canArchiveEmployees && selectedEmployees.length > 0 ? (
-            <button
+          <>
+            {canArchiveEmployees && selectedEmployees.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"
+                onClick={() => {
+                  setBulkArchiveResults([]);
+                  setBulkArchiveOpen(true);
+                }}
+              >
+                <Trash2 data-icon="inline-start" />
+                Archive ({selectedEmployees.length})
+              </Button>
+            ) : null}
+            <Button
               type="button"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2 text-xs font-medium text-rose-700 hover:bg-rose-100"
-              onClick={() => {
-                setBulkArchiveResults([]);
-                setBulkArchiveOpen(true);
-              }}
+              variant="outline"
+              size="icon-sm"
+              disabled={loading}
+              aria-label="Refresh employees"
+              title="Refresh employees"
+              onClick={() => void fetchEmployees()}
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Archive selected ({selectedEmployees.length})
-            </button>
-          ) : null
+              <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
+            </Button>
+            {canAddEmployee ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => router.push("/dashboard/employees/registration")}
+              >
+                <PlusIcon data-icon="inline-start" />
+                Add employee
+              </Button>
+            ) : null}
+          </>
         }
       />
 
@@ -1279,6 +1468,6 @@ export function EmployeesListView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </section>
   );
 }

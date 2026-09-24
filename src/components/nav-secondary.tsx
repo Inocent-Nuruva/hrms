@@ -35,6 +35,7 @@ type SearchItem = {
 }
 
 const RECENT_SEARCHES_STORAGE_KEY = "hrms.global-search.recent.v1"
+export const OPEN_GLOBAL_SEARCH_EVENT = "hrms:open-global-search"
 
 function normalizeSearchValue(value: string) {
   return value.trim().toLowerCase()
@@ -173,7 +174,10 @@ export function NavSecondary({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if (
+        (event.metaKey || event.ctrlKey)
+        && (event.key.toLowerCase() === "k" || event.key === "/")
+      ) {
         event.preventDefault()
         setIsSearchOpen(true)
         return
@@ -204,6 +208,12 @@ export function NavSecondary({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [activeIndex, isSearchOpen, runGlobalNavigation, searchResults])
 
+  React.useEffect(() => {
+    const openGlobalSearch = () => setIsSearchOpen(true)
+    window.addEventListener(OPEN_GLOBAL_SEARCH_EVENT, openGlobalSearch)
+    return () => window.removeEventListener(OPEN_GLOBAL_SEARCH_EVENT, openGlobalSearch)
+  }, [])
+
   return (
     <SidebarGroup className="p-0" {...props}>
       <SidebarGroupContent>
@@ -225,7 +235,7 @@ export function NavSecondary({
                       {item.icon}
                       <span className="truncate">{item.title}</span>
                       <kbd className="ml-auto rounded border border-primary/20 bg-primary/10 px-1 py-px text-[10px] font-medium leading-none text-primary">
-                        Ctrl K
+                        Ctrl /
                       </kbd>
                     </DialogTrigger>
                     <DialogPopup

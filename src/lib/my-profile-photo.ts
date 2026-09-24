@@ -31,6 +31,27 @@ export function getMyProfilePhotoRevision(): number {
   return photoRevision
 }
 
+/**
+ * Append the current photo revision to a remote URL so browsers reload an
+ * image even when storage reuses the same public path after an update.
+ */
+export function withMyProfilePhotoRevision(
+  url: string | null | undefined,
+  revision = photoRevision
+): string | null {
+  const value = typeof url === "string" ? url.trim() : ""
+  if (!value) return null
+  if (value.startsWith("data:") || value.startsWith("blob:") || revision <= 0) {
+    return value
+  }
+
+  const hashIndex = value.indexOf("#")
+  const base = hashIndex >= 0 ? value.slice(0, hashIndex) : value
+  const hash = hashIndex >= 0 ? value.slice(hashIndex) : ""
+  const joiner = base.includes("?") ? "&" : "?"
+  return `${base}${joiner}profilePhotoRevision=${revision}${hash}`
+}
+
 export function hasLoadedMyProfilePhoto(): boolean {
   return cachedUrl !== undefined
 }

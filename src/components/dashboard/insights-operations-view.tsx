@@ -54,6 +54,7 @@ import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { describeSecurityEvent } from "@/lib/security-event-plain"
+import { cn } from "@/lib/utils"
 import {
   isEmployeeReady,
   parseReadinessChecks,
@@ -219,6 +220,86 @@ function ManagerStatList({
   )
 }
 
+function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
+  const attendance = asRecord(dashboard?.attendance) ?? dashboard
+  const performance = asRecord(dashboard?.performance) ?? dashboard
+  const present = readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0
+  const late = readNumber(attendance, ["late", "late_arrivals", "lateArrivals"]) ?? 0
+  const absent = readNumber(attendance, ["absent", "absent_today", "absentToday"]) ?? 0
+  const attendanceTotal = Math.max(1, present + late + absent)
+  const attendanceRate = Math.round(((present + late) / attendanceTotal) * 1000) / 10
+  const published = readNumber(performance, ["published_team_reviews", "publishedTeamReviews", "published_reviews"]) ?? 0
+  const pending = readNumber(performance, ["pending_team_validations", "pendingTeamValidations", "pending_validations"]) ?? 0
+  const approved = readNumber(performance, ["approved_reports", "approvedReports", "approved_daily_reports"]) ?? 0
+  const rawScore = readNumber(performance, ["average_score", "averageScore", "performance_score", "performanceScore"])
+  const performanceScore = rawScore !== null
+    ? Math.min(100, Math.round((rawScore <= 5 ? rawScore * 20 : rawScore) * 10) / 10)
+    : published + pending > 0
+      ? Math.round((published / (published + pending)) * 1000) / 10
+      : 0
+  const attendanceBars = [
+    { label: "On time", value: present, color: "bg-emerald-500" },
+    { label: "Late", value: late, color: "bg-amber-300" },
+    { label: "Absent", value: absent, color: "bg-rose-300" },
+  ]
+  const performanceBars = [
+    { label: "Reviews", value: published },
+    { label: "Pending", value: pending },
+    { label: "Approved", value: approved },
+  ]
+  const attendanceMax = Math.max(1, ...attendanceBars.map((item) => item.value))
+  const performanceMax = Math.max(1, ...performanceBars.map((item) => item.value))
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
+            <div className="mt-3 flex items-end gap-2">
+              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">{attendanceRate}%</span>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">Attendance rate</span>
+            </div>
+          </div>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">Selected period</span>
+        </div>
+        <div className="mt-6 flex h-40 items-end justify-around gap-6 border-b border-border/60 px-4 pb-2">
+          {attendanceBars.map((item) => (
+            <div key={item.label} className="flex h-full min-w-16 flex-1 flex-col items-center justify-end gap-2">
+              <span className="text-xs font-semibold tabular-nums text-foreground">{item.value}</span>
+              <span className={cn("w-full max-w-16 rounded-t-md", item.color)} style={{ height: `${Math.max(8, (item.value / attendanceMax) * 75)}%` }} />
+              <span className="text-[10px] text-muted-foreground">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Team performance</h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">Reviews and approved work</p>
+          </div>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">This period</span>
+        </div>
+        <p className="mt-5 text-3xl font-semibold leading-none tabular-nums text-foreground">{performanceScore}%</p>
+        <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">Current performance score</p>
+        <div className="mt-5 flex h-28 items-end justify-around gap-3 border-b border-border/60 pb-2">
+          {performanceBars.map((item) => (
+            <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
+              <div className="flex h-20 items-end gap-1">
+                <span className="w-3 rounded-t bg-emerald-500/20" style={{ height: `${Math.max(10, (item.value / performanceMax) * 65)}%` }} />
+                <span className="w-3 rounded-t bg-emerald-500" style={{ height: `${Math.max(14, (item.value / performanceMax) * 100)}%` }} />
+              </div>
+              <span className="truncate text-[9px] text-muted-foreground">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }) {
   const team = asRecord(dashboard?.team)
   const attendance = asRecord(dashboard?.attendance)
@@ -295,6 +376,7 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
 
   return (
     <>
+      <ScopedInsightPanels dashboard={dashboard} />
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <dl className="grid sm:grid-cols-2 xl:grid-cols-4">
           {summaryItems.map((item, index) => (
@@ -810,13 +892,16 @@ export function InsightsOperationsView({
           {activeTab === "manager" ? (
             <ManagerDashboardPanels dashboard={dashboard} />
           ) : (
-            <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
-              {metrics.length > 0 ? metrics.map((item) => (
-                <MetricTile key={item.label} label={item.label} value={item.value} />
-              )) : (
-                <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
-              )}
-            </motion.div>
+            <>
+              {activeTab === "management" ? <ScopedInsightPanels dashboard={dashboard} /> : null}
+              <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
+                {metrics.length > 0 ? metrics.map((item) => (
+                  <MetricTile key={item.label} label={item.label} value={item.value} />
+                )) : (
+                  <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
+                )}
+              </motion.div>
+            </>
           )}
         </>
       ) : (

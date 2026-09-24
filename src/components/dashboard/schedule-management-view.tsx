@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Clock3Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { Clock3Icon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
 
 import {
   buildFormDraftStorageKey,
@@ -23,7 +23,9 @@ import {
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { ShiftWeeklyScheduler } from "@/components/dashboard/shift-weekly-scheduler"
 import {
   createShiftResource,
   createTimetableResource,
@@ -37,6 +39,7 @@ import {
   listBranches,
   listDepartments,
   listAllEmployees,
+  listLeaveRequests,
   listUsers,
   listShiftResources,
   listTimetableResources,
@@ -89,6 +92,8 @@ type LookupState = {
   departments: AdminRecord[]
   employees: AdminRecord[]
   shifts: AdminRecord[]
+  shiftAssignments: AdminRecord[]
+  leaveRequests: AdminRecord[]
   timetables: AdminRecord[]
   holidays: AdminRecord[]
   holidayGroups: AdminRecord[]
@@ -519,6 +524,8 @@ const EMPTY_LOOKUPS: LookupState = {
   departments: [],
   employees: [],
   shifts: [],
+  shiftAssignments: [],
+  leaveRequests: [],
   timetables: [],
   holidays: [],
   holidayGroups: [],
@@ -573,6 +580,28 @@ function prettifyLabel(value: string): string {
 
 function isIsoDateString(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)
+}
+
+function currentLocalDateKey() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, "0")
+  const day = String(today.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function ensureShiftScheduleDateIsNotPast(value: unknown) {
+  const scheduleDate = typeof value === "string" ? value.slice(0, 10) : ""
+  if (scheduleDate && scheduleDate < currentLocalDateKey()) {
+    throw new Error("Shift schedules cannot be created or changed for previous days.")
+  }
+}
+
+function ensureShiftScheduleCanBeRemoved(value: unknown) {
+  const scheduleDate = typeof value === "string" ? value.slice(0, 10) : ""
+  if (!scheduleDate || scheduleDate <= currentLocalDateKey()) {
+    throw new Error("Only future shift schedules that have not started can be removed.")
+  }
 }
 
 function isTimeValue(value: string) {
@@ -1214,6 +1243,26 @@ async function listScheduleRows(token: string, section: ScheduleSectionKey) {
   })
 }
 
+async function listAllApprovedLeaveRequests(token: string) {
+  const rows: AdminRecord[] = []
+  const pageSize = 100
+  for (let page = 1; page <= 50; page += 1) {
+    const result = await listLeaveRequests(token, {
+      page,
+      limit: pageSize,
+      status: "approved",
+      sortBy: "start_date",
+      sortOrder: "DESC",
+    })
+    rows.push(...result.rows)
+    const reachedEnd = result.rows.length < pageSize
+      || (result.totalPages !== null && page >= result.totalPages)
+      || (result.total !== null && rows.length >= result.total)
+    if (reachedEnd) break
+  }
+  return { rows }
+}
+
 async function getScheduleRow(token: string, section: ScheduleSectionKey, id: string | number) {
   const config = SECTION_CONFIG[section]
   return config.module === "shift"
@@ -1784,11 +1833,18 @@ export function ScheduleManagementView({ section }: { section: string }) {
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialFormState)
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
+  const [clearingAssignedShift, setClearingAssignedShift] = React.useState<{
+    employeeId: string
+    date: string
+    shiftId: string
+  } | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
+  const [managementSearch, setManagementSearch] = React.useState("")
+  const [managementFilter, setManagementFilter] = React.useState("ALL")
   const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
     readStoredCompanyName()
   )
@@ -1798,6 +1854,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setEditValues(initialFormState)
     setEditingId("")
     setDeletingId("")
+    setClearingAssignedShift(null)
     setSelectedRow(null)
     setDetailsOpen(false)
     setError(null)
@@ -1805,6 +1862,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setFormError(null)
     setLookupError(null)
     setCurrentUserId(null)
+    setManagementSearch("")
+    setManagementFilter("ALL")
   }, [activeSection, createDraftKey, initialFormState])
 
   React.useEffect(() => {
@@ -1870,6 +1929,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
           departmentsResult,
           employeesResult,
           shiftsResult,
+          shiftAssignmentsResult,
+          leaveRequestsResult,
           timetablesResult,
           holidaysResult,
           holidayGroupsResult,
@@ -1892,7 +1953,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               return { rows: fallback.rows }
             })
             : Promise.resolve({ rows: [] }),
-          [
+          activeSection === "shift-schedules" || [
             "shift_id",
             "current_shift_id",
             "requested_shift_id",
@@ -1902,6 +1963,17 @@ export function ScheduleManagementView({ section }: { section: string }) {
             "configuration_default_shift_id",
           ].some((key) => needed.has(key))
             ? listShiftResources(token, "shifts", { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+            : Promise.resolve({ rows: [] }),
+          activeSection === "shift-schedules"
+            ? listShiftResources(token, "shift-assignments", {
+              page: 1,
+              limit: 100,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+            : Promise.resolve({ rows: [] }),
+          activeSection === "shift-schedules"
+            ? listAllApprovedLeaveRequests(token)
             : Promise.resolve({ rows: [] }),
           needed.has("timetable_id")
             ? listTimetableResources(token, "timetables", {
@@ -1959,6 +2031,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
           departments: resolveRows(departmentsResult, "departments"),
           employees: resolveRows(employeesResult, "employees"),
           shifts: resolveRows(shiftsResult, "shifts"),
+          shiftAssignments: resolveRows(shiftAssignmentsResult, "shift assignments"),
+          leaveRequests: resolveRows(leaveRequestsResult, "approved leave"),
           timetables: resolveRows(timetablesResult, "timetables"),
           holidays: resolveRows(holidaysResult, "holidays"),
           holidayGroups: resolveRows(holidayGroupsResult, "holiday groups"),
@@ -1986,7 +2060,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     return () => {
       cancelled = true
     }
-  }, [fields])
+  }, [activeSection, fields])
 
   const fetchRows = React.useCallback(async () => {
     const token = readStoredToken()
@@ -2018,9 +2092,72 @@ export function ScheduleManagementView({ section }: { section: string }) {
     () => buildScheduleLookupLabelMaps(lookups, currentCompanyName),
     [currentCompanyName, lookups]
   )
+  const enhancedShiftList = [
+    "shifts",
+    "shift-breaks",
+    "shift-assignments",
+    "shift-rotation-groups",
+    "shift-rotation-rules",
+  ].includes(activeSection)
+  const filteredManagementRows = React.useMemo(() => {
+    if (!enhancedShiftList) return rows
+    const query = managementSearch.trim().toLowerCase()
+    return rows.filter((row) => {
+      const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
+      if (
+        managementFilter !== "ALL"
+        && activeSection !== "shift-breaks"
+        && activeSection !== "shift-rotation-rules"
+        && status !== managementFilter
+      ) return false
+      if (activeSection === "shift-breaks" && managementFilter !== "ALL") {
+        const isPaid = row.is_paid === true || row.isPaid === true
+        if (managementFilter === "PAID" && !isPaid) return false
+        if (managementFilter === "UNPAID" && isPaid) return false
+      }
+      if (activeSection === "shift-rotation-rules" && managementFilter !== "ALL") {
+        const isOffDay = row.is_off_day === true || row.isOffDay === true
+        if (managementFilter === "OFF_DAY" && !isOffDay) return false
+        if (managementFilter === "WORKING" && isOffDay) return false
+      }
+      if (!query) return true
+      const scalarValues = Object.values(row)
+        .filter((value) => ["string", "number", "boolean"].includes(typeof value))
+        .map((value) => String(value))
+      const employeeId = row.employee_id ?? row.employeeId
+      const shiftId = row.shift_id ?? row.shiftId
+      const rotationGroupId = row.rotation_group_id ?? row.rotationGroupId
+      const relationLabels = [
+        employeeId === null || employeeId === undefined ? "" : lookupMaps.employee_id?.get(String(employeeId)) || "",
+        shiftId === null || shiftId === undefined ? "" : lookupMaps.shift_id?.get(String(shiftId)) || "",
+        rotationGroupId === null || rotationGroupId === undefined ? "" : lookupMaps.rotation_group_id?.get(String(rotationGroupId)) || "",
+      ]
+      return [...scalarValues, ...relationLabels].some((value) => value.toLowerCase().includes(query))
+    })
+  }, [activeSection, enhancedShiftList, lookupMaps, managementFilter, managementSearch, rows])
+  const activeShiftCount = React.useMemo(
+    () => rows.filter((row) => (readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE") === "ACTIVE").length,
+    [rows]
+  )
+  const nightShiftCount = React.useMemo(
+    () => rows.filter((row) => row.is_night_shift === true || row.isNightShift === true).length,
+    [rows]
+  )
+  const paidBreakCount = React.useMemo(
+    () => rows.filter((row) => row.is_paid === true || row.isPaid === true).length,
+    [rows]
+  )
+  const primaryAssignmentCount = React.useMemo(
+    () => rows.filter((row) => row.is_primary === true || row.isPrimary === true).length,
+    [rows]
+  )
+  const offDayRuleCount = React.useMemo(
+    () => rows.filter((row) => row.is_off_day === true || row.isOffDay === true).length,
+    [rows]
+  )
 
   // Defined before tableColumns so the actions column can reference it safely.
-  const openEdit = React.useCallback(async (id: string) => {
+  const openEdit = React.useCallback(async (id: string, overrides?: Record<string, string>) => {
     const token = readStoredToken()
     if (!token) {
       setFormError("Authentication required. Please log in again.")
@@ -2036,7 +2173,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
       const initialEditState = buildEditValues(fields, record)
       const initialEditDraftKey = buildFormDraftStorageKey(`schedule:${activeSection}:edit:${id}`)
       clearPersistedFormState(initialEditDraftKey)
-      setEditValues(initialEditState)
+      setEditValues({ ...initialEditState, ...overrides })
       setFormError(null)
       setEditOpen(true)
     } catch (errorObject) {
@@ -2044,16 +2181,26 @@ export function ScheduleManagementView({ section }: { section: string }) {
     }
   }, [activeSection, fields])
 
+  const openCreate = React.useCallback((prefill?: {
+    employeeId?: string
+    employeeIds?: string[]
+    scheduleDate?: string
+    shiftId?: string
+  }) => {
+    setFormError(null)
+    setCreateValues((current) => ({
+      ...current,
+      ...(prefill?.employeeId ? { employee_id: prefill.employeeId, employee_ids: "" } : {}),
+      ...(prefill?.employeeIds?.length ? { employee_id: "", employee_ids: prefill.employeeIds.join(",") } : {}),
+      ...(prefill?.scheduleDate ? { schedule_date: prefill.scheduleDate } : {}),
+      ...(prefill?.shiftId ? { shift_id: prefill.shiftId, override_shift_id: "", is_off_day: "false" } : {}),
+    }))
+    setCreateOpen(true)
+  }, [])
+
   const tableColumns = React.useMemo(
-    () => [
-      ...columns.map((column) => ({
-        key: column,
-        label: fields.find((field) => field.key === column)?.label ?? prettifyLabel(column),
-        defaultWidth: column === "name" ? 180 : column === "status" ? 90 : 150,
-        sortable: true,
-        render: (row: AdminRecord) => resolveScheduleCellValue(column, row, lookupMaps),
-      })),
-      {
+    () => {
+      const actionColumn = {
         key: "actions",
         label: "Actions",
         defaultWidth: 82,
@@ -2065,7 +2212,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
               <button
                 className="admin-table-icon-button"
                 type="button"
-                aria-label="Edit"
+                aria-label={activeSection === "shifts" ? "Edit shift" : "Edit"}
+                title="Edit"
                 onClick={() => {
                   void openEdit(rowId)
                 }}
@@ -2076,7 +2224,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
                 className="admin-table-icon-button"
                 data-variant="danger"
                 type="button"
-                aria-label="Delete"
+                aria-label={activeSection === "shifts" ? "Delete shift" : "Delete"}
+                title="Delete"
                 onClick={() => {
                   setDeletingId(rowId)
                   setDeleteOpen(true)
@@ -2087,9 +2236,415 @@ export function ScheduleManagementView({ section }: { section: string }) {
             </div>
           )
         },
-      },
-    ],
-    [columns, fields, lookupMaps, openEdit]
+      }
+
+      if (activeSection === "shifts") {
+        return [
+          {
+            key: "name",
+            label: "Shift",
+            defaultWidth: 245,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const name = readStringFromRecord(row, ["name", "shift_name", "shiftName"]) || "Unnamed shift"
+              const code = readStringFromRecord(row, ["code"])
+              const description = readStringFromRecord(row, ["description"])
+              return (
+                <div className="flex min-w-0 items-center gap-2.5 py-1">
+                  <span className="h-8 w-1 shrink-0 bg-primary" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-foreground">{name}</span>
+                      {code ? (
+                        <span className="shrink-0 bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {code}
+                        </span>
+                      ) : null}
+                    </span>
+                    {description ? <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{description}</span> : null}
+                  </span>
+                </div>
+              )
+            },
+          },
+          {
+            key: "schedule_summary",
+            label: "Working hours",
+            defaultWidth: 190,
+            sortable: true,
+            sortValue: (row: AdminRecord) => readStringFromRecord(row, ["start_time", "startTime"]),
+            render: (row: AdminRecord) => {
+              const start = readStringFromRecord(row, ["start_time", "startTime"])
+              const end = readStringFromRecord(row, ["end_time", "endTime"])
+              const expectedMinutes = readNumberFromRecord(row, ["expected_work_minutes", "expectedWorkMinutes"])
+              const duration = expectedMinutes !== null
+                ? `${Math.floor(expectedMinutes / 60)}h ${expectedMinutes % 60 ? `${expectedMinutes % 60}m` : ""}`.trim()
+                : null
+              return (
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-foreground">
+                    <Clock3Icon className="size-3.5 text-primary" />
+                    {start ? formatDisplayTime(start) : "—"} <span className="text-muted-foreground">–</span> {end ? formatDisplayTime(end) : "—"}
+                  </span>
+                  {duration ? <span className="mt-0.5 block text-[10px] text-muted-foreground">{duration} expected</span> : null}
+                </span>
+              )
+            },
+          },
+          {
+            key: "shift_type",
+            label: "Type",
+            defaultWidth: 115,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const type = readStringFromRecord(row, ["shift_type", "shiftType"]) || "FIXED"
+              return (
+                <span className="inline-flex bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">
+                  {prettifyLabel(type)}
+                </span>
+              )
+            },
+          },
+          {
+            key: "scope",
+            label: "Availability",
+            defaultWidth: 185,
+            sortable: false,
+            render: (row: AdminRecord) => {
+              const branchId = row.branch_id ?? row.branchId
+              const departmentId = row.department_id ?? row.departmentId
+              const branch = branchId !== null && branchId !== undefined
+                ? lookupMaps.branch_id?.get(String(branchId))
+                : null
+              const department = departmentId !== null && departmentId !== undefined
+                ? lookupMaps.department_id?.get(String(departmentId))
+                : null
+              return (
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-foreground">{department || branch || "All employees"}</span>
+                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    {department && branch ? branch : department ? "Department shift" : branch ? "Branch shift" : "Company-wide"}
+                  </span>
+                </span>
+              )
+            },
+          },
+          {
+            key: "status",
+            label: "Status",
+            defaultWidth: 105,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
+              const active = status === "ACTIVE"
+              return (
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold",
+                  active
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  <span className={cn("size-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/60")} />
+                  {prettifyLabel(status)}
+                </span>
+              )
+            },
+          },
+          actionColumn,
+        ]
+      }
+
+      if (activeSection === "shift-breaks") {
+        return [
+          {
+            key: "name",
+            label: "Break",
+            defaultWidth: 225,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const name = readStringFromRecord(row, ["name"]) || "Unnamed break"
+              const type = readStringFromRecord(row, ["break_type", "breakType"]) || "OTHER"
+              return (
+                <div className="flex min-w-0 items-center gap-2.5 py-1">
+                  <span className="h-8 w-1 shrink-0 bg-primary" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-foreground">{name}</span>
+                    <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">{prettifyLabel(type)} break</span>
+                  </span>
+                </div>
+              )
+            },
+          },
+          {
+            key: "shift_id",
+            label: "Shift",
+            defaultWidth: 190,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.shift_id ?? row.shiftId
+              return <span className="truncate text-xs font-medium text-foreground">{lookupMaps.shift_id?.get(String(id ?? "")) || "Unassigned shift"}</span>
+            },
+          },
+          {
+            key: "break_window",
+            label: "Break window",
+            defaultWidth: 195,
+            sortable: true,
+            sortValue: (row: AdminRecord) => readStringFromRecord(row, ["start_time", "startTime"]),
+            render: (row: AdminRecord) => {
+              const start = readStringFromRecord(row, ["start_time", "startTime"])
+              const end = readStringFromRecord(row, ["end_time", "endTime"])
+              const duration = readNumberFromRecord(row, ["duration_minutes", "durationMinutes"])
+              return (
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-foreground">
+                    <Clock3Icon className="size-3.5 text-primary" />
+                    {start ? formatDisplayTime(start) : "—"} <span className="text-muted-foreground">–</span> {end ? formatDisplayTime(end) : "—"}
+                  </span>
+                  {duration !== null ? <span className="mt-0.5 block text-[10px] text-muted-foreground">{duration} minutes</span> : null}
+                </span>
+              )
+            },
+          },
+          {
+            key: "break_settings",
+            label: "Policy",
+            defaultWidth: 175,
+            sortable: false,
+            render: (row: AdminRecord) => {
+              const paid = row.is_paid === true || row.isPaid === true
+              const flexible = row.is_flexible === true || row.isFlexible === true
+              return (
+                <span className="flex flex-wrap gap-1">
+                  <span className={cn(
+                    "px-2 py-1 text-[10px] font-semibold",
+                    paid ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+                  )}>{paid ? "Paid" : "Unpaid"}</span>
+                  <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{flexible ? "Flexible" : "Fixed"}</span>
+                </span>
+              )
+            },
+          },
+          actionColumn,
+        ]
+      }
+
+      if (activeSection === "shift-assignments") {
+        return [
+          {
+            key: "employee_id",
+            label: "Employee",
+            defaultWidth: 245,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.employee_id ?? row.employeeId
+              return (
+                <div className="flex min-w-0 items-center gap-2.5 py-1">
+                  <span className="flex size-7 shrink-0 items-center justify-center bg-primary/10 text-[10px] font-bold text-primary">
+                    {(lookupMaps.employee_id?.get(String(id ?? "")) || "E").slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="truncate text-xs font-semibold text-foreground">{lookupMaps.employee_id?.get(String(id ?? "")) || "Unknown employee"}</span>
+                </div>
+              )
+            },
+          },
+          {
+            key: "shift_id",
+            label: "Assigned shift",
+            defaultWidth: 190,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.shift_id ?? row.shiftId
+              return <span className="truncate text-xs font-medium text-foreground">{lookupMaps.shift_id?.get(String(id ?? "")) || "Unknown shift"}</span>
+            },
+          },
+          {
+            key: "effective_period",
+            label: "Effective period",
+            defaultWidth: 205,
+            sortable: true,
+            sortValue: (row: AdminRecord) => readStringFromRecord(row, ["effective_from", "effectiveFrom"]),
+            render: (row: AdminRecord) => {
+              const from = readStringFromRecord(row, ["effective_from", "effectiveFrom"])
+              const to = readStringFromRecord(row, ["effective_to", "effectiveTo"])
+              return (
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">{from ? formatDisplayDate(from) : "Not set"}</span>
+                  <span className="mt-0.5 block text-[10px] text-muted-foreground">{to ? `Until ${formatDisplayDate(to)}` : "No end date"}</span>
+                </span>
+              )
+            },
+          },
+          {
+            key: "assignment_state",
+            label: "Assignment",
+            defaultWidth: 165,
+            sortable: true,
+            sortValue: (row: AdminRecord) => readStringFromRecord(row, ["status"]),
+            render: (row: AdminRecord) => {
+              const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
+              const primary = row.is_primary === true || row.isPrimary === true
+              return (
+                <span className="flex flex-wrap gap-1">
+                  <span className={cn(
+                    "px-2 py-1 text-[10px] font-semibold",
+                    status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+                  )}>{prettifyLabel(status)}</span>
+                  <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{primary ? "Primary" : "Secondary"}</span>
+                </span>
+              )
+            },
+          },
+          {
+            key: "rotation_group_id",
+            label: "Rotation",
+            defaultWidth: 165,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.rotation_group_id ?? row.rotationGroupId
+              return <span className="truncate text-xs text-muted-foreground">{id ? lookupMaps.rotation_group_id?.get(String(id)) || `Group ${String(id)}` : "No rotation"}</span>
+            },
+          },
+          actionColumn,
+        ]
+      }
+
+      if (activeSection === "shift-rotation-groups") {
+        return [
+          {
+            key: "name",
+            label: "Rotation group",
+            defaultWidth: 285,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const name = readStringFromRecord(row, ["name"]) || "Unnamed group"
+              const code = readStringFromRecord(row, ["code"])
+              const description = readStringFromRecord(row, ["description"])
+              return (
+                <div className="flex min-w-0 items-center gap-2.5 py-1">
+                  <span className="h-8 w-1 shrink-0 bg-primary" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-foreground">{name}</span>
+                      {code ? <span className="bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">{code}</span> : null}
+                    </span>
+                    {description ? <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{description}</span> : null}
+                  </span>
+                </div>
+              )
+            },
+          },
+          {
+            key: "cycle_days",
+            label: "Cycle",
+            defaultWidth: 150,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const days = readNumberFromRecord(row, ["cycle_days", "cycleDays"])
+              return (
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-foreground">{days ?? "—"} {days === 1 ? "day" : "days"}</span>
+                  <span className="mt-0.5 block text-[10px] text-muted-foreground">Repeating rotation</span>
+                </span>
+              )
+            },
+          },
+          {
+            key: "rules",
+            label: "Rules",
+            defaultWidth: 145,
+            sortable: false,
+            render: (row: AdminRecord) => {
+              const nestedRules = Array.isArray(row.rules) ? row.rules.length : null
+              return <span className="text-xs font-medium text-foreground">{nestedRules === null ? "Open to manage" : `${nestedRules} ${nestedRules === 1 ? "rule" : "rules"}`}</span>
+            },
+          },
+          {
+            key: "status",
+            label: "Status",
+            defaultWidth: 115,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
+              return (
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold",
+                  status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+                )}>
+                  <span className={cn("size-1.5 rounded-full", status === "ACTIVE" ? "bg-emerald-500" : "bg-muted-foreground/60")} />
+                  {prettifyLabel(status)}
+                </span>
+              )
+            },
+          },
+          actionColumn,
+        ]
+      }
+
+      if (activeSection === "shift-rotation-rules") {
+        return [
+          {
+            key: "rotation_group_id",
+            label: "Rotation group",
+            defaultWidth: 235,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.rotation_group_id ?? row.rotationGroupId
+              return <span className="truncate text-xs font-semibold text-foreground">{lookupMaps.rotation_group_id?.get(String(id ?? "")) || "Unknown rotation group"}</span>
+            },
+          },
+          {
+            key: "day_index",
+            label: "Cycle day",
+            defaultWidth: 135,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const day = readNumberFromRecord(row, ["day_index", "dayIndex"])
+              return <span className="inline-flex size-8 items-center justify-center bg-primary/10 text-xs font-bold text-primary">{day ?? "—"}</span>
+            },
+          },
+          {
+            key: "shift_id",
+            label: "Shift",
+            defaultWidth: 205,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const id = row.shift_id ?? row.shiftId
+              const offDay = row.is_off_day === true || row.isOffDay === true
+              return <span className="truncate text-xs font-medium text-foreground">{offDay ? "No shift" : lookupMaps.shift_id?.get(String(id ?? "")) || "Unassigned shift"}</span>
+            },
+          },
+          {
+            key: "is_off_day",
+            label: "Day type",
+            defaultWidth: 140,
+            sortable: true,
+            render: (row: AdminRecord) => {
+              const offDay = row.is_off_day === true || row.isOffDay === true
+              return (
+                <span className={cn(
+                  "px-2 py-1 text-[10px] font-semibold",
+                  offDay ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                )}>{offDay ? "Off day" : "Working day"}</span>
+              )
+            },
+          },
+          actionColumn,
+        ]
+      }
+
+      return [
+        ...columns.map((column) => ({
+          key: column,
+          label: fields.find((field) => field.key === column)?.label ?? prettifyLabel(column),
+          defaultWidth: column === "name" ? 180 : column === "status" ? 90 : 150,
+          sortable: true,
+          render: (row: AdminRecord) => resolveScheduleCellValue(column, row, lookupMaps),
+        })),
+        actionColumn,
+      ]
+    },
+    [activeSection, columns, fields, lookupMaps, openEdit]
   )
 
   const onCreate = async () => {
@@ -2102,6 +2657,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     try {
       const payload = toPayload(fields, createValues, { currentUserId })
       if (activeSection === "shift-schedules") {
+        ensureShiftScheduleDateIsNotPast(payload.schedule_date)
         const bulkEmployeeIds = Array.isArray(payload.employee_ids)
           ? payload.employee_ids.map((entry) => String(entry).trim()).filter(Boolean)
           : []
@@ -2158,6 +2714,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
 
     try {
       const payload = toPayload(fields, editValues, { currentUserId })
+      if (activeSection === "shift-schedules") {
+        ensureShiftScheduleDateIsNotPast(payload.schedule_date)
+      }
       await updateScheduleRow(token, activeSection, editingId, payload)
       setMessage("Updated successfully.")
       setFormError(null)
@@ -2179,11 +2738,24 @@ export function ScheduleManagementView({ section }: { section: string }) {
     }
 
     try {
-      await deleteScheduleRow(token, activeSection, deletingId)
-      setMessage("Deleted successfully.")
+      if (activeSection === "shift-schedules" && clearingAssignedShift) {
+        ensureShiftScheduleCanBeRemoved(clearingAssignedShift.date)
+        await createScheduleRow(token, activeSection, {
+          employee_id: clearingAssignedShift.employeeId,
+          shift_id: clearingAssignedShift.shiftId,
+          schedule_date: clearingAssignedShift.date,
+          is_off_day: true,
+          ...(currentUserId ? { assigned_by: currentUserId } : {}),
+        })
+        setMessage("Shift removed from the selected future day.")
+      } else {
+        await deleteScheduleRow(token, activeSection, deletingId)
+        setMessage(activeSection === "shift-schedules" ? "Future schedule removed successfully." : "Deleted successfully.")
+      }
       setFormError(null)
       setDeleteOpen(false)
       setDeletingId("")
+      setClearingAssignedShift(null)
       await fetchRows()
       router.refresh()
     } catch (errorObject) {
@@ -2263,7 +2835,53 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setDetailsOpen(true)
   }
 
-  const sectionTitleBlock = (
+  const enhancedListMeta: Partial<Record<ScheduleSectionKey, { title: string; description: string }>> = {
+    shifts: {
+      title: "Shift management",
+      description: "Create and maintain reusable working-hour definitions",
+    },
+    "shift-breaks": {
+      title: "Shift breaks",
+      description: "Manage paid, unpaid, fixed, and flexible break windows",
+    },
+    "shift-assignments": {
+      title: "Shift assignments",
+      description: "Track who owns each shift and when the assignment applies",
+    },
+    "shift-rotation-groups": {
+      title: "Rotation groups",
+      description: "Organize repeating shift cycles and their rules",
+    },
+    "shift-rotation-rules": {
+      title: "Rotation rules",
+      description: "Define the working and off days inside each rotation cycle",
+    },
+  }
+  const activeEnhancedListMeta = enhancedListMeta[activeSection]
+
+  const sectionTitleBlock = activeEnhancedListMeta ? (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="min-w-0">
+        <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{activeEnhancedListMeta.title}</h1>
+        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{activeEnhancedListMeta.description}</p>
+      </div>
+      <div className="hidden shrink-0 items-center gap-1.5 xl:flex">
+        <span className="bg-muted px-2 py-1 text-[10px] font-semibold text-foreground">{rows.length} total</span>
+        {activeSection === "shift-breaks" ? (
+          <span className="bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{paidBreakCount} paid</span>
+        ) : activeSection === "shift-rotation-rules" ? (
+          <span className="bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">{offDayRuleCount} off day</span>
+        ) : (
+          <span className="bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{activeShiftCount} active</span>
+        )}
+        {activeSection === "shifts" && nightShiftCount > 0 ? (
+          <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{nightShiftCount} night</span>
+        ) : activeSection === "shift-assignments" && primaryAssignmentCount > 0 ? (
+          <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{primaryAssignmentCount} primary</span>
+        ) : null}
+      </div>
+    </div>
+  ) : (
     <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
       <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {config.moduleTitle}
@@ -2279,9 +2897,38 @@ export function ScheduleManagementView({ section }: { section: string }) {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {message ? <p className="text-sm text-green-700">{message}</p> : null}
 
+      {activeSection === "shift-schedules" ? (
+        <ShiftWeeklyScheduler
+          rows={rows}
+          employees={lookups.employees}
+          departments={lookups.departments}
+          shifts={lookups.shifts}
+          shiftAssignments={lookups.shiftAssignments}
+          leaveRequests={lookups.leaveRequests}
+          loading={loading || lookupLoading}
+          onCreate={openCreate}
+          onEdit={openEdit}
+          onRemove={(id) => {
+            setFormError(null)
+            setClearingAssignedShift(null)
+            setDeletingId(id)
+            setDeleteOpen(true)
+          }}
+          onClearAssigned={(employeeId, date, shiftId) => {
+            setFormError(null)
+            setDeletingId("")
+            setClearingAssignedShift({ employeeId, date, shiftId })
+            setDeleteOpen(true)
+          }}
+          onRefresh={() => {
+            setMessage(null)
+            void fetchRows()
+          }}
+        />
+      ) : (
       <ResizableTable
         title={config.title}
-        data={rows}
+        data={enhancedShiftList ? filteredManagementRows : rows}
         columns={tableColumns}
         loading={loading}
         itemsPerPage={20}
@@ -2290,12 +2937,52 @@ export function ScheduleManagementView({ section }: { section: string }) {
         toolbarStart={sectionTitleBlock}
         toolbarActions={
           <>
+            {enhancedShiftList ? (
+              <>
+                <label className="relative hidden sm:block">
+                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="search"
+                    value={managementSearch}
+                    onChange={(event) => setManagementSearch(event.target.value)}
+                    placeholder={`Search ${config.title.toLowerCase()}`}
+                    className="h-8 w-40 border border-border bg-background pl-8 pr-2 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 lg:w-48"
+                    aria-label={`Search ${config.title.toLowerCase()}`}
+                  />
+                </label>
+                <Select value={managementFilter} onValueChange={(value) => setManagementFilter(value || "ALL")}>
+                  <SelectTrigger size="sm" className="w-31 rounded-lg bg-background" aria-label={`Filter ${config.title.toLowerCase()}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeSection === "shift-breaks" ? (
+                      <>
+                        <SelectItem value="ALL">All breaks</SelectItem>
+                        <SelectItem value="PAID">Paid</SelectItem>
+                        <SelectItem value="UNPAID">Unpaid</SelectItem>
+                      </>
+                    ) : activeSection === "shift-rotation-rules" ? (
+                      <>
+                        <SelectItem value="ALL">All day types</SelectItem>
+                        <SelectItem value="WORKING">Working days</SelectItem>
+                        <SelectItem value="OFF_DAY">Off days</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="ALL">All statuses</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
             <button
-              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white shadow-xs transition hover:brightness-95"
               type="button"
               onClick={() => {
-                setFormError(null)
-                setCreateOpen(true)
+                openCreate()
               }}
               aria-label={`Create ${config.title}`}
               title="Create"
@@ -2304,7 +2991,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               <span className="hidden sm:inline">Create</span>
             </button>
             <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               disabled={loading}
               onClick={() => {
@@ -2324,6 +3011,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
           }
         }}
       />
+      )}
 
       <RecordDetailsDialog
         open={detailsOpen}
@@ -2400,12 +3088,22 @@ export function ScheduleManagementView({ section }: { section: string }) {
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          setDeleteOpen(open)
+          if (!open) setClearingAssignedShift(null)
+        }}
+      >
         <DialogPopup className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete {config.title.toLowerCase()}</DialogTitle>
+            <DialogTitle>{activeSection === "shift-schedules" ? "Remove future schedule?" : `Delete ${config.title.toLowerCase()}`}</DialogTitle>
             <DialogDescription>
-              This action removes the selected record from the backend. Continue only if you are sure.
+              {activeSection === "shift-schedules"
+                ? clearingAssignedShift
+                  ? "This marks the future date as an off day without changing the employee’s ongoing default shift assignment."
+                  : "This removes the selected assignment before it starts. Schedules for today and previous days are locked to preserve attendance history."
+                : "This action removes the selected record from the backend. Continue only if you are sure."}
             </DialogDescription>
           </DialogHeader>
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
@@ -2422,7 +3120,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               className="inline-flex h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700"
               onClick={() => void onDelete()}
             >
-              Delete
+              {activeSection === "shift-schedules" ? "Remove" : "Delete"}
             </button>
           </DialogFooter>
         </DialogPopup>

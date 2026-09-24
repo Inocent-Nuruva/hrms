@@ -4,12 +4,21 @@ import { mergeUniqueNavItems, selfServiceHomeFor } from "./dashboard-nav"
 import { canSeeDashboardPage } from "./forbidden-routes"
 
 describe("mixed employee helper navigation", () => {
-  it("keeps self-service links out of admin-shell navigation even when the route stays accessible", () => {
+  it("keeps personal routes visible to company users in an admin shell", () => {
     const permissions = ["performance:read", "performance_reviews:read"]
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", permissions, "admin")).toBe(false)
-    expect(canSeeDashboardPage("/dashboard/me/probation", permissions, "admin")).toBe(false)
-    expect(canSeeDashboardPage("/dashboard/me/leave/requests", permissions, "admin")).toBe(false)
+    const options = { scope: "company" as const }
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", permissions, "admin", options)).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/me/probation", permissions, "admin", options)).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/me/leave/requests", permissions, "admin", options)).toBe(true)
     expect(canSeeDashboardPage("/dashboard/performance/overview", permissions, "admin")).toBe(true)
+  })
+
+  it("does not expose company employee self-service to platform operators", () => {
+    expect(
+      canSeeDashboardPage("/dashboard/me/profile", [], "admin", {
+        scope: "platform",
+      }),
+    ).toBe(false)
   })
 
   it("puts My links ahead of granted admin routes and does not drop either", () => {

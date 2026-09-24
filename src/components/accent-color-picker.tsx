@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 const STORAGE_KEY = "hrms.accent.color"
 /** Brand primary — keep in sync with globals.css --primary */
-const DEFAULT_ACCENT = "#0078D4"
+const DEFAULT_ACCENT = "#303194"
 const PRESET_COLORS = ["#303194", "#0078D4", "#ea2e38", "#22C55E", "#EAB308", "#EC4899", "#F97316"]
 
 function hexToRgb(hex: string) {
@@ -57,16 +57,15 @@ export function AccentColorPicker({ className }: { className?: string }) {
   const [open, setOpen] = React.useState(false)
   const [color, setColor] = React.useState(DEFAULT_ACCENT)
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (typeof window === "undefined") {
       return
     }
     const stored = window.localStorage.getItem(STORAGE_KEY)?.trim() ?? ""
-    // Migrate legacy defaults to the brighter dashboard blue.
+    // Migrate only obsolete neutral values; preserve the saved brand/custom color.
     const initial =
       stored === "#111111" ||
       stored === "#000000" ||
-      stored === "#303194" ||
       !/^#[0-9A-Fa-f]{6}$/.test(stored)
         ? DEFAULT_ACCENT
         : stored

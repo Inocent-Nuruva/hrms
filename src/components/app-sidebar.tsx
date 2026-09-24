@@ -4,30 +4,22 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
-import { useMyProfilePhoto } from "@/lib/my-profile-photo"
 import {
   BadgeCheck,
   BarChart3,
   Bell,
   Building2,
-  HelpCircle,
   Kanban,
   LayoutDashboard,
   Mail,
   MapPin,
   Route,
-  Search,
-  Settings,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -61,16 +53,13 @@ const IMail = <Mail />
 const IStructure = <Kanban />
 const IInsights = <LayoutDashboard />
 const IDepartments = <Kanban />
-const ISettings = <Settings />
-const IHelp = <HelpCircle />
-const ISearch = <Search />
 const ICompanies = <Building2 />
 const IGovernance = <ShieldCheck />
 const IPromotion = <TrendingUp />
 
-type AppSidebarAccessMode = "admin" | "employee"
+export type AppSidebarAccessMode = "admin" | "employee"
 
-type SearchItem = { title: string; url: string; section: string; keywords: string[] }
+export type SearchItem = { title: string; url: string; section: string; keywords: string[] }
 type SidebarNavItem = {
   title: string
   url?: string
@@ -80,7 +69,6 @@ type SidebarNavItem = {
 }
 type SidebarData = {
   navMain: SidebarNavItem[]
-  navSecondary: Array<{ title: string; url: string; icon: React.ReactNode }>
 }
 
 const adminData: SidebarData = {
@@ -359,23 +347,6 @@ const adminData: SidebarData = {
       icon: IInsights,
     },
   ],
-  navSecondary: [
-    {
-      title: "Get Help",
-      url: "/dashboard/help",
-      icon: IHelp,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: ISearch,
-    },
-    {
-      title: "Settings",
-      url: "/dashboard/settings",
-      icon: ISettings,
-    },
-  ],
 }
 
 const platformData: SidebarData = {
@@ -406,7 +377,6 @@ const platformData: SidebarData = {
       icon: ISms,
     },
   ],
-  navSecondary: adminData.navSecondary,
 }
 
 const platformSearchIndex: SearchItem[] = [
@@ -437,7 +407,8 @@ const adminSearchIndex = [
   { title: "Attendance / Shift Management / Shift Breaks", url: "/dashboard/attendance/shift-breaks", section: "Shift Management", keywords: ["attendance", "shift", "break"] },
   { title: "Attendance / Shift Management / Shift Assignments", url: "/dashboard/attendance/shift-assignments", section: "Shift Management", keywords: ["attendance", "shift", "assignments"] },
   { title: "Attendance / Shift Management / Shift Schedules", url: "/dashboard/attendance/shift-schedules", section: "Shift Management", keywords: ["attendance", "shift", "schedules"] },
-  { title: "Attendance / Shift Management / Rotation Groups and Rules", url: "/dashboard/attendance/shift-rotation-groups", section: "Shift Management", keywords: ["attendance", "shift", "rotation"] },
+  { title: "Attendance / Shift Management / Rotation Groups", url: "/dashboard/attendance/shift-rotation-groups", section: "Shift Management", keywords: ["attendance", "shift", "rotation", "groups"] },
+  { title: "Attendance / Shift Management / Rotation Rules", url: "/dashboard/attendance/shift-rotation-rules", section: "Shift Management", keywords: ["attendance", "shift", "rotation", "rules"] },
   { title: "Attendance / Correction Requests", url: "/dashboard/attendance/correction-requests", section: "Correction Requests", keywords: ["attendance", "correction", "request", "approve", "hr"] },
   { title: "Attendance / Timetable Management / Timetables", url: "/dashboard/attendance/timetables", section: "Timetable Management", keywords: ["attendance", "timetable"] },
   { title: "Attendance / Timetable Management / Timetable Days", url: "/dashboard/attendance/timetable-days", section: "Timetable Management", keywords: ["attendance", "timetable", "days"] },
@@ -519,27 +490,6 @@ const adminSearchIndex = [
   },
 ]
 
-const employeeData: SidebarData = {
-  navMain: adminData.navMain,
-  navSecondary: [
-    {
-      title: "Get Help",
-      url: "/dashboard/help",
-      icon: IHelp,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: ISearch,
-    },
-    {
-      title: "Settings",
-      url: "/dashboard/settings",
-      icon: ISettings,
-    },
-  ],
-}
-
 const employeeSearchIndex = [
   { title: "Dashboard", url: "/dashboard", section: "General", keywords: ["home", "overview"] },
   { title: "My Info", url: "/dashboard/me/profile", section: "Employees", keywords: ["profile", "my info", "account"] },
@@ -579,9 +529,6 @@ const employeeSearchIndex = [
 ]
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  userName?: string | null
-  userEmail?: string | null
-  userAvatar?: string | null
   accessMode?: AppSidebarAccessMode
   scope?: AuthScope | null
   homeDashboardKind?: HomeDashboardKind
@@ -665,10 +612,35 @@ function filterAdminSearchByPermissions(
   )
 }
 
+export function resolveDashboardSearchItems({
+  scope,
+  permissionLabels,
+  accessMode,
+  homeDashboardKind,
+}: {
+  scope?: AuthScope | null
+  permissionLabels: string[]
+  accessMode: AppSidebarAccessMode
+  homeDashboardKind?: HomeDashboardKind
+}) {
+  const normalizedPermissions = normalizePermissionLabels(permissionLabels)
+  if (scope === "platform") {
+    return filterAdminSearchByPermissions(
+      platformSearchIndex,
+      normalizedPermissions,
+      accessMode,
+      homeDashboardKind,
+    )
+  }
+  return filterAdminSearchByPermissions(
+    mergeUniqueNavItems(employeeSearchIndex, adminSearchIndex),
+    normalizedPermissions,
+    accessMode,
+    homeDashboardKind,
+  )
+}
+
 export function AppSidebar({
-  userName,
-  userEmail,
-  userAvatar,
   accessMode = "admin",
   scope = null,
   homeDashboardKind,
@@ -680,19 +652,6 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
-  // Keep footer avatar in sync with Change Photo / default avatar selection.
-  const { url: liveProfilePhotoUrl, revision: photoRevision } = useMyProfilePhoto()
-  const footerAvatar = React.useMemo(() => {
-    const live = resolveBackendMediaUrl(liveProfilePhotoUrl) || liveProfilePhotoUrl?.trim() || ""
-    const prop = resolveBackendMediaUrl(userAvatar) || userAvatar?.trim() || ""
-    const base = live || prop || "/assets/alliance-logo.png"
-    if (!base || base.startsWith("data:") || base.startsWith("blob:") || base.startsWith("/assets/")) {
-      return base
-    }
-    if (photoRevision <= 0) return base
-    const joiner = base.includes("?") ? "&" : "?"
-    return `${base}${joiner}v=${photoRevision}`
-  }, [liveProfilePhotoUrl, photoRevision, userAvatar])
   const normalizedPermissions = React.useMemo(
     () => normalizePermissionLabels(permissionLabels),
     [permissionLabels]
@@ -719,18 +678,12 @@ export function AppSidebar({
   const permissionsResolved = navReady && identityReady
 
   const navData = React.useMemo(() => {
-    const secondary = scope === "platform"
-      ? platformData.navSecondary
-      : resolvedAccessMode === "employee"
-        ? employeeData.navSecondary
-        : adminData.navSecondary
     // Do not paint the full admin/employee catalog first and then hide items.
     // SSR and the first client frame both render an empty rail; after identity
     // is known we show only the routes this person may open.
     if (!permissionsResolved) {
       return {
         navMain: [] as SidebarNavItem[],
-        navSecondary: secondary,
       }
     }
     void forbiddenVersion
@@ -742,7 +695,6 @@ export function AppSidebar({
           resolvedAccessMode,
           homeDashboardKind,
         ),
-        navSecondary: secondary,
       }
     }
     const adminItems = filterNavByPermissions(
@@ -753,36 +705,7 @@ export function AppSidebar({
     )
     return {
       navMain: adminItems,
-      navSecondary: secondary,
     }
-  }, [
-    forbiddenVersion,
-    homeDashboardKind,
-    normalizedPermissions,
-    permissionsResolved,
-    resolvedAccessMode,
-    scope,
-  ])
-
-  const searchIndex = React.useMemo(() => {
-    if (!permissionsResolved) {
-      return [] as SearchItem[]
-    }
-    void forbiddenVersion
-    if (scope === "platform") {
-      return filterAdminSearchByPermissions(
-        platformSearchIndex,
-        normalizedPermissions,
-        resolvedAccessMode,
-        homeDashboardKind,
-      )
-    }
-    return filterAdminSearchByPermissions(
-      mergeUniqueNavItems(employeeSearchIndex, adminSearchIndex),
-      normalizedPermissions,
-      resolvedAccessMode,
-      homeDashboardKind,
-    )
   }, [
     forbiddenVersion,
     homeDashboardKind,
@@ -806,10 +729,7 @@ export function AppSidebar({
 
       <SidebarContent className="relative z-[1] gap-2 px-2 pt-3">
         <div className="mb-1 px-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/70">
-            Navigation
-          </p>
-          <div className="mt-1.5 h-px w-10 rounded-full bg-gradient-to-r from-primary/50 to-transparent" />
+          <div className="mt-1.5 h-1 w-20 rounded-full bg-gradient-to-r from-primary via-primary/70 to-transparent shadow-[0_0_10px_rgb(var(--primary-rgb)/0.22)]" />
         </div>
         {permissionsResolved ? (
           <NavMain
@@ -824,18 +744,7 @@ export function AppSidebar({
             ))}
           </div>
         )}
-        <NavSecondary items={navData.navSecondary} searchItems={searchIndex} className="mt-auto pt-1" />
       </SidebarContent>
-      <SidebarFooter className="relative z-[1]">
-        <NavUser
-          key={`nav-user-${photoRevision}-${footerAvatar}`}
-          user={{
-            name: userName ?? "Admin",
-            email: userEmail ?? "admin@hrms.local",
-            avatar: footerAvatar,
-          }}
-        />
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

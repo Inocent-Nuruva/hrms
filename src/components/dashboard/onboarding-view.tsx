@@ -3449,6 +3449,24 @@ export function OnboardingView() {
       sections,
     }
   }, [selectedRequestDetails])
+  const employeeDetailsReviewCounts = React.useMemo(
+    () =>
+      employeeDetailsReview.sections.reduce<{
+        approved: number
+        changesRequested: number
+        pending: number
+      }>(
+        (counts, section) => {
+          const status = readString(section, ["status"], "pending").toLowerCase()
+          if (status === "approved") counts.approved += 1
+          else if (status === "changes_requested") counts.changesRequested += 1
+          else counts.pending += 1
+          return counts
+        },
+        { approved: 0, changesRequested: 0, pending: 0 }
+      ),
+    [employeeDetailsReview.sections]
+  )
   const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
   const selectedRequestSummary = React.useMemo(() => {
     const request = selectedRequestDetails ?? selectedRequestRow ?? {}
@@ -4393,8 +4411,23 @@ export function OnboardingView() {
   ]
 
   return (
-    <div className="space-y-2 px-4 pb-6 pt-2 lg:px-6">
-      <div className="tab-rail-scroll">
+    <section className="overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Onboarding
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Manage invitations, employee onboarding requests, and reusable workflows
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[10px] font-medium text-muted-foreground">
+          {canViewPendingInvitations ? <span>{invitations.length} invitations</span> : null}
+          {canViewOnboardingRequests ? <span>{filteredRequests.length} requests</span> : null}
+          {canViewOnboardingWorkflows ? <span>{filteredWorkflows.length} workflows</span> : null}
+        </div>
+      </div>
+      <div className="tab-rail-scroll bg-muted/[0.12] px-3">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {canViewPendingInvitations ? (
             <button
@@ -4404,7 +4437,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "invitations"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
               Pending Invitations
@@ -4419,7 +4452,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "requests"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
               Requests
@@ -4433,7 +4466,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "workflows"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
               Workflows
@@ -4442,7 +4475,11 @@ export function OnboardingView() {
         </div>
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <div className="border-b border-destructive/20 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive">
+          {error}
+        </div>
+      ) : null}
 
       {activeTab === "invitations" && canViewPendingInvitations ? (
         <div className="space-y-2">
@@ -4453,6 +4490,9 @@ export function OnboardingView() {
             loading={loading}
             storageKey="pending-employee-invitations"
             enableAnimations
+            compact
+            toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+            frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
             showExport={false}
             getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
@@ -4621,6 +4661,9 @@ export function OnboardingView() {
             loading={loading}
             storageKey="onboarding-requests"
             enableAnimations
+            compact
+            toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+            frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
             showExport={false}
             getRowId={(row, index) => {
@@ -4644,7 +4687,7 @@ export function OnboardingView() {
                   onChange={setRequestSearch}
                 />
                 <select
-                  className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
                   value={requestStatusFilter}
                   onChange={(event) => setRequestStatusFilter(event.target.value)}
                   aria-label="Filter request status"
@@ -4657,7 +4700,7 @@ export function OnboardingView() {
                 </select>
                 {isEmployeeMode ? null : (
                   <select
-                    className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                    className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
                     value={requestEmployeeFilter}
                     onChange={(event) => setRequestEmployeeFilter(event.target.value)}
                     aria-label="Filter by employee"
@@ -5446,65 +5489,82 @@ export function OnboardingView() {
             <DialogPopup
               from="bottom"
               showCloseButton={false}
-              className="h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-h-none max-w-none overflow-y-auto p-4 sm:h-[calc(100vh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-none sm:p-6"
+              className="flex h-[calc(100vh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none max-w-none flex-col overflow-hidden border border-border bg-background p-0 shadow-sm sm:h-[calc(100vh-1rem)] sm:w-[calc(100vw-1rem)] sm:max-w-none"
             >
-              <DialogClose className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:right-6 sm:top-6">
-                <X aria-hidden="true" />
+              <DialogClose className="absolute right-3 top-3 z-30 inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                <X className="size-4" aria-hidden="true" />
                 <span className="sr-only">Close onboarding request</span>
               </DialogClose>
-              <DialogHeader className="flex flex-row items-start justify-between gap-6 pr-12">
+              <DialogHeader className="z-20 grid shrink-0 gap-2.5 border-b border-border bg-background px-3 py-2.5 pr-14 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center">
                 <div className="min-w-0">
-                  <DialogTitle>Onboarding Request Activity</DialogTitle>
-                  <DialogDescription>Review employee details and track the remaining onboarding work.</DialogDescription>
+                  <DialogTitle className="truncate text-sm font-semibold tracking-tight text-foreground">
+                    Onboarding request
+                  </DialogTitle>
+                  <DialogDescription className="mt-0.5 text-[10px] text-muted-foreground">
+                    Review employee details and track the remaining onboarding work.
+                  </DialogDescription>
                 </div>
-                <div className="hidden shrink-0 items-start gap-5 text-right md:flex">
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Employee</p>
-                    <p className="max-w-56 truncate text-xs font-semibold text-foreground">
+                <div className="hidden shrink-0 items-center divide-x divide-border md:flex">
+                  <div className="px-3 text-right">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Employee</p>
+                    <p className="mt-0.5 max-w-56 truncate text-[11px] font-semibold text-foreground">
                       {selectedRequestSummary.employee}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Status</p>
-                    <p className="text-xs font-semibold text-foreground">{toTitleCaseWords(selectedRequestSummary.status)}</p>
+                  <div className="px-3 text-right">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Status</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-foreground">
+                      {toTitleCaseWords(selectedRequestSummary.status)}
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Updated</p>
-                    <p className="text-xs font-semibold text-foreground">{selectedRequestSummary.updated}</p>
+                  <div className="pl-3 text-right">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Updated</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-foreground">{selectedRequestSummary.updated}</p>
                   </div>
                 </div>
               </DialogHeader>
 
               {requestDetailsLoading ? (
-                <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                <div className="m-3 border border-border p-4 text-sm text-muted-foreground">
                   Loading request activity...
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="min-h-0 flex-1 overflow-y-auto text-foreground [&_.border-slate-200]:border-border [&_.border-slate-300]:border-border [&_.bg-slate-50]:bg-muted/20 [&_.bg-white]:bg-background [&_.text-slate-500]:text-muted-foreground [&_.text-slate-600]:text-muted-foreground [&_.text-slate-700]:text-foreground [&_.text-slate-800]:text-foreground [&_.text-slate-900]:text-foreground">
 
-                  <div className="overflow-hidden rounded-xl border border-border bg-card">
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
+                  <section className="overflow-hidden border-b border-border bg-background">
+                    <div className="flex flex-col gap-2 border-b border-border bg-muted/[0.12] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Employee details review</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
                           Verify each section. Return only the sections that need correction and include a reason.
                         </p>
                       </div>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-xs font-medium",
-                          employeeDetailsReview.status === "approved"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : employeeDetailsReview.status === "changes_requested"
-                              ? "bg-rose-100 text-rose-700"
-                              : employeeDetailsReview.status === "submitted" ||
-                                  employeeDetailsReview.status === "in_review"
-                                ? "bg-sky-100 text-sky-700"
-                                : "bg-slate-100 text-slate-700"
-                        )}
-                      >
-                        {toTitleCaseWords(employeeDetailsReview.status)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
+                        <span className="bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700 dark:text-emerald-400">
+                          {employeeDetailsReviewCounts.approved} approved
+                        </span>
+                        <span className="bg-rose-500/10 px-2 py-1 font-semibold text-rose-700 dark:text-rose-400">
+                          {employeeDetailsReviewCounts.changesRequested} changes
+                        </span>
+                        <span className="bg-amber-500/10 px-2 py-1 font-semibold text-amber-700 dark:text-amber-400">
+                          {employeeDetailsReviewCounts.pending} pending
+                        </span>
+                        <span
+                          className={cn(
+                            "px-2 py-1 font-semibold",
+                            employeeDetailsReview.status === "approved"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                              : employeeDetailsReview.status === "changes_requested"
+                                ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
+                                : employeeDetailsReview.status === "submitted" ||
+                                    employeeDetailsReview.status === "in_review"
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {toTitleCaseWords(employeeDetailsReview.status)}
+                        </span>
+                      </div>
                     </div>
 
                     {employeeDetailsReview.sections.length === 0 ? (
@@ -5512,8 +5572,8 @@ export function OnboardingView() {
                         Employee review details are not available yet.
                       </div>
                     ) : (
-                      <div className="grid min-h-[300px] lg:grid-cols-[220px_minmax(0,1fr)]">
-                        <nav className="border-b border-border bg-muted/20 p-2 lg:border-b-0 lg:border-r">
+                      <div className="grid min-h-[280px] lg:grid-cols-[200px_minmax(0,1fr)]">
+                        <nav className="border-b border-border bg-muted/[0.12] p-1.5 lg:border-b-0 lg:border-r">
                           <ol className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
                             {employeeDetailsReview.sections.map((section, index) => {
                               const sectionStatus = readString(section, ["status"], "pending").toLowerCase()
@@ -5528,7 +5588,7 @@ export function OnboardingView() {
                                     type="button"
                                     onClick={() => setEmployeeReviewStep(index)}
                                     className={cn(
-                                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
+                                      "flex min-h-11 w-full items-center gap-2 border border-transparent px-2 py-1.5 text-left text-[11px] transition",
                                       active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
                                     )}
                                   >
@@ -5554,7 +5614,7 @@ export function OnboardingView() {
                                       </span>
                                       <span
                                         className={cn(
-                                          "mt-0.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                          "mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-medium",
                                           sectionStatus === "approved"
                                             ? "bg-emerald-100 text-emerald-700"
                                             : sectionStatus === "changes_requested"
@@ -5575,12 +5635,12 @@ export function OnboardingView() {
                         </nav>
 
                         {currentEmployeeReviewSection ? (
-                          <div className="space-y-4 p-4">
+                          <div className="space-y-3 p-3 sm:p-4">
                             <div className="flex flex-wrap items-baseline gap-2">
                               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                 Step {employeeReviewStep + 1} of {employeeDetailsReview.sections.length}
                               </p>
-                              <h3 className="text-base font-semibold text-foreground">
+                              <h3 className="text-sm font-semibold text-foreground">
                                 {readString(currentEmployeeReviewSection, ["label"], "Employee details")}
                               </h3>
                             </div>
@@ -5593,7 +5653,7 @@ export function OnboardingView() {
                                   return (
                                     <div
                                       key={`${readString(reviewField, ["label"])}-${index}`}
-                                      className="border-b border-border/70 py-2"
+                                      className="border-b border-border/70 py-1.5"
                                     >
                                       <div className="flex items-center gap-1.5">
                                         {isFilled ? (
@@ -5612,7 +5672,7 @@ export function OnboardingView() {
                                       </div>
                                       <p
                                         className={cn(
-                                          "mt-0.5 whitespace-pre-wrap pl-5 text-sm",
+                                          "mt-0.5 whitespace-pre-wrap pl-5 text-xs",
                                           isFilled ? "text-foreground" : "text-muted-foreground"
                                         )}
                                       >
@@ -5664,10 +5724,10 @@ export function OnboardingView() {
                               </div>
                             ) : null}
 
-                            <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                            <label className="grid gap-1.5 text-xs font-medium text-foreground">
                               Review note
                               <textarea
-                                className="min-h-16 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
+                                className="min-h-16 border border-input bg-background px-3 py-2 text-xs font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 value={
                                   employeeReviewComments[readString(currentEmployeeReviewSection, ["key"], "")] ?? ""
                                 }
@@ -5683,10 +5743,11 @@ export function OnboardingView() {
                             </label>
 
                             {canUpdateOnboardingRequests ? (
-                              <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-4">
+                              <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-3">
                                 <Button
                                   type="button"
                                   variant="outline"
+                                  size="sm"
                                   disabled={
                                     saving ||
                                     !employeeReviewComments[
@@ -5699,6 +5760,7 @@ export function OnboardingView() {
                                 </Button>
                                 <Button
                                   type="button"
+                                  size="sm"
                                   disabled={saving}
                                   onClick={() => void saveEmployeeDetailReview("approved")}
                                 >
@@ -5710,12 +5772,12 @@ export function OnboardingView() {
                         ) : null}
                       </div>
                     )}
-                  </div>
+                  </section>
 
-                  <div className="grid items-start gap-3 xl:grid-cols-2">
-                  <div className="space-y-3 rounded-lg border border-border p-3">
-                    <p className="text-sm font-semibold text-slate-900">Submitted Request</p>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
+                  <section className="space-y-2 bg-background p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Submitted request</p>
+                    <div className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request Code</p>
                         <p className="text-sm text-slate-900">
@@ -5779,15 +5841,15 @@ export function OnboardingView() {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </section>
 
                   {isOnboardingActableStatus(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
                   ) && approvalSummary.pending.length > 0 ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div className="border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/25">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-800">Pending approval</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{approvalSummary.waitingLabel}</p>
-                      <p className="mt-1 text-xs text-slate-600">
+                      <p className="mt-1 text-sm font-semibold text-foreground">{approvalSummary.waitingLabel}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Only the assigned approver for the current workflow level can approve or reject.
                       </p>
                     </div>
@@ -5800,10 +5862,10 @@ export function OnboardingView() {
                     ])
                     const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
                     return (
-                      <div className="space-y-3 rounded-lg border border-border p-3">
+                      <section className="space-y-2 bg-background p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">Employee acknowledgement</p>
+                            <p className="text-sm font-semibold text-foreground">Employee acknowledgement</p>
                             <p className="text-xs text-muted-foreground">
                               {needsAcknowledgement
                                 ? "Waiting for the employee to acknowledge this request from their onboarding dashboard."
@@ -5811,13 +5873,13 @@ export function OnboardingView() {
                             </p>
                           </div>
                         </div>
-                      </div>
+                      </section>
                     )
                   })()}
 
-                  <div className="space-y-3 rounded-lg border border-border p-3">
+                  <section className="space-y-2 bg-background p-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">Approval trail</p>
+                      <p className="text-sm font-semibold text-foreground">Approval trail</p>
                       {approvalSummary.pending.length > 0 ? (
                         <p className="text-xs text-muted-foreground">
                           {approvalSummary.currentLevel > 0
@@ -5836,12 +5898,12 @@ export function OnboardingView() {
                             className="py-2.5 first:pt-0 last:pb-0"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-slate-900">
+                              <p className="text-sm font-medium text-foreground">
                                 {approval.name ||
                                   readString(approval.raw, ["title", "step_name", "approval_name", "name"]) ||
                                   `Level ${approval.level || index + 1}`}
                               </p>
-                              <span className="text-xs text-slate-500">
+                              <span className="text-xs text-muted-foreground">
                                 {toTitleCaseWords(approval.status || "pending")}
                                 {approval.level > 0 ? ` • Level ${approval.level}` : ""}
                                 {approval.isCurrent ? " • Current" : ""}
@@ -5853,7 +5915,7 @@ export function OnboardingView() {
                               </a>
                             ) : null}
                             {approval.comments ? (
-                              <p className="mt-1 text-xs text-slate-600">{approval.comments}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{approval.comments}</p>
                             ) : null}
                             {canUpdateOnboardingRequests && approval.status.toLowerCase() === "pending" ? (
                               <button
@@ -5869,12 +5931,20 @@ export function OnboardingView() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </section>
 
                   {selectedRequestProvisioningSummary ? (
-                    <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
-                      <p className="text-sm font-semibold text-slate-900">Provisioning Summary</p>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <details className="group bg-background xl:col-span-2">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                        <span>Provisioning summary</span>
+                        <span className="text-[10px] font-medium text-muted-foreground group-open:hidden">
+                          Open configuration details
+                        </span>
+                        <span className="hidden text-[10px] font-medium text-muted-foreground group-open:inline">
+                          Hide details
+                        </span>
+                      </summary>
+                      <div className="grid gap-x-4 gap-y-2 border-t border-border px-3 py-2.5 md:grid-cols-2 xl:grid-cols-4">
                         <div>
                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Roles</p>
                           <p className="text-sm text-slate-900">
@@ -6024,10 +6094,10 @@ export function OnboardingView() {
                           <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.continueOnError}</p>
                         </div>
                       </div>
-                    </div>
+                    </details>
                   ) : null}
 
-                  <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
+                  <div className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Documents</p>
                       {canUpdateOnboardingRequests ? (
@@ -6047,7 +6117,7 @@ export function OnboardingView() {
                     </div>
 
                     {showDocumentComposer ? (
-                      <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
+                      <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Title
                           <Input
@@ -6196,7 +6266,7 @@ export function OnboardingView() {
                           return (
                             <div
                               key={`onboarding-document-${documentId ?? index}`}
-                              className="rounded-md border border-slate-200 bg-white p-3"
+                              className="border border-border bg-background p-3"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
@@ -6278,7 +6348,7 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
+                  <div className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Tasks</p>
                       {canUpdateOnboardingRequests ? (
@@ -6299,7 +6369,7 @@ export function OnboardingView() {
                     </div>
 
                     {showTaskComposer ? (
-                      <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
+                      <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
                         {taskForm.task_type === "asset" ? (
                           <div className="grid gap-2 md:col-span-2">
                             <div className="flex items-center justify-between gap-2">
@@ -6566,7 +6636,7 @@ export function OnboardingView() {
                         No onboarding tasks have been created for this request.
                       </p>
                     ) : (
-                      <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                      <div className="divide-y divide-border overflow-hidden border border-border">
                         {selectedRequestTasks.map((taskRow, index) => {
                           const taskId = readNumber(taskRow, ["id", "task_id"])
                           const taskStatus = readString(taskRow, ["status", "task_status"])
@@ -6636,9 +6706,9 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-3">
-                    <p className="text-sm font-semibold text-slate-900">Workflow Map</p>
-                    <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                  <section className="space-y-2 bg-background p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Workflow map</p>
+                    <div className="divide-y divide-border overflow-hidden border border-border">
                       {requestTimelineNodes.map((node, idx) => {
                         const isDone =
                           node.status.includes("complete") ||
@@ -6656,7 +6726,7 @@ export function OnboardingView() {
                             ? "bg-amber-100 text-amber-700"
                             : "bg-slate-100 text-slate-700"
                         return (
-                          <div key={node.key} className="relative bg-background py-2.5 pl-10 pr-3">
+                          <div key={node.key} className="relative bg-background py-2 pl-10 pr-3">
                             {idx < requestTimelineNodes.length - 1 ? (
                               <span className="absolute left-[19px] top-8 h-[calc(100%-1rem)] w-px bg-slate-200" />
                             ) : null}
@@ -6702,18 +6772,18 @@ export function OnboardingView() {
                         )
                       })}
                     </div>
-                  </div>
+                  </section>
 
-                  <div className="space-y-3 rounded-lg border border-border p-3">
-                    <p className="text-sm font-semibold text-slate-900">Activity Record</p>
+                  <section className="space-y-2 bg-background p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Activity record</p>
                     {selectedRequestAuditLogs.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No activity record available for this request.</p>
                     ) : (
-                      <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                      <div className="divide-y divide-border overflow-hidden border border-border">
                         {selectedRequestAuditLogs.map((entry, index) => (
                           <div
                             key={`audit-${readString(entry, ["id", "log_id"])}-${index}`}
-                            className="bg-background px-3 py-2.5"
+                            className="bg-background px-3 py-2"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-medium text-slate-900">
@@ -6737,12 +6807,12 @@ export function OnboardingView() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </section>
                   </div>
                 </div>
               )}
 
-              <DialogFooter className="sticky bottom-0 z-10 border-t border-border bg-background/95 py-3 backdrop-blur">
+              <DialogFooter className="z-20 shrink-0 border-t border-border bg-background/95 px-3 py-2 backdrop-blur">
                 {(() => {
                   const selectedStatus = String(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
@@ -6782,6 +6852,7 @@ export function OnboardingView() {
                           ) : null}
                           <Button
                             type="button"
+                            size="sm"
                             disabled={
                               saving ||
                               selectedId === null ||
@@ -6796,6 +6867,7 @@ export function OnboardingView() {
                       {showApprove ? (
                         <Button
                           type="button"
+                          size="sm"
                           disabled={saving || selectedId === null}
                           onClick={() => void runRequestAction(selectedId, "approve")}
                         >
@@ -6805,7 +6877,7 @@ export function OnboardingView() {
                     </>
                   )
                 })()}
-                <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
+                <Button type="button" variant="outline" size="sm" onClick={() => setRequestDetailsOpen(false)}>
                   Close
                 </Button>
               </DialogFooter>
@@ -6968,6 +7040,9 @@ export function OnboardingView() {
             loading={loading}
             storageKey="onboarding-workflows"
             enableAnimations
+            compact
+            toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+            frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
             showExport={false}
             getRowId={(row, index) => String(readNumber(row, ["id", "workflow_id"]) ?? index)}
@@ -6986,7 +7061,7 @@ export function OnboardingView() {
                   onChange={setWorkflowSearch}
                 />
                 <select
-                  className="h-8 min-w-[8.5rem] rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
                   value={workflowStatusFilter}
                   onChange={(event) => setWorkflowStatusFilter(event.target.value)}
                   aria-label="Filter workflow status"
@@ -7866,6 +7941,6 @@ export function OnboardingView() {
           </Dialog>
         </div>
       ) : null}
-    </div>
+    </section>
   )
 }

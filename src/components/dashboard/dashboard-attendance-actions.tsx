@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-  Clock3,
   Loader2,
   LogIn,
   LogOut,
@@ -242,10 +241,28 @@ function readEmployeeId(record: AdminRecord | null): number | null {
   return Number.isInteger(employeeId) && employeeId > 0 ? employeeId : null
 }
 
-function NetworkCheckButton() {
+export function NetworkCheckButton({
+  iconOnly = false,
+  className,
+}: {
+  iconOnly?: boolean
+  className?: string
+}) {
   const [open, setOpen] = React.useState(false)
   const [checking, setChecking] = React.useState(false)
   const [result, setResult] = React.useState<NetworkCheckResult | null>(null)
+  const [online, setOnline] = React.useState(true)
+
+  React.useEffect(() => {
+    const updateOnlineState = () => setOnline(navigator.onLine)
+    updateOnlineState()
+    window.addEventListener("online", updateOnlineState)
+    window.addEventListener("offline", updateOnlineState)
+    return () => {
+      window.removeEventListener("online", updateOnlineState)
+      window.removeEventListener("offline", updateOnlineState)
+    }
+  }, [])
 
   const runCheck = React.useCallback(async () => {
     setOpen(true)
@@ -270,13 +287,24 @@ function NetworkCheckButton() {
     <>
       <Button
         type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1.5 px-2.5 text-xs"
+        variant={iconOnly ? "ghost" : "outline"}
+        size={iconOnly ? "icon-sm" : "sm"}
+        className={cn(!iconOnly && "h-8 gap-1.5 px-2.5 text-xs", className)}
         onClick={() => void runCheck()}
+        aria-label={iconOnly ? "Check network and location" : undefined}
+        title={iconOnly ? "Network check" : undefined}
       >
-        <Network className="size-3.5" aria-hidden="true" />
-        Network check
+        <Network aria-hidden="true" />
+        {iconOnly ? (
+          <span
+            className={cn(
+              "pointer-events-none absolute right-0.5 top-0.5 size-2 rounded-full ring-2 ring-background",
+              online ? "bg-emerald-500" : "bg-destructive",
+            )}
+            aria-hidden
+          />
+        ) : null}
+        {iconOnly ? <span className="sr-only">Network check</span> : "Network check"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -392,11 +420,17 @@ export function AttendancePunchActions({
   canCheckIn,
   canCheckOut,
   onAttendanceChanged,
+  className,
+  messageClassName,
+  compact = false,
 }: {
   employeeId: number
   canCheckIn: boolean
   canCheckOut: boolean
   onAttendanceChanged?: () => Promise<void>
+  className?: string
+  messageClassName?: string
+  compact?: boolean
 }) {
   const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
   const [message, setMessage] = React.useState<{
@@ -466,38 +500,37 @@ export function AttendancePunchActions({
   )
 
   return (
-    <div className="mt-2 space-y-1.5">
-      <div className="flex flex-wrap gap-2">
+    <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
+      <div className={cn("flex flex-wrap", compact ? "gap-1" : "gap-2")}>
         <Button
           type="button"
-          size="sm"
-          className="h-8 gap-1.5 px-2.5 text-xs"
+          size={compact ? "xs" : "sm"}
+          className={compact ? "h-6 gap-1 rounded-md px-2 text-[10px]" : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
           onClick={() => void submitPunch("in")}
         >
           {busyAction === "in" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <Loader2 className={cn(compact ? "size-3" : "size-3.5", "animate-spin")} aria-hidden="true" />
           ) : (
-            <LogIn className="size-3.5" aria-hidden="true" />
+            <LogIn className={compact ? "size-3" : "size-3.5"} aria-hidden="true" />
           )}
           {busyAction === "in" ? "Checking in…" : "Check in"}
         </Button>
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 px-2.5 text-xs"
+          size={compact ? "xs" : "sm"}
+          className={compact ? "h-6 gap-1 rounded-md px-2 text-[10px]" : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
           onClick={() => void submitPunch("out")}
         >
           {busyAction === "out" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <Loader2 className={cn(compact ? "size-3" : "size-3.5", "animate-spin")} aria-hidden="true" />
           ) : (
-            <LogOut className="size-3.5" aria-hidden="true" />
+            <LogOut className={compact ? "size-3" : "size-3.5"} aria-hidden="true" />
           )}
           {busyAction === "out" ? "Checking out…" : "Check out"}
         </Button>
-        <NetworkCheckButton />
       </div>
       {message ? (
         <p
@@ -506,6 +539,7 @@ export function AttendancePunchActions({
             message.tone === "success"
               ? "text-emerald-700 dark:text-emerald-400"
               : "text-destructive",
+            messageClassName,
           )}
           role="status"
         >
@@ -578,30 +612,16 @@ export function DashboardAttendanceQuickActions() {
   if (!checked || !state) return null
 
   return (
-    <div className="px-3 pt-3 sm:px-4 md:px-6">
-      <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Clock3 className="size-4" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">My attendance</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {state.checkIn
-                ? `Checked in ${state.checkIn}${state.checkOut ? ` · Checked out ${state.checkOut}` : ""}`
-                : "You have not checked in today."}
-            </p>
-          </div>
-        </div>
-        <div className="shrink-0 sm:[&>div]:mt-0">
-          <AttendancePunchActions
-            employeeId={state.employeeId}
-            canCheckIn={state.canCheckIn}
-            canCheckOut={state.canCheckOut}
-            onAttendanceChanged={loadAttendance}
-          />
-        </div>
-      </section>
+    <div className="relative flex items-center justify-center">
+      <AttendancePunchActions
+        employeeId={state.employeeId}
+        canCheckIn={state.canCheckIn}
+        canCheckOut={state.canCheckOut}
+        onAttendanceChanged={loadAttendance}
+        compact
+        className="relative mt-0 items-center"
+        messageClassName="absolute left-1/2 top-[calc(100%+0.5rem)] z-10 -translate-x-1/2 whitespace-nowrap border border-border bg-popover px-3 py-1.5 text-popover-foreground shadow-md"
+      />
     </div>
   )
 }

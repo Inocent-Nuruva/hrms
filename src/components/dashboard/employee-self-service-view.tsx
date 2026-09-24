@@ -4019,7 +4019,8 @@ export function EmployeeSelfServiceProfileView() {
           result = await uploadMyProfilePhoto(token, selectedProfilePhotoFile)
         }
 
-        const submittedForApproval = Boolean(selectedProfilePhotoFile)
+        const submittedForApproval =
+          Boolean(selectedProfilePhotoFile) && result?.approval_required !== false
         if (submittedForApproval) {
           try {
             const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
@@ -4050,7 +4051,9 @@ export function EmployeeSelfServiceProfileView() {
           resolveBackendMediaUrl(profilePhotoPreviewUrl) || profilePhotoPreviewUrl.trim() || ""
 
         // Publish immediately so the sidebar footer updates before any follow-up GET.
-        const optimisticUrl = resultUrl || previewUrl
+        // Show the selected image immediately. The canonical backend URL is
+        // fetched just below and will be used on the next refresh/navigation.
+        const optimisticUrl = previewUrl || resultUrl
         if (optimisticUrl) {
           setMyProfilePhotoUrl(optimisticUrl)
         }
@@ -4065,6 +4068,13 @@ export function EmployeeSelfServiceProfileView() {
           }
         } catch {
           // Save already succeeded; photo URL refresh is best-effort.
+        }
+
+        // A local data preview is ideal for instant feedback, but retain the
+        // durable backend URL in the shared store once the request completes.
+        if (resultUrl && resultUrl !== canonicalUrl) {
+          canonicalUrl = resultUrl
+          setMyProfilePhotoUrl(resultUrl)
         }
 
         if (canonicalUrl) {

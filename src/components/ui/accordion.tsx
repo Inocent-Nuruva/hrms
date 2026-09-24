@@ -14,7 +14,7 @@ function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props & 
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("rounded-lg border border-slate-200 bg-white", className)}
+      className={cn("rounded-md border border-border bg-card text-card-foreground shadow-xs", className)}
       {...props}
     />
   )
@@ -26,13 +26,13 @@ function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "group flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-slate-800",
+          "group flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-foreground",
           className
         )}
         {...props}
       >
         <span>{children}</span>
-        <ChevronDownIcon className="size-4 text-slate-500 transition-transform duration-200 group-data-[panel-open]:rotate-180" />
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-[panel-open]:rotate-180" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   )
@@ -43,7 +43,7 @@ function AccordionContent({ className, children, ...props }: AccordionPrimitive.
     <AccordionPrimitive.Panel
       data-slot="accordion-content"
       className={cn(
-        "overflow-hidden border-t border-slate-200 px-4 text-sm data-[ending-style]:animate-accordion-up data-[starting-style]:animate-accordion-down",
+        "overflow-hidden border-t border-border px-4 text-sm text-foreground data-[ending-style]:animate-accordion-up data-[starting-style]:animate-accordion-down",
         className
       )}
       {...props}

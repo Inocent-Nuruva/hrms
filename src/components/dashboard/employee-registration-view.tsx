@@ -12,8 +12,22 @@ export function EmployeeRegistrationView() {
   const [activeTab, setActiveTab] = React.useState<RegistrationTab>("manual")
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="tab-rail-scroll">
+    <section className="min-w-0 overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Add employees
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Register one employee or validate and import an Excel employee list
+          </p>
+        </div>
+        <p className="text-[10px] font-medium text-muted-foreground">
+          {activeTab === "manual" ? "Single employee" : "Excel import"}
+        </p>
+      </div>
+
+      <div className="tab-rail-scroll bg-muted/[0.12] px-3">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {([
             { id: "manual", label: "Manual Registration" },
@@ -27,7 +41,7 @@ export function EmployeeRegistrationView() {
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "shrink-0 border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors duration-200",
+                  "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                   isActive
                     ? "border-[var(--primary)] text-[var(--primary)]"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -40,9 +54,9 @@ export function EmployeeRegistrationView() {
         </div>
       </div>
 
-      <div className="min-w-0">
+      <div className="min-w-0 p-2.5 sm:p-3">
         {activeTab === "manual" ? <EmployeeRegisterForm /> : <EmployeeImportView />}
       </div>
-    </div>
+    </section>
   )
 }

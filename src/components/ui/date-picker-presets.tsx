@@ -48,8 +48,7 @@ export function DatePickerPresets({
             ? "border-white/30 bg-white/10 text-white hover:bg-white/20 focus-visible:border-white/50"
             : [
                 // High-contrast field chrome for normal surfaces / dark mode.
-                "border-slate-300 bg-white !text-slate-900 hover:bg-slate-50 focus-visible:border-slate-400",
-                "dark:border-slate-600 dark:bg-slate-900 dark:!text-slate-100 dark:hover:bg-slate-800",
+                "border-input bg-background text-foreground shadow-xs hover:border-primary/30 hover:bg-muted/30 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15",
               ],
           className
         )}
@@ -59,7 +58,7 @@ export function DatePickerPresets({
             "size-4 shrink-0",
             onPrimary
               ? "text-white/80"
-              : "!text-slate-500 dark:!text-slate-300"
+              : "text-muted-foreground"
           )}
         />
         <span
@@ -70,8 +69,8 @@ export function DatePickerPresets({
                 ? "font-medium text-white"
                 : "text-white/70"
               : selectedDate
-                ? "font-medium !text-slate-900 dark:!text-slate-100"
-                : "!text-slate-500 dark:!text-slate-400"
+                ? "font-medium text-foreground"
+                : "text-muted-foreground"
           )}
         >
           {selectedDate ? format(selectedDate, "d MMM yyyy") : placeholder}

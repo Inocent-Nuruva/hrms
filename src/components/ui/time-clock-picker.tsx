@@ -178,19 +178,19 @@ export function TimeClockPicker({
         id={id}
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex h-6 w-full min-w-0 items-center justify-between gap-1 rounded border border-slate-300 bg-white px-1.5 text-left text-[10px] leading-none text-slate-900 outline-none transition hover:bg-slate-50 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]",
+          "inline-flex h-6 w-full min-w-0 items-center justify-between gap-1 rounded-sm border border-input bg-background px-1.5 text-left text-[10px] leading-none text-foreground shadow-xs outline-none transition-colors hover:border-primary/30 hover:bg-muted",
           className
         )}
       >
         <span
           className={cn(
             "truncate font-mono tabular-nums",
-            parsed ? "font-medium" : "text-slate-400 dark:text-slate-500"
+            parsed ? "font-medium" : "text-muted-foreground"
           )}
         >
           {parsed ? formatHhMm(parsed.hour, parsed.minute) : placeholder}
         </span>
-        <Clock3Icon className="size-2.5 shrink-0 text-slate-400" />
+        <Clock3Icon className="size-2.5 shrink-0 text-muted-foreground" />
       </PopoverTrigger>
 
       <PopoverContent

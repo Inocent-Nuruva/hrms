@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { CircleHelpIcon, CircleUserRoundIcon, LogOutIcon, SettingsIcon } from "lucide-react"
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,13 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar"
-import { EllipsisVerticalIcon, CircleUserRoundIcon, BellIcon, LogOutIcon } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 import {
@@ -30,196 +21,140 @@ import {
   getMyProfilePhotoRevision,
   subscribeMyProfilePhoto,
   useMyProfilePhoto,
+  withMyProfilePhotoRevision,
 } from "@/lib/my-profile-photo"
 import { ROUTES } from "@/utils/constants"
 
 const FALLBACK_AVATAR = "/assets/alliance-logo.png"
 
-function resolveAvatarCandidate(value: string | null | undefined): string {
+function resolveAvatarCandidate(value: string | null | undefined) {
   const raw = typeof value === "string" ? value.trim() : ""
   if (!raw || raw === FALLBACK_AVATAR) return ""
   return resolveBackendMediaUrl(raw) || raw
 }
 
-function SidebarUserAvatar({
+function UserAvatar({
   src,
   alt,
   initials,
-  sizeClassName,
+  className,
 }: {
   src: string
   alt: string
   initials: string
-  sizeClassName: string
+  className: string
 }) {
   const [failed, setFailed] = useState(false)
 
-  // Reset error state whenever the source changes.
-  useEffect(() => {
-    setFailed(false)
-  }, [src])
-
-  // Prefer a plain <img> so Base UI Avatar image state cannot stick on the old picture.
-  if (src && src !== FALLBACK_AVATAR && !failed) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        key={src}
-        src={src}
-        alt={alt}
-        className={`${sizeClassName} shrink-0 rounded-full mr-0.5 scale-125 object-cover ring-1 ring-border`}
-        onError={() => setFailed(true)}
-      />
-    )
-  }
+  useEffect(() => setFailed(false), [src])
 
   return (
-    <Avatar className={`${sizeClassName} rounded-md`} size="sm">
-      {src && src !== FALLBACK_AVATAR ? <AvatarImage src={src} alt={alt} /> : null}
-      <AvatarFallback className="rounded-md text-xs">{initials}</AvatarFallback>
+    <Avatar className={className}>
+      {src && src !== FALLBACK_AVATAR && !failed ? (
+        <AvatarImage src={src} alt={alt} onError={() => setFailed(true)} />
+      ) : null}
+      <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">
+        {initials}
+      </AvatarFallback>
     </Avatar>
   )
 }
 
-export function NavUser({
+export function HeaderUserMenu({
   user,
+  accountHref = "/dashboard/me/profile",
 }: {
   user: {
     name: string
     email: string
     avatar: string
   }
+  accountHref?: string
 }) {
-  const { isMobile, setOpenMobile } = useSidebar()
   const router = useRouter()
   const { logout } = useAuth()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  // Live profile photo (updated by Change Photo / default avatar selection).
   const { url: liveProfilePhotoUrl, revision: photoRevision } = useMyProfilePhoto()
-  // Extra direct subscription — guarantees re-render even if hook identity is stale.
   const [storeTick, setStoreTick] = useState(0)
-  useEffect(() => {
-    return subscribeMyProfilePhoto(() => {
-      setStoreTick((n) => n + 1)
-    })
-  }, [])
+
+  useEffect(() => subscribeMyProfilePhoto(() => setStoreTick((value) => value + 1)), [])
 
   const avatarSrc = useMemo(() => {
     const cached = getCachedMyProfilePhotoUrl()
-    const live =
-      resolveAvatarCandidate(liveProfilePhotoUrl) ||
-      resolveAvatarCandidate(cached)
+    const live = resolveAvatarCandidate(liveProfilePhotoUrl) || resolveAvatarCandidate(cached)
     const fromProp = resolveAvatarCandidate(user.avatar)
     const base = live || fromProp || FALLBACK_AVATAR
 
     if (!base || base.startsWith("data:") || base.startsWith("blob:") || base === FALLBACK_AVATAR) {
       return base
     }
-    const rev = Math.max(photoRevision, getMyProfilePhotoRevision(), storeTick)
-    if (rev <= 0) return base
-    const joiner = base.includes("?") ? "&" : "?"
-    return `${base}${joiner}v=${rev}`
+    const revision = Math.max(photoRevision, getMyProfilePhotoRevision(), storeTick)
+    return withMyProfilePhotoRevision(base, revision) || base
   }, [liveProfilePhotoUrl, photoRevision, storeTick, user.avatar])
 
-  const navigateAndClose = (url: string) => {
-    router.push(url)
-    if (isMobile) {
-      setOpenMobile(false)
-    }
-  }
-  const initials =
+  const userInitials =
     user.name
-      .split(" ")
+      .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "U"
 
   const handleLogout = async () => {
-    if (isLoggingOut) {
-      return
-    }
-
+    if (isLoggingOut) return
     setIsLoggingOut(true)
-    if (isMobile) {
-      setOpenMobile(false)
-    }
     await logout()
     router.replace(ROUTES.login)
   }
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <SidebarMenuButton
-                size="lg"
-                className="h-10 min-h-10 rounded-lg px-2 py-1.5 aria-expanded:bg-muted"
-              />
-            }
-          >
-            <SidebarUserAvatar
-              src={avatarSrc}
-              alt={user.name}
-              initials={initials}
-              sizeClassName="size-7"
-            />
-            <div className="grid min-w-0 flex-1 text-left text-xs leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-[11px] text-foreground/70">
-                {user.email}
-              </span>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="relative ml-0.5 rounded-full outline-none ring-offset-background transition hover:ring-2 hover:ring-primary/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={`${user.name} account menu`}
+            title="Account menu"
+          />
+        }
+      >
+        <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-8" />
+        <span className="pointer-events-none absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="min-w-60" side="bottom" align="end" sideOffset={8}>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="p-0 font-normal">
+            <div className="flex items-center gap-2.5 px-2 py-2 text-left">
+              <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-9" />
+              <div className="grid min-w-0 flex-1 leading-tight">
+                <span className="truncate text-sm font-semibold text-foreground">{user.name}</span>
+                <span className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</span>
+              </div>
             </div>
-            <EllipsisVerticalIcon className="ml-auto size-3.5 shrink-0" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="min-w-56"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <SidebarUserAvatar
-                    src={avatarSrc}
-                    alt={user.name}
-                    initials={initials}
-                    sizeClassName="size-8"
-                  />
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {user.email}
-                    </span>
-                  </div>
-                </div>
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => navigateAndClose("/dashboard/settings")}>
-                <CircleUserRoundIcon
-                />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon
-                />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => void handleLogout()} disabled={isLoggingOut}>
-              <LogOutIcon
-              />
-              {isLoggingOut ? "Logging out..." : "Log out"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => router.push(accountHref)}>
+            <CircleUserRoundIcon />
+            Account
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+            <SettingsIcon />
+            Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/dashboard/help")}>
+            <CircleHelpIcon />
+            Get help
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => void handleLogout()} disabled={isLoggingOut} variant="destructive">
+          <LogOutIcon />
+          {isLoggingOut ? "Logging out…" : "Log out"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

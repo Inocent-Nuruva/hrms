@@ -5,22 +5,19 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   UsersIcon,
-  UserCheckIcon,
   CalendarIcon,
-  ClockIcon,
-  Building2Icon,
   RefreshCwIcon,
   AlertCircleIcon,
-  UserPlusIcon,
+  ArrowUpRightIcon,
+  InfoIcon,
+  UserCheckIcon,
   UserMinusIcon,
+  UserXIcon,
+  FilterIcon,
+  MoreHorizontalIcon,
+  SearchIcon,
+  FileTextIcon,
 } from "lucide-react"
-import {
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-} from "recharts"
-
 import {
   getAnalyticsDashboard,
   getAnalyticsFreshness,
@@ -31,6 +28,8 @@ import {
   listAttendanceDailySummariesPage,
   listOnboardingRequests,
   listOffboardingRequests,
+  listPayrollRuns,
+  listPayrollPayslipsForRun,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { isHistoricalEmployeeStatus } from "@/lib/employee-directory-search"
@@ -44,23 +43,18 @@ import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Card, CardContent } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
-
-const EMPLOYMENT_STATUS_OPACITY: Record<string, number> = {
-  active: 1,
-  onboarding: 0.72,
-  suspended: 0.5,
-  terminated: 0.34,
-  exited: 0.2,
-}
-
-function employmentStatusColor(status: string) {
-  const opacity = EMPLOYMENT_STATUS_OPACITY[status.trim().toLowerCase()] ?? 0.42
-  return `rgb(var(--primary-rgb) / ${opacity})`
-}
 
 /** Short client cache so revisiting / refresh feels instant. */
 const DASHBOARD_CACHE_TTL_MS = 20_000
@@ -151,53 +145,6 @@ function readStringDeep(row: AdminRecord | null | undefined, keys: string[]) {
   return typeof value === "string" && value.trim() ? value.trim() : ""
 }
 
-function extractStatusCountsFromAnalytics(
-  row: AdminRecord | null | undefined,
-): Record<string, number> {
-  if (!row) return {}
-
-  const direct = [
-    "employment_status_counts",
-    "status_counts",
-    "headcount_by_status",
-    "statusBreakdown",
-    "employmentStatusBreakdown",
-  ]
-    .map((key) => readDeepValue(row, [key]))
-    .find((value) => value !== null && value !== undefined)
-
-  if (Array.isArray(direct)) {
-    const counts: Record<string, number> = {}
-    for (const entry of direct) {
-      const record = asRecord(entry)
-      if (!record) continue
-      const label =
-        readString(record, ["status", "label", "name", "employment_status"]).toLowerCase()
-      const count =
-        readNumber(record, ["count", "value", "headcount", "total"]) ?? 0
-      if (label) counts[label] = count
-    }
-    return counts
-  }
-
-  const record = asRecord(direct)
-  if (!record) return {}
-  const counts: Record<string, number> = {}
-  for (const [key, value] of Object.entries(record)) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      counts[key.toLowerCase()] = value
-      continue
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value)
-      if (Number.isFinite(parsed)) {
-        counts[key.toLowerCase()] = parsed
-      }
-    }
-  }
-  return counts
-}
-
 function extractDepartmentHeadcountsFromAnalytics(
   row: AdminRecord | null | undefined,
 ): Array<[string, number]> {
@@ -261,6 +208,22 @@ function formatInputDate(value: Date) {
   return value.toISOString().slice(0, 10)
 }
 
+function formatLocalDateKey(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function recordDateKey(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) return ""
+  const raw = String(value)
+  const direct = raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (direct) return direct
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? "" : formatLocalDateKey(parsed)
+}
+
 function shiftDays(value: Date, days: number) {
   const next = new Date(value)
   next.setDate(next.getDate() + days)
@@ -278,16 +241,6 @@ function getEmployeeName(row: AdminRecord): string {
   return parts.length ? parts.join(" ") : "-"
 }
 
-function getEmployeeInitials(name: string): string {
-  const parts = name
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter((part) => part && part !== "-")
-  if (parts.length === 0) return "?"
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase()
-}
-
 function getEmployeeNo(row: AdminRecord): string {
   return readString(row, ["employee_no", "employeeNo", "user_no", "employee_number", "code"]) || "-"
 }
@@ -295,14 +248,6 @@ function getEmployeeNo(row: AdminRecord): string {
 function getEmploymentStatus(row: AdminRecord): string {
   const s = readString(row, ["employment_status", "status", "employmentStatus"])
   return s || "unknown"
-}
-
-function formatStatusLabel(status: string): string {
-  return status
-    .trim()
-    .replace(/[_-]+/g, " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function getDepartmentNameFromEmployee(row: AdminRecord): string {
@@ -537,18 +482,6 @@ function getLeaveId(row: AdminRecord): number | null {
   return readNumber(row, ["id", "leave_request_id", "leaveRequestId"])
 }
 
-function employeeProfileHref(row: AdminRecord): string | null {
-  const no = getEmployeeNo(row)
-  if (no && no !== "-") {
-    return `/dashboard/employees/profile/${encodeURIComponent(no)}`
-  }
-  const id = readNumber(row, ["id", "employee_id", "employeeId"])
-  if (id != null) {
-    return `/dashboard/employees/profile/${id}`
-  }
-  return null
-}
-
 function leaveDetailHref(row: AdminRecord): string {
   const id = getLeaveId(row)
   if (id != null) {
@@ -584,9 +517,21 @@ interface Metric {
   label: string
   value: string | number
   sub?: string
-  icon: React.ComponentType<{ className?: string }>
   href?: string
   compact?: boolean
+}
+
+type WorkforceMetricTone = "emerald" | "amber" | "rose"
+
+interface WorkforceMetric {
+  label: string
+  value: number
+  percentage: number
+  description: React.ReactNode
+  icon: React.ReactNode
+  tone: WorkforceMetricTone
+  visualization: "sparkline" | "bars" | "ticks" | "progress"
+  href?: string
 }
 
 type PagedRowsResult = {
@@ -598,6 +543,7 @@ interface HrAnalyticsDashboardProps {
   refreshKey?: number
   companyName?: string | null
   adminRolesLabel?: string | null
+  assignedRoleNames?: string[]
   userName?: string | null
   profilePhotoUrl?: string | null
   showLeaveRequests?: boolean
@@ -670,7 +616,7 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
 
 function MetricValueSkeleton() {
   return (
-    <div className="mt-1.5 space-y-1.5" aria-hidden="true">
+    <div className="mt-1.5 flex flex-col gap-1.5" aria-hidden="true">
       <Skeleton className="h-6 w-12 rounded-md sm:h-7 sm:w-14" />
       <Skeleton className="hidden h-2.5 w-16 rounded-md sm:block" />
     </div>
@@ -679,83 +625,84 @@ function MetricValueSkeleton() {
 
 function MetricCard({
   metric,
-  index,
   reduce,
   variants,
   hover,
 }: {
   metric: Metric & { ready: boolean }
-  index: number
   reduce: boolean
   variants: ReturnType<typeof useDashboardMotion>["metricCard"]
   hover: ReturnType<typeof useDashboardMotion>["hover"]
 }) {
-  const Icon = metric.icon
-  const orbDelay = index * 0.12
+  const router = useRouter()
   const cardClassName = cn(
-    "dashboard-metric-card group relative isolate block h-full min-w-0 overflow-hidden border border-primary/20 bg-card dark:bg-[#181818]",
-    "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_12px_28px_-20px_rgb(var(--primary-rgb)_/_0.4)] dark:shadow-none",
-    "transition-shadow duration-300",
-    "rounded-xl p-2 sm:p-2.5 lg:p-3",
+    "dashboard-metric-card group relative block h-full w-full min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-4",
+    "shadow-[0_14px_34px_-28px_rgb(15_23_42_/_0.45)] transition duration-300",
     metric.href
-      ? "cursor-pointer !no-underline hover:!no-underline outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      ? "outline-none hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_18px_36px_-24px_rgb(var(--primary-rgb)_/_0.55)]"
       : null,
   )
 
   const cardBody = (
     <>
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ backgroundColor: "var(--primary)" }}
-        initial={reduce ? false : { clipPath: "circle(0% at 92% -6%)", opacity: 0 }}
-        animate={{
-          clipPath: "circle(34% at 94% -8%)",
-          opacity: 1,
-        }}
-        transition={{ duration: 0.95, delay: orbDelay, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -right-5 -top-5 h-12 w-12 rounded-full blur-xl sm:h-16 sm:w-16"
-        style={{ clipPath: "circle(50% at 50% 50%)", backgroundColor: "var(--primary)" }}
-        animate={
-          reduce
-            ? undefined
-            : { y: [0, -8, 0], x: [0, 6, 0], scale: [1, 1.08, 1], opacity: [0.55, 0.85, 0.55] }
-        }
-        transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut", delay: orbDelay }}
-      />
-      <div className="relative z-10 flex items-start justify-between gap-3">
-        <motion.span
-          className={cn(
-            "inline-flex size-6 items-center justify-center rounded-full border border-primary/15 bg-primary/12 text-primary shadow-sm dark:shadow-none sm:size-7 lg:size-8",
-          )}
-          initial={reduce ? false : { scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 380, damping: 18, delay: 0.12 + orbDelay }}
-        >
-          <Icon className="size-3 sm:size-3.5" />
-        </motion.span>
-      </div>
-
-      <div className="relative z-10 mt-2 min-w-0 sm:mt-2.5">
-        <div className="truncate text-[8px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:text-[9px] lg:text-[10px] lg:tracking-[0.16em]">
-          {metric.label}
-        </div>
-        {!metric.ready ? (
-          <MetricValueSkeleton />
+      <div className="flex items-start justify-between gap-3">
+        {metric.href ? (
+          <Link href={metric.href} className="truncate text-xs font-semibold text-foreground !no-underline hover:!no-underline">
+            {metric.label}
+          </Link>
         ) : (
-          <>
-            <div className="mt-0.5 font-semibold leading-none tracking-tight tabular-nums text-primary text-[clamp(0.95rem,1.8vw,1.35rem)]">
-              <AnimatedMetricValue value={metric.value} />
-            </div>
-            {metric.sub ? (
-              <div className="mt-1 hidden truncate text-[10px] leading-4 text-muted-foreground sm:block">
-                {metric.sub}
-              </div>
-            ) : null}
-          </>
+          <div className="truncate text-xs font-semibold text-foreground">{metric.label}</div>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-muted/40 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            aria-label={`${metric.label} actions`}
+          >
+            <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            <DropdownMenuItem disabled={!metric.href} onClick={() => metric.href && router.push(metric.href)}>
+              Open records
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!metric.href}
+              onClick={() => metric.href && window.open(metric.href, "_blank", "noopener,noreferrer")}
+            >
+              Open in new tab
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {!metric.ready ? (
+        <MetricValueSkeleton />
+      ) : (
+        <div className="mt-3 flex min-w-0 items-baseline gap-1.5">
+          <div className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-emerald-600 dark:text-emerald-400">
+            <AnimatedMetricValue value={metric.value} />
+          </div>
+          {metric.sub ? <span className="truncate text-[10px] text-foreground">{metric.sub}</span> : null}
+        </div>
+      )}
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-1 text-[9px] font-medium text-emerald-700 dark:text-emerald-400">
+          <ArrowUpRightIcon className="size-2.5" aria-hidden="true" />
+          Current period
+        </span>
+        {metric.label === "Departments" ? (
+          <div className="flex h-7 items-end gap-1" aria-hidden="true">
+            {[25, 42, 58, 78, 100].map((height, index) => (
+              <span key={height} className={cn("w-1.5 rounded-sm", index === 4 ? "bg-emerald-500" : "bg-emerald-500/10")} style={{ height: `${height}%` }} />
+            ))}
+          </div>
+        ) : metric.label === "New hires" ? (
+          <div className="flex h-2 w-20 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <span className="w-3/5 bg-emerald-500" />
+            <span className="w-1/5 bg-emerald-500/40" />
+          </div>
+        ) : (
+          <svg viewBox="0 0 72 24" className="h-7 w-20" aria-hidden="true">
+            <path d="M2 15 C8 3 13 22 20 10 C27 -1 31 22 39 10 C47 0 52 22 59 9 C64 2 67 14 70 8" fill="none" stroke="rgb(16 185 129)" strokeWidth="2" strokeLinecap="round" />
+          </svg>
         )}
       </div>
     </>
@@ -766,16 +713,415 @@ function MetricCard({
       variants={variants}
       whileHover={hover}
       whileTap={reduce ? undefined : { scale: 0.985 }}
-      className="min-w-0"
+      className="h-full w-full min-w-0"
     >
+      <article className={cardClassName}>{cardBody}</article>
+    </motion.div>
+  )
+}
+
+const workforceMetricTone = {
+  emerald: {
+    icon: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    pill: "bg-emerald-500 text-white",
+    visual: "bg-emerald-500",
+    soft: "bg-emerald-500/10",
+    stroke: "rgb(16 185 129)",
+  },
+  amber: {
+    icon: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    pill: "bg-orange-500 text-white",
+    visual: "bg-orange-500",
+    soft: "bg-orange-500/12",
+    stroke: "rgb(249 115 22)",
+  },
+  rose: {
+    icon: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    pill: "bg-rose-500 text-white",
+    visual: "bg-rose-500",
+    soft: "bg-rose-500/12",
+    stroke: "rgb(244 63 94)",
+  },
+} satisfies Record<WorkforceMetricTone, Record<string, string>>
+
+function WorkforceMetricVisual({ metric }: { metric: WorkforceMetric }) {
+  const tone = workforceMetricTone[metric.tone]
+  const percentage = Math.min(100, Math.max(0, metric.percentage))
+
+  if (metric.visualization === "sparkline") {
+    return (
+      <svg viewBox="0 0 150 42" className="h-8 w-full" aria-hidden="true">
+        <path
+          d="M2 34 C17 34 17 38 30 38 C42 38 38 20 52 20 C66 20 62 35 77 35 C94 35 88 38 104 38 C119 38 113 10 128 10 C140 10 136 3 148 3"
+          fill="none"
+          stroke={tone.stroke}
+          strokeLinecap="round"
+          strokeWidth="2"
+          opacity="0.7"
+        />
+      </svg>
+    )
+  }
+
+  if (metric.visualization === "bars") {
+    return (
+      <div className="flex h-8 items-end gap-1" aria-hidden="true">
+        {[45, 62, 38, 88, 58, 76, 52].map((height, index) => (
+          <span
+            key={height + index}
+            className={cn("w-2.5 rounded-t-md", index === 3 ? tone.visual : tone.soft)}
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  if (metric.visualization === "ticks") {
+    return (
+      <div className="flex h-8 items-center gap-0.5" aria-hidden="true">
+        {Array.from({ length: 18 }, (_, index) => (
+          <span
+            key={index}
+            className={cn("h-6 w-1 rounded-full", index < Math.round(percentage / 5.56) ? tone.visual : tone.soft)}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn("h-5 overflow-hidden rounded-full", tone.soft)} aria-hidden="true">
+      <div className={cn("h-full rounded-full transition-[width] duration-700", tone.visual)} style={{ width: `${percentage}%` }} />
+    </div>
+  )
+}
+
+function WorkforceMetricCard({
+  metric,
+  reduce,
+  variants,
+}: {
+  metric: WorkforceMetric
+  reduce: boolean
+  variants: ReturnType<typeof useDashboardMotion>["metricCard"]
+}) {
+  const tone = workforceMetricTone[metric.tone]
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h2 className="truncate text-xs font-semibold text-foreground">{metric.label}</h2>
+          <InfoIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <span className={cn("inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10px] font-semibold tabular-nums", tone.pill)}>
+          <span className="inline-flex size-3.5 items-center justify-center rounded-full bg-white/90 text-slate-800">
+            <ArrowUpRightIcon className="size-2" aria-hidden="true" />
+          </span>
+          {metric.percentage}%
+        </span>
+      </div>
+
+      <div className="mt-4 flex items-center gap-2.5">
+        <span className={cn("inline-flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone.icon)}>
+          {metric.icon}
+        </span>
+        <div className="text-3xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
+          <AnimatedMetricValue value={metric.value} />
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-[minmax(58px,0.7fr)_minmax(0,1.3fr)] items-end gap-2.5">
+        <WorkforceMetricVisual metric={metric} />
+        <p className="truncate text-[10px] leading-4 text-muted-foreground" title={typeof metric.description === "string" ? metric.description : undefined}>
+          {metric.description}
+        </p>
+      </div>
+    </>
+  )
+
+  return (
+    <motion.div variants={variants} whileTap={reduce ? undefined : { scale: 0.99 }} className="h-full w-full min-w-0">
       {metric.href ? (
-        <Link href={metric.href} className={cardClassName} aria-label={metric.label}>
-          {cardBody}
+        <Link
+          href={metric.href}
+          className="block h-full min-h-40 rounded-2xl border border-border/70 bg-card p-4 !no-underline shadow-[0_16px_40px_-34px_rgb(15_23_42_/_0.5)] transition hover:-translate-y-0.5 hover:border-primary/25 hover:!no-underline hover:shadow-[0_20px_44px_-32px_rgb(15_23_42_/_0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&_*]:!no-underline"
+        >
+          {content}
         </Link>
       ) : (
-        <article className={cardClassName}>{cardBody}</article>
+        <article className="h-full min-h-40 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_16px_40px_-34px_rgb(15_23_42_/_0.5)]">
+          {content}
+        </article>
       )}
     </motion.div>
+  )
+}
+
+type AttendanceChartDay = {
+  label: string
+  present: number
+  late: number
+  absent: number
+}
+
+type PerformanceStat = {
+  label: string
+  value: number
+}
+
+function WorkforceInsightPanels({
+  rangeLabel,
+  attendanceRate,
+  present,
+  late,
+  absent,
+  attendanceDays,
+  performanceScore,
+  performanceStats,
+}: {
+  rangeLabel: string
+  attendanceRate: number
+  present: number
+  late: number
+  absent: number
+  attendanceDays: AttendanceChartDay[]
+  performanceScore: number
+  performanceStats: PerformanceStat[]
+}) {
+  const maxPerformanceValue = Math.max(1, ...performanceStats.map((item) => item.value))
+
+  return (
+    <div className="mt-3 grid w-full gap-3 lg:grid-cols-2">
+      <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-[0_16px_42px_-34px_rgb(15_23_42_/_0.45)]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
+            <div className="mt-3 flex items-end gap-2">
+              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">{attendanceRate}%</span>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                Attendance rate
+              </span>
+            </div>
+          </div>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">{rangeLabel}</span>
+        </div>
+        <div className="mt-4 grid w-full grid-cols-3 gap-2 border-y border-border/60 py-3">
+          {[
+            ["On time", present, "border-emerald-500"],
+            ["Late", late, "border-amber-400"],
+            ["Absent", absent, "border-rose-400"],
+          ].map(([label, value, border]) => (
+            <div key={String(label)} className={cn("border-l-2 pl-2", border)}>
+              <p className="text-[10px] text-muted-foreground">{label}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{value}</p>
+            </div>
+          ))}
+        </div>
+        {attendanceDays.length > 0 ? (
+          <div className="mt-4 flex h-40 items-end gap-2 overflow-hidden">
+            {attendanceDays.map((day) => {
+              const total = Math.max(1, day.present + day.late + day.absent)
+              return (
+                <div key={day.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                  <div className="flex h-28 w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-md bg-muted/40">
+                    <span className="bg-emerald-500" style={{ height: `${(day.present / total) * 100}%` }} />
+                    <span className="bg-amber-300" style={{ height: `${(day.late / total) * 100}%` }} />
+                    <span className="bg-rose-300" style={{ height: `${(day.absent / total) * 100}%` }} />
+                  </div>
+                  <span className="truncate text-[9px] text-muted-foreground">{day.label}</span>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 flex h-40 items-center justify-center rounded-xl bg-muted/20 text-xs text-muted-foreground">
+            No attendance records in this period.
+          </div>
+        )}
+      </section>
+
+      <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-[0_16px_42px_-34px_rgb(15_23_42_/_0.45)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Team performance</h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">Published reviews and approved work</p>
+          </div>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">{rangeLabel}</span>
+        </div>
+        <div className="mt-5">
+          <p className="text-3xl font-semibold leading-none tabular-nums text-foreground">{performanceScore}%</p>
+          <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">Current performance score</p>
+        </div>
+        <div className="mt-6 flex h-36 items-end justify-around gap-4 border-b border-border/60 pb-2">
+          {performanceStats.map((item) => (
+            <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+              <div className="flex h-24 w-full max-w-12 items-end justify-center gap-1">
+                <span className="w-2.5 rounded-t bg-emerald-500/20" style={{ height: `${Math.max(12, (item.value / maxPerformanceValue) * 70)}%` }} />
+                <span className="w-2.5 rounded-t bg-emerald-500" style={{ height: `${Math.max(18, (item.value / maxPerformanceValue) * 100)}%` }} />
+              </div>
+              <span className="truncate text-[9px] font-medium text-foreground">{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-3 text-[9px] text-muted-foreground">
+          {performanceStats.map((item) => (
+            <span key={item.label}><span className="font-semibold text-foreground">{item.value}</span> {item.label.toLowerCase()}</span>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function formatDashboardCurrency(value: unknown, currency = "TZS") {
+  const amount = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(amount)) return "—"
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount)
+  } catch {
+    return `${currency} ${amount.toLocaleString()}`
+  }
+}
+
+function PeopleExperiencePanels({
+  satisfactionScore,
+  satisfactionCategories,
+  payrollRows,
+  canOpenPayroll,
+}: {
+  satisfactionScore: number
+  satisfactionCategories: Array<{ label: string; value: number }>
+  payrollRows: AdminRecord[]
+  canOpenPayroll: boolean
+}) {
+  const [payrollSearch, setPayrollSearch] = React.useState("")
+  const filteredPayrollRows = payrollRows.filter((row) => {
+    if (!payrollSearch.trim()) return true
+    const employee = asRecord(row.employee)
+    const haystack = [
+      readStringDeep(row, ["employee_name", "full_name", "employee_no", "employeeNo"]),
+      readStringDeep(employee, ["full_name", "name", "employee_no", "employeeNo"]),
+      readStringDeep(row, ["job_title", "designation_name", "position_name"]),
+    ].join(" ").toLowerCase()
+    return haystack.includes(payrollSearch.trim().toLowerCase())
+  })
+  const gaugeLength = 126
+  const gaugeProgress = gaugeLength * (Math.min(100, Math.max(0, satisfactionScore)) / 100)
+
+  return (
+    <div className="mt-3 grid w-full gap-3 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)]">
+      <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-foreground">Employee satisfaction</h2>
+          <MoreHorizontalIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <div className="mt-4 grid grid-cols-[180px_minmax(0,1fr)] items-center gap-3">
+          <div className="relative h-24">
+            <svg viewBox="0 0 120 68" className="h-full w-full" aria-hidden="true">
+              <path d="M12 58 A48 48 0 0 1 108 58" fill="none" stroke="rgb(226 232 240)" strokeWidth="10" strokeLinecap="round" pathLength={gaugeLength} />
+              <path d="M12 58 A48 48 0 0 1 108 58" fill="none" stroke="rgb(16 185 129)" strokeWidth="10" strokeLinecap="round" pathLength={gaugeLength} strokeDasharray={`${gaugeProgress} ${gaugeLength}`} />
+            </svg>
+            <div className="absolute inset-x-0 bottom-1 text-center">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{satisfactionScore}%</p>
+              <p className="text-[9px] text-muted-foreground">average satisfaction</p>
+            </div>
+          </div>
+          <div className="space-y-2 text-[10px] text-muted-foreground">
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500" />Satisfied</p>
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500/25" />Neutral</p>
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-muted" />Needs attention</p>
+          </div>
+        </div>
+        {satisfactionCategories.some((item) => item.value > 0) ? (
+          <div className="mt-4 space-y-3">
+            {satisfactionCategories.map((item) => (
+              <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_100px] items-center gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold text-foreground">{item.label}</p>
+                  <p className="text-[10px] text-muted-foreground">{item.value}% satisfaction</p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, item.value)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-lg bg-muted/30 px-3 py-3 text-xs text-muted-foreground">No employee satisfaction survey data is available yet.</p>
+        )}
+      </section>
+
+      <section className="h-full min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Payroll summary</h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">Latest generated employee payslips</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="relative hidden sm:block">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={payrollSearch}
+                onChange={(event) => setPayrollSearch(event.target.value)}
+                placeholder="Search employee"
+                className="h-8 w-44 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] text-foreground outline-none focus:border-primary"
+              />
+            </label>
+            {canOpenPayroll ? (
+              <Link href="/dashboard/operations/payroll" className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[10px] font-semibold !text-primary-foreground !no-underline hover:!no-underline">
+                View payroll
+              </Link>
+            ) : null}
+          </div>
+        </div>
+        {filteredPayrollRows.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left">
+              <thead className="bg-muted/35 text-[10px] text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Employee</th>
+                  <th className="px-3 py-2 font-medium">Job title</th>
+                  <th className="px-3 py-2 font-medium">Gross</th>
+                  <th className="px-3 py-2 font-medium">Deductions</th>
+                  <th className="px-3 py-2 font-medium">Net pay</th>
+                  <th className="px-4 py-2 text-right font-medium">Payslip</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filteredPayrollRows.slice(0, 6).map((row, index) => {
+                  const employee = asRecord(row.employee)
+                  const name = readStringDeep(row, ["employee_name", "full_name"]) || readStringDeep(employee, ["full_name", "name"]) || `Employee ${index + 1}`
+                  const number = readStringDeep(row, ["employee_no", "employeeNo"]) || readStringDeep(employee, ["employee_no", "employeeNo"])
+                  const title = readStringDeep(row, ["job_title", "designation_name", "position_name"]) || readStringDeep(employee, ["job_title", "designation_name", "position_name"]) || "—"
+                  const currency = readStringDeep(row, ["currency", "currency_code"]) || "TZS"
+                  return (
+                    <tr key={`${readNumber(row, ["id", "payslip_id"]) ?? index}`} className="text-xs text-foreground hover:bg-muted/20">
+                      <td className="px-4 py-2.5"><p className="font-medium">{name}</p><p className="text-[9px] text-muted-foreground">{number || "—"}</p></td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{title}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatDashboardCurrency(readDeepValue(row, ["gross_pay", "grossPay", "total_gross_pay"]), currency)}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatDashboardCurrency(readDeepValue(row, ["total_deductions", "deductions", "deduction_amount"]), currency)}</td>
+                      <td className="px-3 py-2.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{formatDashboardCurrency(readDeepValue(row, ["net_pay", "netPay", "total_net_pay"]), currency)}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {canOpenPayroll ? <Link href="/dashboard/operations/payroll" className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-500/10 px-2 text-[10px] font-medium text-emerald-700 !no-underline hover:!no-underline"><FileTextIcon className="size-3" />Open</Link> : "—"}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex min-h-56 items-center justify-center px-6 text-center text-xs text-muted-foreground">
+            {canOpenPayroll ? "No generated payslips are available for the latest payroll run." : "Payroll access is not available for this account."}
+          </div>
+        )}
+      </section>
+    </div>
   )
 }
 
@@ -787,53 +1133,26 @@ function DashboardSurface({
   className?: string
 }) {
   return (
-    <div
+    <Card
+      size="sm"
       className={cn(
-        "rounded-none border border-primary/20 bg-card p-4 sm:p-5 dark:bg-[#181818]",
-        "shadow-[0_1px_0_rgb(var(--primary-rgb)_/_0.12)_inset,0_16px_36px_-22px_rgb(var(--primary-rgb)_/_0.45)] dark:shadow-none",
+        "gap-0 rounded-2xl border-border/70 bg-card py-0 shadow-[0_18px_42px_-34px_rgb(var(--primary-rgb)_/_0.6)]",
         className,
       )}
     >
-      {children}
-    </div>
+      <CardContent className="p-4 sm:p-5">{children}</CardContent>
+    </Card>
   )
 }
 
 function SectionSkeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="space-y-2 py-1" aria-hidden="true">
+    <div className="flex flex-col gap-2 py-1" aria-hidden="true">
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton key={i} className="h-9 w-full rounded-md" />
       ))}
     </div>
   )
-}
-
-// Reusable doodle components (for admin dashboard header styling, matching employee dashboards)
-function DoodleSprites() {
-  return (
-    <svg width="0" height="0" className="hidden" aria-hidden="true">
-      <symbol id="doodle-circles" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
-          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
-          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
-          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
-        </g>
-      </symbol>
-    </svg>
-  )
-}
-
-function Doodle({ name = "doodle-circles" }: { name?: string }) {
-  const doodleType = name.replace('doodle-', '');
-  return (
-    <svg 
-      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
-      aria-hidden="true"
-    >
-      <use href={`#${name}`} />
-    </svg>
-  );
 }
 
 type DashboardSlice =
@@ -868,6 +1187,7 @@ export default function HrAnalyticsDashboard({
   refreshKey = 0,
   companyName,
   adminRolesLabel,
+  assignedRoleNames = [],
   userName,
   profilePhotoUrl,
   showLeaveRequests = false,
@@ -887,6 +1207,7 @@ export default function HrAnalyticsDashboard({
     warm?.fromDate ?? formatInputDate(shiftDays(new Date(), -30))
   )
   const [toDate, setToDate] = React.useState(warm?.toDate ?? formatInputDate(new Date()))
+  const [dateFilterOpen, setDateFilterOpen] = React.useState(false)
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>(warm?.employees ?? [])
   const [departments, setDepartments] = React.useState<AdminRecord[]>(warm?.departments ?? [])
@@ -905,6 +1226,7 @@ export default function HrAnalyticsDashboard({
   const [offboardingRequests, setOffboardingRequests] = React.useState<AdminRecord[]>(
     warm?.offboardingRequests ?? []
   )
+  const [payrollPayslips, setPayrollPayslips] = React.useState<AdminRecord[]>([])
   const [analyticsSummary, setAnalyticsSummary] = React.useState<AdminRecord | null>(null)
   const [analyticsFreshness, setAnalyticsFreshness] = React.useState<AdminRecord[]>([])
 
@@ -924,13 +1246,6 @@ export default function HrAnalyticsDashboard({
     actor.ready &&
     canAccessDashboardRoute(
       "/dashboard/employees/all",
-      actor.permissionLabels,
-      actor.accessMode
-    )
-  const canOpenEmployeeProfiles =
-    actor.ready &&
-    canAccessDashboardRoute(
-      "/dashboard/employees/profile",
       actor.permissionLabels,
       actor.accessMode
     )
@@ -967,6 +1282,13 @@ export default function HrAnalyticsDashboard({
         actor.permissionLabels,
         actor.accessMode
       ))
+  const canOpenPayroll =
+    actor.ready &&
+    canAccessDashboardRoute(
+      "/dashboard/operations/payroll",
+      actor.permissionLabels,
+      actor.accessMode
+    )
 
   React.useEffect(() => {
     employeesRef.current = employees
@@ -1097,11 +1419,21 @@ export default function HrAnalyticsDashboard({
           setOffboardingRequests(offboardRes.rows ?? [])
           markReady("offboarding")
         }),
+
+      canOpenPayroll
+        ? listPayrollRuns(token, { page: 1, limit: 1, sortBy: "created_at", sortOrder: "DESC" })
+            .then(async (result) => {
+              const run = result.rows[0]
+              const runId = run ? readNumber(run, ["id", "payroll_run_id", "payrollRunId"]) : null
+              setPayrollPayslips(runId === null ? [] : await listPayrollPayslipsForRun(token, runId).catch(() => []))
+            })
+            .catch(() => setPayrollPayslips([]))
+        : Promise.resolve().then(() => setPayrollPayslips([])),
     ]
 
     await Promise.allSettled(tasks)
     setLoading(false)
-  }, [fromDate, toDate, markReady, showLeaveRequests])
+  }, [canOpenPayroll, fromDate, toDate, markReady, showLeaveRequests])
 
   React.useEffect(() => {
     // First mount after login: revalidate quietly so we don't flash skeletons again.
@@ -1116,11 +1448,6 @@ export default function HrAnalyticsDashboard({
     }
   }, [refreshKey, fetchAll])
 
-  const analyticsStatusCounts = React.useMemo(
-    () => extractStatusCountsFromAnalytics(analyticsSummary),
-    [analyticsSummary],
-  )
-
   const statusCounts = React.useMemo(() => {
     const counts: Record<string, number> = {}
     for (const e of employees) {
@@ -1129,9 +1456,6 @@ export default function HrAnalyticsDashboard({
     }
     return counts
   }, [employees])
-
-  const resolvedStatusCounts =
-    Object.keys(statusCounts).length > 0 ? statusCounts : analyticsStatusCounts
 
   const currentEmployees = React.useMemo(
     () =>
@@ -1145,12 +1469,6 @@ export default function HrAnalyticsDashboard({
   const totalHeadcount = currentEmployees.length
 
   const activeCount = statusCounts["active"] ?? 0
-  const activePct = totalHeadcount > 0 ? Math.round((activeCount / totalHeadcount) * 100) : 0
-  const statusBreakdownTotal = Math.max(
-    0,
-    Object.values(resolvedStatusCounts).reduce((sum, count) => sum + count, 0),
-  )
-
   // Always derive from latest employees + departments so the chart cannot go stale
   // when one list request finishes before the other.
   const resolvedDepartmentHeadcounts = React.useMemo(() => {
@@ -1160,24 +1478,6 @@ export default function HrAnalyticsDashboard({
       : buildDepartmentHeadcounts(departments, currentEmployees)
   }, [analyticsSummary, currentEmployees, departments])
 
-  const maxDeptCount = React.useMemo(() => {
-    return Math.max(1, ...resolvedDepartmentHeadcounts.map(([, c]) => c), 0)
-  }, [resolvedDepartmentHeadcounts])
-
-  const leaveStatusCounts = React.useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const l of leaveRequests) {
-      const s = getLeaveStatus(l)
-      counts[s] = (counts[s] || 0) + 1
-    }
-    return counts
-  }, [leaveRequests])
-
-  const pendingLeaves =
-    readNumberDeep(analyticsSummary, ["pending_leave", "pending_leaves", "leave_pending"]) ??
-    leaveStatusCounts["pending"] ??
-    leaveStatusCounts["submitted"] ??
-    0
   const recentLeaves = React.useMemo(() => {
     return [...leaveRequests]
       .sort((a, b) => {
@@ -1187,45 +1487,6 @@ export default function HrAnalyticsDashboard({
       })
       .slice(0, 6)
   }, [leaveRequests])
-
-  // Attendance rate from summaries (defensive)
-  const attendanceRate = React.useMemo(() => {
-    const analyticsValue = readNumberDeep(analyticsSummary, [
-      "attendance_rate",
-      "attendance_percentage",
-      "present_rate",
-    ])
-    if (analyticsValue !== null) return analyticsValue
-    if (!attendanceSummaries.length) return null
-    let present = 0
-    let total = 0
-    for (const s of attendanceSummaries) {
-      const st = getAttendanceStatus(s)
-      total += 1
-      if (
-        st.includes("present") ||
-        st.includes("worked") ||
-        st.includes("on_time") ||
-        st.includes("ontime") ||
-        st === "ok" ||
-        st.includes("full")
-      ) {
-        present += 1
-      }
-    }
-    if (total === 0) return null
-    return Math.round((present / total) * 100)
-  }, [analyticsSummary, attendanceSummaries])
-
-  const recentEmployees = React.useMemo(() => {
-    return [...currentEmployees]
-      .sort((a, b) => {
-        const da = String(a.created_at || a.hire_date || a.joined_at || "")
-        const db = String(b.created_at || b.hire_date || b.joined_at || "")
-        return db.localeCompare(da)
-      })
-      .slice(0, 5)
-  }, [currentEmployees])
 
   // Surface more: hires within the chosen date range (client-side on the loaded sample)
   const hiresInRange = React.useMemo(() => {
@@ -1285,43 +1546,195 @@ export default function HrAnalyticsDashboard({
     }).length
   }, [analyticsSummary, offboardingRequests])
 
-  type MetricWithReady = Metric & { ready: boolean }
+  const todayKey = formatLocalDateKey(new Date())
+  const todayAttendance = React.useMemo(() => {
+    const rows = new Map<string, AdminRecord>()
+    attendanceSummaries.forEach((summary, index) => {
+      const date = recordDateKey(
+        readDeepValue(summary, ["attendance_date", "work_date", "summary_date", "date", "record_date"])
+      )
+      if (date !== todayKey) return
+      const employeeId = readNumberDeep(summary, ["employee_id", "employeeId", "company_user_id", "user_id"])
+      const employeeNo = readStringDeep(summary, ["employee_no", "employeeNo", "staff_no"])
+      rows.set(employeeId !== null ? `id:${employeeId}` : employeeNo ? `no:${employeeNo}` : `row:${index}`, summary)
+    })
+    return Array.from(rows.values())
+  }, [attendanceSummaries, todayKey])
 
-  const metrics: MetricWithReady[] = [
+  const todayPresent = React.useMemo(
+    () =>
+      todayAttendance.filter((summary) => {
+        const status = getAttendanceStatus(summary)
+        return (
+          status.includes("present") ||
+          status.includes("worked") ||
+          status.includes("on_time") ||
+          status.includes("ontime") ||
+          status === "ok" ||
+          status.includes("full")
+        )
+      }).length,
+    [todayAttendance]
+  )
+
+  const todayLeave = React.useMemo(() => {
+    const employeesOnLeave = new Set<string>()
+    leaveRequests.forEach((request, index) => {
+      const status = getLeaveStatus(request)
+      if (status.includes("reject") || status.includes("cancel") || status.includes("pending") || status.includes("submitted")) {
+        return
+      }
+      const start = recordDateKey(readDeepValue(request, ["start_date", "from_date", "date_from"]))
+      const end = recordDateKey(readDeepValue(request, ["end_date", "to_date", "date_to"])) || start
+      if (!start || todayKey < start || todayKey > end) return
+      const employeeId = readNumberDeep(request, ["employee_id", "employeeId", "company_user_id", "user_id"])
+      const employeeNo = readStringDeep(request, ["employee_no", "employeeNo", "staff_no"])
+      employeesOnLeave.add(employeeId !== null ? `id:${employeeId}` : employeeNo ? `no:${employeeNo}` : `row:${index}`)
+    })
+    return employeesOnLeave.size
+  }, [leaveRequests, todayKey])
+
+  const explicitTodayAbsent = React.useMemo(
+    () =>
+      todayAttendance.filter((summary) => {
+        const status = getAttendanceStatus(summary)
+        return status.includes("absent") || status.includes("no_show") || status.includes("no show")
+      }).length,
+    [todayAttendance]
+  )
+  const todayAbsent =
+    explicitTodayAbsent > 0
+      ? explicitTodayAbsent
+      : todayAttendance.length > 0
+        ? Math.max(0, totalHeadcount - todayPresent - todayLeave)
+        : 0
+  const percentageOfHeadcount = (value: number) =>
+    totalHeadcount > 0 ? Math.min(100, Math.round((value / totalHeadcount) * 100)) : 0
+  const toneForPercentage = (percentage: number): WorkforceMetricTone => {
+    if (percentage <= 0) return "rose"
+    if (percentage < 70) return "amber"
+    return "emerald"
+  }
+  const attendanceReport = React.useMemo(() => {
+    const byDate = new Map<string, AttendanceChartDay>()
+    let present = 0
+    let late = 0
+    let absent = 0
+
+    attendanceSummaries.forEach((summary) => {
+      const status = getAttendanceStatus(summary)
+      const isLate = status.includes("late")
+      const isAbsent = status.includes("absent") || status.includes("no_show") || status.includes("no show")
+      const isPresent =
+        !isAbsent &&
+        (isLate ||
+          status.includes("present") ||
+          status.includes("worked") ||
+          status.includes("on_time") ||
+          status.includes("ontime") ||
+          status === "ok" ||
+          status.includes("full"))
+
+      if (isAbsent) absent += 1
+      else if (isLate) late += 1
+      else if (isPresent) present += 1
+
+      const date = recordDateKey(
+        readDeepValue(summary, ["attendance_date", "work_date", "summary_date", "date", "record_date"])
+      )
+      if (!date || (!isPresent && !isAbsent)) return
+      const current = byDate.get(date) ?? { label: date, present: 0, late: 0, absent: 0 }
+      if (isAbsent) current.absent += 1
+      else if (isLate) current.late += 1
+      else current.present += 1
+      byDate.set(date, current)
+    })
+
+    const total = present + late + absent
+    return {
+      present,
+      late,
+      absent,
+      rate: total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : 0,
+      days: Array.from(byDate.entries())
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(-14)
+        .map(([date, values]) => ({
+          ...values,
+          label: new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "2-digit" }),
+        })),
+    }
+  }, [attendanceSummaries])
+  const rawPerformanceScore = readNumberDeep(analyticsSummary, [
+    "average_score",
+    "team_performance",
+    "performance_score",
+    "average_performance_score",
+  ])
+  const performanceScore = rawPerformanceScore === null
+    ? 0
+    : Math.min(100, Math.round((rawPerformanceScore <= 5 ? rawPerformanceScore * 20 : rawPerformanceScore) * 10) / 10)
+  const performanceStats: PerformanceStat[] = [
     {
-      label: "Headcount",
+      label: "Reviews",
+      value: readNumberDeep(analyticsSummary, ["published_reviews", "published_team_reviews"]) ?? 0,
+    },
+    {
+      label: "Reports",
+      value: readNumberDeep(analyticsSummary, ["approved_daily_reports", "approved_reports"]) ?? 0,
+    },
+    {
+      label: "Visits",
+      value: readNumberDeep(analyticsSummary, ["reviewed_field_visits", "reviewed_visits"]) ?? 0,
+    },
+  ]
+  const rawSatisfactionScore = readNumberDeep(analyticsSummary, [
+    "employee_satisfaction",
+    "satisfaction_score",
+    "employee_satisfaction_score",
+    "engagement_score",
+  ])
+  const satisfactionScore = rawSatisfactionScore === null
+    ? 0
+    : Math.min(100, Math.round((rawSatisfactionScore <= 5 ? rawSatisfactionScore * 20 : rawSatisfactionScore) * 10) / 10)
+  const satisfactionCategories = [
+    {
+      label: "Compensation & benefits",
+      value: readNumberDeep(analyticsSummary, ["compensation_satisfaction", "benefits_satisfaction"]) ?? 0,
+    },
+    {
+      label: "Work culture",
+      value: readNumberDeep(analyticsSummary, ["work_culture_satisfaction", "culture_satisfaction"]) ?? 0,
+    },
+    {
+      label: "Work-life balance",
+      value: readNumberDeep(analyticsSummary, ["work_life_balance_satisfaction", "work_life_balance"]) ?? 0,
+    },
+    {
+      label: "Career growth",
+      value: readNumberDeep(analyticsSummary, ["career_growth_satisfaction", "career_growth_score"]) ?? 0,
+    },
+  ].map((item) => ({ ...item, value: Math.min(100, Math.max(0, item.value)) }))
+
+  const workforceMetrics: WorkforceMetric[] = [
+    {
+      label: "Total employees",
       value: totalHeadcount,
-      sub: `${activeCount} active • ${activePct}%`,
-      icon: UsersIcon,
-      ready: sliceReady.employees,
+      percentage: totalHeadcount > 0 ? 100 : 0,
+      description: `${activeCount} active across ${departments.length || resolvedDepartmentHeadcounts.length} departments`,
+      icon: <UsersIcon className="size-5" aria-hidden="true" />,
+      tone: toneForPercentage(totalHeadcount > 0 ? 100 : 0),
+      visualization: "sparkline",
       href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
     },
     {
-      label: "Departments",
-      value: departments.length || departmentHeadcounts.length || "-",
-      sub: "Active structures",
-      icon: Building2Icon,
-      ready: sliceReady.departments,
-      href: canOpenDepartments ? "/dashboard/departments" : undefined,
-    },
-    ...(showLeaveRequests
-      ? [
-          {
-            label: "Pending Leave",
-            value: pendingLeaves,
-            sub: "Awaiting action",
-            icon: CalendarIcon,
-            ready: sliceReady.leave,
-            href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
-          } satisfies MetricWithReady,
-        ]
-      : []),
-    {
-      label: "Attendance",
-      value: attendanceRate != null ? `${attendanceRate}%` : "—",
-      sub: attendanceRate != null ? "Last period" : "No summary data",
-      icon: ClockIcon,
-      ready: sliceReady.attendance,
+      label: "Today present",
+      value: todayPresent,
+      percentage: percentageOfHeadcount(todayPresent),
+      description: `${percentageOfHeadcount(todayPresent)}% of employees are present today (${todayPresent} of ${totalHeadcount})`,
+      icon: <UserCheckIcon className="size-5" aria-hidden="true" />,
+      tone: toneForPercentage(percentageOfHeadcount(todayPresent)),
+      visualization: "bars",
       href: canOpenAttendance
         ? canAccessDashboardRoute(
             "/dashboard/attendance/daily-summaries",
@@ -1333,10 +1746,49 @@ export default function HrAnalyticsDashboard({
         : undefined,
     },
     {
+      label: "Today absent",
+      value: todayAbsent,
+      percentage: percentageOfHeadcount(todayAbsent),
+      description: `${percentageOfHeadcount(todayAbsent)}% of employees are absent today (${todayAbsent} of ${totalHeadcount})`,
+      icon: <UserXIcon className="size-5" aria-hidden="true" />,
+      tone: toneForPercentage(percentageOfHeadcount(todayAbsent)),
+      visualization: "ticks",
+      href: canOpenAttendance
+        ? canAccessDashboardRoute(
+            "/dashboard/attendance/daily-summaries",
+            actor.permissionLabels,
+            actor.accessMode
+          )
+          ? "/dashboard/attendance/daily-summaries"
+          : "/dashboard/attendance"
+        : undefined,
+    },
+    {
+      label: "Today on leave",
+      value: todayLeave,
+      percentage: percentageOfHeadcount(todayLeave),
+      description: `${percentageOfHeadcount(todayLeave)}% of employees are on approved leave today (${todayLeave} of ${totalHeadcount})`,
+      icon: <UserMinusIcon className="size-5" aria-hidden="true" />,
+      tone: toneForPercentage(percentageOfHeadcount(todayLeave)),
+      visualization: "progress",
+      href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
+    },
+  ]
+
+  type MetricWithReady = Metric & { ready: boolean }
+
+  const metrics: MetricWithReady[] = [
+    {
+      label: "Departments",
+      value: departments.length || departmentHeadcounts.length || "-",
+      sub: "Active structures",
+      ready: sliceReady.departments,
+      href: canOpenDepartments ? "/dashboard/departments" : undefined,
+    },
+    {
       label: "New hires",
       value: hiresInRange,
       sub: fromDate && toDate ? `${formatDateShort(fromDate)} - ${formatDateShort(toDate)}` : "Selected range",
-      icon: UserCheckIcon,
       ready: sliceReady.employees,
       compact: true,
       href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
@@ -1345,7 +1797,6 @@ export default function HrAnalyticsDashboard({
       label: "Onboarding",
       value: pendingOnboarding,
       sub: "open requests",
-      icon: UserPlusIcon,
       ready: sliceReady.onboarding,
       compact: true,
       href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
@@ -1354,18 +1805,13 @@ export default function HrAnalyticsDashboard({
       label: "Offboarding",
       value: pendingOffboarding,
       sub: "open requests",
-      icon: UserMinusIcon,
       ready: sliceReady.offboarding,
       compact: true,
       href: canOpenOffboarding ? "/dashboard/employees/offboarding" : undefined,
     },
   ]
 
-  const workforceReady = sliceReady.employees
   const leaveSectionReady = sliceReady.leave
-  const departmentSectionReady = sliceReady.employees && sliceReady.departments
-
-  const statusOrder = ["active", "onboarding", "suspended", "terminated", "exited"]
   const dashboardTitle = companyName?.trim() || "HRMS"
   const motionPreset = useDashboardMotion()
   const hrAnalyticsGroups = React.useMemo(() => {
@@ -1443,6 +1889,31 @@ export default function HrAnalyticsDashboard({
       )
       .find(Boolean) ||
     readStringDeep(analyticsSummary, ["generated_at", "generatedAt"])
+  const dateRangePresets = [
+    { label: "Last week", days: 7 },
+    { label: "Last 2 weeks", days: 14 },
+    { label: "Last 30 days", days: 30 },
+    { label: "Last 90 days", days: 90 },
+  ]
+  const todayInputDate = formatInputDate(new Date())
+  const activeDateRangeLabel =
+    dateRangePresets.find(
+      (preset) =>
+        fromDate === formatInputDate(shiftDays(new Date(), -preset.days)) &&
+        toDate === todayInputDate
+    )?.label ?? "Custom range"
+
+  const applyDateRangePreset = (days: number) => {
+    setFromDate(formatInputDate(shiftDays(new Date(), -days)))
+    setToDate(formatInputDate(new Date()))
+    setDateFilterOpen(false)
+  }
+  const visibleRoleNames = Array.from(
+    new Set([
+      ...assignedRoleNames,
+      ...(adminRolesLabel?.split("•").map((role) => role.trim()).filter(Boolean) ?? []),
+    ]),
+  )
 
   return (
     <motion.div
@@ -1451,135 +1922,182 @@ export default function HrAnalyticsDashboard({
       initial="hidden"
       animate="show"
     >
-      <DoodleSprites />
-      {/* Full-bleed identity strip — flush under the site header */}
-      <motion.div
-        className="relative w-full overflow-hidden border-b border-primary/20 px-4 py-4 text-white md:px-6 md:py-5"
-        style={{ backgroundColor: "var(--primary)" }}
+      <motion.header
+        className="relative mx-1 mt-2 border-b border-border/80 bg-gradient-to-r from-primary/[0.07] via-background to-background px-1 py-4 sm:mx-2 md:py-5 lg:mx-3"
         variants={motionPreset.rise}
       >
-        <motion.div
+        <div
           aria-hidden
-          className="pointer-events-none absolute -left-10 top-0 h-36 w-36 rounded-full bg-white/10"
-          animate={
-            motionPreset.reduce
-              ? undefined
-              : { x: [0, 16, 0], y: [0, 8, 0], opacity: [0.35, 0.55, 0.35] }
-          }
-          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-primary/70 via-primary/20 to-transparent"
         />
-        <Doodle name="doodle-circles" />
-        <div className="relative z-10 flex w-full flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar className="h-11 w-11 shrink-0 border-2 border-white/30 bg-white/15 shadow-sm sm:h-12 sm:w-12">
+        <div className="relative flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <Avatar className="mt-0.5 size-11 shrink-0 border-2 border-primary/25 bg-primary/10 shadow-sm ring-4 ring-primary/[0.06] sm:size-12">
               {profilePhotoUrl ? (
                 <AvatarImage src={profilePhotoUrl} alt={userName || "HR profile"} />
               ) : null}
-              <AvatarFallback className="bg-white/15 text-sm font-semibold text-white">
+              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
                 {getInitials(userName)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              {adminRolesLabel ? (
-                <motion.p
-                  className="text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-white/75"
-                  initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.32 }}
-                >
-                  {adminRolesLabel}
-                </motion.p>
-              ) : null}
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                {userName || "Company user"}
+              </p>
               <motion.h1
-                className="mt-0.5 truncate text-base font-semibold tracking-tight text-white sm:text-lg"
+                className="mt-0.5 truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl"
                 initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.38, delay: 0.05 }}
               >
                 {dashboardTitle}
               </motion.h1>
-              {latestAnalyticsRefresh ? (
-                <p className="mt-1 text-[11px] text-white/70">
-                  Analytics snapshot refreshed {formatDateShort(latestAnalyticsRefresh)}
-                </p>
-              ) : null}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Workforce overview
+                {latestAnalyticsRefresh
+                  ? ` · Updated ${formatDateShort(latestAnalyticsRefresh)}`
+                  : " · Live company snapshot"}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Assigned roles">
+                <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Roles
+                </span>
+                {visibleRoleNames.length > 0 ? (
+                  visibleRoleNames.map((roleName) => (
+                    <span
+                      key={roleName}
+                      className="inline-flex h-5 items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2 text-[9px] font-semibold text-primary"
+                    >
+                      {roleName}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">No roles assigned</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-            <div className="grid min-w-[240px] gap-2 sm:grid-cols-2">
-              <DatePickerPresets
-                value={fromDate}
-                onChange={setFromDate}
-                placeholder="From date"
-                appearance="onPrimary"
-                className="h-9 text-xs"
-              />
-              <DatePickerPresets
-                value={toDate}
-                onChange={setToDate}
-                placeholder="To date"
-                appearance="onPrimary"
-                className="h-9 text-xs"
-              />
-            </div>
-            {fromDate !== formatInputDate(shiftDays(new Date(), -30)) ||
-            toDate !== formatInputDate(new Date()) ? (
-              <button
+            <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+              <PopoverTrigger
                 type="button"
-                onClick={() => {
-                  setFromDate(formatInputDate(shiftDays(new Date(), -30)))
-                  setToDate(formatInputDate(new Date()))
-                }}
-                className="inline-flex h-9 items-center rounded-md border border-white/30 bg-white/10 px-3 text-xs font-medium text-white transition hover:bg-white/20"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-background/80 px-2.5 text-[10px] font-semibold text-foreground shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                aria-label="Filter dashboard date range"
               >
-                Reset
-              </button>
-            ) : null}
+                <FilterIcon className="size-3" aria-hidden="true" />
+                <span>{activeDateRangeLabel}</span>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[min(19rem,calc(100vw-1.5rem))] p-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Dashboard period</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {formatDateShort(fromDate)} – {formatDateShort(toDate)}
+                  </p>
+                </div>
+                <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                  {dateRangePresets.map((preset) => {
+                    const active = activeDateRangeLabel === preset.label
+                    return (
+                      <button
+                        key={preset.days}
+                        type="button"
+                        className={cn(
+                          "h-7 rounded-md px-2 text-left text-[10px] font-medium transition",
+                          active
+                            ? "bg-primary !text-primary-foreground"
+                            : "bg-muted/50 text-foreground hover:bg-muted"
+                        )}
+                        onClick={() => applyDateRangePreset(preset.days)}
+                      >
+                        {preset.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="mt-2.5 border-t border-border pt-2.5">
+                  <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Custom range
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <DatePickerPresets
+                      value={fromDate}
+                      onChange={setFromDate}
+                      placeholder="From date"
+                      className="h-7 px-2 text-[10px]"
+                    />
+                    <DatePickerPresets
+                      value={toDate}
+                      onChange={setToDate}
+                      placeholder="To date"
+                      className="h-7 px-2 text-[10px]"
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
             <button
               type="button"
               onClick={() => void fetchAll()}
               disabled={loading}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/30 bg-white/10 text-white transition hover:bg-white/20 disabled:opacity-60"
+              className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/20 bg-background/80 text-primary shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:opacity-60"
               title="Refresh"
             >
-              <RefreshCwIcon className={cn("h-4 w-4", loading && "animate-spin")} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFromDate(formatInputDate(shiftDays(new Date(), -30)))
-                setToDate(formatInputDate(new Date()))
-              }}
-              className="inline-flex h-9 items-center rounded-md border border-white/30 bg-white/10 px-3 text-xs font-medium text-white transition hover:bg-white/20"
-            >
-              Last 30 days
+              <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
             </button>
           </div>
         </div>
-      </motion.div>
+      </motion.header>
 
-      <div className="px-3 md:px-4 lg:px-6">
+      <div className="w-full px-1 sm:px-2 lg:px-3">
       <motion.section
-        className="relative border-b border-border/70 pt-5 pb-6 md:pt-6 md:pb-7"
+        className="relative pb-1 pt-3 md:pt-4"
         variants={motionPreset.item}
       >
         <motion.div
-          className="grid grid-cols-7 items-stretch gap-1.5 sm:gap-2 lg:gap-2.5"
+          className="grid w-full grid-cols-1 items-stretch gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
           aria-busy={loading}
           aria-live="polite"
           variants={motionPreset.metrics}
         >
-          {metrics.map((m, idx) => (
+          {workforceMetrics.map((metric) => (
+            <WorkforceMetricCard
+              key={metric.label}
+              metric={metric}
+              reduce={motionPreset.reduce}
+              variants={motionPreset.metricCard}
+            />
+          ))}
+        </motion.div>
+        <motion.div
+          className="mt-2.5 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] items-stretch gap-2.5"
+          variants={motionPreset.metrics}
+        >
+          {metrics.map((metric) => (
             <MetricCard
-              key={m.label}
-              metric={m}
-              index={idx}
+              key={metric.label}
+              metric={metric}
               reduce={motionPreset.reduce}
               variants={motionPreset.metricCard}
               hover={motionPreset.hover}
             />
           ))}
         </motion.div>
+        <WorkforceInsightPanels
+          rangeLabel={activeDateRangeLabel}
+          attendanceRate={attendanceReport.rate}
+          present={attendanceReport.present}
+          late={attendanceReport.late}
+          absent={attendanceReport.absent}
+          attendanceDays={attendanceReport.days}
+          performanceScore={performanceScore}
+          performanceStats={performanceStats}
+        />
+        <PeopleExperiencePanels
+          satisfactionScore={satisfactionScore}
+          satisfactionCategories={satisfactionCategories}
+          payrollRows={payrollPayslips}
+          canOpenPayroll={canOpenPayroll}
+        />
       </motion.section>
 
       {error ? (
@@ -1593,43 +2111,43 @@ export default function HrAnalyticsDashboard({
       ) : null}
 
       {hrAnalyticsGroups.length > 0 ? (
-        <motion.section className="mt-5" variants={motionPreset.item}>
+        <motion.section className="mt-6" variants={motionPreset.item}>
           <div className="mb-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              HR analytics
-            </div>
-            <div className="mt-1 text-sm font-semibold text-foreground">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">HR analytics</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Workforce, attendance, pay, and performance snapshot
-            </div>
+            </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">
             {hrAnalyticsGroups.map((group) => (
-              <div key={group.title} className="border border-border/70 bg-card p-4 shadow-sm">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-                  {group.title}
-                </h2>
-                <dl className="mt-3 space-y-2">
-                  {group.items.map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 first:border-t-0 first:pt-0"
-                    >
-                      <dt className="text-xs leading-5 text-muted-foreground">{item.label}</dt>
-                      <dd className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
-                        {item.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
+              <Card key={group.title} size="sm" className="gap-0 rounded-2xl border-border/70 py-0 shadow-sm">
+                <CardContent className="p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                    {group.title}
+                  </h3>
+                  <dl className="mt-3 flex flex-col gap-2">
+                    {group.items.map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 first:border-t-0 first:pt-0"
+                      >
+                        <dt className="text-xs leading-5 text-muted-foreground">{item.label}</dt>
+                        <dd className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                          {item.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </motion.section>
       ) : null}
 
-      <div className="mt-5 grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-12 lg:items-start">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
         {showLeaveRequests ? (
-        <motion.section className="self-start lg:col-span-6" variants={motionPreset.item}>
+        <motion.section className="lg:col-span-12" variants={motionPreset.item}>
           <DashboardSurface>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1725,289 +2243,6 @@ export default function HrAnalyticsDashboard({
         </motion.section>
         ) : null}
 
-        <motion.section className={`self-start ${showLeaveRequests ? "lg:col-span-6" : "lg:col-span-12"}`} variants={motionPreset.item}>
-          <DashboardSurface>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Employment status
-            </div>
-
-            <div className="mt-4">
-              {!workforceReady ? (
-                <SectionSkeleton rows={3} />
-              ) : Object.keys(resolvedStatusCounts).length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
-                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
-                    <UsersIcon className="size-4" />
-                  </span>
-                  <p className="mt-3 text-sm font-semibold text-foreground">No employee records yet</p>
-                </div>
-              ) : (
-                (() => {
-                  const chartRows = statusOrder
-                    .filter((s) => resolvedStatusCounts[s] != null)
-                    .concat(
-                      Object.keys(resolvedStatusCounts).filter((s) => !statusOrder.includes(s)),
-                    )
-                    .map((status) => {
-                      const count = resolvedStatusCounts[status] || 0
-                      const pct =
-                        statusBreakdownTotal > 0
-                          ? Math.round((count / statusBreakdownTotal) * 100)
-                          : 0
-                      return {
-                        status,
-                        label: formatStatusLabel(status),
-                        count,
-                        pct,
-                        color: employmentStatusColor(status),
-                      }
-                    })
-                    .filter((row) => row.count > 0)
-
-                  return (
-                    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
-                      <div className="relative h-[168px] w-[168px] shrink-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartRows}
-                              dataKey="count"
-                              nameKey="label"
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={63}
-                              outerRadius={76}
-                              paddingAngle={chartRows.length > 1 ? 2 : 0}
-                              stroke="none"
-                              isAnimationActive
-                            >
-                              {chartRows.map((row) => (
-                                <Cell key={row.status} fill={row.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                          <div className="text-2xl font-semibold tabular-nums leading-none text-primary">
-                            {totalHeadcount}
-                          </div>
-                          <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                            total
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="w-full min-w-0 flex-1 space-y-2">
-                        {chartRows.map((row, index) => (
-                          <motion.div
-                            key={row.status}
-                            className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-[#181818] dark:shadow-none"
-                            initial={motionPreset.reduce ? false : { opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.3, delay: 0.08 + index * 0.05 }}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span
-                                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                  style={{ backgroundColor: row.color }}
-                                />
-                                <span className="truncate text-sm font-medium text-foreground">
-                                  {row.label}
-                                </span>
-                              </div>
-                              <div className="shrink-0 text-right tabular-nums">
-                                <div className="text-sm font-semibold text-primary">{row.count}</div>
-                                <div className="text-[11px] text-muted-foreground">{row.pct}%</div>
-                              </div>
-                            </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/10">
-                              <motion.div
-                                className="h-full rounded-full bg-primary"
-                                initial={motionPreset.reduce ? false : { width: 0 }}
-                                animate={{ width: `${row.pct}%` }}
-                                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.16 + index * 0.05 }}
-                              />
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()
-              )}
-            </div>
-          </DashboardSurface>
-        </motion.section>
-
-        <motion.section className="lg:col-span-12" variants={motionPreset.item}>
-          <DashboardSurface>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Recent people
-                </div>
-                <div className="mt-1 text-sm font-semibold text-foreground">
-                  {canOpenEmployeeProfiles
-                    ? "Newest records · click a row to open profile"
-                    : "Newest employee records"}
-                </div>
-              </div>
-              {canOpenEmployeeDirectory ? (
-                <Link
-                  href="/dashboard/employees/all"
-                  className="inline-flex h-8 items-center rounded-full border border-primary/15 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition hover:bg-primary/15"
-                >
-                  View all
-                </Link>
-              ) : null}
-            </div>
-
-            <div className="mt-4">
-              {!workforceReady ? (
-                <SectionSkeleton rows={5} />
-              ) : recentEmployees.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
-                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
-                    <UsersIcon className="size-4" />
-                  </span>
-                  <p className="mt-3 text-sm font-semibold text-foreground">No employee records loaded</p>
-                </div>
-              ) : (
-                <div className="grid gap-2">
-                  {recentEmployees.map((emp, idx) => {
-                    const href = employeeProfileHref(emp)
-                    const canOpenEmployeeLink = canOpenEmployeeProfiles && Boolean(href)
-                    const name = getEmployeeName(emp)
-                    const status = formatStatusLabel(getEmploymentStatus(emp))
-                    const department = getDepartmentNameFromEmployee(emp) || "—"
-                    const row = (
-                      <motion.div
-                        className={cn(
-                          "flex items-center gap-3 rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-[#181818] dark:shadow-none",
-                          canOpenEmployeeLink ? "transition hover:border-primary/30 hover:bg-primary/5" : null,
-                        )}
-                        initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.28, delay: idx * 0.045 }}
-                      >
-                        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-[11px] font-semibold tracking-wide text-primary">
-                          {getEmployeeInitials(name)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-foreground">{name}</div>
-                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                            <span className="font-mono">{getEmployeeNo(emp)}</span>
-                            <span className="px-1.5 text-primary/40">·</span>
-                            <span>{department}</span>
-                          </div>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                          {status}
-                        </span>
-                      </motion.div>
-                    )
-
-                    if (canOpenEmployeeLink && href) {
-                      return (
-                        <Link
-                          key={getEmployeeNo(emp) || href || idx}
-                          href={href}
-                          className="block outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-2xl"
-                        >
-                          {row}
-                        </Link>
-                      )
-                    }
-
-                    return <div key={getEmployeeNo(emp) || idx}>{row}</div>
-                  })}
-                </div>
-              )}
-            </div>
-          </DashboardSurface>
-        </motion.section>
-
-        <motion.section className="self-start lg:col-span-12" variants={motionPreset.item}>
-          <DashboardSurface>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Employees by department
-                </div>
-                <div className="mt-1 text-sm font-semibold text-foreground">
-                  {departmentSectionReady && resolvedDepartmentHeadcounts.length > 0
-                    ? `${resolvedDepartmentHeadcounts.length} departments`
-                    : "Workforce by structure"}
-                </div>
-              </div>
-              <span className="inline-flex size-9 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
-                <Building2Icon className="size-4" />
-              </span>
-            </div>
-
-            <div className="mt-4">
-              {!departmentSectionReady ? (
-                <SectionSkeleton rows={6} />
-              ) : resolvedDepartmentHeadcounts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-primary/20 bg-primary/4 px-4 py-8 text-center">
-                  <span className="inline-flex size-11 items-center justify-center rounded-full border border-primary/15 bg-primary/10 text-primary">
-                    <Building2Icon className="size-4" />
-                  </span>
-                  <p className="mt-3 text-sm font-semibold text-foreground">No departments found</p>
-                </div>
-              ) : (
-                (() => {
-                  const chartData = [...resolvedDepartmentHeadcounts]
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([name, count]) => ({
-                      name,
-                      count: Number(count) || 0,
-                      pct:
-                        maxDeptCount > 0
-                          ? Math.round((Number(count) / maxDeptCount) * 100)
-                          : 0,
-                    }))
-
-                  return (
-                    <div className="grid gap-2">
-                      {chartData.map((row, index) => (
-                        <motion.div
-                          key={row.name}
-                          className="rounded-2xl border border-primary/12 bg-card px-3 py-2.5 dark:bg-[#181818] dark:shadow-none"
-                          initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.28, delay: index * 0.035 }}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0 truncate text-sm font-medium text-foreground">
-                              {row.name}
-                            </div>
-                            <div className="shrink-0 text-sm font-semibold tabular-nums text-primary">
-                              {row.count}
-                            </div>
-                          </div>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/10">
-                            <motion.div
-                              className="h-full rounded-full bg-primary"
-                              initial={motionPreset.reduce ? false : { width: 0 }}
-                              animate={{ width: `${row.pct}%` }}
-                              transition={{
-                                duration: 0.8,
-                                ease: [0.16, 1, 0.3, 1],
-                                delay: 0.12 + index * 0.035,
-                              }}
-                            />
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )
-                })()
-              )}
-            </div>
-          </DashboardSurface>
-        </motion.section>
       </div>
       </div>
     </motion.div>

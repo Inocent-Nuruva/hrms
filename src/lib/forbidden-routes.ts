@@ -3,7 +3,6 @@ import type { DashboardAccessMode } from "@/lib/dashboard-permissions"
 import {
   canSeeHrLeaveRequestsQueue,
   isCompanyLeaveRequestsPath,
-  showsPersonalRoutesAlongsideWorkRoutes,
   type HomeDashboardKind,
 } from "@/lib/dashboard-home"
 import {
@@ -309,15 +308,15 @@ export function canSeeDashboardPage(
     homeDashboardKind?: HomeDashboardKind | null
   },
 ) {
-  const managerCanSeeSelfService =
-    isSelfServiceDashboardRoute(url) &&
-    showsPersonalRoutesAlongsideWorkRoutes(
-      options?.homeDashboardKind,
-      permissionLabels,
-    )
+  // A company administrator, HR user, or manager is still an employee. Keep
+  // their personal workspace visible alongside any work/management routes.
+  // Platform operators are the exception because they do not belong to a
+  // company employee record.
+  const companyUserCanSeeSelfService =
+    isSelfServiceDashboardRoute(url) && options?.scope !== "platform"
   if (
     !canShowDashboardRouteInNavigation(url, accessMode) &&
-    !managerCanSeeSelfService
+    !companyUserCanSeeSelfService
   ) {
     return false
   }

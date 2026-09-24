@@ -3538,7 +3538,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           }
         }}
       >
-        <DialogPopup className="w-[min(92vw,24rem)] rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-2xl sm:max-w-sm">
+        <DialogPopup className="w-[min(92vw,24rem)] rounded-md border border-border bg-background p-6 text-foreground shadow-2xl sm:max-w-sm">
           <DialogHeader className="sr-only">
             <DialogTitle>Waiting for fingerprint capture</DialogTitle>
             <DialogDescription>

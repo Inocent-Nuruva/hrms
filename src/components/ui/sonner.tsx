@@ -6,7 +6,7 @@ import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
-      theme="light"
+      theme="system"
       className="toaster group"
       icons={{
         success: (
@@ -27,22 +27,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "#ffffff",
-          "--normal-text": "#111827",
-          "--normal-border": "#e5e7eb",
+          "--normal-bg": "var(--background)",
+          "--normal-text": "var(--foreground)",
+          "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
       toastOptions={{
         classNames: {
-          toast:
-            "cn-toast !bg-white !text-slate-900 !border !border-slate-200 !shadow-lg",
-          title: "!text-slate-900",
-          description: "!text-slate-700",
-          success: "!bg-white !text-slate-900 !border-slate-200",
-          error: "!bg-white !text-slate-900 !border-slate-200",
-          warning: "!bg-white !text-slate-900 !border-slate-200",
-          info: "!bg-white !text-slate-900 !border-slate-200",
+          toast: "cn-toast !rounded-md !border !border-border !bg-background !text-foreground !shadow-lg",
+          title: "!text-foreground",
+          description: "!text-muted-foreground",
+          success: "!border-emerald-500/30 !bg-background !text-foreground",
+          error: "!border-destructive/35 !bg-background !text-foreground",
+          warning: "!border-amber-500/35 !bg-background !text-foreground",
+          info: "!border-primary/30 !bg-background !text-foreground",
         },
       }}
       {...props}

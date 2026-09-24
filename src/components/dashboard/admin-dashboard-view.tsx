@@ -4,7 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, resolveDashboardSearchItems } from "@/components/app-sidebar";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 import {
   Dialog,
@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
-import { DashboardAttendanceQuickActions } from "@/components/dashboard/dashboard-attendance-actions";
 import { SiteHeader } from "@/components/site-header";
 import {
   accessControlSectionTabGroups,
@@ -91,7 +90,10 @@ import type {
 function loadAdminApi() {
   return import("@/lib/admin-api");
 }
-import { useMyProfilePhoto } from "@/lib/my-profile-photo";
+import {
+  useMyProfilePhoto,
+  withMyProfilePhotoRevision,
+} from "@/lib/my-profile-photo";
 import { DashboardIdentityProvider } from "@/components/dashboard/dashboard-identity";
 import {
   DEFAULT_COMPANY_MODULES,
@@ -1123,8 +1125,9 @@ export default function AdminDashboardView({
     getStringValue(currentAdmin, ["email"]) ??
     clientIdentity.adminEmail ??
     null;
-  const { url: myProfilePhotoUrl } = useMyProfilePhoto(token);
-  const adminAvatar =
+  const { url: myProfilePhotoUrl, revision: myProfilePhotoRevision } =
+    useMyProfilePhoto(token);
+  const resolvedAdminAvatar =
     myProfilePhotoUrl ||
     resolveUserAvatarUrl(
       currentAdmin,
@@ -1134,13 +1137,19 @@ export default function AdminDashboardView({
       clientIdentity.tokenPayload,
     ) ||
     null;
+  const adminAvatar = myProfilePhotoUrl
+    ? withMyProfilePhotoRevision(
+        resolvedAdminAvatar,
+        myProfilePhotoRevision,
+      )
+    : resolvedAdminAvatar;
   const companyName =
     getStringValue(myCompany, ["company_name", "name", "display_name"]) ??
     getStringValue(currentAdmin, ["company_name", "companyName", "company"]) ??
     clientIdentity.companyName ??
     clientIdentity.tokenCompanyName ??
     null;
-  const adminRolesLabel = React.useMemo(() => {
+  const adminRoleNames = React.useMemo(() => {
     const roleNames = new Set<string>();
     actorSnapshot.roleNames.forEach((roleName) => roleNames.add(roleName));
     collectAssignedRoleNames(currentAdmin, roleNames);
@@ -1158,11 +1167,7 @@ export default function AdminDashboardView({
     )
       .filter(Boolean)
       .sort((left, right) => left.localeCompare(right));
-    if (orderedNames.length === 0) {
-      return null;
-    }
-
-    return orderedNames.join(" • ");
+    return orderedNames;
   }, [
     actorSnapshot.roleNames,
     clientIdentity.rawUser,
@@ -1171,6 +1176,8 @@ export default function AdminDashboardView({
     currentEmployeeIdentity,
     currentEmployeeProfile,
   ]);
+  const adminRolesLabel =
+    adminRoleNames.length > 0 ? adminRoleNames.join(" • ") : null;
   const accessMode = actorSnapshot.accessMode;
   const effectivePermissionLabels = actorSnapshot.permissionLabels;
   const accessIdentityReady = identityReady && actorSnapshot.ready;
@@ -1297,6 +1304,24 @@ export default function AdminDashboardView({
     };
   }, [accessIdentityReady, actorSnapshot.scope, homeDashboardKind, token]);
 
+  React.useEffect(() => {
+    if (!resolvedShowOverview || !accessIdentityReady || !token || currentAdmin) {
+      return;
+    }
+
+    let active = true;
+    void loadAdminApi()
+      .then((api) => api.getCurrentAdmin(token))
+      .then((admin) => {
+        if (active) setCurrentAdmin(admin);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [accessIdentityReady, currentAdmin, resolvedShowOverview, token]);
+
   const effectiveHomeDashboardKind =
     homeDashboardKind === "employee" &&
     isHumanResourcesEmployeeRecord(currentEmployeeIdentity)
@@ -1410,15 +1435,12 @@ export default function AdminDashboardView({
         style={
           {
             "--sidebar-width": "15.75rem",
-            "--header-height": "calc(var(--spacing) * 11)",
+            "--header-height": "calc(var(--spacing) * 14)",
           } as React.CSSProperties
         }
       >
       <AppSidebar
         variant="inset"
-        userName={adminName}
-        userEmail={adminEmail}
-        userAvatar={adminAvatar}
         accessMode={accessMode}
         scope={actorSnapshot.scope}
         homeDashboardKind={effectiveHomeDashboardKind}
@@ -1433,21 +1455,25 @@ export default function AdminDashboardView({
           onRefresh={handleHeaderRefresh}
           loading={loading}
           adminName={adminName}
+          adminEmail={adminEmail}
+          adminAvatar={adminAvatar}
           companyName={companyName}
           scope={actorSnapshot.scope}
+          searchItems={navigationReady ? resolveDashboardSearchItems({
+            scope: actorSnapshot.scope,
+            permissionLabels: effectivePermissionLabels,
+            accessMode,
+            homeDashboardKind: effectiveHomeDashboardKind,
+          }) : []}
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           <div className="@container/main flex min-w-0 max-w-full flex-col">
-            {resolvedShowOverview &&
-            accessIdentityReady &&
-            effectiveHomeDashboardKind !== "employee" ? (
-              <DashboardAttendanceQuickActions />
-            ) : null}
             {resolvedShowOverview && showWorkforceDashboard ? (
               <HrAnalyticsDashboard
                 refreshKey={overviewRefreshKey}
                 companyName={companyName}
                 adminRolesLabel={adminRolesLabel}
+                assignedRoleNames={adminRoleNames}
                 userName={adminName}
                 profilePhotoUrl={adminAvatar}
                 showLeaveRequests={effectiveHomeDashboardKind === "hr"}
@@ -1520,7 +1546,7 @@ export default function AdminDashboardView({
                   profilePhotoUrl={adminAvatar}
                   displayName={adminName}
                   profilePictureHref={
-                    accessMode === "employee"
+                    actorSnapshot.scope !== "platform"
                       ? "/dashboard/me/profile?tab=summary&edit=profile-photo"
                       : null
                   }

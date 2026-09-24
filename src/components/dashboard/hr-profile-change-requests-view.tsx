@@ -7,26 +7,21 @@ import {
   CheckIcon,
   FilterIcon,
   HistoryIcon,
-  InfoIcon,
   Loader2Icon,
   RefreshCwIcon,
   RotateCcwIcon,
   UserRoundIcon,
   XIcon,
 } from "lucide-react"
-import { motion } from "framer-motion"
 import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
-  HeroBand,
-  TalentDoodleSprites,
   actionButtonClass,
   asRecord,
   formatDate,
   prettify,
-  heroGhostButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
@@ -55,59 +50,15 @@ import {
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
-import { useDashboardMotion } from "@/lib/dashboard-motion"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-
-function TipIcon({
-  text,
-  variant = "default",
-}: {
-  text: string
-  variant?: "default" | "onPrimary"
-}) {
-  const motionPreset = useDashboardMotion()
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className={
-              variant === "onPrimary"
-                ? "inline-flex h-6 w-6 items-center justify-center rounded-full text-white/80 hover:text-white"
-                : "inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:text-primary"
-            }
-            aria-label="More information"
-          />
-        }
-      >
-        <motion.span
-          className="inline-flex"
-          animate={
-            motionPreset.reduce
-              ? undefined
-              : { scale: [1, 1.15, 1], opacity: [0.65, 1, 0.65] }
-          }
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <InfoIcon className="h-3.5 w-3.5" />
-        </motion.span>
-      </TooltipTrigger>
-      <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -686,34 +637,34 @@ export function HrProfileChangeRequestsView() {
   if (!canAccess) return null
 
   return (
-    <section className="space-y-4">
-      <TalentDoodleSprites />
-      <HeroBand
-        eyebrow="Employees"
-        title={
-          <>
-            Profile requests
-            <TipIcon
-              variant="onPrimary"
-              text="Review employee requests to change name, phone, address, photo, or emergency contact."
-            />
-          </>
-        }
-        description="Open a request to see what changed, then approve, send it back, or decline."
-        actions={
-          <button type="button" className={heroGhostButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-            Refresh
-          </button>
-        }
-      />
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <section className="overflow-hidden border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Profile changes
+          </h1>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Review employee change requests and return incomplete submissions
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-primary transition-colors hover:bg-muted disabled:opacity-60"
+          onClick={() => void load()}
+          disabled={loading}
+          aria-label="Refresh profile change requests"
+          title="Refresh"
+        >
+          <RefreshCwIcon className={cn("size-3.5", loading && "animate-spin")} />
+        </button>
+      </div>
+      <div className="border-b border-border bg-muted/[0.12]">
         <div className="grid grid-cols-4">
           {([
-            { key: "all", label: "All", value: counts.all, valueClass: "text-slate-800", activeClass: "bg-slate-50" },
-            { key: "open", label: "Open", value: counts.open, valueClass: "text-sky-600", activeClass: "bg-sky-50/90" },
-            { key: "approved", label: "Approved", value: counts.approved, valueClass: "text-emerald-600", activeClass: "bg-emerald-50/80" },
-            { key: "rejected", label: "Declined", value: counts.rejected, valueClass: "text-rose-600", activeClass: "bg-rose-50/80" },
+            { key: "all", label: "All", value: counts.all, valueClass: "text-foreground", activeClass: "bg-primary/[0.06]" },
+            { key: "open", label: "Open", value: counts.open, valueClass: "text-sky-600 dark:text-sky-400", activeClass: "bg-sky-500/[0.08]" },
+            { key: "approved", label: "Approved", value: counts.approved, valueClass: "text-emerald-600 dark:text-emerald-400", activeClass: "bg-emerald-500/[0.08]" },
+            { key: "rejected", label: "Declined", value: counts.rejected, valueClass: "text-rose-600 dark:text-rose-400", activeClass: "bg-rose-500/[0.08]" },
           ] as const).map((item, index) => {
             const active = statusFilter === item.key
             return (
@@ -723,7 +674,7 @@ export function HrProfileChangeRequestsView() {
                 onClick={() => setStatusFilter(item.key)}
                 aria-pressed={active}
                 className={cn(
-                  "relative min-w-0 px-3 py-2 text-left transition-colors",
+                  "relative min-w-0 px-3 py-1.5 text-left transition-colors",
                   active ? item.activeClass : "hover:bg-muted/40",
                 )}
               >
@@ -731,7 +682,7 @@ export function HrProfileChangeRequestsView() {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {item.label}
                 </p>
-                <p className={cn("mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight", item.valueClass)}>
+                <p className={cn("mt-0.5 text-sm font-semibold tabular-nums leading-tight tracking-tight", item.valueClass)}>
                   {item.value}
                 </p>
               </button>
@@ -739,7 +690,7 @@ export function HrProfileChangeRequestsView() {
           })}
         </div>
       </div>
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2 border-b border-border px-3 py-2">
         <SearchToggleField value={search} onChange={setSearch} placeholder="Search employee or change" active={Boolean(search.trim())} />
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -778,8 +729,8 @@ export function HrProfileChangeRequestsView() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {error ? <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">{error}</div> : null}
+      <div className="min-w-0">
         <ResizableTable
           title="Profile change requests"
           data={visible}
@@ -788,6 +739,9 @@ export function HrProfileChangeRequestsView() {
           itemsPerPage={20}
           showExport={false}
           storageKey="hr-profile-change-requests"
+          compact
+          toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+          frameClassName="rounded-none border-0 shadow-none"
           onRowSelect={(_, row) => {
             if (!row) return
             openRequestDetails(row)
