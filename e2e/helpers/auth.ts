@@ -6,21 +6,21 @@ export type TestUser = {
   password: string
 }
 
-export function readTestUsers(): { admin: TestUser; hr: TestUser } {
-  const adminEmail = process.env.HRMS_E2E_ADMIN_EMAIL?.trim()
-  const adminPassword = process.env.HRMS_E2E_ADMIN_PASSWORD
-  const hrEmail = process.env.HRMS_E2E_HR_EMAIL?.trim()
-  const hrPassword = process.env.HRMS_E2E_HR_PASSWORD
+export function readTestUser(role: TestUser["role"]): TestUser {
+  const prefix = role === "admin" ? "HRMS_E2E_ADMIN" : "HRMS_E2E_HR"
+  const email = process.env[`${prefix}_EMAIL`]?.trim()
+  const password = process.env[`${prefix}_PASSWORD`]
 
-  if (!adminEmail || !adminPassword || !hrEmail || !hrPassword) {
+  if (!email || !password) {
     throw new Error(
-      "Set HRMS_E2E_ADMIN_EMAIL, HRMS_E2E_ADMIN_PASSWORD, HRMS_E2E_HR_EMAIL, and HRMS_E2E_HR_PASSWORD before running e2e tests.",
+      `Set ${prefix}_EMAIL and ${prefix}_PASSWORD before running ${role} e2e tests.`,
     )
   }
 
   return {
-    admin: { role: "admin", email: adminEmail, password: adminPassword },
-    hr: { role: "hr", email: hrEmail, password: hrPassword },
+    role,
+    email,
+    password,
   }
 }
 
