@@ -4806,6 +4806,51 @@ function buildAttendanceQuery(params: AttendanceQueryParams) {
   return query ? `?${query}` : "";
 }
 
+const PAGING_ONLY_QUERY_KEYS = new Set([
+  "page",
+  "limit",
+  "sortBy",
+  "sortOrder",
+]);
+
+function hasOnlyPagingParams(params: object): boolean {
+  return Object.entries(params).every(
+    ([key, value]) =>
+      PAGING_ONLY_QUERY_KEYS.has(key) ||
+      value === undefined ||
+      value === null ||
+      (typeof value === "string" && !value.trim()),
+  );
+}
+
+/**
+ * Some collection endpoints report a non-zero total but return no items when
+ * paging/sort params are sent. Retry the bare path in that case. Requests that
+ * carry a search or filter are never retried, so a filter is never dropped.
+ */
+async function retryEmptyPagedCollection(
+  path: string,
+  token: string,
+  params: object,
+  result: PaginatedUsersResult,
+): Promise<PaginatedUsersResult> {
+  if (result.rows.length > 0 || !result.total || !hasOnlyPagingParams(params)) {
+    return result;
+  }
+
+  const payload = await adminRequest<unknown>(path, { token });
+  const rows = normalizeList(payload);
+  if (rows.length === 0) return result;
+
+  return {
+    rows,
+    page: 1,
+    limit: rows.length,
+    total: rows.length,
+    totalPages: 1,
+  };
+}
+
 async function listAttendanceCollectionPage(
   path: string,
   token: string,
@@ -4873,13 +4918,13 @@ async function listAllAttendanceCollection(
     }
   }
 
-  return {
+  return retryEmptyPagedCollection(path, token, params, {
     rows: mergedRows,
     page: startPage,
     limit: mergedRows.length || pageSize,
     total,
     totalPages,
-  };
+  });
 }
 
 /**
@@ -5651,7 +5696,10 @@ async function listGenericCollection(
     fallbackPage,
     fallbackLimit,
   );
-  return { rows, ...pagination };
+  return retryEmptyPagedCollection(path, token, params, {
+    rows,
+    ...pagination,
+  });
 }
 
 function shiftResourcePath(resource: ShiftResourceKey) {
