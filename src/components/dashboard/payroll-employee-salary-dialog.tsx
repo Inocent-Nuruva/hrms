@@ -219,13 +219,20 @@ export function PayrollEmployeeSalaryDialog({
         ...(draft.mode === "amount" ? { amount: draft.value.trim() } : {}),
         ...(draft.mode === "rate" ? { rate: draft.value.trim() } : {}),
       }));
+    // Same grammar and rate bound the server applies to overrides.
+    const isNumber = (value: string | undefined) =>
+      /^\+?(\d+(\.\d+)?|\.\d+)$/.test(value ?? "");
     if (
       componentOverrides.some(
         (item) =>
-          ("amount" in item && !item.amount) || ("rate" in item && !item.rate),
+          ("amount" in item && !isNumber(item.amount)) ||
+          ("rate" in item &&
+            (!isNumber(item.rate) || Number(item.rate) > 1000)),
       )
     ) {
-      setError("Enter a value for every amount or rate override.");
+      setError(
+        "Enter a non-negative number for every amount override, and a rate between 0 and 1000 for every % of base override.",
+      );
       return;
     }
     setSaving(true);
