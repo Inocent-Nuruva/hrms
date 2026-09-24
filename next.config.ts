@@ -1,20 +1,24 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
-function resolveBackendOrigin() {
+export function resolveBackendOrigin() {
   const configuredOrigin =
     process.env.NEXT_PUBLIC_BACKEND_ORIGIN?.trim() ||
     process.env.BACKEND_ORIGIN?.trim();
   const rawValue =
     configuredOrigin ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    "http://localhost:8888";
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 
   if (rawValue === "" || rawValue === "/api") {
-    return "http://localhost:8888";
+    const appEnv = process.env.APP_ENV?.trim().toLowerCase();
+    return appEnv === "uat"
+      ? "http://127.0.0.1:9999"
+      : "http://localhost:8888";
   }
 
-  return rawValue.replace(/\/api\/?$/i, "").replace(/\/$/, "");
+  return (rawValue || "http://localhost:8888")
+    .replace(/\/api\/?$/i, "")
+    .replace(/\/$/, "");
 }
 
 const backendOrigin = resolveBackendOrigin();
