@@ -618,6 +618,7 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
   documents: [
     { name: "title", label: "Document Title", placeholder: "Passport Copy", required: true },
     { name: "type", label: "Type", type: "select", options: ["certificate", "cv", "offer_letter", "contract", "id", "other"], defaultValue: "other" },
+    { name: "onboarding_section", label: "Related onboarding section", type: "select", options: ["personal", "assignment", "contacts", "family", "identification", "banking", "education", "experience"], defaultValue: "personal", required: true },
     { name: "classification", label: "Classification", type: "select", options: ["PRIVATE", "CONFIDENTIAL", "RESTRICTED"], defaultValue: "PRIVATE" },
     { name: "file", label: "Attachment", type: "file", required: true },
     { name: "notes", label: "Notes (optional)", placeholder: "Scanned copy" },
@@ -661,6 +662,10 @@ function buildPayload(key: string, values: Record<string, string>): AdminRecord 
   if (key === "addresses" && !payload.address_type) payload.address_type = "home"
   if (key === "identifications" && !payload.identification_type) payload.identification_type = "national_id"
   if (key === "bank_accounts" && payload.is_primary === undefined) payload.is_primary = true
+  if (key === "documents" && typeof payload.onboarding_section === "string") {
+    payload.metadata = { onboarding_section: payload.onboarding_section }
+    delete payload.onboarding_section
+  }
   return payload
 }
 
@@ -4187,7 +4192,15 @@ export function EmployeeHomeDashboard() {
                                 className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                               >
                                 {field.options.map((opt) => (
-                                  <option key={opt} value={opt}>{opt === "true" ? "Yes" : opt === "false" ? "No" : opt}</option>
+                                  <option key={opt} value={opt}>
+                                    {opt === "true"
+                                      ? "Yes"
+                                      : opt === "false"
+                                        ? "No"
+                                        : opt === opt.toUpperCase()
+                                          ? opt
+                                          : opt.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase())}
+                                  </option>
                                 ))}
                               </select>
                             ) : field.type === "file" ? (
@@ -4198,6 +4211,9 @@ export function EmployeeHomeDashboard() {
                                     const file = e.target.files?.[0] ?? null
                                     setDocumentUploadFile(file)
                                     updateFormValue(field.name, file?.name ?? "")
+                                    if (file && !String(formValues.title ?? "").trim()) {
+                                      updateFormValue("title", file.name.replace(/\.[^.]+$/, ""))
+                                    }
                                   }}
                                   className="h-auto border-0 px-0 py-0 shadow-none focus-visible:ring-0"
                                   required={!!field.required}

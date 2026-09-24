@@ -31,6 +31,7 @@ import {
   listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingTasks,
+  submitMyOnboardingDetails,
   uploadOnboardingDocument,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -203,14 +204,30 @@ export function OnboardingSelfView() {
     try {
       const payload = await fileToBase64UploadDto(file)
       await uploadOnboardingDocument(access, requestId, {
-        ...payload,
-        document_type: "SUPPORTING",
-        name: file.name,
+        file: payload,
+        document_type: "other",
+        title: file.name.replace(/\.[^.]+$/, ""),
       })
       toast.success("Document uploaded.")
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not upload the document.")
+    } finally {
+      setBusy("")
+    }
+  }
+
+  async function sendCorrectedDetailsToHr() {
+    const access = token()
+    const requestId = rowId(selected)
+    if (!access || !requestId) return
+    setBusy("submit-details")
+    try {
+      await submitMyOnboardingDetails(access, requestId)
+      toast.success("Your updated details were sent to HR for review.")
+      await load()
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not send your details to HR.")
     } finally {
       setBusy("")
     }
@@ -300,6 +317,14 @@ export function OnboardingSelfView() {
           >
             Correct my details
           </Link>
+          <button
+            type="button"
+            className="ml-2 mt-3 inline-flex h-9 items-center rounded-md border border-primary px-3 text-sm font-medium text-primary"
+            disabled={busy === "submit-details"}
+            onClick={() => void sendCorrectedDetailsToHr()}
+          >
+            {busy === "submit-details" ? "Sending…" : "Send updates to HR"}
+          </button>
         </div>
       ) : employeeDetailsReview.status === "submitted" || employeeDetailsReview.status === "in_review" ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">

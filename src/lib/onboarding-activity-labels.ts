@@ -1,9 +1,7 @@
 type AdminRecord = Record<string, unknown>
 
 function asRecord(value: unknown): AdminRecord | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as AdminRecord)
-    : null
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AdminRecord) : null
 }
 
 function readText(record: AdminRecord | null, keys: string[]) {
@@ -84,12 +82,28 @@ export function personDisplayName(record: AdminRecord | null, fallback = "") {
   return fallback
 }
 
-export function resolveCatalogLabel(
-  rows: AdminRecord[],
-  id: number | null,
-  idKeys: string[],
-  labelKeys: string[]
-) {
+export function personEmail(record: AdminRecord | null, fallback = "") {
+  if (!record) return fallback
+
+  const sources = [
+    record,
+    asRecord(record.company_user),
+    asRecord(record.companyUser),
+    asRecord(record.user),
+    asRecord(record.person),
+    asRecord(record.profile),
+    asRecord(record.employee),
+  ].filter((source): source is AdminRecord => Boolean(source))
+
+  for (const source of sources) {
+    const email = readText(source, ["email", "email_address", "emailAddress"])
+    if (email) return email
+  }
+
+  return fallback
+}
+
+export function resolveCatalogLabel(rows: AdminRecord[], id: number | null, idKeys: string[], labelKeys: string[]) {
   if (id === null) return ""
   const found = rows.find((row) => recordMatchesId(row, id, idKeys))
   if (!found) return ""
@@ -99,12 +113,7 @@ export function resolveCatalogLabel(
 }
 
 export function resolveRoleLabel(roles: AdminRecord[], id: number | null) {
-  return resolveCatalogLabel(
-    roles,
-    id,
-    ["id", "role_id", "roleId"],
-    ["display_name", "displayName", "name", "title"]
-  )
+  return resolveCatalogLabel(roles, id, ["id", "role_id", "roleId"], ["display_name", "displayName", "name", "title"])
 }
 
 export function resolvePersonLabel(users: AdminRecord[], id: number | null) {
@@ -112,8 +121,16 @@ export function resolvePersonLabel(users: AdminRecord[], id: number | null) {
     users,
     id,
     ["id", "company_user_id", "companyUserId", "user_id", "userId"],
-    ["full_name", "fullName", "display_name", "displayName", "name", "email"]
+    ["full_name", "fullName", "display_name", "displayName", "name", "email"],
   )
+}
+
+export function resolvePersonEmail(users: AdminRecord[], id: number | null) {
+  if (id === null) return ""
+  const found = users.find((row) =>
+    recordMatchesId(row, id, ["id", "company_user_id", "companyUserId", "user_id", "userId"]),
+  )
+  return personEmail(found ?? null)
 }
 
 const ASSIGNEE_ID_KEYS = ["company_user_id", "companyUserId", "id", "user_id", "userId"] as const
@@ -141,11 +158,7 @@ export function collectAssigneeIds(row: AdminRecord): number[] {
 }
 
 export function flattenAssigneeRecord(row: AdminRecord): AdminRecord {
-  const nested =
-    asRecord(row.user) ??
-    asRecord(row.company_user) ??
-    asRecord(row.companyUser) ??
-    asRecord(row.member)
+  const nested = asRecord(row.user) ?? asRecord(row.company_user) ?? asRecord(row.companyUser) ?? asRecord(row.member)
   if (!nested) {
     return row
   }
@@ -154,8 +167,7 @@ export function flattenAssigneeRecord(row: AdminRecord): AdminRecord {
     ...row,
     id: row.id ?? nested.id,
     user_id: row.user_id ?? row.userId ?? nested.user_id ?? nested.id,
-    company_user_id:
-      row.company_user_id ?? row.companyUserId ?? nested.company_user_id ?? nested.id,
+    company_user_id: row.company_user_id ?? row.companyUserId ?? nested.company_user_id ?? nested.id,
     first_name: row.first_name ?? nested.first_name,
     last_name: row.last_name ?? nested.last_name,
     full_name: row.full_name ?? nested.full_name,
@@ -204,7 +216,11 @@ export function recordHasRole(row: AdminRecord, roleId: number) {
 
 export function filterAssigneesForStep(
   rows: AdminRecord[],
-  options: { roleId?: number | null; search?: string; selectedId?: number | null },
+  options: {
+    roleId?: number | null
+    search?: string
+    selectedId?: number | null
+  },
 ) {
   const search = options.search?.trim().toLowerCase() ?? ""
   const roleId = options.roleId && options.roleId > 0 ? options.roleId : null
@@ -235,11 +251,7 @@ function nestedParty(record: AdminRecord, keys: string[]) {
   return null
 }
 
-export function resolveResponsiblePartyLabel(
-  step: AdminRecord | null,
-  roles: AdminRecord[],
-  users: AdminRecord[]
-) {
+export function resolveResponsiblePartyLabel(step: AdminRecord | null, roles: AdminRecord[], users: AdminRecord[]) {
   if (!step) return ""
 
   const explicitPerson = readText(step, [
@@ -280,10 +292,7 @@ export function resolveResponsiblePartyLabel(
     personDisplayName(nestedRole) ||
     readText(nestedRole, ["display_name", "displayName", "name", "title"]) ||
     resolveRoleLabel(roles, roleId)
-  const userName =
-    explicitPerson ||
-    personDisplayName(nestedUser) ||
-    resolvePersonLabel(users, userId)
+  const userName = explicitPerson || personDisplayName(nestedUser) || resolvePersonLabel(users, userId)
 
   const parts: string[] = []
   if (roleName && !isIdFallback(roleName)) {
@@ -336,11 +345,7 @@ export function resolveAuditActorLabel(entry: AdminRecord | null, users: AdminRe
   return resolvePersonLabel(users, actorId)
 }
 
-export function resolveApprovalOwnerLabel(
-  approval: AdminRecord | null,
-  roles: AdminRecord[],
-  users: AdminRecord[]
-) {
+export function resolveApprovalOwnerLabel(approval: AdminRecord | null, roles: AdminRecord[], users: AdminRecord[]) {
   if (!approval) return ""
   const explicit = readText(approval, [
     "approver_name",
@@ -381,6 +386,48 @@ export function resolveApprovalOwnerLabel(
   if (catalogName && !isIdFallback(catalogName)) return catalogName
 
   return resolveResponsiblePartyLabel(approval, roles, users)
+}
+
+export function resolveApprovalOwnerEmail(approval: AdminRecord | null, users: AdminRecord[]) {
+  if (!approval) return ""
+
+  const explicit = readText(approval, [
+    "approver_email",
+    "approverEmail",
+    "company_user_email",
+    "assigned_to_email",
+    "owner_email",
+    "user_email",
+    "email",
+  ])
+  if (explicit) return explicit
+
+  const nestedApprover = nestedParty(approval, [
+    "approver",
+    "original_approver",
+    "originalApprover",
+    "assigned_user",
+    "assignedUser",
+    "assigned_company_user",
+    "assignedCompanyUser",
+    "company_user",
+    "companyUser",
+    "user",
+  ])
+  const nestedEmail = personEmail(nestedApprover)
+  if (nestedEmail) return nestedEmail
+
+  const companyUserId = readNumber(approval, [
+    "approver_company_user_id",
+    "approverCompanyUserId",
+    "original_approver_company_user_id",
+    "originalApproverCompanyUserId",
+    "assigned_company_user_id",
+    "assignedCompanyUserId",
+    "company_user_id",
+    "companyUserId",
+  ])
+  return resolvePersonEmail(users, companyUserId)
 }
 
 function coerceApprovalsList(value: unknown): AdminRecord[] {
@@ -432,6 +479,7 @@ export type OnboardingApprovalNode = {
   level: number
   status: string
   name: string
+  email: string
   comments: string
   isCurrent: boolean
   raw: AdminRecord
@@ -440,30 +488,26 @@ export type OnboardingApprovalNode = {
 export function summarizeOnboardingApprovals(
   sources: Array<AdminRecord | null | undefined>,
   roles: AdminRecord[],
-  users: AdminRecord[]
+  users: AdminRecord[],
 ) {
   const request = sources.find((source): source is AdminRecord => Boolean(source)) ?? null
   const currentLevel =
-    readNumber(request, [
-      "current_approval_level",
-      "currentApprovalLevel",
-      "current_level",
-      "currentLevel",
-    ]) ?? 0
+    readNumber(request, ["current_approval_level", "currentApprovalLevel", "current_level", "currentLevel"]) ?? 0
 
   const rows = collectOnboardingApprovals(sources)
     .map((approval) => {
-      const level =
-        readNumber(approval, ["approval_level", "approvalLevel", "level"]) ?? 0
+      const level = readNumber(approval, ["approval_level", "approvalLevel", "level"]) ?? 0
       const status = (readText(approval, ["status", "approval_status", "approvalStatus"]) || "pending")
         .trim()
         .toLowerCase()
       const name = resolveApprovalOwnerLabel(approval, roles, users)
+      const email = resolveApprovalOwnerEmail(approval, users)
       return {
         id: readNumber(approval, ["id", "approval_id", "approvalId"]),
         level,
         status,
         name,
+        email,
         comments: readText(approval, ["comments", "comment", "notes"]),
         isCurrent: currentLevel > 0 ? level === currentLevel : status === "pending" || status === "waiting",
         raw: approval,
@@ -477,6 +521,9 @@ export function summarizeOnboardingApprovals(
     return currentLevel > 0 ? row.level === currentLevel || row.isCurrent : true
   })
   const pendingNames = pending.map((row) => row.name).filter(Boolean)
+  const pendingLabels = pending
+    .map((row) => (row.email ? `${row.name || "Approver"} (${row.email})` : row.name))
+    .filter(Boolean)
   const requestStatus = (readText(request, ["status", "request_status"]) || "").toLowerCase()
 
   let waitingLabel = "No pending approver on the current level"
@@ -484,10 +531,10 @@ export function summarizeOnboardingApprovals(
     waitingLabel = "Fully approved"
   } else if (["rejected", "cancelled", "canceled"].includes(requestStatus)) {
     waitingLabel = requestStatus.replace(/\b\w/g, (char) => char.toUpperCase())
-  } else if (pendingNames.length === 1) {
-    waitingLabel = `Pending with ${pendingNames[0]}`
-  } else if (pendingNames.length > 1) {
-    waitingLabel = `Pending with ${pendingNames[0]} +${pendingNames.length - 1}`
+  } else if (pendingLabels.length === 1) {
+    waitingLabel = `Pending with ${pendingLabels[0]}`
+  } else if (pendingLabels.length > 1) {
+    waitingLabel = `Pending with ${pendingLabels[0]} +${pendingLabels.length - 1}`
   } else if (currentLevel > 0) {
     waitingLabel = `Waiting at approval level ${currentLevel}`
   }
@@ -497,6 +544,7 @@ export function summarizeOnboardingApprovals(
     currentLevel,
     pending,
     pendingNames,
+    pendingLabels,
     waitingLabel,
   }
 }
