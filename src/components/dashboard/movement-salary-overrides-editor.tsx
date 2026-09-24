@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils";
 const inputClass =
   "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 dark:border-border dark:bg-background";
 
+/** Non-negative decimal accepted by the server's @IsNumberString. */
+const NUMBER_PATTERN = /^\+?(\d+(\.\d+)?|\.\d+)$/;
+/** Same upper bound the server applies to structure and override rates. */
+const MAX_RATE = 1000;
+
 export type SalaryOverridePayload = {
   component_code: string;
   amount?: string;
@@ -27,6 +32,19 @@ export type StoredSalaryOverrides = Record<
   { amount?: string | null; rate?: string | null; excluded?: boolean }
 >;
 
+export type SalaryOverridesState = {
+  /**
+   * The overrides to send, or null to leave them to the server: it keeps the
+   * overrides saved on the movement (edit) or carries the employee's current
+   * ones over on apply (create). Null until the user changes an override.
+   */
+  overrides: SalaryOverridePayload[] | null;
+  /** Override edits exist but the target structure's lines are loading. */
+  pending: boolean;
+  /** Why the edits can't be saved, when they can't. */
+  error: string | null;
+};
+
 type DraftMode = "default" | "amount" | "rate" | "exclude";
 type Draft = { mode: DraftMode; value: string };
 
@@ -36,6 +54,8 @@ type StructureLine = {
   defaultAmount: string;
   defaultRate: string;
 };
+
+const DEFAULT_DRAFT: Draft = { mode: "default", value: "" };
 
 function str(row: AdminRecord | null | undefined, ...keys: string[]) {
   if (!row) return "";
@@ -58,11 +78,30 @@ function asRecord(value: unknown): AdminRecord | null {
 function draftFromStored(
   stored: StoredSalaryOverrides[string] | undefined,
 ): Draft {
-  if (!stored) return { mode: "default", value: "" };
+  if (!stored) return DEFAULT_DRAFT;
   if (stored.excluded) return { mode: "exclude", value: "" };
   if (stored.amount) return { mode: "amount", value: stored.amount };
   if (stored.rate) return { mode: "rate", value: stored.rate };
-  return { mode: "default", value: "" };
+  return DEFAULT_DRAFT;
+}
+
+function draftsFromStored(stored: StoredSalaryOverrides | null | undefined) {
+  const drafts: Record<string, Draft> = {};
+  for (const [code, value] of Object.entries(stored ?? {})) {
+    const draft = draftFromStored(value);
+    if (draft.mode !== "default") drafts[code.toUpperCase()] = draft;
+  }
+  return drafts;
+}
+
+function draftError(draft: Draft) {
+  if (draft.mode !== "amount" && draft.mode !== "rate") return null;
+  const value = draft.value.trim();
+  if (!NUMBER_PATTERN.test(value)) return "Enter a non-negative number.";
+  if (draft.mode === "rate" && Number(value) > MAX_RATE) {
+    return `A rate can be at most ${MAX_RATE}%.`;
+  }
+  return null;
 }
 
 function formatAmount(value: string) {
@@ -73,40 +112,44 @@ function formatAmount(value: string) {
 }
 
 /**
- * Picks the active version of a structure code in effect on a date, falling
- * back to the newest active version.
+ * Picks the structure version in effect on a date, as the server resolves it:
+ * ACTIVE versions, plus RETIRED ones when the employee keeps their current
+ * structure (payroll still pays from a retired version inside its range).
  */
 function pickStructureVersion(
   structures: AdminRecord[],
   code: string,
   onDate: string,
+  includeRetired: boolean,
 ) {
-  const versions = structures
+  const statuses = includeRetired ? ["ACTIVE", "RETIRED"] : ["ACTIVE"];
+  return structures
     .filter(
       (row) =>
         str(row, "code") === code &&
-        str(row, "status").toUpperCase() === "ACTIVE",
+        statuses.includes(str(row, "status").toUpperCase()),
     )
     .sort(
       (left, right) =>
+        str(right, "effectiveFrom", "effective_from").localeCompare(
+          str(left, "effectiveFrom", "effective_from"),
+        ) ||
         Number(str(right, "versionNumber", "version_number")) -
-        Number(str(left, "versionNumber", "version_number")),
-    );
-  return (
-    versions.find((row) => {
+          Number(str(left, "versionNumber", "version_number")),
+    )
+    .find((row) => {
       const from = str(row, "effectiveFrom", "effective_from");
       const to = str(row, "effectiveTo", "effective_to");
-      return (!onDate || from <= onDate) && (!to || !onDate || to >= onDate);
-    }) ?? versions[0]
-  );
+      return !onDate || (from <= onDate && (!to || to >= onDate));
+    });
 }
 
 /**
  * Edits an employee's per-component overrides for a salary revision. Starts
  * from the overrides saved on the movement (when editing) or the employee's
- * current ones, and carries them across a structure switch for components
- * both structures share. Reports `null` when overrides cannot be edited, in
- * which case the backend carries the current overrides over by itself.
+ * current ones. Edits live in one map keyed by component code, so they
+ * survive any number of structure switches; components missing from the
+ * shown structure are listed as dropped.
  */
 export function MovementSalaryOverridesEditor({
   employeeId,
@@ -120,9 +163,10 @@ export function MovementSalaryOverridesEditor({
   targetStructureCode: string;
   effectiveDate: string;
   structures: AdminRecord[];
+  /** Overrides saved on the movement being edited, for this employee. */
   initialOverrides?: StoredSalaryOverrides | null;
-  /** Must be stable (useCallback); it is called whenever the drafts change. */
-  onChange: (overrides: SalaryOverridePayload[] | null, valid: boolean) => void;
+  /** Must be stable (useCallback); called whenever the state changes. */
+  onChange: (state: SalaryOverridesState) => void;
 }) {
   const [currentCode, setCurrentCode] = React.useState("");
   const [currentOverrides, setCurrentOverrides] =
@@ -131,21 +175,18 @@ export function MovementSalaryOverridesEditor({
     "idle" | "loading" | "ready" | "unavailable"
   >("idle");
   const [lines, setLines] = React.useState<StructureLine[] | null>(null);
-  const [linesLoading, setLinesLoading] = React.useState(false);
-  const [drafts, setDrafts] = React.useState<Record<string, Draft>>({});
-  const [dropped, setDropped] = React.useState<string[]>([]);
-  // Once the user edits, their drafts become the source carried across
-  // structure switches instead of the saved overrides.
-  const touchedRef = React.useRef(false);
-  const draftsRef = React.useRef(drafts);
-  React.useEffect(() => {
-    draftsRef.current = drafts;
-  }, [drafts]);
+  const [linesState, setLinesState] = React.useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  // null until the user changes an override; then it holds every edit.
+  const [edited, setEdited] = React.useState<Record<string, Draft> | null>(
+    null,
+  );
 
   React.useEffect(() => {
-    touchedRef.current = false;
-    setDrafts({});
-    setLines(null);
+    setEdited(null);
+    setCurrentCode("");
+    setCurrentOverrides(null);
     const token = readStoredSessionTokens().accessToken.trim();
     if (!token || !employeeId) {
       setSalaryState("idle");
@@ -173,24 +214,32 @@ export function MovementSalaryOverridesEditor({
     };
   }, [employeeId]);
 
-  const resolvedCode = targetStructureCode.trim().toUpperCase() || currentCode;
+  const requestedCode = targetStructureCode.trim().toUpperCase();
+  const resolvedCode = requestedCode || currentCode;
+  const keepsCurrentCode = !requestedCode || requestedCode === currentCode;
   const structureRow = React.useMemo(
     () =>
       resolvedCode
-        ? pickStructureVersion(structures, resolvedCode, effectiveDate)
+        ? pickStructureVersion(
+            structures,
+            resolvedCode,
+            effectiveDate,
+            keepsCurrentCode,
+          )
         : undefined,
-    [structures, resolvedCode, effectiveDate],
+    [structures, resolvedCode, effectiveDate, keepsCurrentCode],
   );
   const structureId = str(structureRow, "id");
 
   React.useEffect(() => {
     const token = readStoredSessionTokens().accessToken.trim();
+    setLines(null);
     if (salaryState !== "ready" || !structureId || !token) {
-      setLines(null);
+      setLinesState("idle");
       return;
     }
     let cancelled = false;
-    setLinesLoading(true);
+    setLinesState("loading");
     getPayrollSalaryStructure(token, structureId)
       .then((detail) => {
         if (cancelled) return;
@@ -207,73 +256,86 @@ export function MovementSalaryOverridesEditor({
             }))
             .filter((line) => line.code && line.code !== "BASIC"),
         );
+        setLinesState("ready");
       })
       .catch(() => {
-        if (!cancelled) setLines(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLinesLoading(false);
+        if (!cancelled) setLinesState("error");
       });
     return () => {
       cancelled = true;
     };
   }, [salaryState, structureId]);
 
-  // Rebuild drafts for the target structure's lines.
-  React.useEffect(() => {
-    if (!lines) return;
-    const source: StoredSalaryOverrides = touchedRef.current
-      ? Object.fromEntries(
-          Object.entries(draftsRef.current)
-            .filter(([, draft]) => draft.mode !== "default")
-            .map(([code, draft]) => [
-              code,
-              {
-                excluded: draft.mode === "exclude",
-                amount: draft.mode === "amount" ? draft.value : null,
-                rate: draft.mode === "rate" ? draft.value : null,
-              },
-            ]),
-        )
-      : (initialOverrides ?? currentOverrides ?? {});
-    const codes = new Set(lines.map((line) => line.code));
-    setDrafts(
-      Object.fromEntries(
-        lines.map((line) => [line.code, draftFromStored(source[line.code])]),
-      ),
-    );
-    setDropped(Object.keys(source).filter((code) => !codes.has(code)));
-  }, [lines, initialOverrides, currentOverrides]);
+  const baseline = React.useMemo(
+    () => draftsFromStored(initialOverrides ?? currentOverrides),
+    [initialOverrides, currentOverrides],
+  );
+  const drafts = edited ?? baseline;
+  const touched = edited !== null;
+  const editable = salaryState === "ready" && linesState === "ready" && !!lines;
+  const lineCodes = React.useMemo(
+    () => new Set((lines ?? []).map((line) => line.code)),
+    [lines],
+  );
+  const dropped = editable
+    ? Object.keys(drafts).filter((code) => !lineCodes.has(code))
+    : [];
+  const noVersion = salaryState === "ready" && !!resolvedCode && !structureRow;
 
-  const editable = salaryState === "ready" && lines !== null;
-  React.useEffect(() => {
-    if (!editable) {
-      onChange(null, true);
-      return;
+  const state = React.useMemo<SalaryOverridesState>(() => {
+    if (!touched) return { overrides: null, pending: false, error: null };
+    if (salaryState === "loading" || linesState === "loading") {
+      return { overrides: null, pending: true, error: null };
     }
-    const payload: SalaryOverridePayload[] = [];
-    let valid = true;
-    for (const [code, draft] of Object.entries(drafts)) {
-      if (draft.mode === "default") continue;
+    if (!editable) {
+      return {
+        overrides: null,
+        pending: false,
+        error: noVersion
+          ? `${resolvedCode} has no version effective on ${effectiveDate || "the effective date"}, so the override edits can't be saved.`
+          : "The structure lines couldn't be loaded, so the override edits can't be saved.",
+      };
+    }
+    const overrides: SalaryOverridePayload[] = [];
+    let error: string | null = null;
+    for (const line of lines ?? []) {
+      const draft = drafts[line.code];
+      if (!draft || draft.mode === "default") continue;
       if (draft.mode === "exclude") {
-        payload.push({ component_code: code, excluded: true });
+        overrides.push({ component_code: line.code, excluded: true });
         continue;
       }
-      const value = draft.value.trim();
-      if (!value || !Number.isFinite(Number(value)) || Number(value) < 0) {
-        valid = false;
-      }
-      payload.push({
-        component_code: code,
-        ...(draft.mode === "amount" ? { amount: value } : { rate: value }),
+      const message = draftError(draft);
+      if (message && !error) error = `${line.name}: ${message}`;
+      overrides.push({
+        component_code: line.code,
+        ...(draft.mode === "amount"
+          ? { amount: draft.value.trim() }
+          : { rate: draft.value.trim() }),
       });
     }
-    onChange(payload, valid);
-  }, [editable, drafts, onChange]);
+    return { overrides, pending: false, error };
+  }, [
+    touched,
+    salaryState,
+    linesState,
+    editable,
+    noVersion,
+    resolvedCode,
+    effectiveDate,
+    lines,
+    drafts,
+  ]);
+
+  React.useEffect(() => {
+    onChange(state);
+  }, [state, onChange]);
 
   function updateDraft(code: string, next: Draft) {
-    touchedRef.current = true;
-    setDrafts((current) => ({ ...current, [code]: next }));
+    const updated = { ...drafts };
+    if (next.mode === "default") delete updated[code];
+    else updated[code] = next;
+    setEdited(updated);
   }
 
   if (!employeeId) return null;
@@ -288,7 +350,7 @@ export function MovementSalaryOverridesEditor({
         </p>
       </div>
 
-      {salaryState === "loading" || linesLoading ? (
+      {salaryState === "loading" || linesState === "loading" ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2Icon className="size-3.5 animate-spin" />
           Loading structure lines…
@@ -298,8 +360,9 @@ export function MovementSalaryOverridesEditor({
       {salaryState === "unavailable" ? (
         <p className="text-xs text-muted-foreground">
           You don&apos;t have access to payroll salary details, so overrides
-          can&apos;t be edited here. The employee&apos;s current overrides carry
-          over for components the new structure shares.
+          can&apos;t be edited here. Overrides already saved on this movement
+          are kept; otherwise the employee&apos;s current overrides carry over
+          for components the new structure shares.
         </p>
       ) : null}
 
@@ -310,9 +373,16 @@ export function MovementSalaryOverridesEditor({
         </p>
       ) : null}
 
-      {salaryState === "ready" && resolvedCode && !structureRow ? (
+      {noVersion ? (
         <p className="text-xs text-amber-700 dark:text-amber-300">
-          {resolvedCode} has no active version to take overrides from.
+          {resolvedCode} has no {keepsCurrentCode ? "" : "active "}version
+          effective on {effectiveDate || "the effective date"}.
+        </p>
+      ) : null}
+
+      {linesState === "error" ? (
+        <p className="text-xs text-rose-600">
+          Couldn&apos;t load the lines of {resolvedCode}.
         </p>
       ) : null}
 
@@ -331,8 +401,9 @@ export function MovementSalaryOverridesEditor({
 
       {editable
         ? lines.map((line) => {
-            const draft = drafts[line.code] ?? { mode: "default", value: "" };
+            const draft = drafts[line.code] ?? DEFAULT_DRAFT;
             const needsValue = draft.mode === "amount" || draft.mode === "rate";
+            const invalid = needsValue && draftError(draft) !== null;
             return (
               <div
                 key={line.code}
@@ -364,11 +435,9 @@ export function MovementSalaryOverridesEditor({
                   <option value="exclude">Exclude</option>
                 </select>
                 <input
-                  className={cn(
-                    inputClass,
-                    needsValue && !draft.value.trim() && "border-rose-400",
-                  )}
+                  className={cn(inputClass, invalid && "border-rose-400")}
                   aria-label={`${line.name} override value`}
+                  aria-invalid={invalid || undefined}
                   inputMode="decimal"
                   disabled={!needsValue}
                   placeholder={draft.mode === "rate" ? "Rate %" : "Amount"}

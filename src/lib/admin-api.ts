@@ -6870,7 +6870,8 @@ export async function getEmployeeMovement(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/employee-movements/${id}`, {
     token,
   });
-  return normalizeSingle(payload);
+  // The movement nests snapshots and the employee; keep the root record.
+  return unwrapRootRecord(payload, "id");
 }
 
 export async function listEmployeeMovementOperations(
@@ -8359,7 +8360,7 @@ export async function getMyMovement(token: string, id: string | number) {
   const payload = await adminRequest<unknown>(`/api/me/movements/${id}`, {
     token,
   });
-  return normalizeSingle(payload);
+  return unwrapRootRecord(payload, "id");
 }
 
 export async function acknowledgeMyMovement(
