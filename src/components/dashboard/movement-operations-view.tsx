@@ -54,6 +54,7 @@ import {
   listEmployeeMovementOperations,
   listEmployeeMovements,
   listEmployees,
+  listPayrollSalaryStructures,
   listPositions,
   rejectEmployeeMovement,
   retryEmployeeMovementOperation,
@@ -291,6 +292,9 @@ export function MovementOperationsView({
   const [positions, setPositions] = React.useState<AdminRecord[]>([])
   const [grades, setGrades] = React.useState<AdminRecord[]>([])
   const [costCenters, setCostCenters] = React.useState<AdminRecord[]>([])
+  const [salaryStructureCodes, setSalaryStructureCodes] = React.useState<
+    Array<{ code: string; name: string }>
+  >([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -341,6 +345,19 @@ export function MovementOperationsView({
         listCostCenters(token)
           .then(setCostCenters)
           .catch(() => setCostCenters([])),
+        // Needs payroll config read access; the form falls back to free text.
+        listPayrollSalaryStructures(token)
+          .then((structures) => {
+            const byCode = new Map<string, string>()
+            for (const row of structures) {
+              if (String(row.status ?? "").toUpperCase() !== "ACTIVE") continue
+              byCode.set(String(row.code), String(row.name ?? row.code))
+            }
+            setSalaryStructureCodes(
+              [...byCode].map(([code, name]) => ({ code, name })),
+            )
+          })
+          .catch(() => setSalaryStructureCodes([])),
       )
     }
     const results = await Promise.allSettled(tasks)
@@ -1347,17 +1364,38 @@ export function MovementOperationsView({
                       />
                     </label>
                     <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Salary structure code</span>
-                      <input
-                        className={inputClass}
-                        value={form.salary_structure_code ?? ""}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            salary_structure_code: event.target.value,
-                          }))
-                        }
-                      />
+                      <span className="font-medium">Salary structure</span>
+                      {salaryStructureCodes.length > 0 ? (
+                        <select
+                          className={inputClass}
+                          value={form.salary_structure_code ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              salary_structure_code: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Keep current structure</option>
+                          {salaryStructureCodes.map((item) => (
+                            <option key={item.code} value={item.code}>
+                              {item.code} · {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className={inputClass}
+                          placeholder="Leave blank to keep current structure"
+                          value={form.salary_structure_code ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              salary_structure_code: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
                     </label>
                     <label className="grid gap-1.5 text-sm">
                       <span className="font-medium">Justification</span>
