@@ -37,14 +37,11 @@ src/
 Copy `.env.example` to `.env.local` and set:
 
 ```env
-# Use same-origin API proxy in deployed builds so both public and private URLs work.
-NEXT_PUBLIC_API_BASE_URL=/api
-# Next.js rewrite target when /api reaches the frontend process directly.
-# UAT: http://127.0.0.1:9999, production/local default: http://127.0.0.1:8888
-BACKEND_ORIGIN=http://127.0.0.1:8888
+# Point directly at the backend API.
+NEXT_PUBLIC_API_BASE_URL=http://192.168.1.30:9999
 
-# Local development can point directly at the backend instead.
-# NEXT_PUBLIC_API_BASE_URL=http://192.168.1.30:8888
+# Local backend example:
+# NEXT_PUBLIC_API_BASE_URL=http://localhost:8888
 ```
 
 ## API integration points

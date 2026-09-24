@@ -15608,7 +15608,7 @@ export async function getPayrollSalaryStructure(
       token,
     },
   );
-  return normalizeSingle(payload);
+  return unwrapRootRecord(payload, "components");
 }
 
 export async function createPayrollSalaryStructure(
@@ -15620,6 +15620,131 @@ export async function createPayrollSalaryStructure(
     token,
     body: data,
   });
+}
+
+export async function updatePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function deletePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
+export async function activatePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/activate`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
+export async function retirePayrollSalaryStructure(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/retire`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
+export async function createPayrollSalaryStructureVersion(
+  token: string,
+  id: string | number,
+  data: { effective_from: string; name?: string },
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/versions`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function listPayrollSalaryStructureEmployees(
+  token: string,
+  id: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/configuration/salary-structures/${id}/employees`,
+    {
+      token,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function getEmployeePayrollSalary(
+  token: string,
+  employeeId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/employees/${employeeId}/salary`,
+    {
+      token,
+    },
+  );
+  return unwrapRootRecord(payload, "employee");
+}
+
+export async function assignEmployeePayrollSalary(
+  token: string,
+  employeeId: string | number,
+  data: AdminRecord,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/employees/${employeeId}/salary`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+  return unwrapRootRecord(payload, "employee");
+}
+
+/**
+ * For payloads whose root record holds nested objects, where normalizeSingle
+ * would return a child record instead of the root.
+ */
+function unwrapRootRecord(
+  payload: unknown,
+  markerKey: string,
+): AdminRecord | null {
+  const record = asRecord(payload);
+  if (!record) return null;
+  const data = asRecord(record.data);
+  return data && markerKey in data ? data : record;
 }
 
 export async function listPayrollStatutorySchemes(token: string) {
@@ -17183,10 +17308,15 @@ export async function listHrFieldVisits(
   return normalizeList(payload);
 }
 
-export async function getHrFieldVisitsMap(token: string) {
-  const payload = await adminRequest<unknown>("/api/hr/field-visits/map", {
-    token,
-  });
+// The backend requires a purpose for every location-map view (it is written to the access log).
+export async function getHrFieldVisitsMap(
+  token: string,
+  purpose = "HR field visit oversight",
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/hr/field-visits/map${buildRecordQuery({ purpose })}`,
+    { token },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
@@ -17347,12 +17477,13 @@ export async function reviewManagerFieldVisitPlan(
   });
 }
 
-export async function getManagerFieldVisitMap(token: string) {
+export async function getManagerFieldVisitMap(
+  token: string,
+  purpose = "Manager team field visit review",
+) {
   const payload = await adminRequest<unknown>(
-    "/api/manager/field-visits/map/view",
-    {
-      token,
-    },
+    `/api/manager/field-visits/map/view${buildRecordQuery({ purpose })}`,
+    { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }

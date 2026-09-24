@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test"
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000"
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"
+const localURL = new URL(baseURL)
+const runLocalServer = ["localhost", "127.0.0.1"].includes(localURL.hostname)
 
 export default defineConfig({
   testDir: "./e2e",
@@ -15,6 +17,14 @@ export default defineConfig({
     ["json", { outputFile: "outputs/ui-audit/playwright-results.json" }],
   ],
   outputDir: "test-results",
+  webServer: runLocalServer
+    ? {
+        command: `npx next dev --webpack --disable-source-maps -p ${localURL.port || "3000"}`,
+        url: new URL("/login", baseURL).toString(),
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }
+    : undefined,
   use: {
     baseURL,
     viewport: { width: 1440, height: 900 },

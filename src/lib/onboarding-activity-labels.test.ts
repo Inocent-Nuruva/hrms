@@ -18,14 +18,16 @@ import {
 } from "@/lib/onboarding-activity-labels"
 
 describe("onboarding activity labels", () => {
-  const roles = [
-    { id: 19, display_name: "Human Resource", name: "hr" },
-  ]
+  const roles = [{ id: 19, display_name: "Human Resource", name: "hr" }]
   const users = [
     {
       id: 50,
       company_user_id: 146,
-      user: { first_name: "Jane", last_name: "Namakula", email: "jane@example.com" },
+      user: {
+        first_name: "Jane",
+        last_name: "Namakula",
+        email: "jane@example.com",
+      },
     },
   ]
 
@@ -38,9 +40,9 @@ describe("onboarding activity labels", () => {
   it("resolves role and user names instead of #id fallbacks", () => {
     expect(resolveRoleLabel(roles, 19)).toBe("Human Resource")
     expect(resolvePersonLabel(users, 146)).toBe("Jane Namakula")
-    expect(
-      resolveCatalogLabel(users, 146, ["id", "company_user_id"], ["full_name", "name", "email"])
-    ).toBe("Jane Namakula")
+    expect(resolveCatalogLabel(users, 146, ["id", "company_user_id"], ["full_name", "name", "email"])).toBe(
+      "Jane Namakula",
+    )
   })
 
   it("builds the workflow owner line from nested objects even without catalogs", () => {
@@ -53,64 +55,38 @@ describe("onboarding activity labels", () => {
           assigned_user: { id: 146, full_name: "Jane Namakula" },
         },
         [],
-        []
-      )
+        [],
+      ),
     ).toBe("Role: Human Resource • User: Jane Namakula")
   })
 
   it("looks up owner names from catalogs when the step only has ids", () => {
-    expect(
-      resolveResponsiblePartyLabel(
-        { assigned_role_id: 19, assigned_user_id: 146 },
-        roles,
-        users
-      )
-    ).toBe("Role: Human Resource • User: Jane Namakula")
+    expect(resolveResponsiblePartyLabel({ assigned_role_id: 19, assigned_user_id: 146 }, roles, users)).toBe(
+      "Role: Human Resource • User: Jane Namakula",
+    )
   })
 
   it("does not render Role: #19 or User: #146 when names cannot be resolved", () => {
-    expect(
-      resolveResponsiblePartyLabel(
-        { assigned_role_id: 19, assigned_user_id: 146 },
-        [],
-        []
-      )
-    ).toBe("")
+    expect(resolveResponsiblePartyLabel({ assigned_role_id: 19, assigned_user_id: 146 }, [], [])).toBe("")
   })
 
   it("resolves audit actors from nested objects or numeric created_by", () => {
-    expect(
-      resolveAuditActorLabel(
-        { action: "Onboarding Request.Created", created_by: 146 },
-        users
-      )
-    ).toBe("Jane Namakula")
+    expect(resolveAuditActorLabel({ action: "Onboarding Request.Created", created_by: 146 }, users)).toBe(
+      "Jane Namakula",
+    )
 
-    expect(
-      resolveAuditActorLabel(
-        { actor: { full_name: "Kevin Kiggundu" }, created_by: 1 },
-        []
-      )
-    ).toBe("Kevin Kiggundu")
+    expect(resolveAuditActorLabel({ actor: { full_name: "Kevin Kiggundu" }, created_by: 1 }, [])).toBe("Kevin Kiggundu")
   })
 
   it("resolves approval owners from nested approver records", () => {
     expect(
-      resolveApprovalOwnerLabel(
-        { approver: { full_name: "Line Manager" }, assigned_role_id: 19 },
-        roles,
-        []
-      )
+      resolveApprovalOwnerLabel({ approver: { full_name: "Line Manager" }, assigned_role_id: 19 }, roles, []),
     ).toBe("Line Manager")
   })
 
   it("resolves pending onboarding approvers from approver_company_user_id", () => {
     expect(
-      resolveApprovalOwnerLabel(
-        { approver_company_user_id: 146, status: "pending", approval_level: 1 },
-        [],
-        users
-      )
+      resolveApprovalOwnerLabel({ approver_company_user_id: 146, status: "pending", approval_level: 1 }, [], users),
     ).toBe("Jane Namakula")
   })
 
@@ -125,7 +101,13 @@ describe("onboarding activity labels", () => {
               id: 11,
               approval_level: 1,
               status: "pending",
-              approver: { user: { first_name: "Ssali", last_name: "Ronald" } },
+              approver: {
+                user: {
+                  first_name: "Ssali",
+                  last_name: "Ronald",
+                  email: "ssali.ronald@example.com",
+                },
+              },
             },
             {
               id: 12,
@@ -137,10 +119,12 @@ describe("onboarding activity labels", () => {
         },
       ],
       [],
-      users
+      users,
     )
-    expect(summary.waitingLabel).toBe("Pending with Ssali Ronald")
+    expect(summary.waitingLabel).toBe("Pending with Ssali Ronald (ssali.ronald@example.com)")
     expect(summary.pendingNames).toEqual(["Ssali Ronald"])
+    expect(summary.pendingLabels).toEqual(["Ssali Ronald (ssali.ronald@example.com)"])
+    expect(summary.rows[0]?.email).toBe("ssali.ronald@example.com")
     expect(summary.rows[1]?.name).toBe("Jane Namakula")
   })
 
@@ -156,7 +140,7 @@ describe("onboarding activity labels", () => {
   it("merges company-user and user catalog rows without dropping either identity", () => {
     const merged = mergeAdminRecords(
       [{ id: 146, full_name: "Company Jane" }],
-      [{ id: 50, company_user_id: 146, email: "jane@example.com" }]
+      [{ id: 50, company_user_id: 146, email: "jane@example.com" }],
     )
     expect(merged.length).toBeGreaterThan(0)
     expect(resolvePersonLabel(merged, 146)).toBeTruthy()
@@ -186,14 +170,16 @@ describe("onboarding activity labels", () => {
     expect(recordHasRole(hrUser, 14)).toBe(true)
     expect(recordHasRole(itUser, 14)).toBe(false)
     expect(
-      filterAssigneesForStep([hrUser, itUser], { roleId: 14, selectedId: 8 }).map(
-        (row) => preferredAssigneeId(row),
-      ),
+      filterAssigneesForStep([hrUser, itUser], {
+        roleId: 14,
+        selectedId: 8,
+      }).map((row) => preferredAssigneeId(row)),
     ).toEqual([62, 8])
     expect(
-      filterAssigneesForStep([hrUser, itUser], { roleId: 14, search: "asha" }).map(
-        (row) => preferredAssigneeId(row),
-      ),
+      filterAssigneesForStep([hrUser, itUser], {
+        roleId: 14,
+        search: "asha",
+      }).map((row) => preferredAssigneeId(row)),
     ).toEqual([62])
   })
 })

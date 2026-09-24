@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Building2,
   CheckCircle2,
@@ -436,6 +437,7 @@ function memberPermissionIds(row: AdminRecord) {
 }
 
 export function CompaniesView() {
+  const searchParams = useSearchParams()
   const actor = useDashboardActor()
   const { switchCompany } = useAuth()
   const actorPermissions = actor.permissionLabels
@@ -490,6 +492,7 @@ export function CompaniesView() {
   const [editingMember, setEditingMember] = React.useState<AdminRecord | null>(null)
   const [editingMemberRoleIds, setEditingMemberRoleIds] = React.useState<string[]>([])
   const [editingMemberPermissionIds, setEditingMemberPermissionIds] = React.useState<string[]>([])
+  const handledAccessRequestRef = React.useRef("")
 
   const canUpdateCompanies =
     permissionsReady &&
@@ -634,6 +637,48 @@ export function CompaniesView() {
   React.useEffect(() => {
     void loadData()
   }, [loadData])
+
+  React.useEffect(() => {
+    const membershipId = Number(searchParams?.get("membership_id"))
+    const requestedPermission = searchParams?.get("permission")?.trim() ?? ""
+    if (
+      !Number.isFinite(membershipId) ||
+      membershipId <= 0 ||
+      members.length === 0 ||
+      !canManageCompanyUserPermissions
+    ) {
+      return
+    }
+
+    const requestKey = `${membershipId}:${requestedPermission}`
+    if (handledAccessRequestRef.current === requestKey) return
+
+    const member = members.find(
+      (row) => readNumber(row, ["company_user_id", "companyUserId", "membership_id", "membershipId"]) === membershipId
+    )
+    if (!member) return
+
+    const permission = requestedPermission
+      ? permissions.find(
+          (row) => readString(row, ["name", "permission_name", "permissionName", "code"]) === requestedPermission
+        )
+      : null
+    const permissionId = permission ? readNumber(permission, ["id", "permission_id", "permissionId"]) : null
+
+    setEditingMember(member)
+    setEditingMemberRoleIds(memberRoleIds(member))
+    setEditingMemberPermissionIds(() => {
+      const assigned = memberPermissionIds(member)
+      if (permissionId === null) return assigned
+      return Array.from(new Set([...assigned, String(permissionId)]))
+    })
+    setMembersError(
+      requestedPermission && permissionId === null
+        ? `The requested permission (${requestedPermission}) is not available in this company permission catalog.`
+        : null
+    )
+    handledAccessRequestRef.current = requestKey
+  }, [canManageCompanyUserPermissions, members, permissions, searchParams])
 
   const filteredRows = React.useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
@@ -1645,8 +1690,15 @@ export function CompaniesView() {
                       const id = readNumber(permission, ["id"])
                       if (id === null) return null
                       const value = String(id)
+                      const permissionName = readString(permission, ["name", "permission_name", "permissionName", "code"])
+                      const isRequestedPermission = permissionName === searchParams?.get("permission")?.trim()
                       return (
-                        <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                        <label
+                          key={id}
+                          className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${
+                            isRequestedPermission ? "bg-primary/10 ring-1 ring-primary/30" : ""
+                          }`}
+                        >
                           <input
                             type="checkbox"
                             checked={editingMemberPermissionIds.includes(value)}
@@ -1659,6 +1711,9 @@ export function CompaniesView() {
                             }
                           />
                           <span>{readString(permission, ["display_name", "name"])}</span>
+                          {isRequestedPermission ? (
+                            <span className="ml-auto text-xs font-medium text-primary">Required for assignment</span>
+                          ) : null}
                         </label>
                       )
                     })}

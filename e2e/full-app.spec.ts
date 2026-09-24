@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { loginAs, readTestUsers } from "./helpers/auth";
+import { loginAs, readTestUser } from "./helpers/auth";
 import {
   attachPageListeners,
   auditRoute,
@@ -74,7 +74,7 @@ test.afterAll(async () => {
 });
 
 test("admin can sign in and reach the dashboard", async ({ page }) => {
-  const { admin } = readTestUsers();
+  const admin = readTestUser("admin");
   await loginAs(page, admin);
   extra.nav = { ...(extra.nav as object), admin: await collectNavLabels(page) };
   await screenshot(page, "admin-dashboard");
@@ -83,7 +83,7 @@ test("admin can sign in and reach the dashboard", async ({ page }) => {
 
 test("admin smoke: every operations page loads", async ({ page }) => {
   test.setTimeout(30 * 60 * 1000);
-  const { admin } = readTestUsers();
+  const admin = readTestUser("admin");
   await loginAs(page, admin);
   const bags = attachPageListeners(page);
 
@@ -106,7 +106,7 @@ test("admin smoke: every operations page loads", async ({ page }) => {
 test("admin journey: timetable, days, shifts, leave create dialogs", async ({
   page,
 }) => {
-  const { admin } = readTestUsers();
+  const admin = readTestUser("admin");
   await loginAs(page, admin);
   const journeys: unknown[] = [];
 
@@ -139,7 +139,7 @@ test("admin journey: timetable, days, shifts, leave create dialogs", async ({
 test("admin journey: employees, leave, attendance operations", async ({
   page,
 }) => {
-  const { admin } = readTestUsers();
+  const admin = readTestUser("admin");
   await loginAs(page, admin);
 
   await page.goto("/dashboard/employees/all", {
@@ -166,7 +166,7 @@ test("admin journey: employees, leave, attendance operations", async ({
 test("admin journey: loan operations reports and controls", async ({
   page,
 }) => {
-  const { admin } = readTestUsers();
+  const admin = readTestUser("admin");
   await loginAs(page, admin);
 
   await page.goto("/dashboard/finance/reports", {
@@ -189,7 +189,7 @@ test("admin journey: loan operations reports and controls", async ({
 });
 
 test("hr can sign in and reach the dashboard", async ({ page }) => {
-  const { hr } = readTestUsers();
+  const hr = readTestUser("hr");
   await loginAs(page, hr);
   extra.nav = { ...(extra.nav as object), hr: await collectNavLabels(page) };
   await screenshot(page, "hr-dashboard");
@@ -198,7 +198,7 @@ test("hr can sign in and reach the dashboard", async ({ page }) => {
 
 test("hr smoke: self-service and HR workspace pages load", async ({ page }) => {
   test.setTimeout(20 * 60 * 1000);
-  const { hr } = readTestUsers();
+  const hr = readTestUser("hr");
   await loginAs(page, hr);
   const bags = attachPageListeners(page);
 
@@ -219,7 +219,7 @@ test("hr smoke: self-service and HR workspace pages load", async ({ page }) => {
 });
 
 test("hr journey: profile, leave, attendance, timetable", async ({ page }) => {
-  const { hr } = readTestUsers();
+  const hr = readTestUser("hr");
   await loginAs(page, hr);
 
   await page.goto("/dashboard/me/profile", { waitUntil: "domcontentloaded" });
@@ -252,7 +252,7 @@ test("hr journey: profile, leave, attendance, timetable", async ({ page }) => {
 });
 
 test("hr journey: self-service loan workspace", async ({ page }) => {
-  const { hr } = readTestUsers();
+  const hr = readTestUser("hr");
   await loginAs(page, hr);
 
   await page.goto("/dashboard/me/finance/applications", {

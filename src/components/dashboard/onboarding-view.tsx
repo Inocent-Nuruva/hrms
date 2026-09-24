@@ -5,7 +5,22 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { Ban, CheckCheck, CircleHelp, Copy, Pencil, Plus, RefreshCw, Send, Trash2, X } from "lucide-react"
+import {
+  Ban,
+  CalendarDays,
+  CheckCheck,
+  CircleHelp,
+  Copy,
+  Download,
+  Eye,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Send,
+  ShieldAlert,
+  Trash2,
+  X,
+} from "lucide-react"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 
@@ -29,6 +44,7 @@ import {
   deleteOnboardingRequest,
   deleteOnboardingWorkflow,
   deleteOnboardingWorkflowStep,
+  downloadEmployeeDocument,
   downloadOnboardingDocument,
   fileToBase64UploadDto,
   getOnboardingAuditLogs,
@@ -53,6 +69,7 @@ import {
   listResource,
   listShiftResources,
   listTimetableResources,
+  patchOnboardingRequest,
   patchOnboardingWorkflow,
   patchOnboardingWorkflowStep,
   rejectOnboardingRequest,
@@ -68,13 +85,17 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
+  DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -107,8 +128,30 @@ import {
 } from "@/lib/onboarding-activity-labels"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { matchesEmployeeDirectorySearch } from "@/lib/employee-directory-search"
+import {
+  onboardingAssigneeHasPermission,
+  requiredPermissionForOnboardingStep,
+} from "@/lib/onboarding-assignee-permissions"
 
 type OnboardingTab = "invitations" | "requests" | "workflows"
+
+const ONBOARDING_DOCUMENT_TYPES = [
+  { value: "identity_document", label: "Identity document", section: "identification" },
+  { value: "academic_certificate", label: "Academic certificate", section: "education" },
+  { value: "professional_certificate", label: "Professional certificate", section: "education" },
+  { value: "curriculum_vitae", label: "CV / résumé", section: "experience" },
+  { value: "employment_contract", label: "Employment contract", section: "assignment" },
+  { value: "offer_letter", label: "Offer letter", section: "assignment" },
+  { value: "bank_document", label: "Bank document", section: "banking" },
+  { value: "medical_document", label: "Medical document", section: "personal" },
+  { value: "other", label: "Other", section: "personal" },
+] as const
+const TASK_DUE_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hours = Math.floor(index / 2)
+  const minutes = index % 2 === 0 ? "00" : "30"
+  const value = `${String(hours).padStart(2, "0")}:${minutes}`
+  return { value, label: new Date(2000, 0, 1, hours, Number(minutes)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }
+})
 type OnboardingLookupKey =
   | "employees"
   | "workflows"
@@ -882,6 +925,27 @@ function asTruthyBoolean(value: unknown) {
   return Boolean(value)
 }
 
+function hasEmployeeReviewValue(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+  return !["", "-", "n/a", "not provided", "none", "null", "undefined"].includes(normalized)
+}
+
+function parseDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return undefined
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
+function toDateOnlyValue(value: Date | undefined) {
+  if (!value) return ""
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
   const picked = new Set<RequestAction>()
   const normalized = (value: unknown) =>
@@ -1249,7 +1313,7 @@ export function OnboardingView() {
   const [documentForm, setDocumentForm] = React.useState({
     title: "",
     description: "",
-    document_type_code: "",
+    document_type: "",
     expiry_date: "",
   })
   const [showTaskComposer, setShowTaskComposer] = React.useState(false)
@@ -1308,6 +1372,13 @@ export function OnboardingView() {
   const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
   const [selectedInvitation, setSelectedInvitation] = React.useState<AdminRecord | null>(null)
+  const [changeWorkflowDialogOpen, setChangeWorkflowDialogOpen] = React.useState(false)
+  const [changeWorkflowRequest, setChangeWorkflowRequest] = React.useState<AdminRecord | null>(null)
+  const [replacementWorkflowId, setReplacementWorkflowId] = React.useState("")
+  const [approvalAssignmentDialogOpen, setApprovalAssignmentDialogOpen] = React.useState(false)
+  const [approvalToReassign, setApprovalToReassign] = React.useState<AdminRecord | null>(null)
+  const [replacementApproverId, setReplacementApproverId] = React.useState("")
+  const [approvalReassignmentReason, setApprovalReassignmentReason] = React.useState("")
 
   React.useEffect(() => {
     if (requestedTab === "invitations") {
@@ -2200,6 +2271,58 @@ export function OnboardingView() {
     })
   }, [users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
 
+  const selectedStepAssigneeId = React.useMemo(() => {
+    const value = Number(workflowForm.assigned_user_id)
+    return Number.isFinite(value) && value > 0 ? value : null
+  }, [workflowForm.assigned_user_id])
+  const selectedStepAssignee = React.useMemo(
+    () =>
+      selectedStepAssigneeId === null
+        ? null
+        : users.find(
+            (row) => readNumber(row, ["company_user_id", "companyUserId"]) === selectedStepAssigneeId
+          ) ?? findAssigneeRecord(users, selectedStepAssigneeId),
+    [selectedStepAssigneeId, users]
+  )
+  const requiredStepPermission = React.useMemo(
+    () => requiredPermissionForOnboardingStep(workflowForm.step_type),
+    [workflowForm.step_type]
+  )
+  const selectedStepAssigneeMissingPermission =
+    selectedStepAssigneeId !== null &&
+    (!selectedStepAssignee || !onboardingAssigneeHasPermission(selectedStepAssignee, workflowForm.step_type))
+  const selectedStepAssigneeLabel = selectedStepAssignee
+    ? personDisplayName(selectedStepAssignee) || `User #${selectedStepAssigneeId}`
+    : selectedStepAssigneeId !== null
+      ? `User #${selectedStepAssigneeId}`
+      : ""
+
+  const replacementApproverMembershipId = React.useMemo(() => {
+    const value = Number(replacementApproverId)
+    return Number.isFinite(value) && value > 0 ? value : null
+  }, [replacementApproverId])
+  const replacementApprover = React.useMemo(
+    () =>
+      replacementApproverMembershipId === null
+        ? null
+        : users.find(
+            (row) => readNumber(row, ["company_user_id", "companyUserId"]) === replacementApproverMembershipId
+          ) ?? findAssigneeRecord(users, replacementApproverMembershipId),
+    [replacementApproverMembershipId, users]
+  )
+  const replacementApproverMissingPermission =
+    replacementApproverMembershipId !== null &&
+    (!replacementApprover || !onboardingAssigneeHasPermission(replacementApprover, "sign_off"))
+  const approvalAssignmentCandidates = React.useMemo(() => {
+    const seen = new Set<number>()
+    return users.map(flattenAssigneeRecord).filter((row) => {
+      const id = preferredAssigneeId(row)
+      if (id === null || seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  }, [users])
+
   const taskAssignableUsers = React.useMemo(() => {
     const departmentId = Number(taskForm.assigned_department_id)
     if (!Number.isFinite(departmentId) || departmentId <= 0) return []
@@ -2301,7 +2424,7 @@ export function OnboardingView() {
     setDocumentForm({
       title: "",
       description: "",
-      document_type_code: "",
+      document_type: "",
       expiry_date: "",
     })
     setDocumentUploadFile(null)
@@ -2386,6 +2509,13 @@ export function OnboardingView() {
     if (!hasAssignedDepartment) {
       return {
         error: "Select a department for this step.",
+        step: null as AdminRecord | null,
+      }
+    }
+
+    if (hasAssignedUser && selectedStepAssigneeMissingPermission) {
+      return {
+        error: `${selectedStepAssigneeLabel} needs ${requiredStepPermission} before this step can be assigned to them.`,
         step: null as AdminRecord | null,
       }
     }
@@ -3077,7 +3207,10 @@ export function OnboardingView() {
         .toLowerCase()
       const owner =
         resolveResponsibleParty(source) !== "-" ? resolveResponsibleParty(source) : resolveResponsibleParty(step)
-      const actionLabel = readString(step, ["action_type", "task_type", "name", "title", "step_name"])
+      const actionLabel = readString(
+        { ...step, ...source },
+        ["name", "title", "step_name", "task_title", "action_type", "task_type"]
+      )
       return {
         key: `${readString(step, ["id", "step_id", "task_id"])}-${index}`,
         index: index + 1,
@@ -3123,6 +3256,17 @@ export function OnboardingView() {
     () =>
       summarizeOnboardingApprovals([selectedRequestDetails, selectedRequestProgress, selectedRequestRow], roles, users),
     [roles, selectedRequestDetails, selectedRequestProgress, selectedRequestRow, users]
+  )
+
+  const displayedRequestDocuments = React.useMemo<AdminRecord[]>(
+    () => [
+      ...selectedRequestDocuments.map((document) => ({ ...document, source: "onboarding" })),
+      ...toRecordList(selectedRequestDetails?.employee_documents).map((document) => ({
+        ...document,
+        source: "employee_profile",
+      })),
+    ],
+    [selectedRequestDetails, selectedRequestDocuments]
   )
 
   const selectedRequestProvisioningSummary = React.useMemo(() => {
@@ -3306,6 +3450,21 @@ export function OnboardingView() {
     }
   }, [selectedRequestDetails])
   const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
+  const selectedRequestSummary = React.useMemo(() => {
+    const request = selectedRequestDetails ?? selectedRequestRow ?? {}
+    const employee = toRecord(request.employee)
+    const employeeId = readNumber(request, ["employee_id"])
+    const nestedName = personDisplayName(employee)
+    const employeeNumber = readString(employee ?? {}, ["employee_no", "employee_number"], "")
+    const rowName = readString(request, ["employee_name", "employee_full_name"], "")
+    const fallbackName = resolveEmployeeLabel(employeeId)
+    const name = nestedName || (rowName !== "-" ? rowName : "") || fallbackName
+    return {
+      employee: employeeNumber && employeeNumber !== "-" ? `${name} (${employeeNumber})` : name,
+      status: readString(request, ["status", "request_status"], "Not available"),
+      updated: toTimestamp(request.updated_at ?? request.modified_at ?? request.created_at),
+    }
+  }, [employees, selectedRequestDetails, selectedRequestRow])
 
   async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
     if (!canUpdateOnboardingRequests) {
@@ -3376,6 +3535,10 @@ export function OnboardingView() {
       showErrorAlert("Document title is required.")
       return
     }
+    if (!documentForm.document_type) {
+      showErrorAlert("Select the type of document being uploaded.")
+      return
+    }
     if (!documentUploadFile) {
       showErrorAlert("Choose a document file before uploading.")
       return
@@ -3387,7 +3550,7 @@ export function OnboardingView() {
       await uploadOnboardingDocument(token, requestId, {
         title: documentForm.title.trim(),
         description: documentForm.description.trim() || undefined,
-        document_type_code: documentForm.document_type_code.trim() || undefined,
+        document_type: documentForm.document_type || undefined,
         expiry_date: documentForm.expiry_date || undefined,
         file,
       })
@@ -3402,29 +3565,48 @@ export function OnboardingView() {
     }
   }
 
-  async function downloadRequestDocument(documentRow: AdminRecord) {
+  async function viewRequestDocument(documentRow: AdminRecord) {
     const token = readStoredToken()
     const requestId = readCurrentRequestId()
+    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
     const documentId = readNumber(documentRow, ["id", "document_id"])
-    if (!token || requestId === null || documentId === null) {
+    const source = readString(documentRow, ["source"], "onboarding").toLowerCase()
+    if (!token || documentId === null) {
       showErrorAlert("Missing document identifiers.")
+      return
+    }
+    if (source === "employee_profile" && employeeId === null) {
+      showErrorAlert("Missing employee information for this document.")
+      return
+    }
+    if (source !== "employee_profile" && requestId === null) {
+      showErrorAlert("Missing onboarding request information for this document.")
       return
     }
 
     setSaving(true)
     try {
-      const result = await downloadOnboardingDocument(token, requestId, documentId)
+      const result =
+        source === "employee_profile"
+          ? await downloadEmployeeDocument(token, employeeId!, documentId)
+          : await downloadOnboardingDocument(token, requestId!, documentId)
       const url = window.URL.createObjectURL(result.blob)
+      const mimeType = result.contentType ?? readString(documentRow, ["mime_type"], "")
+      const canPreview = mimeType.startsWith("image/") || mimeType === "application/pdf" || mimeType.startsWith("text/")
       const link = document.createElement("a")
       link.href = url
-      link.download = result.filename
+      if (canPreview) {
+        link.target = "_blank"
+        link.rel = "noopener noreferrer"
+      } else {
+        link.download = result.filename
+      }
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-      showSuccessAlert("Document download started.")
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to download document.")
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to open document.")
     } finally {
       setSaving(false)
     }
@@ -3575,27 +3757,57 @@ export function OnboardingView() {
     }
   }
 
-  async function delegateSelectedApproval(approvalRow: AdminRecord) {
+  function openApprovalAssignmentDialog(approvalRow: AdminRecord) {
+    if (!canUpdateOnboardingRequests) {
+      showErrorAlert("You do not have permission to change onboarding approvers.")
+      return
+    }
+    const status = readString(approvalRow, ["status", "approval_status"]).toLowerCase()
+    if (status !== "pending") {
+      showErrorAlert("Only a pending approval can be reassigned.")
+      return
+    }
+    setApprovalToReassign(approvalRow)
+    setReplacementApproverId("")
+    setApprovalReassignmentReason("")
+    setRequestDetailsOpen(false)
+    setApprovalAssignmentDialogOpen(true)
+    void ensureLookups(["users"], true)
+  }
+
+  async function saveApprovalAssignment() {
     const token = readStoredToken()
     const requestId = readCurrentRequestId()
-    const approvalId = readNumber(approvalRow, ["id", "approval_id"])
+    const approvalId = readNumber(approvalToReassign ?? {}, ["id", "approval_id"])
     if (!token || requestId === null || approvalId === null) {
       showErrorAlert("Missing approval identifiers.")
       return
     }
-    const target = window.prompt("Delegate to company user id")
-    const reason = window.prompt("Reason")
-    if (!target || !reason) return
+    if (replacementApproverMembershipId === null) {
+      showErrorAlert("Select the replacement approver.")
+      return
+    }
+    if (replacementApproverMissingPermission) {
+      showErrorAlert("The replacement person needs onboarding_requests:approve before being assigned.")
+      return
+    }
+    if (!approvalReassignmentReason.trim()) {
+      showErrorAlert("Enter a reason for changing the approver.")
+      return
+    }
     setSaving(true)
     try {
       await delegateOnboardingApproval(token, requestId, approvalId, {
-        delegate_company_user_id: Number(target),
-        reason,
+        delegate_company_user_id: replacementApproverMembershipId,
+        reason: approvalReassignmentReason,
       })
-      showSuccessAlert("Onboarding approval delegated.")
+      setApprovalAssignmentDialogOpen(false)
+      setApprovalToReassign(null)
+      showSuccessAlert("Approver changed successfully.")
       await reloadCurrentRequestActivity(requestId)
+      setRequestDetailsOpen(true)
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Delegate failed.")
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to change the approver.")
     } finally {
       setSaving(false)
     }
@@ -3701,6 +3913,67 @@ export function OnboardingView() {
     void openRequestDetails(highlightedRow)
   }, [activeTab, highlightedRequestId, requests])
 
+  function openChangeWorkflowDialog(row: AdminRecord) {
+    const requestId = readNumber(row, ["id", "request_id"])
+    const token = readStoredToken()
+    if (!token || requestId === null) {
+      showErrorAlert("Unable to change the workflow because the request ID is missing.")
+      return
+    }
+
+    const currentWorkflowId = readNumber(row, ["workflow_id", "onboarding_workflow_id"])
+    setChangeWorkflowRequest(row)
+    setReplacementWorkflowId(currentWorkflowId === null ? "" : String(currentWorkflowId))
+    setChangeWorkflowDialogOpen(true)
+
+    void ensureLookups(["workflows"], true)
+    void getOnboardingRequest(token, requestId)
+      .then((detail) => {
+        const resolved = detail ?? row
+        const workflowId = readNumber(resolved, ["workflow_id", "onboarding_workflow_id"])
+        setChangeWorkflowRequest({ ...row, ...resolved })
+        setReplacementWorkflowId(workflowId === null ? "" : String(workflowId))
+      })
+      .catch((errorObject) => {
+        showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to refresh the onboarding request.")
+      })
+  }
+
+  async function saveRequestWorkflowChange() {
+    const requestId = readNumber(changeWorkflowRequest ?? {}, ["id", "request_id"])
+    const workflowId = Number(replacementWorkflowId)
+    const currentWorkflowId = readNumber(changeWorkflowRequest ?? {}, ["workflow_id", "onboarding_workflow_id"])
+    const token = readStoredToken()
+    if (!token || requestId === null) {
+      showErrorAlert("Missing onboarding request information.")
+      return
+    }
+    if (!Number.isFinite(workflowId) || workflowId <= 0) {
+      showErrorAlert("Select a replacement workflow.")
+      return
+    }
+    if (workflowId === currentWorkflowId) {
+      showErrorAlert("Select a different workflow.")
+      return
+    }
+
+    setSaving(true)
+    try {
+      await patchOnboardingRequest(token, requestId, { workflow_id: workflowId })
+      setChangeWorkflowDialogOpen(false)
+      setChangeWorkflowRequest(null)
+      showSuccessAlert("Onboarding workflow changed and pending assignments were refreshed.")
+      await reloadAll("requests", true)
+      if (requestDetailsOpen && readCurrentRequestId() === requestId) {
+        await reloadCurrentRequestActivity(requestId)
+      }
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to change the workflow.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function renderOnboardingRequestActions(row: AdminRecord) {
     const pendingEmployee = isPendingOnboardingRow(row)
     const requestId = pendingEmployee ? null : readNumber(row, ["id", "request_id"])
@@ -3711,6 +3984,8 @@ export function OnboardingView() {
     const isCompleted = requestStatus === "completed" || requestStatus === "rejected"
     const isDraft = isOnboardingDraftStatus(requestStatus)
     const allowedActions = parseAllowedActions(row)
+    const rowApprovalSummary = summarizeOnboardingApprovals([row], roles, users)
+    const hasPendingApproval = rowApprovalSummary.pending.length > 0
     const canSubmit =
       !pendingEmployee &&
       (canCreateOnboardingRequests || canUpdateOnboardingRequests) &&
@@ -3723,6 +3998,7 @@ export function OnboardingView() {
       !isDraft &&
       !isCancelled &&
       !isCompleted &&
+      hasPendingApproval &&
       allowedActions.has("approve")
     const canReject =
       !pendingEmployee &&
@@ -3730,6 +4006,7 @@ export function OnboardingView() {
       !isDraft &&
       !isCancelled &&
       !isCompleted &&
+      hasPendingApproval &&
       allowedActions.has("reject")
     const canCancel =
       !pendingEmployee && canCancelOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("cancel")
@@ -3740,6 +4017,12 @@ export function OnboardingView() {
       !isCompleted &&
       allowedActions.has("complete")
     const canDelete = !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
+    const canChangeWorkflow =
+      !pendingEmployee &&
+      canUpdateOnboardingRequests &&
+      !isCancelled &&
+      !isCompleted &&
+      (isDraft || hasPendingApproval)
 
     return (
       <div
@@ -3848,7 +4131,26 @@ export function OnboardingView() {
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         ) : null}
-        {!pendingEmployee && !canSubmit && !canApprove && !canReject && !canCancel && !canComplete && !canDelete ? (
+        {canChangeWorkflow ? (
+          <button
+            type="button"
+            className="admin-table-icon-button"
+            title="Change workflow"
+            aria-label="Change workflow"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => openChangeWorkflowDialog(row)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {!pendingEmployee &&
+        !canSubmit &&
+        !canApprove &&
+        !canReject &&
+        !canCancel &&
+        !canComplete &&
+        !canDelete &&
+        !canChangeWorkflow ? (
           <span className="text-[11px] text-muted-foreground">No actions</span>
         ) : null}
       </div>
@@ -5143,13 +5445,34 @@ export function OnboardingView() {
           <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
             <DialogPopup
               from="bottom"
+              showCloseButton={false}
               className="h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] max-h-none max-w-none overflow-y-auto p-4 sm:h-[calc(100vh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-none sm:p-6"
             >
-              <DialogHeader>
-                <DialogTitle>Onboarding Request Activity</DialogTitle>
-                <DialogDescription>
-                  View workflow ownership, pending step, and completed activity history for this request.
-                </DialogDescription>
+              <DialogClose className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:right-6 sm:top-6">
+                <X aria-hidden="true" />
+                <span className="sr-only">Close onboarding request</span>
+              </DialogClose>
+              <DialogHeader className="flex flex-row items-start justify-between gap-6 pr-12">
+                <div className="min-w-0">
+                  <DialogTitle>Onboarding Request Activity</DialogTitle>
+                  <DialogDescription>Review employee details and track the remaining onboarding work.</DialogDescription>
+                </div>
+                <div className="hidden shrink-0 items-start gap-5 text-right md:flex">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Employee</p>
+                    <p className="max-w-56 truncate text-xs font-semibold text-foreground">
+                      {selectedRequestSummary.employee}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Status</p>
+                    <p className="text-xs font-semibold text-foreground">{toTitleCaseWords(selectedRequestSummary.status)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Updated</p>
+                    <p className="text-xs font-semibold text-foreground">{selectedRequestSummary.updated}</p>
+                  </div>
+                </div>
               </DialogHeader>
 
               {requestDetailsLoading ? (
@@ -5158,32 +5481,6 @@ export function OnboardingView() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-4">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request ID</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {readNumber(selectedRequestRow ?? {}, ["id", "request_id"]) ?? "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Employee</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {resolveEmployeeLabel(readNumber(selectedRequestRow ?? {}, ["employee_id"]))}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Status</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {readString(selectedRequestRow ?? {}, ["status", "request_status"])}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Updated</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {toTimestamp(readString(selectedRequestRow ?? {}, ["updated_at", "modified_at", "created_at"]))}
-                      </p>
-                    </div>
-                  </div>
 
                   <div className="overflow-hidden rounded-xl border border-border bg-card">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
@@ -5215,29 +5512,35 @@ export function OnboardingView() {
                         Employee review details are not available yet.
                       </div>
                     ) : (
-                      <div className="grid min-h-[360px] lg:grid-cols-[260px_minmax(0,1fr)]">
-                        <nav className="border-b border-border bg-muted/20 p-3 lg:border-b-0 lg:border-r">
-                          <ol className="space-y-1">
+                      <div className="grid min-h-[300px] lg:grid-cols-[220px_minmax(0,1fr)]">
+                        <nav className="border-b border-border bg-muted/20 p-2 lg:border-b-0 lg:border-r">
+                          <ol className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
                             {employeeDetailsReview.sections.map((section, index) => {
                               const sectionStatus = readString(section, ["status"], "pending").toLowerCase()
                               const active = index === employeeReviewStep
+                              const sectionFields = toRecordList(section.fields)
+                              const allFieldsPresent =
+                                sectionFields.length > 0 &&
+                                sectionFields.every((field) => hasEmployeeReviewValue(readString(field, ["value"])))
                               return (
                                 <li key={readString(section, ["key"], String(index))}>
                                   <button
                                     type="button"
                                     onClick={() => setEmployeeReviewStep(index)}
                                     className={cn(
-                                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition",
+                                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
                                       active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
                                     )}
                                   >
                                     <span
                                       className={cn(
-                                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                                        active
-                                          ? "bg-white/20 text-white"
-                                          : sectionStatus === "approved"
-                                            ? "bg-emerald-100 text-emerald-700"
+                                        "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                                        sectionStatus === "approved"
+                                          ? "bg-emerald-500 text-white"
+                                          : allFieldsPresent
+                                            ? "bg-emerald-500 text-white ring-2 ring-emerald-200"
+                                            : active
+                                              ? "bg-white/20 text-white"
                                             : sectionStatus === "changes_requested"
                                               ? "bg-rose-100 text-rose-700"
                                               : "bg-slate-200 text-slate-700"
@@ -5251,8 +5554,14 @@ export function OnboardingView() {
                                       </span>
                                       <span
                                         className={cn(
-                                          "block text-[11px]",
-                                          active ? "text-white/75" : "text-muted-foreground"
+                                          "mt-0.5 inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                          sectionStatus === "approved"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : sectionStatus === "changes_requested"
+                                              ? "bg-destructive/10 text-destructive"
+                                              : sectionStatus === "in_review" || sectionStatus === "submitted"
+                                                ? "bg-primary/10 text-primary"
+                                                : "bg-amber-100 text-amber-700"
                                         )}
                                       >
                                         {toTitleCaseWords(sectionStatus)}
@@ -5266,36 +5575,99 @@ export function OnboardingView() {
                         </nav>
 
                         {currentEmployeeReviewSection ? (
-                          <div className="space-y-5 p-4 sm:p-6">
-                            <div>
-                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <div className="space-y-4 p-4">
+                            <div className="flex flex-wrap items-baseline gap-2">
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                 Step {employeeReviewStep + 1} of {employeeDetailsReview.sections.length}
                               </p>
-                              <h3 className="mt-1 text-lg font-semibold text-foreground">
+                              <h3 className="text-base font-semibold text-foreground">
                                 {readString(currentEmployeeReviewSection, ["label"], "Employee details")}
                               </h3>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-2">
+                            <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
                               {toRecordList(currentEmployeeReviewSection.fields).map((reviewField, index) => (
-                                <div
-                                  key={`${readString(reviewField, ["label"])}-${index}`}
-                                  className="rounded-lg border border-border bg-background p-3"
-                                >
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                    {readString(reviewField, ["label"], "Field")}
-                                  </p>
-                                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
-                                    {readString(reviewField, ["value"])}
-                                  </p>
-                                </div>
+                                (() => {
+                                  const value = readString(reviewField, ["value"])
+                                  const isFilled = hasEmployeeReviewValue(value)
+                                  return (
+                                    <div
+                                      key={`${readString(reviewField, ["label"])}-${index}`}
+                                      className="border-b border-border/70 py-2"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        {isFilled ? (
+                                          <CheckCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+                                        ) : (
+                                          <span className="size-3.5 shrink-0 rounded-full border border-slate-300" />
+                                        )}
+                                        <p
+                                          className={cn(
+                                            "text-[10px] font-medium uppercase tracking-wide",
+                                            isFilled ? "text-emerald-700" : "text-muted-foreground"
+                                          )}
+                                        >
+                                          {readString(reviewField, ["label"], "Field")}
+                                        </p>
+                                      </div>
+                                      <p
+                                        className={cn(
+                                          "mt-0.5 whitespace-pre-wrap pl-5 text-sm",
+                                          isFilled ? "text-foreground" : "text-muted-foreground"
+                                        )}
+                                      >
+                                        {value}
+                                      </p>
+                                    </div>
+                                  )
+                                })()
                               ))}
                             </div>
+
+                            {toRecordList(currentEmployeeReviewSection.attachments).length > 0 ? (
+                              <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3">
+                                <p className="text-xs font-semibold text-foreground">Uploaded evidence</p>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                  {toRecordList(currentEmployeeReviewSection.attachments).map((attachment, index) => {
+                                    const mimeType = readString(attachment, ["mime_type"], "")
+                                    const canPreview =
+                                      mimeType.startsWith("image/") ||
+                                      mimeType === "application/pdf" ||
+                                      mimeType.startsWith("text/")
+                                    return (
+                                      <div
+                                        key={`employee-review-attachment-${readNumber(attachment, ["id"]) ?? index}`}
+                                        className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-background px-3 py-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="truncate text-xs font-medium text-foreground">
+                                            {readString(attachment, ["title", "original_file_name"], `Attachment ${index + 1}`)}
+                                          </p>
+                                          <p className="truncate text-[10px] text-muted-foreground">
+                                            {readString(attachment, ["original_file_name", "document_type"], "Document")}
+                                          </p>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          disabled={saving}
+                                          onClick={() => void viewRequestDocument(attachment)}
+                                        >
+                                          {canPreview ? <Eye data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                                          {canPreview ? "View" : "Download"}
+                                        </Button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
 
                             <label className="grid gap-1.5 text-sm font-medium text-foreground">
                               Review note
                               <textarea
-                                className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
+                                className="min-h-16 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
                                 value={
                                   employeeReviewComments[readString(currentEmployeeReviewSection, ["key"], "")] ?? ""
                                 }
@@ -5310,24 +5682,27 @@ export function OnboardingView() {
                               />
                             </label>
 
-                            {employeeDetailsReview.status === "submitted" ||
-                            employeeDetailsReview.status === "in_review" ||
-                            employeeDetailsReview.status === "changes_requested" ? (
+                            {canUpdateOnboardingRequests ? (
                               <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-4">
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  disabled={saving}
+                                  disabled={
+                                    saving ||
+                                    !employeeReviewComments[
+                                      readString(currentEmployeeReviewSection, ["key"], "")
+                                    ]?.trim()
+                                  }
                                   onClick={() => void saveEmployeeDetailReview("changes_requested")}
                                 >
-                                  Return this section
+                                  Request changes & notify employee
                                 </Button>
                                 <Button
                                   type="button"
                                   disabled={saving}
                                   onClick={() => void saveEmployeeDetailReview("approved")}
                                 >
-                                  Verify and continue
+                                  Approve & notify employee
                                 </Button>
                               </div>
                             ) : null}
@@ -5337,7 +5712,8 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="grid items-start gap-3 xl:grid-cols-2">
+                  <div className="space-y-3 rounded-lg border border-border p-3">
                     <p className="text-sm font-semibold text-slate-900">Submitted Request</p>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       <div>
@@ -5407,8 +5783,8 @@ export function OnboardingView() {
 
                   {isOnboardingActableStatus(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
-                  ) ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  ) && approvalSummary.pending.length > 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-amber-800">Pending approval</p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">{approvalSummary.waitingLabel}</p>
                       <p className="mt-1 text-xs text-slate-600">
@@ -5424,7 +5800,7 @@ export function OnboardingView() {
                     ])
                     const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
                     return (
-                      <div className="space-y-3 rounded-lg border border-border p-4">
+                      <div className="space-y-3 rounded-lg border border-border p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-semibold text-slate-900">Employee acknowledgement</p>
@@ -5439,26 +5815,25 @@ export function OnboardingView() {
                     )
                   })()}
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="space-y-3 rounded-lg border border-border p-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Approval trail</p>
-                      <p className="text-xs text-muted-foreground">
-                        {approvalSummary.currentLevel > 0
-                          ? `Current level ${approvalSummary.currentLevel}. ${approvalSummary.waitingLabel}.`
-                          : approvalSummary.waitingLabel}
-                      </p>
+                      {approvalSummary.pending.length > 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {approvalSummary.currentLevel > 0
+                            ? `Current level ${approvalSummary.currentLevel}. ${approvalSummary.waitingLabel}.`
+                            : approvalSummary.waitingLabel}
+                        </p>
+                      ) : null}
                     </div>
                     {approvalSummary.rows.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No approval records on this request.</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="divide-y divide-border">
                         {approvalSummary.rows.map((approval, index) => (
                           <div
                             key={`onboarding-approval-${approval.id ?? index}`}
-                            className={cn(
-                              "rounded-md border bg-white p-3",
-                              approval.isCurrent ? "border-amber-300" : "border-slate-200"
-                            )}
+                            className="py-2.5 first:pt-0 last:pb-0"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-medium text-slate-900">
@@ -5472,19 +5847,22 @@ export function OnboardingView() {
                                 {approval.isCurrent ? " • Current" : ""}
                               </span>
                             </div>
-                            <p className="mt-1 text-xs text-slate-600">
-                              Approver: <span className="font-medium text-slate-800">{approval.name || "-"}</span>
-                            </p>
+                            {approval.email ? (
+                              <a className="mt-0.5 block text-xs text-primary hover:underline" href={`mailto:${approval.email}`}>
+                                {approval.email}
+                              </a>
+                            ) : null}
                             {approval.comments ? (
                               <p className="mt-1 text-xs text-slate-600">{approval.comments}</p>
                             ) : null}
-                            {canApproveOnboardingRequests ? (
+                            {canUpdateOnboardingRequests && approval.status.toLowerCase() === "pending" ? (
                               <button
                                 type="button"
                                 className="mt-2 text-xs font-medium text-primary"
-                                onClick={() => void delegateSelectedApproval(approval.raw)}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={() => openApprovalAssignmentDialog(approval.raw)}
                               >
-                                Delegate
+                                Change approver
                               </button>
                             ) : null}
                           </div>
@@ -5494,7 +5872,7 @@ export function OnboardingView() {
                   </div>
 
                   {selectedRequestProvisioningSummary ? (
-                    <div className="space-y-3 rounded-lg border border-border p-4">
+                    <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
                       <p className="text-sm font-semibold text-slate-900">Provisioning Summary</p>
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         <div>
@@ -5649,7 +6027,7 @@ export function OnboardingView() {
                     </div>
                   ) : null}
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Documents</p>
                       {canUpdateOnboardingRequests ? (
@@ -5685,39 +6063,77 @@ export function OnboardingView() {
                           />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Document type code
-                          <Input
-                            className="h-9 bg-white text-slate-900"
-                            value={documentForm.document_type_code}
-                            onChange={(event) =>
-                              setDocumentForm((prev) => ({
-                                ...prev,
-                                document_type_code: event.target.value,
-                              }))
+                          Document type
+                          <Select
+                            value={documentForm.document_type}
+                            onValueChange={(value) =>
+                              setDocumentForm((prev) => ({ ...prev, document_type: value ?? "" }))
                             }
-                            placeholder="Optional code"
-                          />
+                          >
+                            <SelectTrigger className="h-9 w-full bg-background">
+                              <SelectValue placeholder="Select document type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {ONBOARDING_DOCUMENT_TYPES.map((type) => (
+                                  <SelectItem key={type.value} value={type.value}>
+                                    {type.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
                         </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Expiry date
-                          <Input
-                            className="h-9 bg-white text-slate-900"
-                            type="date"
-                            value={documentForm.expiry_date}
-                            onChange={(event) =>
-                              setDocumentForm((prev) => ({
-                                ...prev,
-                                expiry_date: event.target.value,
-                              }))
-                            }
-                          />
-                        </label>
+                        <div className="grid gap-1 text-xs font-medium text-slate-700">
+                          <span>Expiry date</span>
+                          <Popover>
+                            <PopoverTrigger className="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal text-foreground outline-none transition hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                              <CalendarDays className="text-muted-foreground" />
+                              <span className={documentForm.expiry_date ? "text-foreground" : "text-muted-foreground"}>
+                                {documentForm.expiry_date
+                                  ? parseDateOnly(documentForm.expiry_date)?.toLocaleDateString()
+                                  : "Select expiry date"}
+                              </span>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={parseDateOnly(documentForm.expiry_date)}
+                                onSelect={(date) =>
+                                  setDocumentForm((prev) => ({ ...prev, expiry_date: toDateOnlyValue(date) }))
+                                }
+                                fromYear={new Date().getFullYear()}
+                                toYear={new Date().getFullYear() + 50}
+                              />
+                              {documentForm.expiry_date ? (
+                                <div className="flex justify-end border-t border-border p-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDocumentForm((prev) => ({ ...prev, expiry_date: "" }))}
+                                  >
+                                    Clear date
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           File
                           <Input
                             className="h-9 bg-white text-slate-900 file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-medium"
                             type="file"
-                            onChange={(event) => setDocumentUploadFile(event.target.files?.[0] ?? null)}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] ?? null
+                              setDocumentUploadFile(file)
+                              if (!file) return
+                              setDocumentForm((prev) => ({
+                                ...prev,
+                                title: prev.title.trim() || file.name.replace(/\.[^.]+$/, ""),
+                              }))
+                            }}
                           />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
@@ -5758,14 +6174,22 @@ export function OnboardingView() {
                       </div>
                     ) : null}
 
-                    {selectedRequestDocuments.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No onboarding documents attached yet.</p>
+                    {displayedRequestDocuments.length === 0 ? (
+                      <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        No onboarding documents attached yet.
+                      </p>
                     ) : (
                       <div className="space-y-2">
-                        {selectedRequestDocuments.map((documentRow, index) => {
+                        {displayedRequestDocuments.map((documentRow, index) => {
                           const documentId = readNumber(documentRow, ["id", "document_id"])
                           const title = readString(documentRow, ["title", "name", "file_name"])
-                          const typeCode = readString(documentRow, ["document_type_code", "type_code", "type"])
+                          const typeCode = readString(documentRow, ["document_type", "document_type_code", "type_code", "type"])
+                          const source = readString(documentRow, ["source"], "onboarding").toLowerCase()
+                          const mimeType = readString(documentRow, ["mime_type"], "")
+                          const canPreview =
+                            mimeType.startsWith("image/") ||
+                            mimeType === "application/pdf" ||
+                            mimeType.startsWith("text/")
                           const isVerified = asTruthyBoolean(
                             documentRow.is_verified ?? documentRow.verified ?? documentRow.isVerified
                           )
@@ -5780,8 +6204,12 @@ export function OnboardingView() {
                                     {title !== "-" ? title : `Document #${documentId ?? index + 1}`}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    {typeCode !== "-" ? typeCode : "No type"} •{" "}
-                                    {isVerified ? "Verified" : "Pending verification"}
+                                    {typeCode !== "-" ? toTitleCaseWords(typeCode) : "No type"} •{" "}
+                                    {source === "employee_profile"
+                                      ? "Employee upload"
+                                      : isVerified
+                                        ? "Verified"
+                                        : "Pending verification"}
                                   </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
@@ -5789,12 +6217,13 @@ export function OnboardingView() {
                                     type="button"
                                     variant="outline"
                                     className="h-7 px-2 text-[11px]"
-                                    onClick={() => void downloadRequestDocument(documentRow)}
+                                    onClick={() => void viewRequestDocument(documentRow)}
                                     disabled={saving}
                                   >
-                                    Download
+                                    {canPreview ? <Eye data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                                    {canPreview ? "View" : "Download"}
                                   </Button>
-                                  {canUpdateOnboardingRequests ? (
+                                  {canUpdateOnboardingRequests && source === "onboarding" ? (
                                     <>
                                       <Button
                                         type="button"
@@ -5849,42 +6278,23 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="space-y-3 rounded-lg border border-border p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Tasks</p>
                       {canUpdateOnboardingRequests ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 px-3 text-xs"
-                            onClick={() => {
-                              void ensureLookups(["users", "departments"])
-                              resetTaskForm()
-                              setShowTaskComposer((current) => !current)
-                            }}
-                            disabled={saving}
-                          >
-                            {showTaskComposer ? "Hide task form" : "Create task"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 border-amber-200 px-3 text-xs text-amber-700 hover:bg-amber-50"
-                            onClick={() => {
-                              void ensureLookups(["users", "departments"])
-                              resetTaskForm()
-                              setTaskForm((current) => ({
-                                ...current,
-                                task_type: "asset",
-                              }))
-                              setShowTaskComposer(true)
-                            }}
-                            disabled={saving}
-                          >
-                            Add item to provide
-                          </Button>
-                        </div>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            void ensureLookups(["users", "departments"])
+                            resetTaskForm()
+                            setShowTaskComposer((current) => !current)
+                          }}
+                          disabled={saving}
+                        >
+                          {!showTaskComposer ? <Plus data-icon="inline-start" /> : null}
+                          {showTaskComposer ? "Hide task form" : "Add task"}
+                        </Button>
                       ) : null}
                     </div>
 
@@ -6059,20 +6469,60 @@ export function OnboardingView() {
                             </span>
                           ) : null}
                         </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Due date
-                          <Input
-                            className="h-9 bg-white text-slate-900"
-                            type="datetime-local"
-                            value={taskForm.due_date}
-                            onChange={(event) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                due_date: event.target.value,
-                              }))
-                            }
-                          />
-                        </label>
+                        <div className="grid gap-1 text-xs font-medium text-slate-700">
+                          <span>Due date</span>
+                          <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
+                            <Popover>
+                              <PopoverTrigger className="flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                                <CalendarDays className="text-muted-foreground" />
+                                <span className={taskForm.due_date ? "text-foreground" : "text-muted-foreground"}>
+                                  {taskForm.due_date
+                                    ? parseDateOnly(taskForm.due_date.slice(0, 10))?.toLocaleDateString()
+                                    : "Select date"}
+                                </span>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={parseDateOnly(taskForm.due_date.slice(0, 10))}
+                                  onSelect={(date) =>
+                                    setTaskForm((prev) => ({
+                                      ...prev,
+                                      due_date: date
+                                        ? `${toDateOnlyValue(date)}T${prev.due_date.split("T")[1] || "17:00"}`
+                                        : "",
+                                    }))
+                                  }
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <Select
+                              value={taskForm.due_date.split("T")[1] || "17:00"}
+                              onValueChange={(value) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  due_date: prev.due_date
+                                    ? `${prev.due_date.slice(0, 10)}T${value ?? "17:00"}`
+                                    : prev.due_date,
+                                }))
+                              }
+                              disabled={!taskForm.due_date}
+                            >
+                              <SelectTrigger className="h-9 w-full">
+                                <SelectValue placeholder="Time" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {TASK_DUE_TIME_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
                         <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
                           Description
                           <textarea
@@ -6112,11 +6562,11 @@ export function OnboardingView() {
                     ) : null}
 
                     {selectedRequestTasks.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                         No onboarding tasks have been created for this request.
                       </p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
                         {selectedRequestTasks.map((taskRow, index) => {
                           const taskId = readNumber(taskRow, ["id", "task_id"])
                           const taskStatus = readString(taskRow, ["status", "task_status"])
@@ -6124,7 +6574,7 @@ export function OnboardingView() {
                           return (
                             <div
                               key={`onboarding-task-${taskId ?? index}`}
-                              className="rounded-md border border-slate-200 bg-white p-3"
+                              className="bg-background px-3 py-2.5"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
@@ -6141,7 +6591,6 @@ export function OnboardingView() {
                                 {!isTaskClosed && (canUpdateOnboardingRequests || canCompleteOnboardingRequests) ? (
                                   <Button
                                     type="button"
-                                    variant="outline"
                                     className="h-7 px-2 text-[11px]"
                                     onClick={() => void completeRequestTask(taskRow)}
                                     disabled={saving}
@@ -6152,30 +6601,30 @@ export function OnboardingView() {
                                   </Button>
                                 ) : null}
                               </div>
-                              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                              <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-3">
                                 <div>
                                   <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                                     {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
                                       ? "Provider"
                                       : "Owner"}
                                   </p>
-                                  <p className="text-sm text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
+                                  <p className="text-xs text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
                                 </div>
                                 <div>
                                   <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Due</p>
-                                  <p className="text-sm text-slate-900">{toTimestamp(taskRow.due_date)}</p>
+                                  <p className="text-xs text-slate-900">{toTimestamp(taskRow.due_date)}</p>
                                 </div>
                                 <div>
                                   <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                                     Completed
                                   </p>
-                                  <p className="text-sm text-slate-900">{toTimestamp(taskRow.completed_at)}</p>
+                                  <p className="text-xs text-slate-900">{toTimestamp(taskRow.completed_at)}</p>
                                 </div>
                                 <div className="md:col-span-3">
                                   <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                                     Description
                                   </p>
-                                  <p className="text-sm text-slate-900">
+                                  <p className="text-xs text-slate-900">
                                     {readString(taskRow, ["description", "completion_notes", "notes"])}
                                   </p>
                                 </div>
@@ -6187,9 +6636,9 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="space-y-3 rounded-lg border border-border p-3">
                     <p className="text-sm font-semibold text-slate-900">Workflow Map</p>
-                    <div className="space-y-3">
+                    <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
                       {requestTimelineNodes.map((node, idx) => {
                         const isDone =
                           node.status.includes("complete") ||
@@ -6207,12 +6656,12 @@ export function OnboardingView() {
                             ? "bg-amber-100 text-amber-700"
                             : "bg-slate-100 text-slate-700"
                         return (
-                          <div key={node.key} className="relative pl-8">
+                          <div key={node.key} className="relative bg-background py-2.5 pl-10 pr-3">
                             {idx < requestTimelineNodes.length - 1 ? (
-                              <span className="absolute left-[11px] top-6 h-[calc(100%-0.25rem)] w-px bg-slate-200" />
+                              <span className="absolute left-[19px] top-8 h-[calc(100%-1rem)] w-px bg-slate-200" />
                             ) : null}
                             <span
-                              className={`absolute left-0 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                              className={`absolute left-2 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
                                 isDone
                                   ? "bg-emerald-500 text-white"
                                   : isPending
@@ -6222,7 +6671,7 @@ export function OnboardingView() {
                             >
                               {node.index}
                             </span>
-                            <div className="rounded-md border border-slate-200 bg-white p-3">
+                            <div>
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-sm font-semibold text-slate-900">
                                   {toTitleCaseWords(String(node.actionLabel))}
@@ -6232,18 +6681,22 @@ export function OnboardingView() {
                                 </span>
                               </div>
                               <p className="mt-1 text-xs text-slate-600">
-                                {isPending && approvalSummary.pendingNames.length > 0 ? "Pending approver" : "Owner"}:{" "}
+                                {isPending && approvalSummary.pendingLabels.length > 0 ? "Pending approver" : "Owner"}:{" "}
                                 <span className="font-medium text-slate-800">
-                                  {isPending && approvalSummary.pendingNames.length > 0
-                                    ? approvalSummary.pendingNames.join(", ")
-                                    : node.owner || "-"}
+                                  {isPending && approvalSummary.pendingLabels.length > 0
+                                    ? approvalSummary.pendingLabels.join(", ")
+                                    : node.owner && node.owner !== "-"
+                                      ? node.owner
+                                      : "Unassigned"}
                                 </span>
                               </p>
-                              <p className="mt-1 text-xs text-slate-600">
-                                Required:{" "}
-                                <span className="font-medium text-slate-800">{node.required ? "Yes" : "No"}</span>
-                              </p>
-                              <p className="mt-1 text-xs text-slate-500">Completed: {node.completedAt}</p>
+                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                                <span>
+                                  {isPending ? "Waiting to be completed" : isDone ? "Completed" : "Not started"}
+                                </span>
+                                {node.required ? <span>Required step</span> : null}
+                                {node.completedAt !== "-" ? <span>Completed {node.completedAt}</span> : null}
+                              </div>
                             </div>
                           </div>
                         )
@@ -6251,16 +6704,16 @@ export function OnboardingView() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="space-y-3 rounded-lg border border-border p-3">
                     <p className="text-sm font-semibold text-slate-900">Activity Record</p>
                     {selectedRequestAuditLogs.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No activity record available for this request.</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
                         {selectedRequestAuditLogs.map((entry, index) => (
                           <div
                             key={`audit-${readString(entry, ["id", "log_id"])}-${index}`}
-                            className="rounded-md border border-slate-200 bg-white p-3"
+                            className="bg-background px-3 py-2.5"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-medium text-slate-900">
@@ -6275,18 +6728,16 @@ export function OnboardingView() {
                               </p>
                             </div>
                             <p className="mt-1 text-xs text-slate-600">
-                              By:{" "}
-                              <span className="font-medium text-slate-800">
-                                {resolveAuditActorLabel(entry, users) || "-"}
-                              </span>
-                            </p>
-                            <p className="mt-1 text-xs text-slate-600">
-                              {readString(entry, ["description", "message", "remarks", "comment"])}
+                              By <span className="font-medium text-slate-800">{resolveAuditActorLabel(entry, users) || "-"}</span>
+                              {readString(entry, ["description", "message", "remarks", "comment"]) !== "-"
+                                ? ` • ${readString(entry, ["description", "message", "remarks", "comment"])}`
+                                : ""}
                             </p>
                           </div>
                         ))}
                       </div>
                     )}
+                  </div>
                   </div>
                 </div>
               )}
@@ -6308,7 +6759,8 @@ export function OnboardingView() {
                   const showApprove =
                     canApproveOnboardingRequests &&
                     !isOnboardingDraftStatus(selectedStatus) &&
-                    isOnboardingActableStatus(selectedStatus)
+                    isOnboardingActableStatus(selectedStatus) &&
+                    approvalSummary.pending.length > 0
                   return (
                     <>
                       {showApprove && approvalSummary.waitingLabel ? (
@@ -6355,6 +6807,153 @@ export function OnboardingView() {
                 })()}
                 <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
                   Close
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+
+          <Dialog open={changeWorkflowDialogOpen} onOpenChange={setChangeWorkflowDialogOpen}>
+            <DialogPopup from="bottom" className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Change onboarding workflow</DialogTitle>
+                <DialogDescription>
+                  Select the workflow that should replace the one currently attached to this request.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4">
+                <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
+                  <p className="font-medium text-foreground">
+                    {readString(changeWorkflowRequest ?? {}, ["onboarding_no", "request_no", "title"])}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Pending approvals and tasks from the old workflow will be replaced. A workflow cannot be changed
+                    after an approval or task has been actioned.
+                  </p>
+                </div>
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Replacement workflow
+                  <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Select workflow">
+                        {replacementWorkflowId
+                          ? resolveWorkflowLabel(Number(replacementWorkflowId))
+                          : loading
+                            ? "Loading workflows…"
+                            : "Select workflow"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((workflow) => {
+                        const workflowId = readNumber(workflow, ["id", "workflow_id"])
+                        if (workflowId === null) return null
+                        return (
+                          <SelectItem key={workflowId} value={String(workflowId)}>
+                            {readString(workflow, ["name", "title"])}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setChangeWorkflowDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={saving || !replacementWorkflowId} onClick={saveRequestWorkflowChange}>
+                  {saving ? "Changing…" : "Change Workflow"}
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+
+          <Dialog
+            open={approvalAssignmentDialogOpen}
+            onOpenChange={(open) => {
+              setApprovalAssignmentDialogOpen(open)
+              if (!open) setRequestDetailsOpen(true)
+            }}
+          >
+            <DialogPopup from="bottom" className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Change approval assignee</DialogTitle>
+                <DialogDescription>
+                  Replace the person assigned to this pending approval. The workflow template itself is not changed.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4">
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  New approver
+                  <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
+                    <SelectTrigger
+                      className="h-11 w-full"
+                      aria-invalid={replacementApproverMissingPermission || undefined}
+                    >
+                      <SelectValue placeholder="Select approver">
+                        {replacementApprover
+                          ? personDisplayName(replacementApprover) || `User #${replacementApproverMembershipId}`
+                          : loading
+                            ? "Loading people…"
+                            : "Select approver"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {approvalAssignmentCandidates.map((user) => {
+                        const userId = preferredAssigneeId(user)
+                        if (userId === null) return null
+                        const label = personDisplayName(user) || `User #${userId}`
+                        const hasPermission = onboardingAssigneeHasPermission(user, "sign_off")
+                        return (
+                          <SelectItem key={userId} value={String(userId)}>
+                            {label}{hasPermission ? "" : " — missing approval permission"}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </label>
+                {replacementApproverMissingPermission ? (
+                  <Alert variant="destructive">
+                    <ShieldAlert className="size-4" />
+                    <AlertTitle>Approval permission required</AlertTitle>
+                    <AlertDescription>
+                      This person needs <code className="text-xs">onboarding_requests:approve</code>. Use the permission
+                      link from the workflow assignment warning or Company Access Management before assigning them.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Reason for change
+                  <textarea
+                    value={approvalReassignmentReason}
+                    onChange={(event) => setApprovalReassignmentReason(event.target.value)}
+                    placeholder="Explain why the approver is being replaced"
+                    className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setApprovalAssignmentDialogOpen(false)
+                    setRequestDetailsOpen(true)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={
+                    saving ||
+                    replacementApproverMembershipId === null ||
+                    replacementApproverMissingPermission ||
+                    !approvalReassignmentReason.trim()
+                  }
+                  onClick={saveApprovalAssignment}
+                >
+                  {saving ? "Changing…" : "Change Approver"}
                 </Button>
               </DialogFooter>
             </DialogPopup>
@@ -6914,15 +7513,13 @@ export function OnboardingView() {
                     }
                     disabled={!workflowForm.assigned_department_id}
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger
+                      className="h-11 w-full"
+                      aria-invalid={selectedStepAssigneeMissingPermission || undefined}
+                    >
                       <SelectValue placeholder="Specific person (optional)">
                         {workflowForm.assigned_user_id
-                          ? resolveOptionLabel(
-                              users,
-                              Number(workflowForm.assigned_user_id),
-                              ["id", "company_user_id", "user_id"],
-                              ["full_name", "name", "email"]
-                            )
+                          ? selectedStepAssigneeLabel
                           : workflowForm.assigned_department_id
                             ? "Whole department"
                             : "Select department first"}
@@ -6939,9 +7536,10 @@ export function OnboardingView() {
                           ["id", "company_user_id", "user_id"],
                           ["full_name", "name", "email"]
                         )
+                        const hasRequiredPermission = onboardingAssigneeHasPermission(row, workflowForm.step_type)
                         return (
                           <SelectItem key={userId} value={String(userId)} data-search-text={`${label} ${userId}`}>
-                            {label}
+                            {label}{hasRequiredPermission ? "" : " — missing required permission"}
                           </SelectItem>
                         )
                       })}
@@ -6952,6 +7550,46 @@ export function OnboardingView() {
                     they receive the task through each enabled notification channel and can track it under My Requests →
                     To do.
                   </p>
+                  {selectedStepAssigneeMissingPermission ? (
+                    <Alert variant="destructive" className="mt-2">
+                      <ShieldAlert className="size-4" />
+                      <AlertTitle>Permission required before assignment</AlertTitle>
+                      <AlertDescription className="grid gap-2">
+                        <p>
+                          {selectedStepAssigneeLabel} cannot be assigned to this step until they have the
+                          <code className="mx-1 rounded bg-destructive/10 px-1 py-0.5 text-xs">
+                            {requiredStepPermission}
+                          </code>
+                          permission.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            render={
+                              <Link
+                                href={`/dashboard/companies?membership_id=${selectedStepAssigneeId}&permission=${encodeURIComponent(requiredStepPermission)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              />
+                            }
+                          >
+                            Fix user permission
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={loading}
+                            onClick={() => void ensureLookups(["users"], true)}
+                          >
+                            <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
+                            Recheck permissions
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                 </div>
               </div>
               <DialogFooter>
@@ -6969,10 +7607,195 @@ export function OnboardingView() {
                 <Button
                   type="button"
                   onClick={addWorkflowStep}
+                  disabled={selectedStepAssigneeMissingPermission}
                   className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                 >
                   <Plus className="h-4 w-4" />
                   {editingStepIndex === null ? "Add Step" : "Save Step"}
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+
+          <Dialog
+            open={changeWorkflowDialogOpen}
+            onOpenChange={(open) => {
+              setChangeWorkflowDialogOpen(open)
+              if (!open) setChangeWorkflowRequest(null)
+            }}
+          >
+            <DialogPopup from="bottom" className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Change onboarding workflow</DialogTitle>
+                <DialogDescription>
+                  Select the workflow that should replace the one currently attached to this request.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4">
+                <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
+                  <p className="font-medium text-foreground">
+                    {readString(changeWorkflowRequest ?? {}, ["onboarding_no", "request_no", "title"])}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Pending approvals and tasks from the old workflow will be replaced. A workflow cannot be changed
+                    after an approval or task has been actioned.
+                  </p>
+                </div>
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Replacement workflow
+                  <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Select workflow">
+                        {replacementWorkflowId
+                          ? resolveWorkflowLabel(Number(replacementWorkflowId))
+                          : "Select workflow"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((workflow) => {
+                        const workflowId = readNumber(workflow, ["id", "workflow_id"])
+                        if (workflowId === null) return null
+                        return (
+                          <SelectItem key={workflowId} value={String(workflowId)}>
+                            {readString(workflow, ["name", "title"])}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setChangeWorkflowDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" disabled={saving || !replacementWorkflowId} onClick={saveRequestWorkflowChange}>
+                  {saving ? "Changing…" : "Change Workflow"}
+                </Button>
+              </DialogFooter>
+            </DialogPopup>
+          </Dialog>
+
+          <Dialog
+            open={approvalAssignmentDialogOpen}
+            onOpenChange={(open) => {
+              setApprovalAssignmentDialogOpen(open)
+              if (!open) {
+                setApprovalToReassign(null)
+                setReplacementApproverId("")
+                setApprovalReassignmentReason("")
+                setRequestDetailsOpen(true)
+              }
+            }}
+          >
+            <DialogPopup from="bottom" className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Change approval assignee</DialogTitle>
+                <DialogDescription>
+                  Replace the person assigned to this pending approval. The workflow template itself is not changed.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4">
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  New approver
+                  <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
+                    <SelectTrigger
+                      className="h-11 w-full"
+                      aria-invalid={replacementApproverMissingPermission || undefined}
+                    >
+                      <SelectValue placeholder="Select approver">
+                        {replacementApprover
+                          ? personDisplayName(replacementApprover) || `User #${replacementApproverMembershipId}`
+                          : "Select approver"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {approvalAssignmentCandidates.map((user) => {
+                        const userId = preferredAssigneeId(user)
+                        if (userId === null) return null
+                        const label = personDisplayName(user) || `User #${userId}`
+                        const hasPermission = onboardingAssigneeHasPermission(user, "sign_off")
+                        return (
+                          <SelectItem key={userId} value={String(userId)}>
+                            {label}{hasPermission ? "" : " — missing approval permission"}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </label>
+                {replacementApproverMissingPermission ? (
+                  <Alert variant="destructive">
+                    <ShieldAlert className="size-4" />
+                    <AlertTitle>Approval permission required</AlertTitle>
+                    <AlertDescription className="grid gap-2">
+                      <p>
+                        This person needs <code className="text-xs">onboarding_requests:approve</code> before they can
+                        replace the current approver.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          render={
+                            <Link
+                              href={`/dashboard/companies?membership_id=${replacementApproverMembershipId}&permission=onboarding_requests%3Aapprove`}
+                              target="_blank"
+                              rel="noreferrer"
+                            />
+                          }
+                        >
+                          Fix user permission
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={loading}
+                          onClick={() => void ensureLookups(["users"], true)}
+                        >
+                          <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
+                          Recheck permissions
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                  Reason for change
+                  <textarea
+                    value={approvalReassignmentReason}
+                    onChange={(event) => setApprovalReassignmentReason(event.target.value)}
+                    placeholder="Explain why the approver is being replaced"
+                    className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setApprovalAssignmentDialogOpen(false)
+                    setApprovalToReassign(null)
+                    setReplacementApproverId("")
+                    setApprovalReassignmentReason("")
+                    setRequestDetailsOpen(true)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={
+                    saving ||
+                    replacementApproverMembershipId === null ||
+                    replacementApproverMissingPermission ||
+                    !approvalReassignmentReason.trim()
+                  }
+                  onClick={saveApprovalAssignment}
+                >
+                  {saving ? "Changing…" : "Change Approver"}
                 </Button>
               </DialogFooter>
             </DialogPopup>
