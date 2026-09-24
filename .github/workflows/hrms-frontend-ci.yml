@@ -152,6 +152,30 @@ jobs:
           printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$release/BUILT_AT"
           tar -C "$release" -czf "$archive" .
           (cd "$RUNNER_TEMP"; sha256sum hrms-frontend-release.tar.gz > hrms-frontend-release.tar.gz.sha256; sha256sum --check hrms-frontend-release.tar.gz.sha256)
+      - name: Prune old release artifacts before upload
+        if: >-
+          (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
+          (github.event_name == 'workflow_dispatch' &&
+           ((github.ref == 'refs/heads/uat' && inputs.environment == 'uat') ||
+            (github.ref == 'refs/heads/master' && inputs.environment == 'production')))
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          repo="${{ github.repository }}"
+          mapfile -t ids < <(
+            gh api "repos/${repo}/actions/artifacts" --paginate -q \
+              '.artifacts[] | select(.name | startswith("hrms-frontend-release-")) | .id'
+          )
+          if [[ ${#ids[@]} -eq 0 ]]; then
+            echo "No old frontend release artifacts to delete."
+            exit 0
+          fi
+          echo "Deleting ${#ids[@]} old frontend release artifact(s) before upload."
+          for id in "${ids[@]}"; do
+            gh api -X DELETE "repos/${repo}/actions/artifacts/${id}" && echo "Deleted artifact $id" || echo "Failed to delete artifact $id" >&2
+          done
       - name: Upload frontend artifact
         if: >-
           (github.event_name == 'push' && github.ref == 'refs/heads/uat') ||
@@ -174,7 +198,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-          keep=10
+          keep=2
           repo="${{ github.repository }}"
           mapfile -t ids < <(
             gh api "repos/${repo}/actions/artifacts" --paginate -q \
