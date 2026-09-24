@@ -2,7 +2,18 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 function resolveBackendOrigin() {
-  const rawValue = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:8888";
+  const configuredOrigin =
+    process.env.NEXT_PUBLIC_BACKEND_ORIGIN?.trim() ||
+    process.env.BACKEND_ORIGIN?.trim();
+  const rawValue =
+    configuredOrigin ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    "http://localhost:8888";
+
+  if (rawValue === "" || rawValue === "/api") {
+    return "http://localhost:8888";
+  }
+
   return rawValue.replace(/\/api\/?$/i, "").replace(/\/$/, "");
 }
 
@@ -43,6 +54,10 @@ const nextConfig: NextConfig = {
       {
         source: "/socket.io/:path*",
         destination: `${backendOrigin}/socket.io/:path*`,
+      },
+      {
+        source: "/api/:path*",
+        destination: `${backendOrigin}/api/:path*`,
       },
     ];
   },
