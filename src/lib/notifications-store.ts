@@ -31,7 +31,7 @@ export const DEFAULT_NOTIFICATION_QUERY: Readonly<NotificationQueryParams> = Obj
 const LIVE_OFFLINE_WARNING = "Live notifications are temporarily offline."
 const RESYNC_DEBOUNCE_MS = 350
 const SOCKET_CONNECT_FALLBACK_MS = 8_000
-const SOCKET_CONNECT_ERROR_FALLBACK_COUNT = 2
+const SOCKET_CONNECT_ERROR_WARNING_COUNT = 2
 const NOTIFICATION_SOUND_PATH = "/assets/sounds/hrms_sound.mp3"
 /** Absolute asset URL so the sound always resolves from Next public/. */
 function resolveNotificationSoundUrl() {
@@ -917,13 +917,18 @@ function connectSocket(token: string) {
   const nextSocket = io(socketUrl, {
     path: "/socket.io",
     auth: { token },
-    query: { token },
-    // Connect straight to the API gateway. Polling would require browser CORS
-    // headers and previously fell through the broken Next `/socket.io` proxy.
-    transports: ["websocket"],
+    // Prefer a real WebSocket, but let Socket.IO fall back to HTTP polling when
+    // a proxy or a brief backend restart prevents the initial upgrade. The
+    // gateway CORS policy covers both transports at this direct API origin.
+    transports: ["websocket", "polling"],
+    tryAllTransports: true,
     reconnection: true,
-    reconnectionAttempts: 5,
+    // Notifications already use REST as their data fallback, so keep trying
+    // the live channel in the background instead of permanently giving up.
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
+    reconnectionDelayMax: 10_000,
+    randomizationFactor: 0.5,
     timeout: 12_000,
     withCredentials: false,
     autoConnect: true,
@@ -964,7 +969,14 @@ function connectSocket(token: string) {
     if (gatewayReady || nextSocket.connected) {
       return
     }
-    fallbackToRest("Live notifications unavailable. Using REST.")
+    if (token !== state.token || socket !== nextSocket) {
+      return
+    }
+    setState({
+      connected: false,
+      socketConfigured: true,
+      quietWarning: "Live notifications unavailable. Using REST while reconnecting.",
+    })
   }, SOCKET_CONNECT_FALLBACK_MS)
 
   nextSocket.on("connect", () => {
@@ -1027,8 +1039,12 @@ function connectSocket(token: string) {
     console.warn("[notifications] Socket connection failed.", errorObject)
     clearAuthSettleTimer()
     connectionFailureCount += 1
-    if (connectionFailureCount >= SOCKET_CONNECT_ERROR_FALLBACK_COUNT) {
-      fallbackToRest("Live notifications unavailable. Using REST.")
+    if (connectionFailureCount >= SOCKET_CONNECT_ERROR_WARNING_COUNT) {
+      setState({
+        connected: false,
+        socketConfigured: true,
+        quietWarning: "Live notifications unavailable. Using REST while reconnecting.",
+      })
       return
     }
     // Briefly retry before falling back to REST so the UI never stays stuck.
@@ -1056,7 +1072,11 @@ function connectSocket(token: string) {
     }
     clearAuthSettleTimer()
     clearConnectFallbackTimer()
-    markLiveOffline(LIVE_OFFLINE_WARNING)
+    setState({
+      connected: false,
+      socketConfigured: true,
+      quietWarning: "Live notifications unavailable. Using REST while reconnecting.",
+    })
   })
 
   nextSocket.on("notification:connected", () => {
