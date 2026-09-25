@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { CheckIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
+import { CheckIcon, FileTextIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -31,6 +31,8 @@ import {
   listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingTasks,
+  listEmploymentContracts,
+  signEmploymentContract,
   submitMyOnboardingDetails,
   uploadOnboardingDocument,
   type AdminRecord,
@@ -38,6 +40,7 @@ import {
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
+import { API_BASE_URL } from "@/utils/constants"
 
 const STEPS = ["DRAFT", "SUBMITTED", "IN_PROGRESS", "ACKNOWLEDGED", "COMPLETED"]
 
@@ -71,6 +74,8 @@ export function OnboardingSelfView() {
   const [progress, setProgress] = React.useState<AdminRecord | null>(null)
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
+  const [contracts, setContracts] = React.useState<AdminRecord[]>([])
+  const [signedName, setSignedName] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -98,12 +103,15 @@ export function OnboardingSelfView() {
         setProgress(null)
         setTasks([])
         setDocuments([])
+        setContracts([])
         return
       }
-      const [progressResult, taskResult, documentResult] = await Promise.allSettled([
+      const employeeId = readNumber(rows.find((row) => rowId(row) === nextId), ["employee_id", "employeeId"])
+      const [progressResult, taskResult, documentResult, contractResult] = await Promise.allSettled([
         getOnboardingProgress(access, nextId),
         listOnboardingTasks(access, nextId),
         listOnboardingDocuments(access, nextId),
+        employeeId ? listEmploymentContracts(access, employeeId) : Promise.resolve([]),
       ])
       const request = rows.find((row) => rowId(row) === nextId) ?? null
       setProgress(
@@ -111,6 +119,7 @@ export function OnboardingSelfView() {
       )
       setTasks(taskResult.status === "fulfilled" ? taskResult.value : asRecordArray(request?.tasks ?? request?.items))
       setDocuments(documentResult.status === "fulfilled" ? documentResult.value : asRecordArray(request?.documents))
+      setContracts(contractResult.status === "fulfilled" ? contractResult.value : [])
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) return
       setError(errorObject instanceof Error ? errorObject.message : "Could not load your onboarding.")
@@ -166,7 +175,7 @@ export function OnboardingSelfView() {
     try {
       await acknowledgeOnboardingRequest(access, id, {
         accepted: true,
-        acknowledgement_version: "v1",
+        acknowledgement_version: "1.0",
       })
       toast.success("Onboarding acknowledged.")
       await load()
@@ -212,6 +221,42 @@ export function OnboardingSelfView() {
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not upload the document.")
+    } finally {
+      setBusy("")
+    }
+  }
+
+  async function openContract(contractId: number) {
+    const access = token()
+    if (!access) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/employment-contracts/${contractId}/document`, {
+        headers: { Authorization: `Bearer ${access}` },
+      })
+      if (!response.ok) throw new Error("Contract document could not be opened")
+      const url = URL.createObjectURL(await response.blob())
+      const link = document.createElement("a")
+      link.href = url
+      link.target = "_blank"
+      link.rel = "noopener noreferrer"
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Contract download failed")
+    }
+  }
+
+  async function signContract(contractId: number) {
+    const access = token()
+    if (!access || !signedName.trim()) return
+    setBusy("contract")
+    try {
+      await signEmploymentContract(access, contractId, signedName.trim())
+      setSignedName("")
+      toast.success("Contract signed")
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Contract could not be signed")
     } finally {
       setBusy("")
     }
@@ -387,6 +432,21 @@ export function OnboardingSelfView() {
               />
 
               <CycleRail steps={STEPS} current={statusOf(selected)} />
+
+              {contracts.length ? <section className="w-full border-y border-border py-4">
+                <h2 className="text-sm font-semibold">Employment contract</h2>
+                {contracts.map((contract) => <div key={rowId(contract)} className="mt-3 border-t pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div><p className="font-medium">Version {readString(contract, ["version"], "1")}</p><p className="text-xs text-muted-foreground">{prettify(readString(contract, ["contractType"]))} · {formatDate(contract.startDate)}{contract.endDate ? ` to ${formatDate(contract.endDate)}` : ""}</p></div>
+                    <StatusChip value={readString(contract, ["status"])} />
+                  </div>
+                  {contract.documentId ? <button type="button" className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary underline" onClick={() => void openContract(Number(contract.id))}><FileTextIcon className="size-4" /> Review contract</button> : null}
+                  {readString(contract, ["status"]) === "ISSUED" && contract.documentId ? <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <label className="min-w-56 space-y-1 text-xs text-muted-foreground"><span>Type your full name to sign</span><input className="h-9 w-full rounded-sm border border-border bg-background px-2 text-sm text-foreground" value={signedName} onChange={(event) => setSignedName(event.target.value)} /></label>
+                    <button type="button" className={primaryButtonClass} disabled={!signedName.trim() || busy === "contract"} onClick={() => void signContract(Number(contract.id))}>{busy === "contract" ? "Signing..." : "Sign contract"}</button>
+                  </div> : null}
+                </div>)}
+              </section> : null}
 
               <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
