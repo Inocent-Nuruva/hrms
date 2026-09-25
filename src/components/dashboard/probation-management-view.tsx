@@ -43,6 +43,7 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import {
   createProbationCase,
+  createProbationObjective,
   createProbationPolicy,
   deleteProbationCase,
   deleteProbationPolicy,
@@ -72,7 +73,7 @@ import {
 
 export type ProbationHrTab = "overview" | "policies" | "cases" | "team"
 
-type FormMode = "policy" | "manager-review" | "hr-decision" | "case" | "case-edit"
+type FormMode = "policy" | "manager-review" | "hr-decision" | "case" | "case-edit" | "objective"
 
 const CASE_EDITABLE_STATUSES = ["ACTIVE", "OBJECTIVES_PENDING"]
 
@@ -122,6 +123,14 @@ function caseNo(row: AdminRecord | null | undefined) {
   return readString(row, ["caseNo", "case_no", "caseNumber"], rowId(row) ? `Case #${rowId(row)}` : "Case")
 }
 
+function probationLetterType(row: AdminRecord | null | undefined) {
+  const status = readString(row, ["status"]).toUpperCase()
+  const decision = readString(row, ["finalDecision", "final_decision"]).toUpperCase()
+  if (status === "EXTENDED" || decision === "EXTENDED") return "EXTENSION"
+  if (status === "NOT_CONFIRMED" || decision === "NOT_CONFIRMED") return "NOT_CONFIRMED"
+  return "CONFIRMATION"
+}
+
 export function ProbationManagementView({
   activeTab,
 }: {
@@ -162,6 +171,10 @@ export function ProbationManagementView({
   })
   const canUpdateCase = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_cases:update"],
+    mode: "any",
+  })
+  const canCreateObjective = canPerformPermission(actor.permissionLabels, {
+    permissions: ["probation_objectives:create", "probation_cases:update"],
     mode: "any",
   })
   const canManagerReview = canPerformPermission(actor.permissionLabels, {
@@ -391,6 +404,17 @@ export function ProbationManagementView({
           start_date: form.start_date || undefined,
           current_due_date: form.current_due_date || undefined,
           policy_id: form.policy_id ? Number(form.policy_id) : undefined,
+        })
+      } else if (formMode === "objective") {
+        if (!form.case_id || !form.title) {
+          throw new Error("Objective title is required.")
+        }
+        await createProbationObjective(token, form.case_id, {
+          title: form.title,
+          description: form.description || undefined,
+          expected_result: form.expected_result || undefined,
+          weight: form.weight ? Number(form.weight) : undefined,
+          due_date: form.due_date || undefined,
         })
       }
       toast.success("Saved.")
@@ -839,6 +863,20 @@ export function ProbationManagementView({
                 Edit case
               </button>
             ) : null}
+            {canCreateObjective && caseDetail && CASE_EDITABLE_STATUSES.includes(readString(caseDetail, ["status"]).toUpperCase()) ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() =>
+                  openForm("objective", {
+                    case_id: rowId(caseDetail),
+                    due_date: String(caseDetail.currentDueDate ?? caseDetail.current_due_date ?? "").slice(0, 10),
+                  })
+                }
+              >
+                Add objective
+              </button>
+            ) : null}
             {canManagerReview ? (
               <button
                 type="button"
@@ -890,8 +928,8 @@ export function ProbationManagementView({
                   const id = rowId(caseDetail)
                   if (!token || !id) return
                   setBusyId("letter")
-                  void generateProbationLetter(token, id)
-                    .then(() => toast.success("Confirmation letter generated."))
+                  void generateProbationLetter(token, id, probationLetterType(caseDetail))
+                    .then(() => toast.success("Letter generated."))
                     .catch((errorObject) =>
                       toast.error(errorObject instanceof Error ? errorObject.message : "Could not generate the letter."),
                     )
@@ -915,8 +953,10 @@ export function ProbationManagementView({
                   : "New policy"
                 : formMode === "manager-review"
                   ? "Manager review"
-                  : formMode === "hr-decision"
-                    ? "HR decision"
+                : formMode === "hr-decision"
+                  ? "HR decision"
+                  : formMode === "objective"
+                    ? "New objective"
                     : formMode === "case"
                       ? "New probation case"
                       : "Edit probation case"}
@@ -1058,6 +1098,15 @@ export function ProbationManagementView({
                     ))}
                   </select>
                 </Field>
+              </>
+            ) : null}
+            {formMode === "objective" ? (
+              <>
+                <Field label="Title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
+                <Field label="Expected result"><textarea className={textareaClass} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} /></Field>
+                <Field label="Weight"><input className={inputClass} value={form.weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight: event.target.value }))} /></Field>
+                <Field label="Due date"><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
+                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

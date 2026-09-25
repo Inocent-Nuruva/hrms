@@ -17,7 +17,7 @@ export type SortOrder = "ASC" | "DESC";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-interface AdminRequestOptions {
+export interface AdminRequestOptions {
   method?: HttpMethod;
   token?: string;
   body?: unknown;
@@ -2917,7 +2917,7 @@ function extractMessage(payload: unknown, status: number) {
   return `Request failed with status ${status}`;
 }
 
-async function adminRequest<T>(
+export async function adminRequest<T>(
   path: string,
   options: AdminRequestOptions = {},
 ): Promise<T> {
@@ -8408,7 +8408,7 @@ export async function uploadMyDocument(token: string, data: AdminRecord) {
   });
 }
 
-async function downloadAdminBlob(
+export async function downloadAdminBlob(
   path: string,
   token: string,
   fallbackName: string,
@@ -12201,6 +12201,76 @@ export async function acceptEmployeeInvitation(
   return normalizeSingle(
     payload,
   ) as unknown as AcceptEmployeeInvitationResponse;
+}
+
+export type PublicRecruitmentOffer = {
+  candidate_name: string;
+  job_title: string;
+  salary: string;
+  start_date: string;
+  offer_expires_at: string;
+  has_letter: boolean;
+};
+
+export async function getPublicRecruitmentOffer(token: string) {
+  const payload = await adminRequest<unknown>(
+    `/api/recruitment/offers/preview?token=${encodeURIComponent(token)}`,
+    { dedupe: false },
+  );
+  return normalizeSingle(payload) as PublicRecruitmentOffer;
+}
+
+export async function acceptPublicRecruitmentOffer(token: string) {
+  const payload = await adminRequest<unknown>(`/api/recruitment/offers/accept`, {
+    method: 'POST',
+    body: { token },
+    dedupe: false,
+  });
+  return normalizeSingle(payload) as { status: string; candidate_id: number };
+}
+
+export async function listRecruitmentRequests(token: string) {
+  return normalizeList(await adminRequest<unknown>('/api/recruitment/requests', { token }))
+}
+
+export async function listRecruitmentCandidates(token: string, requestId: number) {
+  return normalizeList(await adminRequest<unknown>(`/api/recruitment/requests/${requestId}/candidates`, { token }))
+}
+
+export async function recruitmentCommand(
+  token: string,
+  path: string,
+  body?: Record<string, unknown>,
+) {
+  const payload = await adminRequest<unknown>(`/api/recruitment/${path}`, {
+    method: 'POST', token, body: body ?? {}, dedupe: false,
+  })
+  return normalizeSingle(payload) as AdminRecord
+}
+
+export async function listEmploymentContracts(token: string, employeeId: number) {
+  return normalizeList(await adminRequest<unknown>(
+    `/api/employment-contracts/employees/${employeeId}`, { token },
+  ))
+}
+
+export async function signEmploymentContract(token: string, contractId: number, signedName: string) {
+  const payload = await adminRequest<unknown>(`/api/employment-contracts/${contractId}/sign`, {
+    method: 'POST', token, body: { signed_name: signedName }, dedupe: false,
+  })
+  return normalizeSingle(payload)
+}
+
+export async function issueEmploymentContract(token: string, body: Record<string, unknown>) {
+  return normalizeSingle(await adminRequest<unknown>('/api/employment-contracts', {
+    method: 'POST', token, body, dedupe: false,
+  }))
+}
+
+export async function attachEmploymentContract(token: string, contractId: number, file: Record<string, unknown>) {
+  return normalizeSingle(await adminRequest<unknown>(`/api/employment-contracts/${contractId}/document`, {
+    method: 'POST', token, body: file, dedupe: false,
+  }))
 }
 
 export async function getEmployeeById(id: string | number, token: string) {
@@ -17196,6 +17266,18 @@ export async function updateProbationCase(
   });
 }
 
+export async function createProbationObjective(
+  token: string,
+  caseId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/probation/cases/${caseId}/objectives`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function submitProbationManagerReview(
   token: string,
   caseId: string | number,
@@ -17226,12 +17308,14 @@ export async function submitProbationHrDecision(
 export async function generateProbationLetter(
   token: string,
   caseId: string | number,
+  letterType = "CONFIRMATION",
 ) {
   return adminRequest<unknown>(
     `/api/probation/cases/${caseId}/generate-letter`,
     {
       method: "POST",
       token,
+      body: { letter_type: letterType },
     },
   );
 }

@@ -5,14 +5,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
+import { RecruitmentPipelineView } from "@/components/dashboard/recruitment-pipeline-view"
+import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
 import { cn } from "@/lib/utils"
 
-type RecruitmentTab = "invite" | "registration"
+type RecruitmentTab = "pipeline" | "invite" | "registration" | "contracts"
 
-const DEFAULT_TAB: RecruitmentTab = "invite"
+const DEFAULT_TAB: RecruitmentTab = "pipeline"
 
 function resolveRecruitmentTab(value: string | null): RecruitmentTab {
-  if (value === "registration") return value
+  if (value === "registration" || value === "invite" || value === "contracts") return value
   return DEFAULT_TAB
 }
 
@@ -43,8 +45,10 @@ export function RecruitmentView() {
       <div className="tab-rail-scroll">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {([
+            { id: "pipeline", label: "Pipeline" },
             { id: "invite", label: "Invite" },
             { id: "registration", label: "Registration" },
+            { id: "contracts", label: "Contracts" },
           ] as const).map((tab) => {
             const isActive = activeTab === tab.id
 
@@ -67,8 +71,12 @@ export function RecruitmentView() {
         </div>
       </div>
 
-      {activeTab === "invite" ? (
+      {activeTab === "pipeline" ? (
+        <RecruitmentPipelineView />
+      ) : activeTab === "invite" ? (
         <EmployeeInviteView />
+      ) : activeTab === "contracts" ? (
+        <EmploymentContractsView />
       ) : (
         <div className="min-w-0">
           <EmployeeRegistrationView />
