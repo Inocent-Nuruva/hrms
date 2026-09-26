@@ -1041,6 +1041,9 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "leave_balances:read",
       "leave-balances.view",
       "leave-balances.manage",
+      "leave-balances.export",
+      "leave-balances.bulk-import",
+      "leave-balances.import-history",
       "holidays:read",
       "attendance_holidays:read",
       "leave_policies:read",
@@ -1064,6 +1067,14 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   },
   "/dashboard/leave-management/transactions": {
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    mode: "any",
+  },
+  "/dashboard/leave-management/balance-import": {
+    permissions: [
+      "leave-balances.export",
+      "leave-balances.bulk-import",
+      "leave-balances.import-history",
+    ],
     mode: "any",
   },
   "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,

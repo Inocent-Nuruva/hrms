@@ -125,10 +125,12 @@ describe("forbidden route memory", () => {
     )
   })
 
-  it("keeps self-service routes directly accessible but out of admin navigation", () => {
+  it("shows self-service in company admin navigation but not platform navigation", () => {
     expect(canAccessDashboardRoute("/dashboard/me/performance/overview", [], "admin")).toBe(true)
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin")).toBe(false)
-    expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin", { scope: "company" })).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin", { scope: "company" })).toBe(true)
+    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin", { scope: "platform" })).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin", { scope: "platform" })).toBe(false)
   })
 
   it("shows self-service tabs in the admin shell when the actor is a manager", () => {

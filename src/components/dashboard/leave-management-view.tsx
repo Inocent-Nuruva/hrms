@@ -20,6 +20,7 @@ import { LeaveWorkflowsCatalog } from "@/components/dashboard/leave-workflows-ca
 import { LeaveWorkflowStepDialog } from "@/components/dashboard/leave-workflow-step-dialog"
 import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { LEAVE_BALANCE_IMPORT_PERMISSIONS } from "@/lib/leave-balance-import"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -60,7 +61,6 @@ import {
   downloadLeaveRequestDocument,
   downloadLeaveRequestPdf,
   downloadLeaveImportTemplate,
-  downloadLeaveBalanceImportTemplate,
   fileToBase64UploadDto,
   getCurrentAdmin,
   getLeavePolicy,
@@ -73,7 +73,6 @@ import {
   listAllEmployees,
   generateLeaveBalances,
   importLeaveRequests,
-  importLeaveBalances,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
   listAllLeaveBalances,
@@ -95,7 +94,6 @@ import {
   patchLeaveWorkflowStep,
   type AdminRecord,
   type LeaveImportResult,
-  type LeaveBalanceImportResult,
 } from "@/lib/admin-api"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
@@ -1114,6 +1112,14 @@ export function LeaveManagementView({
     permissions: ["leave_balances:update", "leave_balances:create", "leave-balances.manage"],
     mode: "any",
   })
+  const canUseBalanceBulkImport = canPerformPermission(actor.permissionLabels, {
+    permissions: [
+      LEAVE_BALANCE_IMPORT_PERMISSIONS.export,
+      LEAVE_BALANCE_IMPORT_PERMISSIONS.bulkImport,
+      LEAVE_BALANCE_IMPORT_PERMISSIONS.history,
+    ],
+    mode: "any",
+  })
   const canReadHolidays = canPerformPermission(actor.permissionLabels, {
     permissions: ["holidays:read", "attendance_holidays:read"],
     mode: "any",
@@ -1202,11 +1208,6 @@ export function LeaveManagementView({
   const [requestImportResult, setRequestImportResult] = React.useState<LeaveImportResult | null>(null)
   const [requestImportBusy, setRequestImportBusy] = React.useState(false)
   const [requestTemplateBusy, setRequestTemplateBusy] = React.useState(false)
-  const [balanceImportOpen, setBalanceImportOpen] = React.useState(false)
-  const [balanceImportFile, setBalanceImportFile] = React.useState<File | null>(null)
-  const [balanceImportResult, setBalanceImportResult] = React.useState<LeaveBalanceImportResult | null>(null)
-  const [balanceImportBusy, setBalanceImportBusy] = React.useState(false)
-  const [balanceTemplateBusy, setBalanceTemplateBusy] = React.useState(false)
   const [balanceDialogOpen, setBalanceDialogOpen] = React.useState(false)
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false)
   const [holidayImportDialogOpen, setHolidayImportDialogOpen] = React.useState(false)
@@ -2468,37 +2469,6 @@ export function LeaveManagementView({
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Leave import failed.")
     } finally {
       setRequestImportBusy(false)
-    }
-  }
-
-  async function downloadBalanceImportTemplate() {
-    const token = readStoredToken()
-    if (!token) return
-    setBalanceTemplateBusy(true)
-    try {
-      const result = await downloadLeaveBalanceImportTemplate(token)
-      downloadBlob(result.blob, result.filename)
-    } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Template download failed.")
-    } finally {
-      setBalanceTemplateBusy(false)
-    }
-  }
-
-  async function uploadBalanceImport() {
-    const token = readStoredToken()
-    if (!token || !balanceImportFile) return
-    setBalanceImportBusy(true)
-    setBalanceImportResult(null)
-    try {
-      const result = await importLeaveBalances(token, balanceImportFile)
-      setBalanceImportResult(result)
-      if (result.created > 0) await reloadAll("balances", true)
-      if (result.failed === 0) showSuccessAlert(`${result.created} leave balance adjustment${result.created === 1 ? "" : "s"} imported.`)
-    } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Leave balance import failed.")
-    } finally {
-      setBalanceImportBusy(false)
     }
   }
 
@@ -4553,71 +4523,6 @@ export function LeaveManagementView({
       </Dialog>
 
       <Dialog
-        open={balanceImportOpen}
-        onOpenChange={(open) => {
-          if (!balanceImportBusy) setBalanceImportOpen(open)
-        }}
-      >
-        <DialogPopup from="bottom" className="w-[min(96vw,56rem)] max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Import Leave Balances</DialogTitle>
-            <DialogDescription>
-              Use the guided workbook: choose an employee and leave type from the reference sheets, select ADD, DEDUCT, or SET, and include a reason for every adjustment.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-60"
-              disabled={balanceTemplateBusy}
-              onClick={() => void downloadBalanceImportTemplate()}
-            >
-              <Download className="size-4" />
-              {balanceTemplateBusy ? "Preparing template…" : "Download Excel template"}
-            </button>
-            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
-              The workbook includes Instructions, Leave Balances, Employees, and Leave Types sheets with frozen headers, filters, sample data, and dropdowns.
-            </div>
-            <label className="block space-y-1.5 text-sm font-medium text-foreground">
-              Completed Excel file
-              <input
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                disabled={balanceImportBusy}
-                onChange={(event) => {
-                  setBalanceImportFile(event.target.files?.[0] ?? null)
-                  setBalanceImportResult(null)
-                }}
-              />
-            </label>
-            {balanceImportResult ? (
-              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-                <p className="font-medium">
-                  {balanceImportResult.created} imported · {balanceImportResult.failed} failed · {balanceImportResult.total} total
-                </p>
-                {balanceImportResult.failed > 0 ? (
-                  <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-rose-700">
-                    {balanceImportResult.results.filter((row) => row.status === "failed").map((row) => (
-                      <p key={`${row.row}-${row.employee_no}-${row.leave_type_code}`}>
-                        Row {row.row} ({row.employee_no || "no employee"}): {row.message || "Import failed"}
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <button type="button" className="rounded-md border border-border px-4 py-2 text-sm" disabled={balanceImportBusy} onClick={() => setBalanceImportOpen(false)}>Close</button>
-            <button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60" disabled={!balanceImportFile || balanceImportBusy} onClick={() => void uploadBalanceImport()}>
-              {balanceImportBusy ? "Importing…" : "Import leave balances"}
-            </button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
-
-      <Dialog
         open={requestDialogOpen}
         onOpenChange={(open) => {
           setRequestDialogOpen(open)
@@ -5615,18 +5520,14 @@ export function LeaveManagementView({
                 Adjust Leave Balance
               </button>
             ) : null}
-            {canAdjustBalances ? (
+            {canUseBalanceBulkImport ? (
               <button
                 type="button"
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground"
-                onClick={() => {
-                  setBalanceImportFile(null)
-                  setBalanceImportResult(null)
-                  setBalanceImportOpen(true)
-                }}
+                onClick={() => router.push("/dashboard/leave-management/balance-import")}
               >
                 <Download className="h-3.5 w-3.5" />
-                Import balances
+                Bulk import
               </button>
             ) : null}
             {refreshButton}
@@ -5655,7 +5556,21 @@ export function LeaveManagementView({
             data={balanceAdjustments}
             columns={[
               { key: "employee", label: "Employee", render: (r) => employeeLabelFromRow(r) },
-              { key: "days", label: "Days", render: (r) => readString(r, ["days", "adjustment_days", "amount"]) },
+              { key: "leave_type", label: "Leave type", render: (r) => readString(asRecord(r.leave_type) ?? {}, ["name", "code"]) || "—" },
+              {
+                key: "balance",
+                label: "Balance",
+                render: (r) => `${readString(r, ["old_balance_days"]) || "—"} → ${readString(r, ["new_balance_days"]) || "—"}`,
+              },
+              { key: "days", label: "Days", render: (r) => readString(r, ["adjustment_amount_days", "days", "adjustment_days", "amount"]) },
+              {
+                key: "source",
+                label: "Source",
+                render: (r) =>
+                  readString(r, ["source"]) === "BULK_IMPORT"
+                    ? `Bulk import · ${readString(r, ["import_batch_id"]) || "—"}`
+                    : "Manual",
+              },
               { key: "reason", label: "Reason", render: (r) => readString(r, ["reason", "remarks"]) },
             ]}
             itemsPerPage={10}

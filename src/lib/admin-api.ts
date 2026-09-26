@@ -8209,61 +8209,357 @@ export type LeaveImportResult = {
   results: LeaveImportRowResult[];
 };
 
-export type LeaveBalanceImportRowResult = {
-  row: number;
-  employee_no: string;
-  leave_type_code: string;
-  status: "created" | "failed";
-  message?: string;
+export type LeaveBalanceImportBatchStatus =
+  | "UPLOADED"
+  | "VALIDATING"
+  | "VALIDATED"
+  | "HAS_ERRORS"
+  | "READY_FOR_IMPORT"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "PARTIALLY_COMPLETED"
+  | "FAILED"
+  | "CANCELLED";
+
+export type LeaveBalanceImportMode = "STRICT" | "VALID_ROWS_ONLY";
+
+export type LeaveBalanceImportValidationStatus =
+  | "VALID"
+  | "WARNING"
+  | "INVALID"
+  | "NO_CHANGE";
+
+export type LeaveBalanceImportResultStatus = "IMPORTED" | "SKIPPED" | "FAILED";
+
+export type LeaveBalanceImportIssue = {
+  code: string;
+  severity: "error" | "warning" | "info";
+  field: string | null;
+  message: string;
 };
 
-export type LeaveBalanceImportResult = {
+export type LeaveBalanceImportPerson = {
+  id: number;
+  name: string;
+  email: string;
+} | null;
+
+export type LeaveBalanceImportBatch = {
+  batch_id: string;
+  status: LeaveBalanceImportBatchStatus;
+  import_mode: LeaveBalanceImportMode | null;
+  fiscal_year: string;
+  original_file_name: string;
+  file_size: number;
+  template_generated_at: string | null;
+  default_reason: string | null;
+  total_rows: number;
+  valid_rows: number;
+  warning_rows: number;
+  invalid_rows: number;
+  no_change_rows: number;
+  changed_rows: number;
+  imported_rows: number;
+  skipped_rows: number;
+  failed_rows: number;
+  /** Changed rows applied so far while the batch is PROCESSING. */
+  processed_rows: number;
+  total_employees: number;
+  employees_affected: number;
+  failure_reason: string | null;
+  uploaded_at: string;
+  uploaded_by: LeaveBalanceImportPerson;
+  confirmed_at: string | null;
+  confirmed_by: LeaveBalanceImportPerson;
+  completed_at: string | null;
+  cancelled_at: string | null;
+};
+
+export type LeaveBalanceImportFacet = { id: number; name: string; code?: string };
+
+export type LeaveBalanceImportBatchDetail = LeaveBalanceImportBatch & {
+  summary: {
+    issue_counts?: Record<string, number>;
+    total_increase_days?: string;
+    total_decrease_days?: string;
+    net_adjustment_days?: string;
+    facets?: {
+      leave_types?: LeaveBalanceImportFacet[];
+      branches?: LeaveBalanceImportFacet[];
+      departments?: LeaveBalanceImportFacet[];
+    };
+    result?: {
+      imported_rows?: number;
+      failed_rows?: number;
+      skipped_rows?: number;
+      net_adjustment_days?: string;
+    };
+  };
+  actions: {
+    can_confirm_strict: boolean;
+    can_confirm_valid_rows_only: boolean;
+    can_cancel: boolean;
+    requires_warning_acknowledgement: boolean;
+  };
+};
+
+export type LeaveBalanceImportRow = {
+  id: number;
+  row_number: number;
+  employee_no: string | null;
+  employee_name: string | null;
+  branch_name: string | null;
+  department_name: string | null;
+  leave_type_code: string | null;
+  leave_type_name: string | null;
+  uploaded_current_balance: string | null;
+  db_current_balance: string | null;
+  new_balance: string | null;
+  adjustment_days: string | null;
+  reason: string | null;
+  validation_status: LeaveBalanceImportValidationStatus;
+  result_status: LeaveBalanceImportResultStatus | null;
+  error_code: string | null;
+  message: string | null;
+  issues: LeaveBalanceImportIssue[];
+  previous_balance_at_import: string | null;
+  new_balance_at_import: string | null;
+  processed_at: string | null;
+};
+
+export type LeaveBalanceImportRowFilter =
+  | "ALL"
+  | "VALID"
+  | "WARNING"
+  | "INVALID"
+  | "CHANGED"
+  | "UNCHANGED"
+  | "CONFLICT"
+  | "IMPORTED"
+  | "SKIPPED"
+  | "FAILED";
+
+export type LeaveBalanceImportPage<T> = {
+  rows: T[];
+  page: number;
+  limit: number;
   total: number;
-  created: number;
-  failed: number;
-  results: LeaveBalanceImportRowResult[];
+  totalPages: number;
 };
 
-export async function downloadLeaveBalanceImportTemplate(
-  token: string,
-): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(
-    buildUrl("/api/leave/balances/import/template"),
-    {
-      headers: { accept: "*/*", Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    },
-  );
-  if (!response.ok)
-    throw new Error(
-      (await response.text()) || "Could not download leave balance template.",
-    );
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const match = disposition.match(
-    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
-  );
+export type LeaveBalanceTemplateParams = {
+  fiscal_year?: string;
+  branch_id?: number;
+  department_id?: number;
+  leave_type_id?: number;
+};
+
+function buildLeaveBalanceImportQuery(
+  params: Record<string, string | number | null | undefined>,
+) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    searchParams.set(key, String(value));
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+function toLeaveBalanceImportPage<T>(
+  payload: unknown,
+  fallbackPage: number,
+  fallbackLimit: number,
+): LeaveBalanceImportPage<T> {
+  const record = asRecord(payload);
+  const meta = asRecord(record?.meta);
+  const rows = Array.isArray(record?.data) ? (record.data as T[]) : [];
+  const total = Number(meta?.totalItems ?? rows.length);
+  const limit = Number(meta?.itemsPerPage ?? fallbackLimit) || fallbackLimit;
   return {
-    blob: await response.blob(),
-    filename: decodeURIComponent(
-      match?.[1] ?? match?.[2] ?? "leave-balance-import-template.xlsx",
+    rows,
+    page: Number(meta?.currentPage ?? fallbackPage) || fallbackPage,
+    limit,
+    total: Number.isFinite(total) ? total : rows.length,
+    totalPages: Math.max(1, Number(meta?.totalPages ?? Math.ceil(total / limit)) || 1),
+  };
+}
+
+async function fetchLeaveBalanceWorkbook(
+  token: string,
+  path: string,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(buildUrl(path), {
+    method: "GET",
+    headers: {
+      accept:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  const contentType = response.headers.get("content-type");
+  const buffer = await response.arrayBuffer();
+
+  if (!response.ok || !(isBinaryContentType(contentType) || isZipOrXlsxMagic(new Uint8Array(buffer)))) {
+    const payload = parseResponseBodyText(new TextDecoder().decode(buffer), contentType);
+    const error = new Error(
+      response.ok
+        ? "Unexpected response while downloading the workbook."
+        : extractMessage(payload, response.status),
+    ) as Error & { status?: number; payload?: unknown };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return {
+    blob: new Blob([buffer], {
+      type:
+        contentType ||
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    filename: filenameFromContentDisposition(
+      response.headers.get("content-disposition"),
+      fallbackFilename,
     ),
   };
 }
 
-export async function importLeaveBalances(
+/** Template with every eligible Employee + Leave Type row and its current balance. */
+export async function downloadLeaveBalanceImportTemplate(
+  token: string,
+  params: LeaveBalanceTemplateParams = {},
+): Promise<{ blob: Blob; filename: string }> {
+  return fetchLeaveBalanceWorkbook(
+    token,
+    `/api/leave/balances/import/template${buildLeaveBalanceImportQuery(params)}`,
+    "leave-balance-template.xlsx",
+  );
+}
+
+/** Uploads and validates a completed template. Balances do not change until confirmation. */
+export async function uploadLeaveBalanceImport(
   token: string,
   file: File,
-): Promise<LeaveBalanceImportResult> {
+  options: { default_reason?: string } = {},
+): Promise<LeaveBalanceImportBatchDetail> {
   const body = new FormData();
   body.set("file", file, file.name || "leave-balance-import.xlsx");
+  const defaultReason = options.default_reason?.trim();
+  if (defaultReason) body.set("default_reason", defaultReason);
+
   const response = await fetch(buildUrl("/api/leave/balances/import"), {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body,
+    cache: "no-store",
   });
-  if (!response.ok)
-    throw new Error((await response.text()) || "Leave balance import failed.");
-  return (await response.json()) as LeaveBalanceImportResult;
+  invalidateAdminGetCache();
+
+  const contentType = response.headers.get("content-type");
+  const payload = parseResponseBodyText(await response.text(), contentType);
+  if (!response.ok) {
+    const error = new Error(extractMessage(payload, response.status)) as Error & {
+      status?: number;
+      payload?: unknown;
+      code?: string;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    const code = asRecord(payload)?.code;
+    if (typeof code === "string") error.code = code;
+    throw error;
+  }
+  return payload as LeaveBalanceImportBatchDetail;
+}
+
+export async function getLeaveBalanceImport(
+  token: string,
+  batchId: string,
+): Promise<LeaveBalanceImportBatchDetail> {
+  return adminRequest<LeaveBalanceImportBatchDetail>(
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}`,
+    { token },
+  );
+}
+
+export async function listLeaveBalanceImportRows(
+  token: string,
+  batchId: string,
+  params: {
+    page?: number;
+    limit?: number;
+    status?: LeaveBalanceImportRowFilter;
+    search?: string;
+    leave_type_id?: number;
+    branch_id?: number;
+    department_id?: number;
+  } = {},
+): Promise<LeaveBalanceImportPage<LeaveBalanceImportRow>> {
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 50;
+  const payload = await adminRequest<unknown>(
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}/rows${buildLeaveBalanceImportQuery({
+      ...params,
+      page,
+      limit,
+      status: params.status === "ALL" ? undefined : params.status,
+    })}`,
+    { token },
+  );
+  return toLeaveBalanceImportPage<LeaveBalanceImportRow>(payload, page, limit);
+}
+
+export async function confirmLeaveBalanceImport(
+  token: string,
+  batchId: string,
+  data: {
+    import_mode: LeaveBalanceImportMode;
+    acknowledge_warnings?: boolean;
+    acknowledge_skipped_rows?: boolean;
+  },
+): Promise<LeaveBalanceImportBatchDetail> {
+  return adminRequest<LeaveBalanceImportBatchDetail>(
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}/confirm`,
+    { method: "POST", token, body: data },
+  );
+}
+
+export async function cancelLeaveBalanceImport(
+  token: string,
+  batchId: string,
+): Promise<LeaveBalanceImportBatchDetail> {
+  return adminRequest<LeaveBalanceImportBatchDetail>(
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}/cancel`,
+    { method: "POST", token },
+  );
+}
+
+export async function listLeaveBalanceImportHistory(
+  token: string,
+  params: { page?: number; limit?: number; status?: LeaveBalanceImportBatchStatus } = {},
+): Promise<LeaveBalanceImportPage<LeaveBalanceImportBatch>> {
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 20;
+  const payload = await adminRequest<unknown>(
+    `/api/leave/balances/import/history${buildLeaveBalanceImportQuery({ ...params, page, limit })}`,
+    { token },
+  );
+  return toLeaveBalanceImportPage<LeaveBalanceImportBatch>(payload, page, limit);
+}
+
+/** Uploaded rows plus database balance, status, error code and description. */
+export async function downloadLeaveBalanceImportReport(
+  token: string,
+  batchId: string,
+): Promise<{ blob: Blob; filename: string }> {
+  return fetchLeaveBalanceWorkbook(
+    token,
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}/report`,
+    `leave-balance-import-${batchId}-report.xlsx`,
+  );
 }
 
 export async function downloadLeaveImportTemplate(
