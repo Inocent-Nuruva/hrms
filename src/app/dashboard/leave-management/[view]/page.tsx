@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation"
 
 import { AttendanceBusinessTripsView } from "@/components/dashboard/attendance-business-trips-view"
+import { LeaveBalanceImportView } from "@/components/dashboard/leave-balance-import-view"
 import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
 
 const ALLOWED_VIEWS = new Set([
   "types",
   "requests",
   "balances",
+  "balance-import",
   "transactions",
   "business-trips",
   "holidays",
@@ -34,6 +36,10 @@ export default async function LeaveManagementViewPage({
 
   if (normalized === "business-trips") {
     return <AttendanceBusinessTripsView />
+  }
+
+  if (normalized === "balance-import") {
+    return <LeaveBalanceImportView />
   }
 
   return <LeaveManagementView activeTab={normalized as LeaveView} showTabButtons={false} />

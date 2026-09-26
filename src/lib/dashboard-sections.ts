@@ -382,6 +382,7 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Leave Types", url: "/dashboard/leave-management/types" },
       { title: "Leave Requests", url: "/dashboard/leave-management/requests" },
       { title: "Leave Balances", url: "/dashboard/leave-management/balances" },
+      { title: "Balance Import", url: "/dashboard/leave-management/balance-import" },
       { title: "Balance Transactions", url: "/dashboard/leave-management/transactions" },
       { title: "Business Trips", url: "/dashboard/leave-management/business-trips" },
       { title: "Holidays", url: "/dashboard/leave-management/holidays" },

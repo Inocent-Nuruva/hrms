@@ -35,6 +35,7 @@ export const ADMIN_SMOKE_ROUTES: string[] = [
   "/dashboard/leave-management/types",
   "/dashboard/leave-management/requests",
   "/dashboard/leave-management/balances",
+  "/dashboard/leave-management/balance-import",
   "/dashboard/leave-management/transactions",
   "/dashboard/leave-management/business-trips",
   "/dashboard/leave-management/holidays",
