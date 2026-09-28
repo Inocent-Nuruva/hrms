@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   assignAccessOrganizationEmployees,
   getAccessControlResourceById,
@@ -626,25 +627,24 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className="h-10 min-w-[13rem] rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  <FluentSelect
+                    ariaLabel="Device"
+                    className="min-w-[13rem]"
                     value={syncDeviceId}
-                    onChange={(event) => setSyncDeviceId(event.target.value)}
-                  >
-                    <option value="">Select device</option>
-                    {devices.map((device, index) => {
-                      const id = readNumberFromRecord(device, ["id", "device_id"])
-                      if (id === null) return null
-                      const name =
-                        readStringFromRecord(device, ["device_name", "deviceName", "name"]) ?? `Device ${id}`
-                      const code = readStringFromRecord(device, ["device_code", "deviceCode"])
-                      return (
-                        <option key={`organization-sync-device-${id}-${index}`} value={String(id)}>
-                          {code ? `${name} (${code})` : name}
-                        </option>
-                      )
-                    })}
-                  </select>
+                    onChange={setSyncDeviceId}
+                    placeholder="Select device"
+                    options={[
+                      { value: "", label: "Select device" },
+                      ...devices.flatMap((device) => {
+                        const id = readNumberFromRecord(device, ["id", "device_id"])
+                        if (id === null) return []
+                        const name =
+                          readStringFromRecord(device, ["device_name", "deviceName", "name"]) ?? `Device ${id}`
+                        const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+                        return [{ value: String(id), label: code ? `${name} (${code})` : name }]
+                      }),
+                    ]}
+                  />
                   <button
                     type="button"
                     className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"

@@ -48,6 +48,7 @@ import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { EmployeeSetupView } from "@/components/dashboard/employee-setup-view"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type StructureOpsTab = "cost-centers" | "grades" | "numbering"
@@ -403,26 +404,43 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Branch (optional)</span>
-                  <select className={inputClass} value={form.branch_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, branch_id: event.target.value }))}>
-                    <option value="">All branches</option>
-                    {branches.map((row) => <option key={rowId(row)} value={rowId(row)}>{optionLabel(row)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Branch"
+                    placeholder="All branches"
+                    value={form.branch_id ?? ""}
+                    onChange={(value) => setForm((current) => ({ ...current, branch_id: value }))}
+                    options={[
+                      { value: "", label: "All branches" },
+                      ...branches.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Department (optional)</span>
-                  <select className={inputClass} value={form.department_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, department_id: event.target.value }))}>
-                    <option value="">All departments</option>
-                    {departments.map((row) => <option key={rowId(row)} value={rowId(row)}>{optionLabel(row)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Department"
+                    placeholder="All departments"
+                    value={form.department_id ?? ""}
+                    onChange={(value) => setForm((current) => ({ ...current, department_id: value }))}
+                    options={[
+                      { value: "", label: "All departments" },
+                      ...departments.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) })),
+                    ]}
+                  />
                 </label>
               </>
             )}
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">In use</span>
-              <select className={inputClass} value={form.status ?? "active"} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-                <option value="active">Yes, assign this to people</option>
-                <option value="inactive">No, keep it on file only</option>
-              </select>
+              <FluentSelect
+                ariaLabel="In use"
+                value={form.status ?? "active"}
+                onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+                options={[
+                  { value: "active", label: "Yes, assign this to people" },
+                  { value: "inactive", label: "No, keep it on file only" },
+                ]}
+              />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Notes (optional)</span>

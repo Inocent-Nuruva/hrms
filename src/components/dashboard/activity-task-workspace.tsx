@@ -37,6 +37,7 @@ import {
   secondaryButtonClass,
 } from "@/components/dashboard/talent-visuals"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { TimeClockPicker } from "@/components/ui/time-clock-picker"
 import {
   addIsoDays,
@@ -65,6 +66,7 @@ import {
   createMyActivityTask,
   getManagerActivityReport,
   getMyActivityReport,
+  getMyAttendanceSchedule,
   listManagerActivityAssignees,
   listManagerActivityTasks,
   listManagerEmployeeKpis,
@@ -231,6 +233,19 @@ function minutesOfDay(value: Date) {
   return value.getHours() * 60 + value.getMinutes()
 }
 
+function minutesFromScheduleTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null
+  const trimmed = value.trim()
+  const timeMatch = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(trimmed)
+  if (timeMatch) {
+    const hour = Number(timeMatch[1])
+    const minute = Number(timeMatch[2])
+    return hour <= 23 && minute <= 59 ? hour * 60 + minute : null
+  }
+  const parsed = new Date(trimmed)
+  return Number.isNaN(parsed.getTime()) ? null : minutesOfDay(parsed)
+}
+
 function formatTimelineTime(value: Date) {
   return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
@@ -327,6 +342,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [workspaceView, setWorkspaceView] = React.useState<WorkspaceView>("timeline")
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
   const [reports, setReports] = React.useState<AdminRecord[]>([])
+  const [dailySchedule, setDailySchedule] = React.useState<AdminRecord | null>(null)
   const [team, setTeam] = React.useState<AdminRecord[]>([])
   const [employeeKpis, setEmployeeKpis] = React.useState<AdminRecord[]>([])
   const [selected, setSelected] = React.useState<AdminRecord | null>(null)
@@ -382,10 +398,15 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     setError(null)
     try {
       if (mode === "self") {
-        const [taskRows, reportRows, kpiRows] = await Promise.all([
+        const scheduleDate = today()
+        const [taskRows, reportRows, kpiRows, scheduleRows] = await Promise.all([
           listMyActivityTasks(accessToken, { limit: 100 }).catch(() => []),
           listMyActivities(accessToken, { limit: 100 }),
           listMyEmployeeKpis(accessToken, { status: "APPROVED", limit: 100 }).catch(() => []),
+          getMyAttendanceSchedule(accessToken, {
+            from_date: scheduleDate,
+            to_date: scheduleDate,
+          }).catch(() => []),
         ])
         const fromReports = entriesFromReports(reportRows)
         const reportEntryById = new Map(fromReports.map((entry) => [entryIdOf(entry) || rowId(entry), entry]))
@@ -407,6 +428,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         })
         setTasks(mergedTasks)
         setReports(reportRows)
+        setDailySchedule(
+          scheduleRows.find((schedule) => readString(schedule, ["date"]) === scheduleDate) ?? null,
+        )
         setTeam([])
         setEmployeeKpis(kpiRows)
       } else {
@@ -422,6 +446,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         )
         setTeam(teamRows)
         setEmployeeKpis(kpiRows)
+        setDailySchedule(null)
       }
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) return
@@ -517,14 +542,21 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       (row): row is { task: AdminRecord; start: Date; end: Date } => Boolean(row.start && row.end)
     )
     const unscheduled = rows.filter((row) => !row.start || !row.end)
+    const shift = asRecord(dailySchedule?.shift)
+    const shiftStart = minutesFromScheduleTime(
+      shift?.start_time ?? shift?.startTime ?? dailySchedule?.start_time,
+    )
+    const shiftEnd = minutesFromScheduleTime(
+      shift?.end_time ?? shift?.endTime ?? dailySchedule?.end_time,
+    )
     const firstMinute = scheduled.length
-      ? Math.min(...scheduled.map((row) => minutesOfDay(row.start)))
-      : 8 * 60
+      ? Math.min(...scheduled.map((row) => minutesOfDay(row.start)), shiftStart ?? Number.POSITIVE_INFINITY)
+      : shiftStart ?? 8 * 60
     const lastMinute = scheduled.length
-      ? Math.max(...scheduled.map((row) => minutesOfDay(row.end)))
-      : 17 * 60
-    const startHour = Math.max(0, Math.min(8, Math.floor(firstMinute / 60)))
-    const endHour = Math.min(24, Math.max(18, Math.ceil(lastMinute / 60)))
+      ? Math.max(...scheduled.map((row) => minutesOfDay(row.end)), shiftEnd ?? Number.NEGATIVE_INFINITY)
+      : shiftEnd ?? 17 * 60
+    const startHour = Math.max(0, Math.floor(firstMinute / 60))
+    const endHour = Math.min(24, Math.ceil(lastMinute / 60))
     const totalMinutes = Math.max(60, (endHour - startHour) * 60)
 
     return {
@@ -535,7 +567,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       totalMinutes,
       hours: Array.from({ length: endHour - startHour + 1 }, (_, index) => startHour + index),
     }
-  }, [visibleRows])
+  }, [dailySchedule, visibleRows])
 
   const canAssign = team.length > 0
   const filteredTeam = React.useMemo(() => {
@@ -1188,33 +1220,51 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 </div>
                 <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                   Priority
-                  <select className={inputClass} value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}>
-                    <option value="ALL">All priorities</option>
-                    <option value="URGENT">Urgent</option>
-                    <option value="HIGH">High</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="LOW">Low</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Priority"
+                    className="w-full"
+                    value={priorityFilter}
+                    onChange={setPriorityFilter}
+                    options={[
+                      { value: "ALL", label: "All priorities" },
+                      { value: "URGENT", label: "Urgent" },
+                      { value: "HIGH", label: "High" },
+                      { value: "MEDIUM", label: "Medium" },
+                      { value: "LOW", label: "Low" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                   Status
-                  <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                    <option value="ALL">All statuses</option>
-                    <option value="PLANNED">Not started</option>
-                    <option value="IN_PROGRESS">In progress</option>
-                    <option value="COMPLETED">Completed</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Status"
+                    className="w-full"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    options={[
+                      { value: "ALL", label: "All statuses" },
+                      { value: "PLANNED", label: "Not started" },
+                      { value: "IN_PROGRESS", label: "In progress" },
+                      { value: "COMPLETED", label: "Completed" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                   Review status
-                  <select className={inputClass} value={reviewFilter} onChange={(event) => setReviewFilter(event.target.value)}>
-                    <option value="ALL">All review statuses</option>
-                    <option value="NOT_REQUIRED">No review</option>
-                    <option value="PENDING">Pending</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="RETURNED">Returned</option>
-                    <option value="REJECTED">Rejected</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Review status"
+                    className="w-full"
+                    value={reviewFilter}
+                    onChange={setReviewFilter}
+                    options={[
+                      { value: "ALL", label: "All review statuses" },
+                      { value: "NOT_REQUIRED", label: "No review" },
+                      { value: "PENDING", label: "Pending" },
+                      { value: "APPROVED", label: "Approved" },
+                      { value: "RETURNED", label: "Returned" },
+                      { value: "REJECTED", label: "Rejected" },
+                    ]}
+                  />
                 </label>
                 <button
                   type="button"
@@ -1260,7 +1310,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-sm font-semibold text-foreground">Work timeline</h2>
-              <p className="text-xs text-muted-foreground">Scheduled work appears at its planned start and end time.</p>
+              <p className="text-xs text-muted-foreground">Hours follow today&apos;s shift or timetable. Work appears at its planned time.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {timeline.unscheduled.length ? (
@@ -1854,30 +1904,41 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Related KPI <span className="font-normal text-slate-500">(optional)</span></span>
-                <select className={inputClass} value={form.employee_kpi_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_kpi_id: event.target.value }))}>
-                  <option value="">No related KPI</option>
-                  {employeeKpis
-                    .filter((kpi) => {
-                      if (audience !== "employee") return true
-                      if (employeeIds.length !== 1) return false
-                      return readString(kpi, ["employeeId", "employee_id"]) === employeeIds[0]
-                    })
-                    .map((kpi) => (
-                      <option key={rowId(kpi)} value={rowId(kpi)}>{optionLabel(kpi)}</option>
-                    ))}
-                </select>
+                <FluentSelect
+                  ariaLabel="Related KPI"
+                  className="w-full"
+                  value={form.employee_kpi_id ?? ""}
+                  placeholder="No related KPI"
+                  onChange={(value) => setForm((current) => ({ ...current, employee_kpi_id: value }))}
+                  options={[
+                    { value: "", label: "No related KPI" },
+                    ...employeeKpis
+                      .filter((kpi) => {
+                        if (audience !== "employee") return true
+                        if (employeeIds.length !== 1) return false
+                        return readString(kpi, ["employeeId", "employee_id"]) === employeeIds[0]
+                      })
+                      .map((kpi) => ({ value: rowId(kpi), label: optionLabel(kpi) })),
+                  ]}
+                />
                 {audience === "employee" && employeeIds.length !== 1 ? (
                   <span className="text-xs text-slate-500">Select one employee to link this task to a KPI.</span>
                 ) : null}
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Priority</span>
-                <select className={inputClass} value={form.priority ?? "MEDIUM"} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))}>
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="URGENT">Urgent</option>
-                </select>
+                <FluentSelect
+                  ariaLabel="Priority"
+                  className="w-full"
+                  value={form.priority ?? "MEDIUM"}
+                  onChange={(value) => setForm((current) => ({ ...current, priority: value }))}
+                  options={[
+                    { value: "LOW", label: "Low" },
+                    { value: "MEDIUM", label: "Medium" },
+                    { value: "HIGH", label: "High" },
+                    { value: "URGENT", label: "Urgent" },
+                  ]}
+                />
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Notes</span>
@@ -2089,12 +2150,18 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <label className="grid gap-1 text-xs font-medium text-slate-500">
                       Status
                       {mode === "self" && canEditTask(selected) ? (
-                        <select className={inputClass} value={taskEditStatus} onChange={(event) => setTaskEditStatus(event.target.value)}>
-                          <option value="PLANNED">Not started</option>
-                          <option value="IN_PROGRESS">In progress</option>
-                          <option value="COMPLETED">Completed</option>
-                          <option value="DEFERRED">Deferred</option>
-                        </select>
+                        <FluentSelect
+                          ariaLabel="Status"
+                          className="w-full"
+                          value={taskEditStatus}
+                          onChange={setTaskEditStatus}
+                          options={[
+                            { value: "PLANNED", label: "Not started" },
+                            { value: "IN_PROGRESS", label: "In progress" },
+                            { value: "COMPLETED", label: "Completed" },
+                            { value: "DEFERRED", label: "Deferred" },
+                          ]}
+                        />
                       ) : (
                         <span className="flex h-10 items-center"><StatusPill value={taskStatus(selected)} /></span>
                       )}

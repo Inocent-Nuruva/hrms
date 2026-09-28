@@ -19,6 +19,7 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -440,28 +441,30 @@ export function DefaultAvatarsView() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Gender</Label>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              <FluentSelect
+                ariaLabel="Gender"
                 value={genderFilter}
-                onChange={(e) => setGenderFilter(e.target.value as "" | DefaultAvatarGender)}
-              >
-                <option value="">All</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="neutral">Neutral</option>
-              </select>
+                onChange={(value) => setGenderFilter(value as "" | DefaultAvatarGender)}
+                options={[
+                  { value: "", label: "All" },
+                  { value: "male", label: "Male" },
+                  { value: "female", label: "Female" },
+                  { value: "neutral", label: "Neutral" },
+                ]}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              <FluentSelect
+                ariaLabel="Status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "" | DefaultAvatarStatus)}
-              >
-                <option value="">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+                onChange={(value) => setStatusFilter(value as "" | DefaultAvatarStatus)}
+                options={[
+                  { value: "", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+              />
             </div>
             <label className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
               <input
@@ -661,21 +664,23 @@ export function DefaultAvatarsView() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="avatar-gender">Gender category</Label>
-                <select
+                <FluentSelect
                   id="avatar-gender"
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  ariaLabel="Gender category"
+                  className="w-full"
                   value={form.gender_category}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setForm((p) => ({
                       ...p,
-                      gender_category: e.target.value as DefaultAvatarGender,
+                      gender_category: value as DefaultAvatarGender,
                     }))
                   }
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="neutral">Neutral</option>
-                </select>
+                  options={[
+                    { value: "male", label: "Male" },
+                    { value: "female", label: "Female" },
+                    { value: "neutral", label: "Neutral" },
+                  ]}
+                />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="avatar-order">Display order</Label>
@@ -692,17 +697,19 @@ export function DefaultAvatarsView() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="avatar-status">Status</Label>
-                <select
+                <FluentSelect
                   id="avatar-status"
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  ariaLabel="Status"
+                  className="w-full"
                   value={form.status}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, status: e.target.value as DefaultAvatarStatus }))
+                  onChange={(value) =>
+                    setForm((p) => ({ ...p, status: value as DefaultAvatarStatus }))
                   }
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                  options={[
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ]}
+                />
               </div>
               <label className="mt-6 flex items-center gap-2 text-sm">
                 <input

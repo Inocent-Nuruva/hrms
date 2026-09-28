@@ -1,9 +1,9 @@
 import { useRouter } from "next/router";
+import { Card } from "@fluentui/react-components";
 import { LoginFlow } from "@/components/auth/LoginFlow";
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler";
 import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
-import { BorderBeam } from "@/components/ui/border-beam";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function LoginPage() {
@@ -33,10 +33,10 @@ export default function LoginPage() {
       {/* Theme toggle — available before login */}
       <div className="fixed right-3 top-3 z-20 md:right-4 md:top-4">
         <ThemeTogglerButton
-          variant="outline"
+          variant="ghost"
           size="icon-sm"
           modes={["light", "dark", "system"]}
-          className="border-border bg-card/90 text-foreground shadow-sm backdrop-blur-sm hover:bg-muted"
+          className="!border-0 !bg-transparent text-foreground !shadow-none hover:!bg-transparent"
         />
       </div>
 
@@ -50,12 +50,17 @@ export default function LoginPage() {
             mounted their own form; OTP "Back to sign in" only updated the hidden
             instance on some mobile browsers / resize paths.
           */}
-          <div className="relative overflow-hidden rounded-xl p-[2px] shadow-sm md:rounded-2xl dark:shadow-none">
-            <BorderBeam duration={5} colorFrom="#ffffff" colorTo="#a5b4fc" />
-
-            <div className="relative z-10 overflow-hidden rounded-[10px] bg-card text-card-foreground md:grid md:min-h-[420px] md:grid-cols-5 md:rounded-[14px]">
+          <Card
+            appearance="filled"
+            className="w-full overflow-hidden shadow-lg"
+            style={{ padding: 0 }}
+          >
+            <div className="overflow-hidden text-card-foreground md:grid md:min-h-[460px] md:grid-cols-2">
               {/* Brand panel — desktop/tablet only */}
-              <div className="relative col-span-3 hidden flex-col justify-center overflow-hidden bg-gradient-to-br from-[#303194] to-[#252882] p-8 text-white md:flex lg:p-10">
+              <div
+                className="relative hidden flex-col justify-center overflow-hidden p-8 text-white md:flex lg:p-10"
+                style={{ backgroundColor: "var(--colorBrandBackground)" }}
+              >
                 <div className="relative z-10">
                   <div className="mb-6">
                     <span className="text-sm font-semibold tracking-tight">Alliance HRMS</span>
@@ -73,12 +78,12 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="absolute inset-0 bg-[radial-gradient(#fff_0.8px,transparent_1px)] bg-[length:5px_5px] opacity-10" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#fff_0.9px,transparent_1px)] bg-[length:5px_5px] opacity-25" />
               </div>
 
               {/* Form panel — single LoginFlow */}
-              <div className="col-span-2 flex items-center bg-background p-4 md:p-4 lg:p-5 dark:bg-card">
-                <div className="mx-auto w-full max-w-[280px] md:max-w-[240px]">
+              <div className="flex items-center bg-background px-6 py-8 md:px-8 dark:bg-card">
+                <div className="mx-auto w-full max-w-[320px]">
                   <div className="mb-4 md:hidden">
                     <div className="mb-3 flex justify-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -103,7 +108,7 @@ export default function LoginPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
 
           <p className="mt-6 text-center text-[10px] text-muted-foreground md:hidden">
             © {new Date().getFullYear()} Alliance Insurance Corporation Ltd

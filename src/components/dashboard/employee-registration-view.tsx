@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { Tab, TabList } from "@fluentui/react-components"
 
 import { EmployeeImportView } from "@/components/dashboard/employee-import-view"
 import { EmployeeRegisterForm } from "@/components/dashboard/employee-register-form"
-import { cn } from "@/lib/utils"
 
 type RegistrationTab = "manual" | "import"
 
@@ -28,30 +28,25 @@ export function EmployeeRegistrationView() {
       </div>
 
       <div className="tab-rail-scroll bg-muted/[0.12] px-3">
-        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
+        <TabList
+          aria-label="Employee registration mode"
+          selectedValue={activeTab}
+          onTabSelect={(_event, data) => {
+            if (data.value === "manual" || data.value === "import") {
+              setActiveTab(data.value)
+            }
+          }}
+          className="min-w-full"
+        >
           {([
             { id: "manual", label: "Manual Registration" },
             { id: "import", label: "Bulk Import" },
-          ] as const).map((tab) => {
-            const isActive = activeTab === tab.id
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-                  isActive
-                    ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
+          ] as const).map((tab) => (
+            <Tab key={tab.id} value={tab.id}>
+              {tab.label}
+            </Tab>
+          ))}
+        </TabList>
       </div>
 
       <div className="min-w-0 p-2.5 sm:p-3">

@@ -61,6 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BorderBeam } from "@/components/ui/border-beam";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
 const IMPORT_MODES: Array<{
@@ -3853,19 +3854,18 @@ export function EmployeeImportView() {
           }
           toolbarActions={
             <>
-              <select
-                className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
+              <FluentSelect
+                ariaLabel="Filter by status"
+                size="small"
+                className="min-w-[8.5rem]"
                 value={historyStatusFilter}
-                onChange={(event) => setHistoryStatusFilter(event.target.value)}
-                aria-label="Filter by status"
-              >
-                <option value="">All statuses</option>
-                {historyStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setHistoryStatusFilter}
+                placeholder="All statuses"
+                options={[
+                  { value: "", label: "All statuses" },
+                  ...historyStatusOptions,
+                ]}
+              />
               <Button
                 type="button"
                 size="sm"

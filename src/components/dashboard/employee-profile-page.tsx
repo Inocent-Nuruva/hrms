@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Textarea } from "@/components/ui/textarea"
 import {
   createEmployeeDocument,
@@ -1400,82 +1401,86 @@ function renderEntryInput({
 }) {
   if (entry.kind === "boolean") {
     return (
-      <select
+      <FluentSelect
+        ariaLabel={entry.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-      >
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </select>
+        onChange={onChange}
+        options={[
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]}
+      />
     )
   }
 
   if (entry.key === "education_level") {
     return (
-      <select
+      <FluentSelect
+        ariaLabel={entry.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-      >
-        <option value="">Select education level</option>
-        {EDUCATION_LEVEL_OPTIONS.map((level) => (
-          <option key={level} value={level}>
-            {level}
-          </option>
-        ))}
-      </select>
+        placeholder="Select education level"
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select education level" },
+          ...EDUCATION_LEVEL_OPTIONS.map((level) => ({ value: level, label: level })),
+        ]}
+      />
     )
   }
 
   if (entry.key === "type") {
     return (
-      <select
+      <FluentSelect
+        ariaLabel={entry.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-      >
-        <option value="">Select document type</option>
-        {DOCUMENT_TYPE_OPTIONS.map((type) => (
-          <option key={type} value={type}>
-            {type}
-          </option>
-        ))}
-      </select>
+        placeholder="Select document type"
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select document type" },
+          ...DOCUMENT_TYPE_OPTIONS.map((type) => ({ value: type, label: type })),
+        ]}
+      />
     )
   }
 
   if (entry.key === "classification") {
     return (
-      <select
+      <FluentSelect
+        ariaLabel={entry.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-      >
-        <option value="">Select classification</option>
-        {DOCUMENT_CLASSIFICATION_OPTIONS.map((classification) => (
-          <option key={classification} value={classification}>
-            {classification}
-          </option>
-        ))}
-      </select>
+        placeholder="Select classification"
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select classification" },
+          ...DOCUMENT_CLASSIFICATION_OPTIONS.map((classification) => ({
+            value: classification,
+            label: classification,
+          })),
+        ]}
+      />
     )
   }
 
   if (entry.key === "relationship") {
     return (
-      <select
+      <FluentSelect
+        ariaLabel={entry.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-      >
-        <option value="">Select relationship</option>
-        {RELATIONSHIP_OPTIONS.map((relationship) => (
-          <option key={relationship} value={relationship}>
-            {relationship}
-          </option>
-        ))}
-      </select>
+        placeholder="Select relationship"
+        onChange={onChange}
+        options={[
+          { value: "", label: "Select relationship" },
+          ...RELATIONSHIP_OPTIONS.map((relationship) => ({
+            value: relationship,
+            label: relationship,
+          })),
+        ]}
+      />
     )
   }
 
@@ -2833,45 +2838,47 @@ function DepartmentAssignmentsSection({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Department
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Department"
+                className="w-full"
                 value={form.department_id}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, department_id: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, department_id: value }))
                 }
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 disabled={departmentsLoading}
-              >
-                <option value="">
-                  {departmentsLoading ? "Loading departments..." : "Select department"}
-                </option>
-                {departmentOptions.map((option) => {
-                  const optionId = readNumber(option.id)
-                  if (optionId === null) {
-                    return null
-                  }
-                  return (
-                    <option key={`department-option-${optionId}`} value={String(optionId)}>
-                      {recordOptionLabel(option)}
-                    </option>
-                  )
-                })}
-              </select>
+                placeholder={departmentsLoading ? "Loading departments..." : "Select department"}
+                options={[
+                  {
+                    value: "",
+                    label: departmentsLoading ? "Loading departments..." : "Select department",
+                  },
+                  ...departmentOptions.flatMap((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return []
+                    }
+                    return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                  }),
+                ]}
+              />
             </label>
 
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Primary Assignment
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Primary Assignment"
+                className="w-full"
                 value={form.is_primary}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, is_primary: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, is_primary: value }))
                 }
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-              >
-                <option value="false">No</option>
-                <option value="true">Yes</option>
-              </select>
+                options={[
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ]}
+              />
             </label>
 
             <label className="grid gap-1">
@@ -3262,63 +3269,61 @@ function PositionAssignmentsSection({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Position
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Position"
+                className="w-full"
                 value={form.position_id}
-                onChange={(event) => setForm((current) => ({ ...current, position_id: event.target.value }))}
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                onChange={(value) => setForm((current) => ({ ...current, position_id: value }))}
                 disabled={positionsLoading}
-              >
-                <option value="">
-                  {positionsLoading ? "Loading positions..." : "Select position"}
-                </option>
-                {positionOptions.map((option) => {
-                  const optionId = readNumber(option.id)
-                  if (optionId === null) {
-                    return null
-                  }
-                  return (
-                    <option key={`position-option-${optionId}`} value={String(optionId)}>
-                      {recordOptionLabel(option)}
-                    </option>
-                  )
-                })}
-              </select>
+                placeholder={positionsLoading ? "Loading positions..." : "Select position"}
+                options={[
+                  {
+                    value: "",
+                    label: positionsLoading ? "Loading positions..." : "Select position",
+                  },
+                  ...positionOptions.flatMap((option) => {
+                    const optionId = readNumber(option.id)
+                    if (optionId === null) {
+                      return []
+                    }
+                    return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                  }),
+                ]}
+              />
             </label>
 
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Assignment Type
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Assignment Type"
+                className="w-full"
                 value={form.assignment_type}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, assignment_type: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, assignment_type: value }))
                 }
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-              >
-                {POSITION_ASSIGNMENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {formatLabelValue(option)}
-                  </option>
-                ))}
-              </select>
+                options={POSITION_ASSIGNMENT_TYPE_OPTIONS.map((option) => ({
+                  value: option,
+                  label: formatLabelValue(option),
+                }))}
+              />
             </label>
 
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Status
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Status"
+                className="w-full"
                 value={form.status}
-                onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-              >
-                {POSITION_ASSIGNMENT_STATUS_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {formatLabelValue(option)}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+                options={POSITION_ASSIGNMENT_STATUS_OPTIONS.map((option) => ({
+                  value: option,
+                  label: formatLabelValue(option),
+                }))}
+              />
             </label>
 
             <label className="grid gap-1">
@@ -3345,16 +3350,18 @@ function PositionAssignmentsSection({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Primary Assignment
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Primary Assignment"
+                className="w-full"
                 value={form.is_primary}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, is_primary: event.target.value }))
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, is_primary: value }))
                 }
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-              >
-                <option value="false">No</option>
-                <option value="true">Yes</option>
-              </select>
+                options={[
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ]}
+              />
             </label>
 
             <label className="grid gap-1 sm:col-span-2">
@@ -4157,12 +4164,14 @@ function EmployeeMovementsSection({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Movement Type
               </span>
-              <select
+              <FluentSelect
+                ariaLabel="Movement Type"
+                className="w-full"
                 value={form.movement_type}
-                onChange={(event) =>
+                onChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    movement_type: event.target.value,
+                    movement_type: value,
                     new_branch_id: "",
                     new_department_id: "",
                     new_position_id: "",
@@ -4172,15 +4181,12 @@ function EmployeeMovementsSection({
                     new_employment_type: "",
                   }))
                 }
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 disabled={optionsLoading}
-              >
-                {EMPLOYEE_MOVEMENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {formatLabelValue(option)}
-                  </option>
-                ))}
-              </select>
+                options={EMPLOYEE_MOVEMENT_TYPE_OPTIONS.map((option) => ({
+                  value: option,
+                  label: formatLabelValue(option),
+                }))}
+              />
             </label>
 
             <label className="grid gap-1">
@@ -4222,34 +4228,33 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Branch
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Branch"
+                  className="w-full"
                   value={form.new_branch_id}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      new_branch_id: event.target.value,
+                      new_branch_id: value,
                       new_department_id: "",
                       new_position_id: "",
                       new_cost_center_id: "",
                       new_manager_employee_id: "",
                     }))
                   }
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                   disabled={optionsLoading}
-                >
-                  <option value="">{optionsLoading ? "Loading branches..." : "Select branch"}</option>
-                  {branchOptions.map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-branch-${optionId}`} value={String(optionId)}>
-                        {recordOptionLabel(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                  placeholder={optionsLoading ? "Loading branches..." : "Select branch"}
+                  options={[
+                    { value: "", label: optionsLoading ? "Loading branches..." : "Select branch" },
+                    ...branchOptions.flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4258,33 +4263,35 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Department
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Department"
+                  className="w-full"
                   value={form.new_department_id}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      new_department_id: event.target.value,
+                      new_department_id: value,
                       new_position_id: "",
                       new_cost_center_id: "",
                       new_manager_employee_id: "",
                     }))
                   }
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                   disabled={optionsLoading}
-                >
-                  <option value="">{optionsLoading ? "Loading departments..." : "Select department"}</option>
-                  {filteredDepartmentOptions.map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-department-${optionId}`} value={String(optionId)}>
-                        {recordOptionLabel(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                  placeholder={optionsLoading ? "Loading departments..." : "Select department"}
+                  options={[
+                    {
+                      value: "",
+                      label: optionsLoading ? "Loading departments..." : "Select department",
+                    },
+                    ...filteredDepartmentOptions.flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4293,31 +4300,38 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Position
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Position"
+                  className="w-full"
                   value={form.new_position_id}
-                  onChange={(event) => setForm((current) => ({ ...current, new_position_id: event.target.value }))}
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  onChange={(value) => setForm((current) => ({ ...current, new_position_id: value }))}
                   disabled={optionsLoading || (Boolean(form.new_department_id) && scopedPositionOptionsLoading)}
-                >
-                  <option value="">
-                    {optionsLoading || (form.new_department_id && scopedPositionOptionsLoading)
+                  placeholder={
+                    optionsLoading || (form.new_department_id && scopedPositionOptionsLoading)
                       ? "Loading positions..."
                       : form.new_department_id && availablePositionOptions.length > 0
                         ? "Select department position"
-                        : "Select position"}
-                  </option>
-                  {availablePositionOptions.map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-position-${optionId}`} value={String(optionId)}>
-                        {recordOptionLabel(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                        : "Select position"
+                  }
+                  options={[
+                    {
+                      value: "",
+                      label:
+                        optionsLoading || (form.new_department_id && scopedPositionOptionsLoading)
+                          ? "Loading positions..."
+                          : form.new_department_id && availablePositionOptions.length > 0
+                            ? "Select department position"
+                            : "Select position",
+                    },
+                    ...availablePositionOptions.flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4326,33 +4340,40 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Manager
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Manager"
+                  className="w-full"
                   value={form.new_manager_employee_id}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, new_manager_employee_id: event.target.value }))
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, new_manager_employee_id: value }))
                   }
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                   disabled={optionsLoading || (Boolean(form.new_department_id) && scopedManagerOptionsLoading)}
-                >
-                  <option value="">
-                    {optionsLoading || (form.new_department_id && scopedManagerOptionsLoading)
+                  placeholder={
+                    optionsLoading || (form.new_department_id && scopedManagerOptionsLoading)
                       ? "Loading managers..."
                       : form.new_department_id && availableManagerOptions.length > 0
                         ? "Select department manager"
-                        : "Select manager"}
-                  </option>
-                  {availableManagerOptions.map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-manager-${optionId}`} value={String(optionId)}>
-                        {employeeDisplayName(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                        : "Select manager"
+                  }
+                  options={[
+                    {
+                      value: "",
+                      label:
+                        optionsLoading || (form.new_department_id && scopedManagerOptionsLoading)
+                          ? "Loading managers..."
+                          : form.new_department_id && availableManagerOptions.length > 0
+                            ? "Select department manager"
+                            : "Select manager",
+                    },
+                    ...availableManagerOptions.flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: employeeDisplayName(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4361,25 +4382,24 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Grade
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Grade"
+                  className="w-full"
                   value={form.new_grade_id}
-                  onChange={(event) => setForm((current) => ({ ...current, new_grade_id: event.target.value }))}
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                  onChange={(value) => setForm((current) => ({ ...current, new_grade_id: value }))}
                   disabled={optionsLoading}
-                >
-                  <option value="">{optionsLoading ? "Loading grades..." : "Select grade"}</option>
-                  {gradeOptions.map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-grade-${optionId}`} value={String(optionId)}>
-                        {recordOptionLabel(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                  placeholder={optionsLoading ? "Loading grades..." : "Select grade"}
+                  options={[
+                    { value: "", label: optionsLoading ? "Loading grades..." : "Select grade" },
+                    ...gradeOptions.flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4388,33 +4408,39 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Cost Center
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Cost Center"
+                  className="w-full"
                   value={form.new_cost_center_id}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, new_cost_center_id: event.target.value }))
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, new_cost_center_id: value }))
                   }
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                   disabled={optionsLoading}
-                >
-                  <option value="">
-                    {optionsLoading
+                  placeholder={
+                    optionsLoading
                       ? "Loading cost centers..."
                       : form.new_department_id && filteredCostCenterOptions.length > 0
                         ? "Select department cost center"
-                        : "Select cost center"}
-                  </option>
-                  {(form.new_department_id ? filteredCostCenterOptions : costCenterOptions).map((option) => {
-                    const optionId = readNumber(option.id)
-                    if (optionId === null) {
-                      return null
-                    }
-                    return (
-                      <option key={`movement-cost-center-${optionId}`} value={String(optionId)}>
-                        {recordOptionLabel(option)}
-                      </option>
-                    )
-                  })}
-                </select>
+                        : "Select cost center"
+                  }
+                  options={[
+                    {
+                      value: "",
+                      label: optionsLoading
+                        ? "Loading cost centers..."
+                        : form.new_department_id && filteredCostCenterOptions.length > 0
+                          ? "Select department cost center"
+                          : "Select cost center",
+                    },
+                    ...(form.new_department_id ? filteredCostCenterOptions : costCenterOptions).flatMap((option) => {
+                      const optionId = readNumber(option.id)
+                      if (optionId === null) {
+                        return []
+                      }
+                      return [{ value: String(optionId), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
             ) : null}
 
@@ -4423,20 +4449,22 @@ function EmployeeMovementsSection({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Target Employment Type
                 </span>
-                <select
+                <FluentSelect
+                  ariaLabel="Target Employment Type"
+                  className="w-full"
                   value={form.new_employment_type}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, new_employment_type: event.target.value }))
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, new_employment_type: value }))
                   }
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                >
-                  <option value="">Select employment type</option>
-                  {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {formatLabelValue(option)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select employment type"
+                  options={[
+                    { value: "", label: "Select employment type" },
+                    ...EMPLOYMENT_TYPE_OPTIONS.map((option) => ({
+                      value: option,
+                      label: formatLabelValue(option),
+                    })),
+                  ]}
+                />
               </label>
             ) : null}
           </div>
@@ -5270,11 +5298,12 @@ export function EmployeeProfilePage({
           <div className="grid gap-3 lg:grid-cols-2">
             <label className="grid gap-1 md:col-span-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Employment Status</span>
-              <select
+              <FluentSelect
+                ariaLabel="Employment Status"
                 value={statusForm.employment_status}
-                onChange={(event) =>
+                onChange={(value) =>
                   setStatusForm((prev) => {
-                    const nextStatus = normalizeEmployeeStatus(event.target.value)
+                    const nextStatus = normalizeEmployeeStatus(value)
                     if (["resigned", "terminated", "retired", "exited"].includes(nextStatus)) {
                       return { ...prev, employment_status: nextStatus }
                     }
@@ -5286,14 +5315,8 @@ export function EmployeeProfilePage({
                     }
                   })
                 }
-                className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-              >
-                {EMPLOYEE_STATUS_VALUES.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
+                options={EMPLOYEE_STATUS_VALUES.map((value) => ({ value, label: value }))}
+              />
             </label>
             <label className="grid min-w-0 gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Effective Date</span>
@@ -5482,11 +5505,14 @@ export function EmployeeProfilePage({
             <div className="grid gap-2.5 sm:col-span-2 sm:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
-                <select
+                <FluentSelect
+                  ariaLabel="Branch"
+                  className="min-w-0"
                   value={branchId}
                   disabled={organizationOptionsLoading}
-                  onChange={(event) => {
-                    const nextBranchId = event.target.value
+                  placeholder="No branch"
+                  onChange={(value) => {
+                    const nextBranchId = value
                     setBranchId(nextBranchId)
                     setDepartmentId("")
                     setPositionId("")
@@ -5494,55 +5520,67 @@ export function EmployeeProfilePage({
                     setCostCenterId("")
                     void loadOrganizationOptions(nextBranchId, "")
                   }}
-                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-                >
-                  <option value="">No branch</option>
-                  {branchOptions.map((option) => {
-                    const id = readNumber(option.id)
-                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "No branch" },
+                    ...branchOptions.flatMap((option) => {
+                      const id = readNumber(option.id)
+                      return id === null ? [] : [{ value: String(id), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
-                <select
+                <FluentSelect
+                  ariaLabel="Department"
+                  className="min-w-0"
                   value={departmentId}
                   disabled={organizationOptionsLoading}
-                  onChange={(event) => {
-                     const nextDepartmentId = event.target.value
-                     setDepartmentId(nextDepartmentId)
-                     setPositionId("")
-                     setManagerId("")
-                     setCostCenterId("")
-                     void loadOrganizationOptions(branchId, nextDepartmentId)
+                  placeholder="Select department"
+                  onChange={(value) => {
+                    const nextDepartmentId = value
+                    setDepartmentId(nextDepartmentId)
+                    setPositionId("")
+                    setManagerId("")
+                    setCostCenterId("")
+                    void loadOrganizationOptions(branchId, nextDepartmentId)
                   }}
-                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-                >
-                  <option value="">Select department</option>
-                  {filteredDepartmentOptions.map((option) => {
-                    const id = readNumber(option.id)
-                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Select department" },
+                    ...filteredDepartmentOptions.flatMap((option) => {
+                      const id = readNumber(option.id)
+                      return id === null ? [] : [{ value: String(id), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</span>
-                <select
+                <FluentSelect
+                  ariaLabel="Position"
+                  className="min-w-0"
                   value={positionId}
                   disabled={!departmentId || organizationOptionsLoading}
-                  onChange={(event) => setPositionId(event.target.value)}
-                  className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-                >
-                   <option value="">
-                     {departmentPositionOptions.length === 0
-                       ? "No positions configured for this department"
-                       : "Select position"}
-                   </option>
-                   {departmentPositionOptions.map((option) => {
-                    const id = readNumber(option.id)
-                    return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
-                  })}
-                </select>
+                  placeholder={
+                    departmentPositionOptions.length === 0
+                      ? "No positions configured for this department"
+                      : "Select position"
+                  }
+                  onChange={(value) => setPositionId(value)}
+                  options={[
+                    {
+                      value: "",
+                      label:
+                        departmentPositionOptions.length === 0
+                          ? "No positions configured for this department"
+                          : "Select position",
+                    },
+                    ...departmentPositionOptions.flatMap((option) => {
+                      const id = readNumber(option.id)
+                      return id === null ? [] : [{ value: String(id), label: recordOptionLabel(option) }]
+                    }),
+                  ]}
+                />
                 {departmentPositionOptions.length === 0 ? (
                   <span className="text-[11px] font-normal normal-case tracking-normal text-destructive">
                     Create positions for this exact department in {" "}
@@ -5556,53 +5594,62 @@ export function EmployeeProfilePage({
             </div>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager</span>
-              <select
+              <FluentSelect
+                ariaLabel="Manager"
+                className="min-w-0"
                 value={managerId}
                 disabled={!departmentId || organizationOptionsLoading}
-                onChange={(event) => setManagerId(event.target.value)}
-                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-              >
-                <option value="">No manager</option>
-                {filteredManagerOptions.map((option) => {
-                  const id = readNumber(option.id)
-                  return id === null ? null : (
-                    <option key={id} value={id}>{employeeDisplayNameFromLinkedUser(option)}</option>
-                  )
-                })}
-              </select>
+                placeholder="No manager"
+                onChange={(value) => setManagerId(value)}
+                options={[
+                  { value: "", label: "No manager" },
+                  ...filteredManagerOptions.flatMap((option) => {
+                    const id = readNumber(option.id)
+                    return id === null
+                      ? []
+                      : [{ value: String(id), label: employeeDisplayNameFromLinkedUser(option) }]
+                  }),
+                ]}
+              />
               <span className="text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
                 Shows all other employees in the selected department.
               </span>
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</span>
-              <select
+              <FluentSelect
+                ariaLabel="Grade"
+                className="min-w-0"
                 value={gradeId}
                 disabled={organizationOptionsLoading}
-                onChange={(event) => setGradeId(event.target.value)}
-                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-              >
-                <option value="">No grade</option>
-                {gradeOptions.map((option) => {
-                  const id = readNumber(option.id)
-                  return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
-                })}
-              </select>
+                placeholder="No grade"
+                onChange={(value) => setGradeId(value)}
+                options={[
+                  { value: "", label: "No grade" },
+                  ...gradeOptions.flatMap((option) => {
+                    const id = readNumber(option.id)
+                    return id === null ? [] : [{ value: String(id), label: recordOptionLabel(option) }]
+                  }),
+                ]}
+              />
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cost Center</span>
-              <select
+              <FluentSelect
+                ariaLabel="Cost Center"
+                className="min-w-0"
                 value={costCenterId}
                 disabled={organizationOptionsLoading}
-                onChange={(event) => setCostCenterId(event.target.value)}
-                className="h-9 min-w-0 rounded-md border border-slate-300 bg-background px-3 text-sm"
-              >
-                <option value="">No cost center</option>
-                {filteredCostCenterOptions.map((option) => {
-                  const id = readNumber(option.id)
-                  return id === null ? null : <option key={id} value={id}>{recordOptionLabel(option)}</option>
-                })}
-              </select>
+                placeholder="No cost center"
+                onChange={(value) => setCostCenterId(value)}
+                options={[
+                  { value: "", label: "No cost center" },
+                  ...filteredCostCenterOptions.flatMap((option) => {
+                    const id = readNumber(option.id)
+                    return id === null ? [] : [{ value: String(id), label: recordOptionLabel(option) }]
+                  }),
+                ]}
+              />
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">

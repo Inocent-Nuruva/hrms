@@ -55,6 +55,7 @@ import {
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type ActivityOpsTab = "overview" | "reports" | "reviews" | "exceptions" | "setup"
@@ -422,11 +423,16 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Decision</span>
-                  <select className={inputClass} value={form.decision ?? "APPROVE"} onChange={(event) => setForm((current) => ({ ...current, decision: event.target.value }))}>
-                    <option value="APPROVE">Approve</option>
-                    <option value="RETURN">Return</option>
-                    <option value="REJECT">Reject</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Decision"
+                    value={form.decision ?? "APPROVE"}
+                    onChange={(value) => setForm((current) => ({ ...current, decision: value }))}
+                    options={[
+                      { value: "APPROVE", label: "Approve" },
+                      { value: "RETURN", label: "Return" },
+                      { value: "REJECT", label: "Reject" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Rating</span>

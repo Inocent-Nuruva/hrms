@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import {
   InfoIcon,
   Loader2Icon,
@@ -11,6 +10,9 @@ import {
   UserPlus2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  Label as FluentLabel,
+} from "@fluentui/react-components"
 
 import {
   createEmployeeInvitation,
@@ -28,16 +30,9 @@ import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Dropdown, Option } from "@/components/ui/dropdown"
+import { Input as FluentInput } from "@/components/ui/input"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -361,11 +356,16 @@ function FieldShell({
   className?: string
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+    <div className={cn("flex min-w-0 flex-col gap-0.5", className)}>
+      <FluentLabel
+        id={htmlFor ? `${htmlFor}-label` : undefined}
+        htmlFor={htmlFor}
+        size="small"
+        className="text-sm font-medium text-foreground"
+      >
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
-      </Label>
+      </FluentLabel>
       {children}
     </div>
   )
@@ -996,10 +996,10 @@ export function EmployeeInviteView() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={discardInviteDraft}>
+              <Button type="button" appearance="outline" size="small" onClick={discardInviteDraft}>
                 Start fresh
               </Button>
-              <Button type="button" size="sm" onClick={resumeInviteDraft}>
+              <Button type="button" appearance="primary" size="small" onClick={resumeInviteDraft}>
                 Continue
               </Button>
             </div>
@@ -1017,12 +1017,13 @@ export function EmployeeInviteView() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <SectionHeader title="Personal details" />
             {canPerformPermission(actor.permissionLabels, "employees:create") ? (
-              <Link
+              <Button
+                as="a"
                 href="/dashboard/employees/onboarding?tab=invitations"
-                className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="!no-underline hover:!no-underline focus:!no-underline"
               >
                 View pending invitations
-              </Link>
+              </Button>
             ) : null}
           </div>
           {loading ? (
@@ -1034,74 +1035,69 @@ export function EmployeeInviteView() {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FieldShell label="First name" htmlFor="first_name" required>
-                <Input
+                <FluentInput
                   id="first_name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="First name"
                   autoComplete="given-name"
+                  className="w-full"
                   required
                 />
               </FieldShell>
               <FieldShell label="Last name" htmlFor="last_name" required>
-                <Input
+                <FluentInput
                   id="last_name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Last name"
                   autoComplete="family-name"
+                  className="w-full"
                   required
                 />
               </FieldShell>
               <FieldShell label="Work email" htmlFor="email" required>
-                <div className="relative">
-                  <MailIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@company.com"
-                    autoComplete="email"
-                    className="pl-9"
-                    required
-                  />
-                </div>
+                <FluentInput
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  autoComplete="email"
+                  contentBefore={<MailIcon className="size-4 text-muted-foreground" />}
+                  className="w-full"
+                  required
+                />
               </FieldShell>
               <FieldShell label="Phone number" htmlFor="phone" required>
-                <div className="relative">
-                  <PhoneIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+255 7XX XXX XXX"
-                    autoComplete="tel"
-                    className="pl-9"
-                    required
-                  />
-                </div>
+                <FluentInput
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+255 7XX XXX XXX"
+                  autoComplete="tel"
+                  contentBefore={<PhoneIcon className="size-4 text-muted-foreground" />}
+                  className="w-full"
+                  required
+                />
               </FieldShell>
-              <FieldShell label="Gender" required>
-                <Select
-                  value={gender || null}
-                  onValueChange={(value) => setGender(value ?? "")}
+              <FieldShell label="Gender" htmlFor="gender" required>
+                <Dropdown
+                  id="gender"
+                  aria-labelledby="gender-label"
+                  value={GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? ""}
+                  selectedOptions={gender ? [gender] : []}
+                  onOptionSelect={(_event, data) => setGender(data.optionValue ?? "")}
+                  placeholder="Select gender"
+                  className="w-full"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select gender">
-                      {GENDER_OPTIONS.find((option) => option.value === gender)
-                        ?.label ?? "Select gender"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GENDER_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {GENDER_OPTIONS.map((option) => (
+                    <Option key={option.value} value={option.value} text={option.label}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Dropdown>
               </FieldShell>
             </div>
           )}
@@ -1110,164 +1106,99 @@ export function EmployeeInviteView() {
         <section className="flex flex-col gap-4">
           <SectionHeader title="Work assignment" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FieldShell label="Branch" required>
-              <Select
-                value={branchId != null ? String(branchId) : null}
-                onValueChange={handleBranchChange}
+            <FieldShell label="Branch" htmlFor="branch" required>
+              <Dropdown
+                id="branch"
+                aria-labelledby="branch-label"
+                value={getSelectedLabel(branchOptions, branchId, "")}
+                selectedOptions={branchId != null ? [String(branchId)] : []}
+                onOptionSelect={(_event, data) => handleBranchChange(data.optionValue ?? null)}
+                placeholder="Select branch"
                 disabled={loading}
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select branch">
-                    {getSelectedLabel(branchOptions, branchId, "Select branch")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {branchOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      No branches found
-                    </div>
-                  ) : null}
-                  {branchOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {branchOptions.length === 0 ? (
+                  <Option disabled>No branches found</Option>
+                ) : null}
+                {branchOptions.map((option) => (
+                  <Option key={option.id} value={String(option.id)} text={option.label}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
 
-            <FieldShell label="Department" required>
-              <Select
-                value={departmentId != null ? String(departmentId) : null}
-                onValueChange={handleDepartmentChange}
+            <FieldShell label="Department" htmlFor="department" required>
+              <Dropdown
+                id="department"
+                aria-labelledby="department-label"
+                value={getSelectedLabel(departmentOptions, departmentId, "")}
+                selectedOptions={departmentId != null ? [String(departmentId)] : []}
+                onOptionSelect={(_event, data) => handleDepartmentChange(data.optionValue ?? null)}
+                placeholder={branchId === null ? "Select branch first" : "Select department"}
                 disabled={departmentDisabled}
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      branchId === null
-                        ? "Select branch first"
-                        : "Select department"
-                    }
-                  >
-                    {branchId === null
-                      ? "Select branch first"
-                      : getSelectedLabel(
-                          departmentOptions,
-                          departmentId,
-                          "Select department",
-                        )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {departmentOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      {branchId === null
-                        ? "Select a branch first"
-                        : "No departments for this branch"}
-                    </div>
-                  ) : null}
-                  {departmentOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {departmentOptions.length === 0 ? (
+                  <Option disabled>
+                    {branchId === null ? "Select a branch first" : "No departments for this branch"}
+                  </Option>
+                ) : null}
+                {departmentOptions.map((option) => (
+                  <Option key={option.id} value={String(option.id)} text={option.label}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
 
-            <FieldShell label="Position" required>
-              <Select
-                value={positionId != null ? String(positionId) : null}
-                onValueChange={handlePositionChange}
+            <FieldShell label="Position" htmlFor="position" required>
+              <Dropdown
+                id="position"
+                aria-labelledby="position-label"
+                value={getSelectedLabel(positionOptions, positionId, "")}
+                selectedOptions={positionId != null ? [String(positionId)] : []}
+                onOptionSelect={(_event, data) => handlePositionChange(data.optionValue ?? null)}
+                placeholder={departmentId === null ? "Select department first" : departmentPositionsLoading ? "Loading positions..." : "Select position"}
                 disabled={positionDisabled}
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      departmentId === null
-                        ? "Select department first"
-                        : departmentPositionsLoading
-                          ? "Loading positions..."
-                          : "Select position"
-                    }
-                  >
-                    {departmentId === null
-                      ? "Select department first"
-                      : departmentPositionsLoading
-                        ? "Loading positions..."
-                        : getSelectedLabel(
-                            positionOptions,
-                            positionId,
-                            "Select position",
-                          )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {positionOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      {departmentId === null
-                        ? "Select a department first"
-                        : departmentPositionsLoading
-                          ? "Loading positions..."
-                          : "No positions for this department"}
-                    </div>
-                  ) : null}
-                  {positionOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {positionOptions.length === 0 ? (
+                  <Option disabled>
+                    {departmentId === null ? "Select a department first" : departmentPositionsLoading ? "Loading positions..." : "No positions for this department"}
+                  </Option>
+                ) : null}
+                {positionOptions.map((option) => (
+                  <Option key={option.id} value={String(option.id)} text={option.label}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
 
-            <FieldShell label="Reports to">
-              <Select
-                value={reportsToId != null ? String(reportsToId) : null}
-                onValueChange={(value) =>
-                  setReportsToId(value ? Number(value) : null)
-                }
+            <FieldShell label="Reports to" htmlFor="reports_to">
+              <Dropdown
+                id="reports_to"
+                aria-labelledby="reports_to-label"
+                value={getSelectedLabel(employeeOptions, reportsToId, "")}
+                selectedOptions={reportsToId != null ? [String(reportsToId)] : []}
+                onOptionSelect={(_event, data) => setReportsToId(data.optionValue ? Number(data.optionValue) : null)}
+                placeholder={departmentId === null ? "Select department first" : employeesLoading ? "Loading managers..." : "Select manager (optional)"}
                 disabled={reportsToDisabled}
+                clearable
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      departmentId === null
-                        ? "Select department first"
-                        : employeesLoading
-                          ? "Loading managers..."
-                          : "Select manager (optional)"
-                    }
-                  >
-                    {departmentId === null
-                      ? "Select department first"
-                      : employeesLoading
-                        ? "Loading managers..."
-                        : getSelectedLabel(
-                            employeeOptions,
-                            reportsToId,
-                            "Select manager (optional)",
-                          )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {employeeOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      {departmentId === null
-                        ? "Select a department first"
-                        : employeesLoading
-                          ? "Loading managers..."
-                          : "No managers found in this department"}
-                    </div>
-                  ) : null}
-                  {employeeOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {employeeOptions.length === 0 ? (
+                  <Option disabled>
+                    {departmentId === null ? "Select a department first" : employeesLoading ? "Loading managers..." : "No managers found in this department"}
+                  </Option>
+                ) : null}
+                {employeeOptions.map((option) => (
+                  <Option key={option.id} value={String(option.id)} text={option.label}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
           </div>
         </section>
@@ -1275,74 +1206,50 @@ export function EmployeeInviteView() {
         <section className="flex flex-col gap-4">
           <SectionHeader title="Employment & onboarding" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FieldShell label="Employment type" required>
-              <Select
-                value={employmentType}
-                onValueChange={(value) =>
-                  setEmploymentType(value || "full_time")
-                }
+            <FieldShell label="Employment type" htmlFor="employment_type" required>
+              <Dropdown
+                id="employment_type"
+                aria-labelledby="employment_type-label"
+                value={EMPLOYMENT_TYPES.find((type) => type.value === employmentType)?.label ?? "Employment type"}
+                selectedOptions={employmentType ? [employmentType] : []}
+                onOptionSelect={(_event, data) => setEmploymentType(data.optionValue || "full_time")}
                 disabled={loading}
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {EMPLOYMENT_TYPES.find(
-                      (type) => type.value === employmentType,
-                    )?.label ?? "Employment type"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {EMPLOYMENT_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {EMPLOYMENT_TYPES.map((type) => (
+                  <Option key={type.value} value={type.value} text={type.label}>
+                    {type.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
 
             <FieldShell
               label="Onboarding workflow"
+              htmlFor="onboarding_workflow"
               required={canReadOnboardingWorkflows}
             >
-              <Select
-                value={workflowId != null ? String(workflowId) : null}
-                onValueChange={(value) =>
-                  setWorkflowId(value ? Number(value) : null)
-                }
+              <Dropdown
+                id="onboarding_workflow"
+                aria-labelledby="onboarding_workflow-label"
+                value={canReadOnboardingWorkflows ? getSelectedLabel(workflowOptions, workflowId, "") : "Workflow assigned automatically"}
+                selectedOptions={workflowId != null ? [String(workflowId)] : []}
+                onOptionSelect={(_event, data) => setWorkflowId(data.optionValue ? Number(data.optionValue) : null)}
+                placeholder={canReadOnboardingWorkflows ? "Select workflow" : "Workflow assigned automatically"}
                 disabled={loading || !canReadOnboardingWorkflows}
+                className="w-full"
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      canReadOnboardingWorkflows
-                        ? "Select workflow"
-                        : "Workflow assigned automatically"
-                    }
-                  >
-                    {canReadOnboardingWorkflows
-                      ? getSelectedLabel(
-                          workflowOptions,
-                          workflowId,
-                          "Select workflow",
-                        )
-                      : "Workflow assigned automatically"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {workflowOptions.length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">
-                      {canReadOnboardingWorkflows
-                        ? "No workflows found"
-                        : "Your role cannot view workflow templates."}
-                    </div>
-                  ) : null}
-                  {workflowOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {workflowOptions.length === 0 ? (
+                  <Option disabled>
+                    {canReadOnboardingWorkflows ? "No workflows found" : "Your role cannot view workflow templates."}
+                  </Option>
+                ) : null}
+                {workflowOptions.map((option) => (
+                  <Option key={option.id} value={String(option.id)} text={option.label}>
+                    {option.label}
+                  </Option>
+                ))}
+              </Dropdown>
             </FieldShell>
 
             <FieldShell label="Hire date">
@@ -1359,12 +1266,16 @@ export function EmployeeInviteView() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="About this action"
-              >
-                <InfoIcon className="size-4" />
-              </TooltipTrigger>
+                render={
+                  <Button
+                    type="button"
+                    appearance="subtle"
+                    size="small"
+                    icon={<InfoIcon />}
+                    aria-label="About this action"
+                  />
+                }
+              />
               <TooltipContent side="top" className="max-w-xs text-left">
                 Sends one secure invitation link through both the configured
                 email and SMS channels.
@@ -1373,28 +1284,21 @@ export function EmployeeInviteView() {
           </TooltipProvider>
           <Button
             type="button"
-            variant="outline"
+            appearance="outline"
             onClick={resetForm}
             disabled={submitting}
+            icon={<RotateCcwIcon />}
           >
-            <RotateCcwIcon data-icon="inline-start" />
             Reset
           </Button>
-          <Button type="submit" size="lg" disabled={submitting || loading}>
-            {submitting ? (
-              <>
-                <Loader2Icon
-                  data-icon="inline-start"
-                  className="animate-spin"
-                />
-                Sending…
-              </>
-            ) : (
-              <>
-                <UserPlus2Icon data-icon="inline-start" />
-                Send email & SMS invitation
-              </>
-            )}
+          <Button
+            type="submit"
+            appearance="primary"
+            size="large"
+            disabled={submitting || loading}
+            icon={submitting ? <Loader2Icon className="animate-spin" /> : <UserPlus2Icon />}
+          >
+            {submitting ? "Sending…" : "Send email & SMS invitation"}
           </Button>
         </div>
       </form>

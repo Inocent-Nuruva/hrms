@@ -71,6 +71,7 @@ import {
   useLeaveIfForbidden,
 } from "@/hooks/use-forbidden-route-guard";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
 export type FinanceOpsTab =
@@ -1293,17 +1294,13 @@ export function FinanceOperationsView({
             <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto] lg:items-end">
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Report</span>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Report"
+                  className="w-full"
                   value={selectedReport}
-                  onChange={(event) => setSelectedReport(event.target.value)}
-                >
-                  {financeReportTypes.map((report) => (
-                    <option key={report.value} value={report.value}>
-                      {report.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedReport}
+                  options={financeReportTypes}
+                />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm">
@@ -2426,19 +2423,21 @@ export function FinanceOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Type</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Type"
+                    className="w-full"
                     value={form.product_type ?? "STAFF_LOAN"}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        product_type: event.target.value,
+                        product_type: value,
                       }))
                     }
-                  >
-                    <option value="STAFF_LOAN">Staff loan</option>
-                    <option value="SALARY_ADVANCE">Salary advance</option>
-                  </select>
+                    options={[
+                      { value: "STAFF_LOAN", label: "Staff loan" },
+                      { value: "SALARY_ADVANCE", label: "Salary advance" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Code</span>
@@ -2482,20 +2481,22 @@ export function FinanceOperationsView({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Interest method</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="Interest method"
+                      className="w-full"
                       value={form.interest_method ?? "ZERO_INTEREST"}
-                      onChange={(event) =>
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          interest_method: event.target.value,
+                          interest_method: value,
                         }))
                       }
-                    >
-                      <option value="ZERO_INTEREST">Zero interest</option>
-                      <option value="FLAT_RATE">Flat rate</option>
-                      <option value="REDUCING_BALANCE">Reducing balance</option>
-                    </select>
+                      options={[
+                        { value: "ZERO_INTEREST", label: "Zero interest" },
+                        { value: "FLAT_RATE", label: "Flat rate" },
+                        { value: "REDUCING_BALANCE", label: "Reducing balance" },
+                      ]}
+                    />
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Annual interest %</span>

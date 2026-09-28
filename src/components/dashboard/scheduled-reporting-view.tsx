@@ -61,6 +61,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { Badge } from "@/components/ui/badge"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Sheet,
@@ -625,7 +626,6 @@ function Field({
 
 const inputClass =
   "h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-const selectClass = inputClass
 const textareaClass =
   "min-h-20 w-full rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
@@ -1991,31 +1991,30 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         <input className={inputClass} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
       </Field>
       <Field label="Output format">
-        <select className={selectClass} value={form.outputFormat} onChange={(e) => setForm((c) => ({ ...c, outputFormat: e.target.value }))}>
-          {OUTPUT_FORMATS.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        <FluentSelect
+          ariaLabel="Output format"
+          className="w-full"
+          value={form.outputFormat}
+          onChange={(value) => setForm((c) => ({ ...c, outputFormat: value }))}
+          options={OUTPUT_FORMATS.map((value) => ({ value, label: value }))}
+        />
       </Field>
       <Field label="Report definition *">
-        <select
-          className={cn(selectClass, !form.reportDefinitionId && "border-amber-400")}
+        <FluentSelect
+          ariaLabel="Report definition"
+          className="w-full"
           value={form.reportDefinitionId}
-          onChange={(e) => setForm((c) => ({ ...c, reportDefinitionId: e.target.value }))}
-        >
-          <option value="">Select definition</option>
-          {definitions.map((row, index) => {
-            const id = definitionId(row)
-            if (id === null) return null
-            return (
-              <option key={`def-${id}-${index}`} value={String(id)}>
-                {optionLabel(row)}
-              </option>
-            )
-          })}
-        </select>
+          placeholder="Select definition"
+          onChange={(value) => setForm((c) => ({ ...c, reportDefinitionId: value }))}
+          options={[
+            { value: "", label: "Select definition" },
+            ...definitions.flatMap((row) => {
+              const id = definitionId(row)
+              if (id === null) return []
+              return [{ value: String(id), label: optionLabel(row) }]
+            }),
+          ]}
+        />
         {definitions.length === 0 ? (
           <span className="text-[11px] text-amber-700 dark:text-amber-300">
             No report definitions loaded. Refresh the page or check permissions.
@@ -2023,24 +2022,23 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         ) : null}
       </Field>
       <Field label="SMTP configuration (optional)">
-        <select
-          className={selectClass}
+        <FluentSelect
+          ariaLabel="SMTP configuration"
+          className="w-full"
           value={form.smtpConfigurationId}
-          onChange={(e) => setForm((c) => ({ ...c, smtpConfigurationId: e.target.value }))}
-        >
-          <option value="">Select company SMTP</option>
-          {smtpConfigs.map((row, index) => {
-            const id = smtpConfigId(row)
-            if (id === null) return null
-            const label = optionLabel(row)
-            const isDefault = readBool(row, ["isDefault", "is_default"])
-            return (
-              <option key={`smtp-${id}-${index}`} value={String(id)}>
-                {isDefault ? `${label} (default)` : label}
-              </option>
-            )
-          })}
-        </select>
+          placeholder="Select company SMTP"
+          onChange={(value) => setForm((c) => ({ ...c, smtpConfigurationId: value }))}
+          options={[
+            { value: "", label: "Select company SMTP" },
+            ...smtpConfigs.flatMap((row) => {
+              const id = smtpConfigId(row)
+              if (id === null) return []
+              const label = optionLabel(row)
+              const isDefault = readBool(row, ["isDefault", "is_default"])
+              return [{ value: String(id), label: isDefault ? `${label} (default)` : label }]
+            }),
+          ]}
+        />
         {smtpConfigs.length === 0 ? (
           <span className="text-[11px] text-muted-foreground">
             No company SMTP settings are available. Active scheduled reports require one. You can{" "}
@@ -2063,17 +2061,13 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         ) : null}
       </Field>
       <Field label="Date range strategy">
-        <select
-          className={selectClass}
+        <FluentSelect
+          ariaLabel="Date range strategy"
+          className="w-full"
           value={form.dateRangeStrategy}
-          onChange={(e) => setForm((c) => ({ ...c, dateRangeStrategy: e.target.value }))}
-        >
-          {DATE_RANGE_STRATEGIES.map((value) => (
-            <option key={value} value={value}>
-              {prettify(value)}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setForm((c) => ({ ...c, dateRangeStrategy: value }))}
+          options={DATE_RANGE_STRATEGIES.map((value) => ({ value, label: prettify(value) }))}
+        />
       </Field>
       <Field label="Filename pattern">
         <input
@@ -2105,16 +2099,28 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Attach report">
-        <select className={selectClass} value={form.attachReport} onChange={(e) => setForm((c) => ({ ...c, attachReport: e.target.value }))}>
-          <option value="true">Yes</option>
-          <option value="false">No</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Attach report"
+          className="w-full"
+          value={form.attachReport}
+          onChange={(value) => setForm((c) => ({ ...c, attachReport: value }))}
+          options={[
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
+          ]}
+        />
       </Field>
       <Field label="Active">
-        <select className={selectClass} value={form.isActive} onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.value }))}>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Active"
+          className="w-full"
+          value={form.isActive}
+          onChange={(value) => setForm((c) => ({ ...c, isActive: value }))}
+          options={[
+            { value: "true", label: "Active" },
+            { value: "false", label: "Inactive" },
+          ]}
+        />
       </Field>
       <div className="grid gap-3 md:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2146,10 +2152,11 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         {form.recipients.map((recipient, index) => (
           <div key={`recipient-${index}`} className="grid gap-3 rounded-md border border-border bg-muted/10 p-3 md:grid-cols-2">
             <Field label="Channel">
-              <select
-                className={selectClass}
+              <FluentSelect
+                ariaLabel="Channel"
+                className="w-full"
                 value={recipient.channel}
-                onChange={(e) =>
+                onChange={(value) =>
                   setForm((current) => ({
                     ...current,
                     recipients: current.recipients.map((entry, entryIndex) =>
@@ -2157,7 +2164,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                         ? {
                             ...entry,
                             channel: enumValue(
-                              e.target.value,
+                              value,
                               RECIPIENT_CHANNELS,
                               "TO",
                             ),
@@ -2166,19 +2173,15 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                     ),
                   }))
                 }
-              >
-                {RECIPIENT_CHANNELS.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
+                options={RECIPIENT_CHANNELS.map((channel) => ({ value: channel, label: channel }))}
+              />
             </Field>
             <Field label="Recipient type">
-              <select
-                className={selectClass}
+              <FluentSelect
+                ariaLabel="Recipient type"
+                className="w-full"
                 value={recipient.recipientType}
-                onChange={(e) =>
+                onChange={(value) =>
                   setForm((current) => ({
                     ...current,
                     recipients: current.recipients.map((entry, entryIndex) =>
@@ -2187,7 +2190,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                             ...emptyTemplateRecipientForm(),
                             channel: entry.channel,
                             recipientType: enumValue(
-                              e.target.value,
+                              value,
                               RECIPIENT_TYPES,
                               "EMAIL",
                             ),
@@ -2196,13 +2199,8 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                     ),
                   }))
                 }
-              >
-                {RECIPIENT_TYPES.map((value) => (
-                  <option key={value} value={value}>
-                    {prettify(value)}
-                  </option>
-                ))}
-              </select>
+                options={RECIPIENT_TYPES.map((type) => ({ value: type, label: prettify(type) }))}
+              />
             </Field>
             {recipient.recipientType === "EMAIL" ? (
               <Field label="Email address">
@@ -2368,27 +2366,30 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         <input className={inputClass} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
       </Field>
       <Field label="Template *">
-        <select className={selectClass} value={form.templateId} onChange={(e) => setForm((c) => ({ ...c, templateId: e.target.value }))}>
-          <option value="">Select template</option>
-          {templates.map((row, index) => {
-            const id = readNumber(row, ["id"])
-            if (id === null) return null
-            return (
-              <option key={`tmpl-${id}-${index}`} value={String(id)}>
-                {optionLabel(row)}
-              </option>
-            )
-          })}
-        </select>
+        <FluentSelect
+          ariaLabel="Template"
+          className="w-full"
+          value={form.templateId}
+          placeholder="Select template"
+          onChange={(value) => setForm((c) => ({ ...c, templateId: value }))}
+          options={[
+            { value: "", label: "Select template" },
+            ...templates.flatMap((row) => {
+              const id = readNumber(row, ["id"])
+              if (id === null) return []
+              return [{ value: String(id), label: optionLabel(row) }]
+            }),
+          ]}
+        />
       </Field>
       <Field label="Schedule type">
-        <select className={selectClass} value={form.scheduleType} onChange={(e) => setForm((c) => ({ ...c, scheduleType: e.target.value }))}>
-          {SCHEDULE_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {prettify(value)}
-            </option>
-          ))}
-        </select>
+        <FluentSelect
+          ariaLabel="Schedule type"
+          className="w-full"
+          value={form.scheduleType}
+          onChange={(value) => setForm((c) => ({ ...c, scheduleType: value }))}
+          options={SCHEDULE_TYPES.map((value) => ({ value, label: prettify(value) }))}
+        />
       </Field>
       <Field label="Execution time">
         <input
@@ -2430,11 +2431,17 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         <DatePickerPresets value={form.endDate} onChange={(value) => setForm((c) => ({ ...c, endDate: value }))} placeholder="End" className="h-9" />
       </Field>
       <Field label="Misfire handling">
-        <select className={selectClass} value={form.misfireHandling} onChange={(e) => setForm((c) => ({ ...c, misfireHandling: e.target.value }))}>
-          <option value="SKIP">Skip</option>
-          <option value="RUN_IMMEDIATELY">Run immediately</option>
-          <option value="DEFER_TO_NEXT_WINDOW">Defer to next window</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Misfire handling"
+          className="w-full"
+          value={form.misfireHandling}
+          onChange={(value) => setForm((c) => ({ ...c, misfireHandling: value }))}
+          options={[
+            { value: "SKIP", label: "Skip" },
+            { value: "RUN_IMMEDIATELY", label: "Run immediately" },
+            { value: "DEFER_TO_NEXT_WINDOW", label: "Defer to next window" },
+          ]}
+        />
       </Field>
       <Field label="Max retries">
         <input
@@ -2446,10 +2453,16 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Active">
-        <select className={selectClass} value={form.isActive} onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.value }))}>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Active"
+          className="w-full"
+          value={form.isActive}
+          onChange={(value) => setForm((c) => ({ ...c, isActive: value }))}
+          options={[
+            { value: "true", label: "Active" },
+            { value: "false", label: "Inactive" },
+          ]}
+        />
       </Field>
     </div>
   )
@@ -2466,13 +2479,13 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         <input className={inputClass} type="number" value={form.port} onChange={(e) => setForm((c) => ({ ...c, port: e.target.value }))} />
       </Field>
       <Field label="Security">
-        <select className={selectClass} value={form.securityType} onChange={(e) => setForm((c) => ({ ...c, securityType: e.target.value }))}>
-          {SECURITY_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        <FluentSelect
+          ariaLabel="Security"
+          className="w-full"
+          value={form.securityType}
+          onChange={(value) => setForm((c) => ({ ...c, securityType: value }))}
+          options={SECURITY_TYPES.map((value) => ({ value, label: value }))}
+        />
       </Field>
       <Field label="Username">
         <input className={inputClass} value={form.username} onChange={(e) => setForm((c) => ({ ...c, username: e.target.value }))} />
@@ -2514,16 +2527,28 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Active">
-        <select className={selectClass} value={form.isActive} onChange={(e) => setForm((c) => ({ ...c, isActive: e.target.value }))}>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Active"
+          className="w-full"
+          value={form.isActive}
+          onChange={(value) => setForm((c) => ({ ...c, isActive: value }))}
+          options={[
+            { value: "true", label: "Active" },
+            { value: "false", label: "Inactive" },
+          ]}
+        />
       </Field>
       <Field label="Default">
-        <select className={selectClass} value={form.isDefault} onChange={(e) => setForm((c) => ({ ...c, isDefault: e.target.value }))}>
-          <option value="false">No</option>
-          <option value="true">Yes</option>
-        </select>
+        <FluentSelect
+          ariaLabel="Default"
+          className="w-full"
+          value={form.isDefault}
+          onChange={(value) => setForm((c) => ({ ...c, isDefault: value }))}
+          options={[
+            { value: "false", label: "No" },
+            { value: "true", label: "Yes" },
+          ]}
+        />
       </Field>
       <div className="grid gap-3 rounded-md border border-border bg-muted/10 p-3 md:col-span-2">
         <div>
@@ -2635,182 +2660,188 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             />
             {tab === "templates" ? (
               <>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Filter by definition"
+                  size="small"
                   value={templateDefinitionFilter}
-                  onChange={(event) => setTemplateDefinitionFilter(event.target.value)}
-                >
-                  <option value="">All definitions</option>
-                  {definitions.map((row, index) => {
-                    const id = definitionId(row)
-                    if (id === null) return null
-                    return (
-                      <option key={`template-definition-filter-${id}-${index}`} value={String(id)}>
-                        {optionLabel(row)}
-                      </option>
-                    )
-                  })}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All definitions"
+                  onChange={(value) => setTemplateDefinitionFilter(value)}
+                  options={[
+                    { value: "", label: "All definitions" },
+                    ...definitions.flatMap((row) => {
+                      const id = definitionId(row)
+                      if (id === null) return []
+                      return [{ value: String(id), label: optionLabel(row) }]
+                    }),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by SMTP"
+                  size="small"
                   value={templateSmtpFilter}
-                  onChange={(event) => setTemplateSmtpFilter(event.target.value)}
-                >
-                  <option value="">All SMTP</option>
-                  {smtpConfigs.map((row, index) => {
-                    const id = smtpConfigId(row)
-                    if (id === null) return null
-                    return (
-                      <option key={`template-smtp-filter-${id}-${index}`} value={String(id)}>
-                        {optionLabel(row)}
-                      </option>
-                    )
-                  })}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All SMTP"
+                  onChange={(value) => setTemplateSmtpFilter(value)}
+                  options={[
+                    { value: "", label: "All SMTP" },
+                    ...smtpConfigs.flatMap((row) => {
+                      const id = smtpConfigId(row)
+                      if (id === null) return []
+                      return [{ value: String(id), label: optionLabel(row) }]
+                    }),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by status"
+                  size="small"
                   value={isActiveFilter}
-                  onChange={(event) => setIsActiveFilter(event.target.value)}
-                >
-                  <option value="">All status</option>
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
+                  placeholder="All status"
+                  onChange={(value) => setIsActiveFilter(value)}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "true", label: "Active" },
+                    { value: "false", label: "Inactive" },
+                  ]}
+                />
               </>
             ) : null}
             {tab === "schedules" ? (
               <>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Filter by template"
+                  size="small"
                   value={scheduleTemplateFilter}
-                  onChange={(event) => setScheduleTemplateFilter(event.target.value)}
-                >
-                  <option value="">All templates</option>
-                  {templates.map((row, index) => {
-                    const id = readNumber(row, ["id"])
-                    if (id === null) return null
-                    return (
-                      <option key={`schedule-template-filter-${id}-${index}`} value={String(id)}>
-                        {optionLabel(row)}
-                      </option>
-                    )
-                  })}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All templates"
+                  onChange={(value) => setScheduleTemplateFilter(value)}
+                  options={[
+                    { value: "", label: "All templates" },
+                    ...templates.flatMap((row) => {
+                      const id = readNumber(row, ["id"])
+                      if (id === null) return []
+                      return [{ value: String(id), label: optionLabel(row) }]
+                    }),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by schedule type"
+                  size="small"
                   value={scheduleTypeFilter}
-                  onChange={(event) => setScheduleTypeFilter(event.target.value)}
-                >
-                  <option value="">All types</option>
-                  {SCHEDULE_TYPES.map((value) => (
-                    <option key={value} value={value}>
-                      {prettify(value)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All types"
+                  onChange={(value) => setScheduleTypeFilter(value)}
+                  options={[
+                    { value: "", label: "All types" },
+                    ...SCHEDULE_TYPES.map((value) => ({ value, label: prettify(value) })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by status"
+                  size="small"
                   value={isActiveFilter}
-                  onChange={(event) => setIsActiveFilter(event.target.value)}
-                >
-                  <option value="">All status</option>
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
+                  placeholder="All status"
+                  onChange={(value) => setIsActiveFilter(value)}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "true", label: "Active" },
+                    { value: "false", label: "Inactive" },
+                  ]}
+                />
               </>
             ) : null}
             {tab === "executions" ? (
               <>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Filter by execution status"
+                  size="small"
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                >
-                  <option value="">All statuses</option>
-                  {EXECUTION_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {prettify(status)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All statuses"
+                  onChange={(value) => setStatusFilter(value)}
+                  options={[
+                    { value: "", label: "All statuses" },
+                    ...EXECUTION_STATUSES.map((status) => ({ value: status, label: prettify(status) })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by template"
+                  size="small"
                   value={executionTemplateFilter}
-                  onChange={(event) => setExecutionTemplateFilter(event.target.value)}
-                >
-                  <option value="">All templates</option>
-                  {templates.map((row, index) => {
-                    const id = readNumber(row, ["id"])
-                    if (id === null) return null
-                    return (
-                      <option key={`execution-template-filter-${id}-${index}`} value={String(id)}>
-                        {optionLabel(row)}
-                      </option>
-                    )
-                  })}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All templates"
+                  onChange={(value) => setExecutionTemplateFilter(value)}
+                  options={[
+                    { value: "", label: "All templates" },
+                    ...templates.flatMap((row) => {
+                      const id = readNumber(row, ["id"])
+                      if (id === null) return []
+                      return [{ value: String(id), label: optionLabel(row) }]
+                    }),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by schedule"
+                  size="small"
                   value={executionScheduleFilter}
-                  onChange={(event) => setExecutionScheduleFilter(event.target.value)}
-                >
-                  <option value="">All schedules</option>
-                  {schedules.map((row, index) => {
-                    const id = readNumber(row, ["id"])
-                    if (id === null) return null
-                    return (
-                      <option key={`execution-schedule-filter-${id}-${index}`} value={String(id)}>
-                        {optionLabel(row)}
-                      </option>
-                    )
-                  })}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All schedules"
+                  onChange={(value) => setExecutionScheduleFilter(value)}
+                  options={[
+                    { value: "", label: "All schedules" },
+                    ...schedules.flatMap((row) => {
+                      const id = readNumber(row, ["id"])
+                      if (id === null) return []
+                      return [{ value: String(id), label: optionLabel(row) }]
+                    }),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by email delivery"
+                  size="small"
                   value={executionEmailFilter}
-                  onChange={(event) => setExecutionEmailFilter(event.target.value)}
-                >
-                  <option value="">All email delivery</option>
-                  {EXECUTION_EMAIL_DELIVERY_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {prettify(status)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All email delivery"
+                  onChange={(value) => setExecutionEmailFilter(value)}
+                  options={[
+                    { value: "", label: "All email delivery" },
+                    ...EXECUTION_EMAIL_DELIVERY_STATUSES.map((status) => ({
+                      value: status,
+                      label: prettify(status),
+                    })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by source"
+                  size="small"
                   value={executionSourceFilter}
-                  onChange={(event) => setExecutionSourceFilter(event.target.value)}
-                >
-                  <option value="">All sources</option>
-                  {EXECUTION_SOURCES.map((source) => (
-                    <option key={source} value={source}>
-                      {prettify(source)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="All sources"
+                  onChange={(value) => setExecutionSourceFilter(value)}
+                  options={[
+                    { value: "", label: "All sources" },
+                    ...EXECUTION_SOURCES.map((source) => ({ value: source, label: prettify(source) })),
+                  ]}
+                />
               </>
             ) : null}
             {tab === "smtp" ? (
               <>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Filter by status"
+                  size="small"
                   value={isActiveFilter}
-                  onChange={(event) => setIsActiveFilter(event.target.value)}
-                >
-                  <option value="">All status</option>
-                  <option value="true">Active</option>
-                  <option value="false">Inactive</option>
-                </select>
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                  placeholder="All status"
+                  onChange={(value) => setIsActiveFilter(value)}
+                  options={[
+                    { value: "", label: "All status" },
+                    { value: "true", label: "Active" },
+                    { value: "false", label: "Inactive" },
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Filter by default state"
+                  size="small"
                   value={smtpDefaultFilter}
-                  onChange={(event) => setSmtpDefaultFilter(event.target.value)}
-                >
-                  <option value="">All default states</option>
-                  <option value="true">Default only</option>
-                  <option value="false">Non-default</option>
-                </select>
+                  placeholder="All default states"
+                  onChange={(value) => setSmtpDefaultFilter(value)}
+                  options={[
+                    { value: "", label: "All default states" },
+                    { value: "true", label: "Default only" },
+                    { value: "false", label: "Non-default" },
+                  ]}
+                />
               </>
             ) : null}
             {canCreate ? (
@@ -2984,19 +3015,15 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               />
             </Field>
             <Field label="Output format" className="md:col-span-2">
-              <select
-                className={selectClass}
+              <FluentSelect
+                ariaLabel="Output format"
+                className="w-full"
                 value={runTemplateForm.outputFormat}
-                onChange={(event) =>
-                  setRunTemplateForm((current) => ({ ...current, outputFormat: event.target.value }))
+                onChange={(value) =>
+                  setRunTemplateForm((current) => ({ ...current, outputFormat: value }))
                 }
-              >
-                {OUTPUT_FORMATS.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
+                options={OUTPUT_FORMATS.map((value) => ({ value, label: value }))}
+              />
             </Field>
           </div>
           <DialogFooter>

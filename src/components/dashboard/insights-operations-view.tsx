@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity"
 import {
   HeroBand,
@@ -972,22 +973,21 @@ export function InsightsOperationsView({
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <label className="space-y-1 sm:col-span-2">
                   <span className="text-xs font-medium text-muted-foreground">Employee</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Employee"
+                    className="w-full"
                     value={previewEmployeeId}
-                    onChange={(event) => setPreviewEmployeeId(event.target.value)}
-                  >
-                    <option value="">Select an employee</option>
-                    {employees.map((row, index) => {
-                      const id = readNumber(row, ["id", "employee_id", "employeeId"])
-                      if (id === null) return null
-                      return (
-                        <option key={`${id}-${index}`} value={String(id)}>
-                          {employeeLabel(row)}
-                        </option>
-                      )
-                    })}
-                  </select>
+                    onChange={setPreviewEmployeeId}
+                    placeholder="Select an employee"
+                    options={[
+                      { value: "", label: "Select an employee" },
+                      ...employees.flatMap((row) => {
+                        const id = readNumber(row, ["id", "employee_id", "employeeId"])
+                        if (id === null) return []
+                        return [{ value: String(id), label: employeeLabel(row) }]
+                      }),
+                    ]}
+                  />
                 </label>
                 <label className="space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">From</span>

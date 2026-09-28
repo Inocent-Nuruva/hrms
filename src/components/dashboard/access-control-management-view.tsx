@@ -21,6 +21,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -618,100 +619,114 @@ function FieldInput({
   onWeekPlanSelected?: (plan: AdminRecord | null) => void
 }) {
   if (field.key === "branch_id") {
+    const emptyLabel = lookupLoading ? "Loading branches..." : "Select branch"
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{lookupLoading ? "Loading branches..." : "Select branch"}</option>
-        {branches.map((branch, index) => {
-          const id = readNumberFromRecord(branch, ["id", "branch_id"])
-          if (id === null) return null
-          return (
-            <option key={`branch-${id}-${index}`} value={String(id)}>
-              {readStringFromRecord(branch, ["name", "title", "display_name"]) ?? `Branch ${id}`}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={emptyLabel}
+        onChange={onChange}
+        options={[
+          { value: "", label: emptyLabel },
+          ...branches.flatMap((branch) => {
+            const id = readNumberFromRecord(branch, ["id", "branch_id"])
+            if (id === null) return []
+            return [{
+              value: String(id),
+              label: readStringFromRecord(branch, ["name", "title", "display_name"]) ?? `Branch ${id}`,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "department_id") {
+    const emptyLabel = lookupLoading ? "Loading departments..." : "Select department"
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{lookupLoading ? "Loading departments..." : "Select department"}</option>
-        {departments.map((department, index) => {
-          const id = readNumberFromRecord(department, ["id", "department_id"])
-          if (id === null) return null
-          return (
-            <option key={`department-${id}-${index}`} value={String(id)}>
-              {readStringFromRecord(department, ["name", "title", "display_name"]) ?? `Department ${id}`}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={emptyLabel}
+        onChange={onChange}
+        options={[
+          { value: "", label: emptyLabel },
+          ...departments.flatMap((department) => {
+            const id = readNumberFromRecord(department, ["id", "department_id"])
+            if (id === null) return []
+            return [{
+              value: String(id),
+              label: readStringFromRecord(department, ["name", "title", "display_name"]) ?? `Department ${id}`,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "device_id") {
+    const emptyLabel = lookupLoading ? "Loading devices..." : "Select device"
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{lookupLoading ? "Loading devices..." : "Select device"}</option>
-        {devices.map((device, index) => {
-          const id = readNumberFromRecord(device, ["id", "device_id"])
-          if (id === null) return null
-          const name =
-            readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
-            `Device ${id}`
-          const code = readStringFromRecord(device, ["device_code", "deviceCode"])
-          return (
-            <option key={`device-${id}-${index}`} value={String(id)}>
-              {code ? `${name} (${code})` : name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={emptyLabel}
+        onChange={onChange}
+        options={[
+          { value: "", label: emptyLabel },
+          ...devices.flatMap((device) => {
+            const id = readNumberFromRecord(device, ["id", "device_id"])
+            if (id === null) return []
+            const name =
+              readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+              `Device ${id}`
+            const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+            return [{
+              value: String(id),
+              label: code ? `${name} (${code})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "parent_id") {
+    const emptyLabel = lookupLoading ? "Loading organizations..." : "Select parent organization"
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{lookupLoading ? "Loading organizations..." : "Select parent organization"}</option>
-        {organizations.map((organization, index) => {
-          const id = readNumberFromRecord(organization, ["id", "organization_id", "organizationId"])
-          if (id === null) return null
-          return (
-            <option key={`organization-${id}-${index}`} value={String(id)}>
-              {readStringFromRecord(organization, ["org_name", "orgName", "name"]) ?? `Organization ${id}`}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={emptyLabel}
+        onChange={onChange}
+        options={[
+          { value: "", label: emptyLabel },
+          ...organizations.flatMap((organization) => {
+            const id = readNumberFromRecord(organization, ["id", "organization_id", "organizationId"])
+            if (id === null) return []
+            return [{
+              value: String(id),
+              label: readStringFromRecord(organization, ["org_name", "orgName", "name"]) ?? `Organization ${id}`,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "week_plan_id") {
+    const emptyLabel = lookupLoading ? "Loading week plans..." : "Select week plan"
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => {
-          const next = event.target.value
+        placeholder={emptyLabel}
+        onChange={(next) => {
           onChange(next)
           if (!onWeekPlanSelected) return
           if (!next.trim()) {
@@ -725,54 +740,56 @@ function FieldInput({
             }) ?? null
           onWeekPlanSelected(selected)
         }}
-      >
-        <option value="">{lookupLoading ? "Loading week plans..." : "Select week plan"}</option>
-        {weekPlans.map((plan, index) => {
-          const id = readNumberFromRecord(plan, ["id", "week_plan_id", "weekPlanId"])
-          if (id === null) return null
-          const hikNo = resolveWeekPlanHikvisionNo(plan)
-          const name =
-            readStringFromRecord(plan, ["name", "plan_name", "planName"]) ??
-            (hikNo ? `Week Plan ${hikNo}` : null) ??
-            `Week Plan ${id}`
-          return (
-            <option key={`week-plan-${id}-${index}`} value={String(id)}>
-              {hikNo ? `${name} (#${hikNo})` : name}
-            </option>
-          )
-        })}
-      </select>
+        options={[
+          { value: "", label: emptyLabel },
+          ...weekPlans.flatMap((plan) => {
+            const id = readNumberFromRecord(plan, ["id", "week_plan_id", "weekPlanId"])
+            if (id === null) return []
+            const hikNo = resolveWeekPlanHikvisionNo(plan)
+            const name =
+              readStringFromRecord(plan, ["name", "plan_name", "planName"]) ??
+              (hikNo ? `Week Plan ${hikNo}` : null) ??
+              `Week Plan ${id}`
+            return [{
+              value: String(id),
+              label: hikNo ? `${name} (#${hikNo})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.type === "select") {
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        {(field.options ?? []).map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
+        placeholder={`Select ${field.label}`}
+        onChange={onChange}
+        options={[
+          { value: "", label: `Select ${field.label}` },
+          ...(field.options ?? []).map((option) => ({ value: option, label: option })),
+        ]}
+      />
     )
   }
 
   if (field.type === "boolean") {
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </select>
+        placeholder={`Select ${field.label}`}
+        onChange={onChange}
+        options={[
+          { value: "", label: `Select ${field.label}` },
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]}
+      />
     )
   }
 
@@ -1537,49 +1554,52 @@ export function AccessControlManagementView({
                 />
                 {activeSection === "templates" ? (
                   <>
-                    <select
-                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                    <FluentSelect
+                      ariaLabel="Filter by status"
+                      size="small"
                       value={templateStatusFilter}
-                      onChange={(event) => setTemplateStatusFilter(event.target.value)}
-                      aria-label="Filter by status"
-                    >
-                      <option value="">All statuses</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                    <select
-                      className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                      placeholder="All statuses"
+                      onChange={setTemplateStatusFilter}
+                      options={[
+                        { value: "", label: "All statuses" },
+                        { value: "ACTIVE", label: "Active" },
+                        { value: "INACTIVE", label: "Inactive" },
+                      ]}
+                    />
+                    <FluentSelect
+                      ariaLabel="Filter by schedule type"
+                      size="small"
                       value={templateTypeFilter}
-                      onChange={(event) => setTemplateTypeFilter(event.target.value)}
-                      aria-label="Filter by schedule type"
-                    >
-                      <option value="">All types</option>
-                      <option value="DOOR">Door</option>
-                      <option value="ATTENDANCE">Attendance</option>
-                      <option value="MIXED">Mixed</option>
-                    </select>
+                      placeholder="All types"
+                      onChange={setTemplateTypeFilter}
+                      options={[
+                        { value: "", label: "All types" },
+                        { value: "DOOR", label: "Door" },
+                        { value: "ATTENDANCE", label: "Attendance" },
+                        { value: "MIXED", label: "Mixed" },
+                      ]}
+                    />
                   </>
                 ) : null}
-                <select
-                  className="h-8 max-w-[10rem] rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Device for sync from"
+                  size="small"
+                  className="max-w-[10rem]"
                   value={syncFromDeviceId}
-                  onChange={(event) => setSyncFromDeviceId(event.target.value)}
-                  aria-label="Device for sync from"
-                >
-                  <option value="">Device to pull…</option>
-                  {devices.map((device, index) => {
-                    const id = readNumberFromRecord(device, ["id", "device_id"])
-                    if (id === null) return null
-                    const name =
-                      readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
-                      `Device ${id}`
-                    return (
-                      <option key={`sync-from-device-${id}-${index}`} value={String(id)}>
-                        {name}
-                      </option>
-                    )
-                  })}
-                </select>
+                  placeholder="Device to pull…"
+                  onChange={setSyncFromDeviceId}
+                  options={[
+                    { value: "", label: "Device to pull…" },
+                    ...devices.flatMap((device) => {
+                      const id = readNumberFromRecord(device, ["id", "device_id"])
+                      if (id === null) return []
+                      const name =
+                        readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+                        `Device ${id}`
+                      return [{ value: String(id), label: name }]
+                    }),
+                  ]}
+                />
                 <button
                   type="button"
                   className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium transition hover:bg-muted disabled:opacity-60"
@@ -1865,26 +1885,25 @@ export function AccessControlManagementView({
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
           <label className="grid gap-1">
             <span className="text-xs font-medium uppercase text-slate-600">Device *</span>
-            <select
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            <FluentSelect
+              ariaLabel="Device"
+              className="w-full"
               value={syncToDeviceId}
-              onChange={(event) => setSyncToDeviceId(event.target.value)}
-            >
-              <option value="">Select device</option>
-              {devices.map((device, index) => {
-                const id = readNumberFromRecord(device, ["id", "device_id"])
-                if (id === null) return null
-                const name =
-                  readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
-                  `Device ${id}`
-                const code = readStringFromRecord(device, ["device_code", "deviceCode"])
-                return (
-                  <option key={`sync-to-device-${id}-${index}`} value={String(id)}>
-                    {code ? `${name} (${code})` : name}
-                  </option>
-                )
-              })}
-            </select>
+              placeholder="Select device"
+              onChange={setSyncToDeviceId}
+              options={[
+                { value: "", label: "Select device" },
+                ...devices.flatMap((device) => {
+                  const id = readNumberFromRecord(device, ["id", "device_id"])
+                  if (id === null) return []
+                  const name =
+                    readStringFromRecord(device, ["device_name", "deviceName", "name"]) ??
+                    `Device ${id}`
+                  const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+                  return [{ value: String(id), label: code ? `${name} (${code})` : name }]
+                }),
+              ]}
+            />
           </label>
           <DialogFooter>
             <button

@@ -2,7 +2,24 @@
 
 import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
-import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { BuildingRegular } from "@fluentui/react-icons"
+import {
+  Avatar,
+  Table,
+  TableBody,
+  TableCell,
+  TableCellLayout,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+  SearchBox,
+  createTableColumn,
+  useTableFeatures,
+  useTableSort,
+  type TableColumnDefinition,
+  type TableColumnId,
+} from "@fluentui/react-components"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
 import { countries as countryCodes } from "country-flag-icons"
@@ -158,6 +175,168 @@ function userLabel(row: AdminRecord) {
   }
   const id = readNumber(row, ["id", "user_id"])
   return id === null ? "Unknown user" : `User #${id}`
+}
+
+type BranchItem = {
+  key: string
+  name: string
+  code: string
+  country: string
+  city: string
+  status: string
+  row: AdminRecord
+}
+
+const branchColumns: TableColumnDefinition<BranchItem>[] = [
+  createTableColumn<BranchItem>({
+    columnId: "name",
+    compare: (a, b) => a.name.localeCompare(b.name),
+  }),
+  createTableColumn<BranchItem>({
+    columnId: "code",
+    compare: (a, b) => a.code.localeCompare(b.code),
+  }),
+  createTableColumn<BranchItem>({
+    columnId: "country",
+    compare: (a, b) => a.country.localeCompare(b.country),
+  }),
+  createTableColumn<BranchItem>({
+    columnId: "city",
+    compare: (a, b) => a.city.localeCompare(b.city),
+  }),
+  createTableColumn<BranchItem>({
+    columnId: "status",
+    compare: (a, b) => a.status.localeCompare(b.status),
+  }),
+]
+
+function BranchDirectoryTable({
+  rows,
+  canUpdate,
+  canDelete,
+  canAccess,
+  saving,
+  onEdit,
+  onAccess,
+  onDelete,
+}: {
+  rows: AdminRecord[]
+  canUpdate: boolean
+  canDelete: boolean
+  canAccess: boolean
+  saving: boolean
+  onEdit: (row: AdminRecord) => void
+  onAccess: (row: AdminRecord) => void
+  onDelete: (row: AdminRecord) => void
+}) {
+  const items = React.useMemo<BranchItem[]>(
+    () =>
+      rows.map((row, index) => ({
+        key: String(readNumber(row, ["id"]) ?? index),
+        name: readString(row, ["name"]),
+        code: readString(row, ["code"]),
+        country: readString(row, ["country"]),
+        city: readString(row, ["city"]),
+        status: readString(row, ["status"]),
+        row,
+      })),
+    [rows],
+  )
+  const {
+    getRows,
+    sort: { getSortDirection, toggleColumnSort, sort },
+  } = useTableFeatures(
+    { columns: branchColumns, items },
+    [useTableSort({ defaultSortState: { sortColumn: "name", sortDirection: "ascending" } })],
+  )
+  const headerSortProps = (columnId: TableColumnId) => ({
+    onClick: (event: React.MouseEvent) => {
+      toggleColumnSort(event, columnId)
+    },
+    sortDirection: getSortDirection(columnId),
+  })
+  const sortedRows = sort(getRows())
+
+  return (
+    <Table sortable aria-label="Branches" style={{ minWidth: "640px" }}>
+      <TableHeader>
+        <TableRow>
+          <TableHeaderCell {...headerSortProps("name")}>Name</TableHeaderCell>
+          <TableHeaderCell {...headerSortProps("code")}>Code</TableHeaderCell>
+          <TableHeaderCell {...headerSortProps("country")}>Country</TableHeaderCell>
+          <TableHeaderCell {...headerSortProps("city")}>City</TableHeaderCell>
+          <TableHeaderCell {...headerSortProps("status")}>Status</TableHeaderCell>
+          <TableHeaderCell>Actions</TableHeaderCell>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {sortedRows.map(({ item }) => (
+          <TableRow key={item.key}>
+            <TableCell>
+              <TableCellLayout media={<BuildingRegular />}>
+                {item.name}
+              </TableCellLayout>
+            </TableCell>
+            <TableCell>{item.code}</TableCell>
+            <TableCell>{item.country}</TableCell>
+            <TableCell>{item.city}</TableCell>
+            <TableCell>
+              <TableCellLayout
+                media={
+                  <Avatar
+                    aria-label={item.status}
+                    name={item.name}
+                    badge={{ status: item.status.toLowerCase() === "active" ? "available" : "offline" }}
+                  />
+                }
+              >
+                {item.status}
+              </TableCellLayout>
+            </TableCell>
+            <TableCell>
+              <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                {canUpdate ? (
+                  <button
+                    type="button"
+                    className="admin-table-icon-button"
+                    onClick={() => onEdit(item.row)}
+                    aria-label="Edit branch"
+                    title="Edit branch"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                ) : null}
+                {canAccess ? (
+                  <button
+                    type="button"
+                    className="admin-table-icon-button"
+                    onClick={() => onAccess(item.row)}
+                    aria-label="Branch access"
+                    title="Branch access"
+                  >
+                    <KeyRound className="size-4" />
+                  </button>
+                ) : null}
+                {canDelete ? (
+                  <button
+                    type="button"
+                    className="admin-table-icon-button"
+                    data-variant="danger"
+                    disabled={saving}
+                    onClick={() => onDelete(item.row)}
+                    aria-label="Delete branch"
+                    title="Delete branch"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
 }
 
 function accessUserName(row: AdminRecord, users: AdminRecord[]) {
@@ -559,105 +738,41 @@ export function BranchesView() {
     },
   ]
 
-  const branchColumns: Column<AdminRecord>[] = [
-    { key: "name", label: "Name", defaultWidth: 110, sortable: true, render: (r) => readString(r, ["name"]) },
-    { key: "code", label: "Code", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["code"]) },
-    { key: "country", label: "Country", defaultWidth: 65, sortable: true, render: (r) => readString(r, ["country"]) },
-    { key: "city", label: "City", defaultWidth: 65, sortable: true, render: (r) => readString(r, ["city"]) },
-    { key: "status", label: "Status", defaultWidth: 55, sortable: true, render: (r) => readString(r, ["status"]) },
-    {
-      key: "actions",
-      label: "Actions",
-      defaultWidth: 70,
-      sortable: false,
-      render: (row) => {
-        const id = readNumber(row, ["id"])
-        return (
-          <div className="flex justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
-            {canUpdateBranches ? (
-              <button
-                type="button"
-                className="admin-table-icon-button"
-                onClick={() => {
-                  fillFormFromRow(row)
-                  setEditingId(id)
-                  setOpenForm(true)
-                }}
-                aria-label="Edit branch"
-                title="Edit branch"
-              >
-                <Pencil className="size-4" />
-              </button>
-            ) : null}
-            {canManageBranchAccess ? (
-              <button
-                type="button"
-                className="admin-table-icon-button"
-                onClick={() => void openBranchAccess(row)}
-                aria-label="Branch access"
-                title="Branch access"
-              >
-                <KeyRound className="size-4" />
-              </button>
-            ) : null}
-            {canDeleteBranches ? (
-              <button
-                type="button"
-                className="admin-table-icon-button"
-                data-variant="danger"
-                disabled={saving}
-                onClick={() => setPendingDelete(row)}
-                aria-label="Delete branch"
-                title="Delete branch"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            ) : null}
-          </div>
-        )
-      },
-    },
-  ]
-
   return (
     <div className="space-y-2">
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-      <ResizableTable
-        title="Branch"
-        data={rows}
-        columns={branchColumns}
-        itemsPerPage={20}
-        loading={loading}
-        storageKey="branches"
-        toolbarStart={
-          <>
-            <SearchToggleField
-              className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
+      <div className="overflow-hidden border border-border bg-background shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-sm font-semibold tracking-tight">Branches</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchBox
+              size="medium"
               placeholder="Search branch"
+              aria-label="Search branches"
               value={query.search}
-              onChange={(value) => {
+              className="!w-64 max-w-full shrink-0"
+              onChange={(_event, data) => {
                 setPage(1)
-                setQuery((previous) => ({ ...previous, search: value }))
+                setQuery((previous) => ({ ...previous, search: data.value }))
               }}
             />
-            <select
-              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
-              value={query.status}
-              onChange={(event) => {
+            <FluentSelect
+              ariaLabel="Filter branch status"
+              size="medium"
+              className="!w-44 shrink-0"
+              value={query.status || "all"}
+              placeholder="All statuses"
+              onChange={(value) => {
                 setPage(1)
-                setQuery((previous) => ({ ...previous, status: event.target.value }))
+                setQuery((previous) => ({ ...previous, status: value === "all" ? "" : value }))
               }}
-              aria-label="Filter branch status"
-            >
-              <option value="">All statuses</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </>
-        }
-        toolbarActions={
-          <>
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "active", label: "active" },
+                { value: "inactive", label: "inactive" },
+              ]}
+            />
             {canCreateBranches ? (
               <button
                 type="button"
@@ -684,9 +799,29 @@ export function BranchesView() {
             >
               <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
             </button>
-          </>
-        }
-      />
+          </div>
+        </div>
+        {loading ? (
+          <p className="px-3 py-6 text-sm text-muted-foreground">Loading branches…</p>
+        ) : rows.length === 0 ? (
+          <p className="px-3 py-6 text-sm text-muted-foreground">No branches found.</p>
+        ) : (
+          <BranchDirectoryTable
+            rows={rows}
+            canUpdate={canUpdateBranches}
+            canDelete={canDeleteBranches}
+            canAccess={canManageBranchAccess}
+            saving={saving}
+            onEdit={(row) => {
+              fillFormFromRow(row)
+              setEditingId(readNumber(row, ["id"]))
+              setOpenForm(true)
+            }}
+            onAccess={(row) => void openBranchAccess(row)}
+            onDelete={setPendingDelete}
+          />
+        )}
+      </div>
 
       {openForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -743,10 +878,15 @@ export function BranchesView() {
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}>
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                </select>
+                <FluentSelect
+                  id="branch-status"
+                  value={form.status}
+                  onChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
+                  options={[
+                    { value: "active", label: "active" },
+                    { value: "inactive", label: "inactive" },
+                  ]}
+                />
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">

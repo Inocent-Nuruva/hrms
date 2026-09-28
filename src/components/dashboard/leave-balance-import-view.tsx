@@ -70,6 +70,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 type LookupOption = { id: number; label: string }
@@ -121,8 +122,6 @@ const TONE_ICONS: Record<ImportTone, React.ComponentType<{ className?: string }>
 
 const BUTTON = "inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
 const PRIMARY_BUTTON = "inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold !text-white disabled:cursor-not-allowed disabled:opacity-60"
-const SELECT = "h-8 rounded-md border border-border bg-background px-2 text-xs"
-
 function readToken(): string | null {
   return readStoredSessionTokens().accessToken ?? null
 }
@@ -687,46 +686,59 @@ export function LeaveBalanceImportView() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="space-y-1 text-xs font-medium">
                     <span>Leave year</span>
-                    <select className={cn(SELECT, "w-full")} value={fiscalYear} onChange={(event) => setFiscalYear(event.target.value)}>
-                      {yearOptions.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Leave year"
+                      size="small"
+                      className="w-full"
+                      value={fiscalYear}
+                      onChange={setFiscalYear}
+                      options={yearOptions.map((year) => ({ value: year, label: year }))}
+                    />
                   </label>
                   <label className="space-y-1 text-xs font-medium">
                     <span>Leave type</span>
-                    <select className={cn(SELECT, "w-full")} value={leaveTypeFilter} onChange={(event) => setLeaveTypeFilter(event.target.value)}>
-                      <option value="">All eligible leave types</option>
-                      {leaveTypes.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Leave type"
+                      size="small"
+                      className="w-full"
+                      value={leaveTypeFilter}
+                      placeholder="All eligible leave types"
+                      onChange={setLeaveTypeFilter}
+                      options={[
+                        { value: "", label: "All eligible leave types" },
+                        ...leaveTypes.map((option) => ({ value: String(option.id), label: option.label })),
+                      ]}
+                    />
                   </label>
                   <label className="space-y-1 text-xs font-medium">
                     <span>Branch</span>
-                    <select className={cn(SELECT, "w-full")} value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)}>
-                      <option value="">All branches</option>
-                      {branches.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Branch"
+                      size="small"
+                      className="w-full"
+                      value={branchFilter}
+                      placeholder="All branches"
+                      onChange={setBranchFilter}
+                      options={[
+                        { value: "", label: "All branches" },
+                        ...branches.map((option) => ({ value: String(option.id), label: option.label })),
+                      ]}
+                    />
                   </label>
                   <label className="space-y-1 text-xs font-medium">
                     <span>Department</span>
-                    <select className={cn(SELECT, "w-full")} value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
-                      <option value="">All departments</option>
-                      {departments.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Department"
+                      size="small"
+                      className="w-full"
+                      value={departmentFilter}
+                      placeholder="All departments"
+                      onChange={setDepartmentFilter}
+                      options={[
+                        { value: "", label: "All departments" },
+                        ...departments.map((option) => ({ value: String(option.id), label: option.label })),
+                      ]}
+                    />
                   </label>
                 </div>
                 <button type="button" className={PRIMARY_BUTTON} disabled={templateBusy} onClick={() => void downloadTemplate()}>
@@ -982,34 +994,43 @@ export function LeaveBalanceImportView() {
                     className="h-8 w-44 rounded-md border border-border bg-background px-2 text-xs"
                   />
                   {facets?.leave_types?.length ? (
-                    <select aria-label="Filter by leave type" className={SELECT} value={rowLeaveType} onChange={(event) => { setRowLeaveType(event.target.value); setRowsPage(1) }}>
-                      <option value="">All leave types</option>
-                      {facets.leave_types.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Filter by leave type"
+                      size="small"
+                      value={rowLeaveType}
+                      placeholder="All leave types"
+                      onChange={(value) => { setRowLeaveType(value); setRowsPage(1) }}
+                      options={[
+                        { value: "", label: "All leave types" },
+                        ...facets.leave_types.map((option) => ({ value: String(option.id), label: option.name })),
+                      ]}
+                    />
                   ) : null}
                   {facets?.branches && facets.branches.length > 1 ? (
-                    <select aria-label="Filter by branch" className={SELECT} value={rowBranch} onChange={(event) => { setRowBranch(event.target.value); setRowsPage(1) }}>
-                      <option value="">All branches</option>
-                      {facets.branches.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Filter by branch"
+                      size="small"
+                      value={rowBranch}
+                      placeholder="All branches"
+                      onChange={(value) => { setRowBranch(value); setRowsPage(1) }}
+                      options={[
+                        { value: "", label: "All branches" },
+                        ...facets.branches.map((option) => ({ value: String(option.id), label: option.name })),
+                      ]}
+                    />
                   ) : null}
                   {facets?.departments && facets.departments.length > 1 ? (
-                    <select aria-label="Filter by department" className={SELECT} value={rowDepartment} onChange={(event) => { setRowDepartment(event.target.value); setRowsPage(1) }}>
-                      <option value="">All departments</option>
-                      {facets.departments.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Filter by department"
+                      size="small"
+                      value={rowDepartment}
+                      placeholder="All departments"
+                      onChange={(value) => { setRowDepartment(value); setRowsPage(1) }}
+                      options={[
+                        { value: "", label: "All departments" },
+                        ...facets.departments.map((option) => ({ value: String(option.id), label: option.name })),
+                      ]}
+                    />
                   ) : null}
                 </>
               }

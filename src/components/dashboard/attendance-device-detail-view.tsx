@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   assignEmployeeDevices,
   captureEmployeeDeviceFingerprint,
@@ -2930,40 +2931,51 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 </div>
                 <label className="grid gap-1">
                   <span className="text-xs font-medium uppercase text-slate-600">Access Group</span>
-                  <select
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                  <FluentSelect
+                    ariaLabel="Access Group"
+                    className="w-full"
+                    placeholder="Select access group"
                     value={selectedAccessGroupId}
-                    onChange={(event) => setSelectedAccessGroupId(event.target.value)}
-                  >
-                    <option value="">Select access group</option>
-                    {accessGroupOptions.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedAccessGroupId}
+                    options={[
+                      { value: "", label: "Select access group" },
+                      ...accessGroupOptions.map((group) => ({
+                        value: group.id,
+                        label: group.label,
+                      })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1">
                   <span className="text-xs font-medium uppercase text-slate-600">Device User</span>
-                  <select
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
-                    value={selectedDeviceUserEmployeeNo}
-                    onChange={(event) => setSelectedDeviceUserEmployeeNo(event.target.value)}
-                    disabled={!selectedEmployeeId || assignDeviceUserLoading}
-                  >
-                    <option value="">
-                      {selectedEmployeeId
+                  <FluentSelect
+                    ariaLabel="Device User"
+                    className="w-full"
+                    placeholder={
+                      selectedEmployeeId
                         ? assignDeviceUserLoading
                           ? "Searching device users..."
                           : "Register as a new device user"
-                        : "Select employee first"}
-                    </option>
-                    {assignDeviceUserMatches.map((match) => (
-                      <option key={match.employeeNo} value={match.employeeNo}>
-                        {match.label} ({match.employeeNo})
-                      </option>
-                    ))}
-                  </select>
+                        : "Select employee first"
+                    }
+                    value={selectedDeviceUserEmployeeNo}
+                    onChange={setSelectedDeviceUserEmployeeNo}
+                    disabled={!selectedEmployeeId || assignDeviceUserLoading}
+                    options={[
+                      {
+                        value: "",
+                        label: selectedEmployeeId
+                          ? assignDeviceUserLoading
+                            ? "Searching device users..."
+                            : "Register as a new device user"
+                          : "Select employee first",
+                      },
+                      ...assignDeviceUserMatches.map((match) => ({
+                        value: match.employeeNo,
+                        label: `${match.label} (${match.employeeNo})`,
+                      })),
+                    ]}
+                  />
                   <span className="text-xs text-slate-500">
                     {selectedDeviceUserEmployeeNo
                       ? assignDeviceUserMatches.find((match) => match.employeeNo === selectedDeviceUserEmployeeNo)
@@ -2977,23 +2989,25 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                 </label>
                 <label className="grid gap-1">
                   <span className="text-xs font-medium uppercase text-slate-600">User Verify Mode</span>
-                  <select
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                  <FluentSelect
+                    ariaLabel="User Verify Mode"
+                    className="w-full"
+                    placeholder="Select verify mode"
                     value={credentialForm.user_verify_mode}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setCredentialForm((current) => ({
                         ...current,
-                        user_verify_mode: event.target.value,
+                        user_verify_mode: value,
                       }))
                     }
-                  >
-                    <option value="">Select verify mode</option>
-                    {USER_VERIFY_MODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Select verify mode" },
+                      ...USER_VERIFY_MODE_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                      })),
+                    ]}
+                  />
                 </label>
               </>
             ) : (
@@ -3040,38 +3054,42 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <label className="grid gap-1">
                         <span className="text-xs font-medium uppercase text-slate-600">Access Group</span>
-                        <select
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                        <FluentSelect
+                          ariaLabel="Access Group"
+                          className="w-full"
+                          placeholder="Select access group"
                           value={selectedAccessGroupId}
-                          onChange={(event) => setSelectedAccessGroupId(event.target.value)}
-                        >
-                          <option value="">Select access group</option>
-                          {accessGroupOptions.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.label}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setSelectedAccessGroupId}
+                          options={[
+                            { value: "", label: "Select access group" },
+                            ...accessGroupOptions.map((group) => ({
+                              value: group.id,
+                              label: group.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <label className="grid gap-1">
                         <span className="text-xs font-medium uppercase text-slate-600">User Verify Mode</span>
-                        <select
-                          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20"
+                        <FluentSelect
+                          ariaLabel="User Verify Mode"
+                          className="w-full"
+                          placeholder="Select verify mode"
                           value={credentialForm.user_verify_mode}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setCredentialForm((current) => ({
                               ...current,
-                              user_verify_mode: event.target.value,
+                              user_verify_mode: value,
                             }))
                           }
-                        >
-                          <option value="">Select verify mode</option>
-                          {USER_VERIFY_MODE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Select verify mode" },
+                            ...USER_VERIFY_MODE_OPTIONS.map((option) => ({
+                              value: option.value,
+                              label: option.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <div className="sm:col-span-2 flex justify-end">
                         <button

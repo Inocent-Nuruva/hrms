@@ -3,6 +3,7 @@ import { Comfortaa } from "next/font/google";
 import App from "@/App";
 import { SessionExpiryGuard } from "@/components/auth/session-expiry-guard";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
 import "@/app/globals.css";
 
 const comfortaa = Comfortaa({
@@ -15,8 +16,10 @@ export default function MyApp(props: AppProps) {
   return (
     <main className={`${comfortaa.variable} ${comfortaa.className}`}>
       <ThemeProvider>
-        <SessionExpiryGuard />
-        <App {...props} />
+        <AppFluentThemeProvider>
+          <SessionExpiryGuard />
+          <App {...props} />
+        </AppFluentThemeProvider>
       </ThemeProvider>
     </main>
   );

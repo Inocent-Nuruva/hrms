@@ -63,6 +63,7 @@ import { readStoredSessionTokens } from "@/lib/session-client"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { decodeJwtPayload } from "@/lib/dashboard-permissions"
 import { Badge } from "@/components/ui/badge"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Sheet,
@@ -2297,45 +2298,49 @@ export function NotificationsView() {
 
             {tab === "inbox" ? (
               <>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Status"
+                  size="small"
                   value={inboxStatusFilter}
-                  onChange={(event) =>
-                    setInboxStatusFilter(event.target.value as InboxStatusFilterValue)
+                  onChange={(value) =>
+                    setInboxStatusFilter(value as InboxStatusFilterValue)
                   }
-                >
-                  <option value="all">All status</option>
-                  <option value="UNREAD">Unread</option>
-                  <option value="READ">Read</option>
-                </select>
-                <select
-                  className={inputClass}
+                  options={[
+                    { value: "all", label: "All status" },
+                    { value: "UNREAD", label: "Unread" },
+                    { value: "READ", label: "Read" },
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Category"
+                  size="small"
                   value={categoryFilter}
-                  onChange={(event) =>
-                    setCategoryFilter(event.target.value as NotificationCategory | "all")
+                  onChange={(value) =>
+                    setCategoryFilter(value as NotificationCategory | "all")
                   }
-                >
-                  <option value="all">All categories</option>
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className={inputClass}
+                  options={[
+                    { value: "all", label: "All categories" },
+                    ...CATEGORY_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Priority"
+                  size="small"
                   value={priorityFilter}
-                  onChange={(event) =>
-                    setPriorityFilter(event.target.value as NotificationPriority | "all")
+                  onChange={(value) =>
+                    setPriorityFilter(value as NotificationPriority | "all")
                   }
-                >
-                  <option value="all">All priorities</option>
-                  {PRIORITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "all", label: "All priorities" },
+                    ...PRIORITY_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    })),
+                  ]}
+                />
                 <label className="inline-flex h-8 items-center gap-2 rounded-lg border border-border bg-background px-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
@@ -2349,99 +2354,105 @@ export function NotificationsView() {
 
             {tab === "deliveries" ? (
               <>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Channel"
+                  size="small"
                   value={channelFilter}
-                  onChange={(event) =>
-                    setChannelFilter(event.target.value as ChannelFilterValue)
+                  onChange={(value) =>
+                    setChannelFilter(value as ChannelFilterValue)
                   }
-                >
-                  <option value="all">All channels</option>
-                  {CHANNEL_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className={inputClass}
+                  options={[
+                    { value: "all", label: "All channels" },
+                    ...CHANNEL_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Delivery status"
+                  size="small"
                   value={deliveryStatusFilter}
-                  onChange={(event) =>
-                    setDeliveryStatusFilter(
-                      event.target.value as DeliveryStatusFilterValue,
-                    )
+                  onChange={(value) =>
+                    setDeliveryStatusFilter(value as DeliveryStatusFilterValue)
                   }
-                >
-                  <option value="all">All statuses</option>
-                  {DELIVERY_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {formatLabel(status)}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "all", label: "All statuses" },
+                    ...DELIVERY_STATUSES.map((status) => ({
+                      value: status,
+                      label: formatLabel(status),
+                    })),
+                  ]}
+                />
               </>
             ) : null}
 
             {tab === "registry" || tab === "platform-registry" ? (
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Channel"
+                size="small"
                 value={channelFilter}
-                onChange={(event) =>
-                  setChannelFilter(event.target.value as ChannelFilterValue)
+                onChange={(value) =>
+                  setChannelFilter(value as ChannelFilterValue)
                 }
-              >
-                <option value="all">All channels</option>
-                {CHANNEL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "all", label: "All channels" },
+                  ...CHANNEL_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  })),
+                ]}
+              />
             ) : null}
 
             {tab === "templates" ? (
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Template status"
+                size="small"
                 value={templateStatusFilter}
-                onChange={(event) =>
-                  setTemplateStatusFilter(event.target.value as TemplateStatusFilterValue)
+                onChange={(value) =>
+                  setTemplateStatusFilter(value as TemplateStatusFilterValue)
                 }
-              >
-                <option value="all">All statuses</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-              </select>
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ]}
+              />
             ) : null}
 
             {tab === "rules" ? (
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Rule status"
+                size="small"
                 value={ruleEnabledFilter}
-                onChange={(event) =>
-                  setRuleEnabledFilter(event.target.value as RuleEnabledFilterValue)
+                onChange={(value) =>
+                  setRuleEnabledFilter(value as RuleEnabledFilterValue)
                 }
-              >
-                <option value="all">All statuses</option>
-                <option value="enabled">Enabled</option>
-                <option value="disabled">Disabled</option>
-              </select>
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "enabled", label: "Enabled" },
+                  { value: "disabled", label: "Disabled" },
+                ]}
+              />
             ) : null}
 
             {tab === "mail-logs" || tab === "platform-mail-logs" ? (
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Mail log status"
+                size="small"
                 value={mailLogStatusFilter}
-                onChange={(event) =>
-                  setMailLogStatusFilter(event.target.value as MailLogStatusFilterValue)
+                onChange={(value) =>
+                  setMailLogStatusFilter(value as MailLogStatusFilterValue)
                 }
-              >
-                <option value="all">All statuses</option>
-                {MAIL_LOG_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {formatLabel(status)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "all", label: "All statuses" },
+                  ...MAIL_LOG_STATUSES.map((status) => ({
+                    value: status,
+                    label: formatLabel(status),
+                  })),
+                ]}
+              />
             ) : null}
 
             <button

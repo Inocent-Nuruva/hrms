@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Switch } from "@heroui/react"
+import { Switch } from "@/components/ui/switch"
 import { ListFilter, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 
 import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
@@ -392,16 +392,12 @@ export function LeaveTypesCatalog({
                   </button>
                   <div className="flex shrink-0 items-center gap-1">
                     {canEdit ? (
-                      <Switch.Root
-                        isSelected={!inactive}
-                        onChange={() => onToggleStatus(item.row)}
+                      <Switch
+                        checked={!inactive}
+                        onCheckedChange={() => onToggleStatus(item.row)}
                         size="sm"
                         aria-label={`${inactive ? "Activate" : "Deactivate"} ${item.name}`}
-                      >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                      </Switch.Root>
+                      />
                     ) : null}
                     {canEdit ? (
                       <button

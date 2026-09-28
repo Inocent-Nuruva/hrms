@@ -23,6 +23,7 @@ import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { TimeClockPicker } from "@/components/ui/time-clock-picker"
 import { Textarea } from "@/components/ui/textarea"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { toast } from "sonner"
 import {
@@ -3824,102 +3825,98 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Employee</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Employee"
+                size="small"
+                className="w-full min-w-0"
                 value={dailySummaryFilters.employee_id}
-                onChange={(event) =>
+                placeholder="All"
+                onChange={(value) =>
                   setDailySummaryFilters((current) => ({
                     ...current,
-                    employee_id: event.target.value,
+                    employee_id: value,
                   }))
                 }
-              >
-                <option value="">All</option>
-                {employees.map((employee, index) => {
-                  const employeeId = readNumberFromRow(employee, [
-                    "id",
-                    "employee_id",
-                    "employeeId",
-                  ])
-                  if (employeeId === null) return null
-                  return (
-                    <option
-                      key={`attendance-employee-${employeeId}-${index}`}
-                      value={String(employeeId)}
-                    >
-                      {getEmployeeOptionLabel(employee)}
-                    </option>
-                  )
-                })}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...employees.flatMap((employee) => {
+                    const employeeId = readNumberFromRow(employee, [
+                      "id",
+                      "employee_id",
+                      "employeeId",
+                    ])
+                    if (employeeId === null) return []
+                    return [{ value: String(employeeId), label: getEmployeeOptionLabel(employee) }]
+                  }),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Branch</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Branch"
+                size="small"
+                className="w-full min-w-0"
                 value={dailySummaryFilters.branch_id}
-                onChange={(event) =>
+                placeholder="All"
+                onChange={(value) =>
                   setDailySummaryFilters((current) => ({
                     ...current,
-                    branch_id: event.target.value,
+                    branch_id: value,
                   }))
                 }
-              >
-                <option value="">All</option>
-                {branches.map((branch, index) => {
-                  const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
-                  if (branchId === null) return null
-                  return (
-                    <option
-                      key={`attendance-branch-${branchId}-${index}`}
-                      value={String(branchId)}
-                    >
-                      {getBranchOptionLabel(branch)}
-                    </option>
-                  )
-                })}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...branches.flatMap((branch) => {
+                    const branchId = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+                    if (branchId === null) return []
+                    return [{ value: String(branchId), label: getBranchOptionLabel(branch) }]
+                  }),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Status</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Status"
+                size="small"
+                className="w-full min-w-0"
                 value={dailySummaryFilters.status}
-                onChange={(event) =>
+                placeholder="All"
+                onChange={(value) =>
                   setDailySummaryFilters((current) => ({
                     ...current,
-                    status: event.target.value,
+                    status: value,
                   }))
                 }
-              >
-                <option value="">All</option>
-                {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {prettifyLabel(status)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...DAILY_SUMMARY_STATUS_OPTIONS.map((status) => ({
+                    value: status,
+                    label: prettifyLabel(status),
+                  })),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Rows</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Number of records to display"
+                size="small"
+                className="w-full min-w-0"
                 value={String(dailySummaryPageSize)}
-                onChange={(event) => {
-                  const next = Number(event.target.value)
+                onChange={(value) => {
+                  const next = Number(value)
                   setDailySummaryPageSize(
                     Number.isFinite(next) && next > 0 ? next : DEFAULT_DAILY_SUMMARY_PAGE_SIZE
                   )
                   setDailySummaryPage(1)
                 }}
-                aria-label="Number of records to display"
-              >
-                {DAILY_SUMMARY_PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+                options={DAILY_SUMMARY_PAGE_SIZE_OPTIONS.map((size) => ({
+                  value: String(size),
+                  label: String(size),
+                }))}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>After</span>
@@ -4063,74 +4060,80 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Employee</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Employee"
+                size="small"
+                className="w-full min-w-0"
                 value={processingExceptionFilters.employee_id}
-                onChange={(event) =>
-                  setProcessingExceptionFilters((current) => ({ ...current, employee_id: event.target.value }))
+                placeholder="All"
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, employee_id: value }))
                 }
-              >
-                <option value="">All</option>
-                {employees.map((employee, index) => {
-                  const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
-                  if (employeeId === null) return null
-                  return (
-                    <option key={`exception-employee-${employeeId}-${index}`} value={String(employeeId)}>
-                      {getEmployeeOptionLabel(employee)}
-                    </option>
-                  )
-                })}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...employees.flatMap((employee) => {
+                    const employeeId = readNumberFromRow(employee, ["id", "employee_id", "employeeId"])
+                    if (employeeId === null) return []
+                    return [{ value: String(employeeId), label: getEmployeeOptionLabel(employee) }]
+                  }),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Status</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Status"
+                size="small"
+                className="w-full min-w-0"
                 value={processingExceptionFilters.status}
-                onChange={(event) =>
-                  setProcessingExceptionFilters((current) => ({ ...current, status: event.target.value }))
+                placeholder="All"
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, status: value }))
                 }
-              >
-                <option value="">All</option>
-                {PROCESSING_EXCEPTION_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {prettifyLabel(status)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...PROCESSING_EXCEPTION_STATUS_OPTIONS.map((status) => ({
+                    value: status,
+                    label: prettifyLabel(status),
+                  })),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Type</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Type"
+                size="small"
+                className="w-full min-w-0"
                 value={processingExceptionFilters.exception_type}
-                onChange={(event) =>
-                  setProcessingExceptionFilters((current) => ({ ...current, exception_type: event.target.value }))
+                placeholder="All"
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, exception_type: value }))
                 }
-              >
-                <option value="">All</option>
-                {PROCESSING_EXCEPTION_TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>
-                    {prettifyLabel(type)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "All" },
+                  ...PROCESSING_EXCEPTION_TYPE_OPTIONS.map((type) => ({
+                    value: type,
+                    label: prettifyLabel(type),
+                  })),
+                ]}
+              />
             </label>
             <label className={dailySummaryFilterLabelClass}>
               <span>Rows</span>
-              <select
-                className={dailySummaryFilterControlClass}
+              <FluentSelect
+                ariaLabel="Rows"
+                size="small"
+                className="w-full min-w-0"
                 value={processingExceptionFilters.limit}
-                onChange={(event) =>
-                  setProcessingExceptionFilters((current) => ({ ...current, limit: event.target.value }))
+                onChange={(value) =>
+                  setProcessingExceptionFilters((current) => ({ ...current, limit: value }))
                 }
-              >
-                {PROCESSING_EXCEPTION_PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={String(size)}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+                options={PROCESSING_EXCEPTION_PAGE_SIZE_OPTIONS.map((size) => ({
+                  value: String(size),
+                  label: String(size),
+                }))}
+              />
             </label>
           </div>
         </div>
@@ -5247,11 +5250,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   </label>
                   <label className="inline-flex h-7 items-center gap-0.5 rounded-md border border-border bg-background px-1 text-[10px] text-muted-foreground">
                     <span className="hidden sm:inline pl-0.5">Rows</span>
-                    <select
-                      className="h-5 max-w-[3.25rem] cursor-pointer rounded border-0 bg-transparent py-0 pl-0.5 pr-0 text-[10px] font-medium text-foreground outline-none"
+                    <FluentSelect
+                      ariaLabel="Number of records to display"
+                      size="small"
+                      className="max-w-[3.25rem]"
                       value={String(dailySummaryPageSize)}
-                      onChange={(event) => {
-                        const next = Number(event.target.value)
+                      onChange={(value) => {
+                        const next = Number(value)
                         setDailySummaryPageSize(
                           Number.isFinite(next) && next > 0
                             ? next
@@ -5259,15 +5264,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         )
                         setDailySummaryPage(1)
                       }}
-                      aria-label="Number of records to display"
-                      title="Records per page"
-                    >
-                      {DAILY_SUMMARY_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
+                      options={DAILY_SUMMARY_PAGE_SIZE_OPTIONS.map((size) => ({
+                        value: String(size),
+                        label: String(size),
+                      }))}
+                    />
                   </label>
                   {dailySummaryFilterPopover}
                   {refreshButton}
@@ -5363,11 +5364,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
                           }))
                         }
                       />
-                      <select
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                      <FluentSelect
+                        ariaLabel="Processing source"
+                        size="small"
+                        className="w-full"
                         value={recalculateValues.processing_source}
-                        onChange={(event) => {
-                          const processing_source = event.target.value
+                        onChange={(processing_source) => {
                           setRecalculateValues((current) => ({
                             ...current,
                             processing_source,
@@ -5380,41 +5382,44 @@ export function AttendanceActivityView({ section }: { section: string }) {
                                   : "summaries_only",
                           }))
                         }}
-                        aria-label="Processing source"
-                      >
-                        <option value="database_only">Database only</option>
-                        <option value="fetch_and_process">Fetch from device &amp; process</option>
-                      </select>
-                      <select
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        options={[
+                          { value: "database_only", label: "Database only" },
+                          { value: "fetch_and_process", label: "Fetch from device & process" },
+                        ]}
+                      />
+                      <FluentSelect
+                        ariaLabel="Refresh mode"
+                        size="small"
+                        className="w-full"
                         value={recalculateValues.mode}
-                        onChange={(event) =>
+                        onChange={(mode) =>
                           setRecalculateValues((current) => ({
                             ...current,
-                            mode: event.target.value,
+                            mode,
                           }))
                         }
-                        aria-label="Refresh mode"
-                      >
-                        <option value="from_raw_logs">From raw logs</option>
-                        <option value="summaries_only">Summaries only</option>
-                      </select>
-                      <select
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
+                        options={[
+                          { value: "from_raw_logs", label: "From raw logs" },
+                          { value: "summaries_only", label: "Summaries only" },
+                        ]}
+                      />
+                      <FluentSelect
+                        ariaLabel="Execution mode"
+                        size="small"
+                        className="w-full"
                         value={recalculateValues.execution_mode}
-                        onChange={(event) => {
-                          const execution_mode = event.target.value
+                        onChange={(execution_mode) => {
                           setRecalculateValues((current) => ({
                             ...current,
                             execution_mode,
                             execution: execution_mode === "immediate" ? "sync" : "async",
                           }))
                         }}
-                        aria-label="Execution mode"
-                      >
-                        <option value="background">Background</option>
-                        <option value="immediate">Immediate</option>
-                      </select>
+                        options={[
+                          { value: "background", label: "Background" },
+                          { value: "immediate", label: "Immediate" },
+                        ]}
+                      />
                       <button
                         type="button"
                         className="inline-flex h-7 w-full items-center justify-center rounded-md bg-primary px-2 text-[11px] font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
@@ -5478,14 +5483,15 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Request type</span>
-                <select
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <FluentSelect
+                  ariaLabel="Request type"
                   value={correctionForm.request_type}
-                  onChange={(event) => setCorrectionForm((current) => ({ ...current, request_type: event.target.value }))}
-                >
-                  <option value="check_in">Check in</option>
-                  <option value="check_out">Check out</option>
-                </select>
+                  onChange={(value) => setCorrectionForm((current) => ({ ...current, request_type: value }))}
+                  options={[
+                    { value: "check_in", label: "Check in" },
+                    { value: "check_out", label: "Check out" },
+                  ]}
+                />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Requested check-in time</span>
@@ -5508,17 +5514,15 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </div>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Requested status</span>
-              <select
-                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+              <FluentSelect
+                ariaLabel="Requested status"
                 value={correctionForm.requested_status}
-                onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_status: event.target.value }))}
-              >
-                {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {prettifyLabel(status)}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setCorrectionForm((current) => ({ ...current, requested_status: value }))}
+                options={DAILY_SUMMARY_STATUS_OPTIONS.map((status) => ({
+                  value: status,
+                  label: prettifyLabel(status),
+                }))}
+              />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Reason</span>
@@ -5596,15 +5600,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
               <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_1fr]">
                 <label className="grid gap-1 text-sm">
                   <span className="font-medium text-slate-700">Status</span>
-                  <select
-                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                  <FluentSelect
+                    ariaLabel="Status"
                     value={exceptionStatus}
-                    onChange={(event) => setExceptionStatus(event.target.value)}
-                  >
-                    <option value="OPEN">Open</option>
-                    <option value="RESOLVED">Resolved</option>
-                    <option value="IGNORED">Ignored</option>
-                  </select>
+                    onChange={setExceptionStatus}
+                    options={[
+                      { value: "OPEN", label: "Open" },
+                      { value: "RESOLVED", label: "Resolved" },
+                      { value: "IGNORED", label: "Ignored" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1 text-sm">
                   <span className="font-medium text-slate-700">Resolution note</span>
@@ -5665,20 +5670,21 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Attendance status</span>
-                <select
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                <FluentSelect
+                  ariaLabel="Attendance status"
+                  placeholder="Keep current"
                   value={adjustmentForm.attendance_status}
-                  onChange={(event) =>
-                    setAdjustmentForm((current) => ({ ...current, attendance_status: event.target.value }))
+                  onChange={(value) =>
+                    setAdjustmentForm((current) => ({ ...current, attendance_status: value }))
                   }
-                >
-                  <option value="">Keep current</option>
-                  {DAILY_SUMMARY_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {prettifyLabel(status)}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "Keep current" },
+                    ...DAILY_SUMMARY_STATUS_OPTIONS.map((status) => ({
+                      value: status,
+                      label: prettifyLabel(status),
+                    })),
+                  ]}
+                />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Break minutes</span>

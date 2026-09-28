@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -1268,24 +1269,22 @@ export function CompaniesView() {
           <div className="mt-4 grid gap-3">
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Platform user</span>
-              <select
-                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+              <FluentSelect
+                ariaLabel="Platform user"
                 value={memberForm.userId}
-                onChange={(event) =>
-                  setMemberForm((previous) => ({ ...previous, userId: event.target.value }))
+                onChange={(value) =>
+                  setMemberForm((previous) => ({ ...previous, userId: value }))
                 }
-              >
-                <option value="">Select user</option>
-                {selectableUsers.map((user) => {
-                  const id = readNumber(user, ["id", "user_id"])
-                  if (id === null) return null
-                  return (
-                    <option key={id} value={String(id)}>
-                      {userOptionLabel(user)}
-                    </option>
-                  )
-                })}
-              </select>
+                placeholder="Select user"
+                options={[
+                  { value: "", label: "Select user" },
+                  ...selectableUsers.flatMap((user) => {
+                    const id = readNumber(user, ["id", "user_id"])
+                    if (id === null) return []
+                    return [{ value: String(id), label: userOptionLabel(user) }]
+                  }),
+                ]}
+              />
             </label>
             <fieldset className="grid gap-1">
               <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">

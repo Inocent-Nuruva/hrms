@@ -737,7 +737,7 @@ export function NotificationCenter({
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
+            onChange={(_event, data) => setSearchInput(data.value)}
             placeholder="Search…"
             className="h-8 w-full rounded-lg border-border bg-muted/30 pl-8 text-xs shadow-none focus-visible:bg-background dark:bg-muted/20"
           />

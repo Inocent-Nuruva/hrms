@@ -14,6 +14,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog";
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared";
 import { Badge } from "@/components/ui/badge";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import {
   assignEmployeePayrollSalary,
   getEmployeePayrollSalary,
@@ -416,20 +417,20 @@ export function PayrollEmployeeSalaryDialog({
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Structure
                   </span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Structure"
+                    className="w-full"
                     value={structureCode}
-                    onChange={(event) =>
-                      void onSelectStructure(event.target.value)
-                    }
-                  >
-                    <option value="">Select structure</option>
-                    {activeStructures.map((row) => (
-                      <option key={str(row, "id")} value={str(row, "code")}>
-                        {str(row, "code")} · {str(row, "name")}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => void onSelectStructure(value)}
+                    placeholder="Select structure"
+                    options={[
+                      { value: "", label: "Select structure" },
+                      ...activeStructures.map((row) => ({
+                        value: str(row, "code"),
+                        label: `${str(row, "code")} · ${str(row, "name")}`,
+                      })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -499,25 +500,26 @@ export function PayrollEmployeeSalaryDialog({
                                   )}
                             </p>
                           </div>
-                          <select
-                            className={inputClass}
+                          <FluentSelect
+                            ariaLabel={`${str(line, "component_name") || code} override`}
+                            className="w-full"
                             value={draft.mode}
-                            onChange={(event) =>
+                            onChange={(value) =>
                               setOverrides((current) => ({
                                 ...current,
                                 [code]: {
-                                  mode: event.target
-                                    .value as OverrideDraft["mode"],
+                                  mode: value as OverrideDraft["mode"],
                                   value: "",
                                 },
                               }))
                             }
-                          >
-                            <option value="default">Use default</option>
-                            <option value="amount">Fixed amount</option>
-                            <option value="rate">% of base</option>
-                            <option value="exclude">Exclude</option>
-                          </select>
+                            options={[
+                              { value: "default", label: "Use default" },
+                              { value: "amount", label: "Fixed amount" },
+                              { value: "rate", label: "% of base" },
+                              { value: "exclude", label: "Exclude" },
+                            ]}
+                          />
                           <input
                             className={cn(
                               inputClass,

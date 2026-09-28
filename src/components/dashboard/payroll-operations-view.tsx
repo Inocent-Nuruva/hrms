@@ -104,6 +104,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { Badge } from "@/components/ui/badge";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
 
@@ -4860,68 +4861,65 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={runForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a period"
+              onChange={(value) =>
                 setRunForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option key={`run-period-${id}-${index}`} value={String(id)}>
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Run type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Run type"
+              className="w-full"
               value={runForm.runType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setRunForm((current) => ({
                   ...current,
-                  runType: event.target.value,
+                  runType: value,
                 }))
               }
-            >
-              {RUN_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={RUN_TYPES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Payroll group">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll group"
+              className="w-full"
               value={runForm.payrollGroupId}
-              onChange={(event) =>
+              placeholder="All eligible employees"
+              onChange={(value) =>
                 setRunForm((current) => ({
                   ...current,
-                  payrollGroupId: event.target.value,
+                  payrollGroupId: value,
                 }))
               }
-            >
-              <option value="">All eligible employees</option>
-              {groups.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option key={`run-group-${id}-${index}`} value={String(id)}>
-                    {optionLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "All eligible employees" },
+                ...groups.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: optionLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Parent run ID">
             <input
@@ -4957,30 +4955,26 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={inputForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a period"
+              onChange={(value) =>
                 setInputForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`input-period-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Employee ID">
             <input
@@ -5069,22 +5063,21 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Status">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Status"
+              className="w-full"
               value={inputForm.status}
-              onChange={(event) =>
+              onChange={(value) =>
                 setInputForm((current) => ({
                   ...current,
-                  status: event.target.value,
+                  status: value,
                 }))
               }
-            >
-              {INPUT_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={INPUT_STATUSES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Source module">
             <input
@@ -5120,48 +5113,45 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={advancedForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a period"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`source-period-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Source type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Source type"
+              className="w-full"
               value={advancedForm.sourceType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  sourceType: event.target.value,
+                  sourceType: value,
                 }))
               }
-            >
-              {["SALES", "KPI", "PERFORMANCE", "COMMISSION"].map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={["SALES", "KPI", "PERFORMANCE", "COMMISSION"].map(
+                (value) => ({
+                  value,
+                  label: prettify(value),
+                }),
+              )}
+            />
           </Field>
           <Field label="Employee ID">
             <input
@@ -5287,30 +5277,26 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={advancedForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a period"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`source-import-period-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Provider">
             <input
@@ -5326,22 +5312,23 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Source type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Source type"
+              className="w-full"
               value={advancedForm.sourceType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  sourceType: event.target.value,
+                  sourceType: value,
                 }))
               }
-            >
-              {["SALES", "COMMISSION", "KPI", "PERFORMANCE"].map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={["SALES", "COMMISSION", "KPI", "PERFORMANCE"].map(
+                (value) => ({
+                  value,
+                  label: prettify(value),
+                }),
+              )}
+            />
           </Field>
           <Field label="Default component">
             <input
@@ -5370,34 +5357,38 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Approval">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Approval"
+              className="w-full"
               value={advancedForm.autoApprove}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  autoApprove: event.target.value,
+                  autoApprove: value,
                 }))
               }
-            >
-              <option value="true">Auto approve</option>
-              <option value="false">Keep draft</option>
-            </select>
+              options={[
+                { value: "true", label: "Auto approve" },
+                { value: "false", label: "Keep draft" },
+              ]}
+            />
           </Field>
           <Field label="Posting">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Posting"
+              className="w-full"
               value={advancedForm.autoPost}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  autoPost: event.target.value,
+                  autoPost: value,
                 }))
               }
-            >
-              <option value="false">Do not post yet</option>
-              <option value="true">Post to payroll inputs</option>
-            </select>
+              options={[
+                { value: "false", label: "Do not post yet" },
+                { value: "true", label: "Post to payroll inputs" },
+              ]}
+            />
           </Field>
           <div className="md:col-span-2">
             <Field label="CSV or TSV rows">
@@ -5424,45 +5415,43 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={advancedForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a payroll period"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a payroll period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`generate-source-period-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a payroll period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Source type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Source type"
+              className="w-full"
               value={advancedForm.sourceType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  sourceType: event.target.value,
+                  sourceType: value,
                 }))
               }
-            >
-              <option value="KPI">KPI</option>
-              <option value="PERFORMANCE">Performance</option>
-            </select>
+              options={[
+                { value: "KPI", label: "KPI" },
+                { value: "PERFORMANCE", label: "Performance" },
+              ]}
+            />
           </Field>
           <Field label="Performance period ID">
             <input
@@ -5570,34 +5559,38 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Auto approve">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Auto approve"
+              className="w-full"
               value={advancedForm.autoApprove}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  autoApprove: event.target.value,
+                  autoApprove: value,
                 }))
               }
-            >
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
+              options={[
+                { value: "true", label: "Yes" },
+                { value: "false", label: "No" },
+              ]}
+            />
           </Field>
           <Field label="Replace draft/rejected">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Replace draft/rejected"
+              className="w-full"
               value={advancedForm.replaceExisting}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  replaceExisting: event.target.value,
+                  replaceExisting: value,
                 }))
               }
-            >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
+              options={[
+                { value: "false", label: "No" },
+                { value: "true", label: "Yes" },
+              ]}
+            />
           </Field>
         </div>
       );
@@ -5607,30 +5600,26 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll period">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll period"
+              className="w-full"
               value={advancedForm.payrollPeriodId}
-              onChange={(event) =>
+              placeholder="Select a period"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollPeriodId: event.target.value,
+                  payrollPeriodId: value,
                 }))
               }
-            >
-              <option value="">Select a period</option>
-              {periods.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`adjustment-period-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {readPeriodLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a period" },
+                ...periods.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: readPeriodLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Employee ID">
             <input
@@ -5671,23 +5660,25 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Adjustment type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Adjustment type"
+              className="w-full"
               value={advancedForm.adjustmentType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  adjustmentType: event.target.value,
+                  adjustmentType: value,
                 }))
               }
-            >
-              <option value="ADJUSTMENT">Adjustment</option>
-              <option value="ARREARS">Arrears</option>
-              <option value="RETROACTIVE_SALARY">Retroactive salary</option>
-              <option value="CORRECTION">Correction</option>
-              <option value="BONUS">Bonus</option>
-              <option value="COMMISSION">Commission</option>
-            </select>
+              options={[
+                { value: "ADJUSTMENT", label: "Adjustment" },
+                { value: "ARREARS", label: "Arrears" },
+                { value: "RETROACTIVE_SALARY", label: "Retroactive salary" },
+                { value: "CORRECTION", label: "Correction" },
+                { value: "BONUS", label: "Bonus" },
+                { value: "COMMISSION", label: "Commission" },
+              ]}
+            />
           </Field>
           <Field label="Effective period code">
             <input
@@ -5747,50 +5738,47 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Frequency">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Frequency"
+              className="w-full"
               value={advancedForm.frequency}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  frequency: event.target.value,
+                  frequency: value,
                 }))
               }
-            >
-              {PAY_FREQUENCIES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-              <option value="CASUAL">Casual</option>
-              <option value="DAILY">Daily</option>
-            </select>
+              options={[
+                ...PAY_FREQUENCIES.map((value) => ({
+                  value,
+                  label: prettify(value),
+                })),
+                { value: "CASUAL", label: "Casual" },
+                { value: "DAILY", label: "Daily" },
+              ]}
+            />
           </Field>
           <Field label="Calendar">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Calendar"
+              className="w-full"
               value={advancedForm.payrollCalendarId}
-              onChange={(event) =>
+              placeholder="Optional"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollCalendarId: event.target.value,
+                  payrollCalendarId: value,
                 }))
               }
-            >
-              <option value="">Optional</option>
-              {calendars.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`group-calendar-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {optionLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Optional" },
+                ...calendars.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: optionLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Branch ID">
             <input
@@ -6006,21 +5994,23 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Scheme type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Scheme type"
+              className="w-full"
               value={advancedForm.schemeType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  schemeType: event.target.value,
+                  schemeType: value,
                 }))
               }
-            >
-              <option value="BONUS">Bonus</option>
-              <option value="COMMISSION">Commission</option>
-              <option value="INCENTIVE">Incentive</option>
-              <option value="THIRTEENTH_MONTH">Thirteenth month</option>
-            </select>
+              options={[
+                { value: "BONUS", label: "Bonus" },
+                { value: "COMMISSION", label: "Commission" },
+                { value: "INCENTIVE", label: "Incentive" },
+                { value: "THIRTEENTH_MONTH", label: "Thirteenth month" },
+              ]}
+            />
           </Field>
           <Field label="Payroll component">
             <input
@@ -6036,24 +6026,25 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Calculation method">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Calculation method"
+              className="w-full"
               value={advancedForm.calculationMethod}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  calculationMethod: event.target.value,
+                  calculationMethod: value,
                 }))
               }
-            >
-              {CALCULATION_METHODS.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-              <option value="PERCENTAGE_OF_SALES">Percentage of sales</option>
-              <option value="FORMULA">Formula</option>
-            </select>
+              options={[
+                ...CALCULATION_METHODS.map((value) => ({
+                  value,
+                  label: prettify(value),
+                })),
+                { value: "PERCENTAGE_OF_SALES", label: "Percentage of sales" },
+                { value: "FORMULA", label: "Formula" },
+              ]}
+            />
           </Field>
           <Field label="Default amount">
             <input
@@ -6168,23 +6159,25 @@ export function PayrollOperationsView() {
           </FormSection>
           <FormSection title="Payment">
             <Field label="Payment method">
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Payment method"
+                className="w-full"
                 value={profileForm.paymentMethod}
-                onChange={(event) =>
+                placeholder="Select method"
+                onChange={(value) =>
                   setProfileForm((current) => ({
                     ...current,
-                    paymentMethod: event.target.value,
+                    paymentMethod: value,
                   }))
                 }
-              >
-                <option value="">Select method</option>
-                {PAYMENT_METHODS.map((value) => (
-                  <option key={value} value={value}>
-                    {prettify(value)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "Select method" },
+                  ...PAYMENT_METHODS.map((value) => ({
+                    value,
+                    label: prettify(value),
+                  })),
+                ]}
+              />
             </Field>
             <Field label="Primary bank account ID">
               <input
@@ -6211,22 +6204,21 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Pay frequency">
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Pay frequency"
+                className="w-full"
                 value={profileForm.payFrequency}
-                onChange={(event) =>
+                onChange={(value) =>
                   setProfileForm((current) => ({
                     ...current,
-                    payFrequency: event.target.value,
+                    payFrequency: value,
                   }))
                 }
-              >
-                {PAY_FREQUENCIES.map((value) => (
-                  <option key={value} value={value}>
-                    {prettify(value)}
-                  </option>
-                ))}
-              </select>
+                options={PAY_FREQUENCIES.map((value) => ({
+                  value,
+                  label: prettify(value),
+                }))}
+              />
             </Field>
           </FormSection>
           <FormSection title="Tax and statutory">
@@ -6317,34 +6309,38 @@ export function PayrollOperationsView() {
           </FormSection>
           <FormSection title="Processing">
             <Field label="Payroll enabled">
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Payroll enabled"
+                className="w-full"
                 value={profileForm.payrollEnabled}
-                onChange={(event) =>
+                onChange={(value) =>
                   setProfileForm((current) => ({
                     ...current,
-                    payrollEnabled: event.target.value,
+                    payrollEnabled: value,
                   }))
                 }
-              >
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
+                options={[
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ]}
+              />
             </Field>
             <Field label="Payroll hold">
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Payroll hold"
+                className="w-full"
                 value={profileForm.payrollHold}
-                onChange={(event) =>
+                onChange={(value) =>
                   setProfileForm((current) => ({
                     ...current,
-                    payrollHold: event.target.value,
+                    payrollHold: value,
                   }))
                 }
-              >
-                <option value="false">No</option>
-                <option value="true">Yes</option>
-              </select>
+                options={[
+                  { value: "false", label: "No" },
+                  { value: "true", label: "Yes" },
+                ]}
+              />
             </Field>
             <Field label="Hold reason" className="md:col-span-2">
               <textarea
@@ -6367,30 +6363,26 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-3">
           <Field label="Payroll calendar">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll calendar"
+              className="w-full"
               value={periodForm.payrollCalendarId}
-              onChange={(event) =>
+              placeholder="Select a calendar"
+              onChange={(value) =>
                 setPeriodForm((current) => ({
                   ...current,
-                  payrollCalendarId: event.target.value,
+                  payrollCalendarId: value,
                 }))
               }
-            >
-              <option value="">Select a calendar</option>
-              {calendars.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`calendar-option-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {optionLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a calendar" },
+                ...calendars.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: optionLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Year">
             <input
@@ -6448,76 +6440,72 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Component type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Component type"
+              className="w-full"
               value={componentForm.componentType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setComponentForm((current) => ({
                   ...current,
-                  componentType: event.target.value,
+                  componentType: value,
                 }))
               }
-            >
-              {COMPONENT_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={COMPONENT_TYPES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Frequency">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Frequency"
+              className="w-full"
               value={componentForm.frequency}
-              onChange={(event) =>
+              onChange={(value) =>
                 setComponentForm((current) => ({
                   ...current,
-                  frequency: event.target.value,
+                  frequency: value,
                 }))
               }
-            >
-              {FREQUENCIES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={FREQUENCIES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Calculation method">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Calculation method"
+              className="w-full"
               value={componentForm.calculationMethod}
-              onChange={(event) =>
+              onChange={(value) =>
                 setComponentForm((current) => ({
                   ...current,
-                  calculationMethod: event.target.value,
+                  calculationMethod: value,
                 }))
               }
-            >
-              {CALCULATION_METHODS.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={CALCULATION_METHODS.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Tax treatment">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Tax treatment"
+              className="w-full"
               value={componentForm.taxTreatment}
-              onChange={(event) =>
+              onChange={(value) =>
                 setComponentForm((current) => ({
                   ...current,
-                  taxTreatment: event.target.value,
+                  taxTreatment: value,
                 }))
               }
-            >
-              {TAX_TREATMENTS.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={TAX_TREATMENTS.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Taxable percentage">
             <input
@@ -6553,21 +6541,23 @@ export function PayrollOperationsView() {
             ["allowManualInput", "Allow manual input"],
           ].map(([key, label]) => (
             <Field key={key} label={label}>
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel={label}
+                className="w-full"
                 value={
                   componentForm[key as keyof typeof componentForm] as string
                 }
-                onChange={(event) =>
+                onChange={(value) =>
                   setComponentForm((current) => ({
                     ...current,
-                    [key]: event.target.value,
+                    [key]: value,
                   }))
                 }
-              >
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
+                options={[
+                  { value: "true", label: "Yes" },
+                  { value: "false", label: "No" },
+                ]}
+              />
             </Field>
           ))}
         </div>
@@ -6650,19 +6640,21 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Default calendar">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Default calendar"
+              className="w-full"
               value={calendarForm.isDefault}
-              onChange={(event) =>
+              onChange={(value) =>
                 setCalendarForm((current) => ({
                   ...current,
-                  isDefault: event.target.value,
+                  isDefault: value,
                 }))
               }
-            >
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
+              options={[
+                { value: "false", label: "No" },
+                { value: "true", label: "Yes" },
+              ]}
+            />
           </Field>
         </div>
       );
@@ -6790,35 +6782,31 @@ export function PayrollOperationsView() {
                 className="grid gap-3 rounded-lg border border-border/70 bg-background p-3 md:grid-cols-4"
               >
                 <Field label="Component">
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Component"
+                    className="w-full"
                     value={line.componentId}
-                    onChange={(event) =>
+                    placeholder="Select a component"
+                    onChange={(value) =>
                       setStructureForm((current) => ({
                         ...current,
                         components: current.components.map(
                           (entry, entryIndex) =>
                             entryIndex === index
-                              ? { ...entry, componentId: event.target.value }
+                              ? { ...entry, componentId: value }
                               : entry,
                         ),
                       }))
                     }
-                  >
-                    <option value="">Select a component</option>
-                    {components.map((row, rowIndex) => {
-                      const id = readNumber(row, ["id"]);
-                      if (id === null) return null;
-                      return (
-                        <option
-                          key={`structure-component-${id}-${rowIndex}`}
-                          value={String(id)}
-                        >
-                          {optionLabel(row)}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    options={[
+                      { value: "", label: "Select a component" },
+                      ...components.flatMap((row) => {
+                        const id = readNumber(row, ["id"]);
+                        if (id === null) return [];
+                        return [{ value: String(id), label: optionLabel(row) }];
+                      }),
+                    ]}
+                  />
                 </Field>
                 <Field label="Default amount">
                   <input
@@ -6927,22 +6915,21 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Scheme type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Scheme type"
+              className="w-full"
               value={schemeForm.schemeType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setSchemeForm((current) => ({
                   ...current,
-                  schemeType: event.target.value,
+                  schemeType: value,
                 }))
               }
-            >
-              {SCHEME_TYPES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={SCHEME_TYPES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Jurisdiction">
             <input
@@ -6988,48 +6975,43 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Frequency">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Frequency"
+              className="w-full"
               value={advancedForm.frequency}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  frequency: event.target.value,
+                  frequency: value,
                 }))
               }
-            >
-              {PAY_FREQUENCIES.map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={PAY_FREQUENCIES.map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Payroll calendar">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll calendar"
+              className="w-full"
               value={advancedForm.payrollCalendarId}
-              onChange={(event) =>
+              placeholder="Optional"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollCalendarId: event.target.value,
+                  payrollCalendarId: value,
                 }))
               }
-            >
-              <option value="">Optional</option>
-              {calendars.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`group-calendar-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {optionLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Optional" },
+                ...calendars.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: optionLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Branch ID">
             <input
@@ -7103,30 +7085,26 @@ export function PayrollOperationsView() {
       return (
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Payroll group">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Payroll group"
+              className="w-full"
               value={advancedForm.payrollGroupId}
-              onChange={(event) =>
+              placeholder="Select a group"
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  payrollGroupId: event.target.value,
+                  payrollGroupId: value,
                 }))
               }
-            >
-              <option value="">Select a group</option>
-              {groups.map((row, index) => {
-                const id = readNumber(row, ["id"]);
-                if (id === null) return null;
-                return (
-                  <option
-                    key={`assignment-group-${id}-${index}`}
-                    value={String(id)}
-                  >
-                    {optionLabel(row)}
-                  </option>
-                );
-              })}
-            </select>
+              options={[
+                { value: "", label: "Select a group" },
+                ...groups.flatMap((row) => {
+                  const id = readNumber(row, ["id"]);
+                  if (id === null) return [];
+                  return [{ value: String(id), label: optionLabel(row) }];
+                }),
+              ]}
+            />
           </Field>
           <Field label="Employee ID">
             <input
@@ -7316,22 +7294,23 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Scheme type">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Scheme type"
+              className="w-full"
               value={advancedForm.schemeType}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  schemeType: event.target.value,
+                  schemeType: value,
                 }))
               }
-            >
-              {["BONUS", "COMMISSION", "KPI", "PERFORMANCE"].map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              options={["BONUS", "COMMISSION", "KPI", "PERFORMANCE"].map(
+                (value) => ({
+                  value,
+                  label: prettify(value),
+                }),
+              )}
+            />
           </Field>
           <Field label="Component code">
             <input
@@ -7347,27 +7326,26 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Calculation method">
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Calculation method"
+              className="w-full"
               value={advancedForm.calculationMethod}
-              onChange={(event) =>
+              onChange={(value) =>
                 setAdvancedForm((current) => ({
                   ...current,
-                  calculationMethod: event.target.value,
+                  calculationMethod: value,
                 }))
               }
-            >
-              {[
+              options={[
                 "FIXED_AMOUNT",
                 "PERCENTAGE_OF_BASE",
                 "PERCENTAGE_OF_SALES",
                 "FORMULA",
-              ].map((value) => (
-                <option key={value} value={value}>
-                  {prettify(value)}
-                </option>
-              ))}
-            </select>
+              ].map((value) => ({
+                value,
+                label: prettify(value),
+              }))}
+            />
           </Field>
           <Field label="Default amount">
             <input
@@ -8124,34 +8102,40 @@ export function PayrollOperationsView() {
                     Compare two payroll runs.
                   </p>
                 </div>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Primary run"
+                  className="w-full"
                   value={varianceRunId}
-                  onChange={(event) => setVarianceRunId(event.target.value)}
-                >
-                  <option value="">Primary run</option>
-                  {recentRuns.map((row) => (
-                    <option key={rowId(row)} value={rowId(row)}>
-                      {readPeriodLabel(row) !== "-"
-                        ? readPeriodLabel(row)
-                        : `Run #${rowId(row)}`}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className={inputClass}
+                  placeholder="Primary run"
+                  onChange={setVarianceRunId}
+                  options={[
+                    { value: "", label: "Primary run" },
+                    ...recentRuns.map((row) => ({
+                      value: rowId(row),
+                      label:
+                        readPeriodLabel(row) !== "-"
+                          ? readPeriodLabel(row)
+                          : `Run #${rowId(row)}`,
+                    })),
+                  ]}
+                />
+                <FluentSelect
+                  ariaLabel="Comparison run"
+                  className="w-full"
                   value={comparisonRunId}
-                  onChange={(event) => setComparisonRunId(event.target.value)}
-                >
-                  <option value="">Comparison run</option>
-                  {recentRuns.map((row) => (
-                    <option key={`cmp-${rowId(row)}`} value={rowId(row)}>
-                      {readPeriodLabel(row) !== "-"
-                        ? readPeriodLabel(row)
-                        : `Run #${rowId(row)}`}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Comparison run"
+                  onChange={setComparisonRunId}
+                  options={[
+                    { value: "", label: "Comparison run" },
+                    ...recentRuns.map((row) => ({
+                      value: rowId(row),
+                      label:
+                        readPeriodLabel(row) !== "-"
+                          ? readPeriodLabel(row)
+                          : `Run #${rowId(row)}`,
+                    })),
+                  ]}
+                />
                 <button
                   type="button"
                   className={primaryButtonClass}
@@ -8175,25 +8159,24 @@ export function PayrollOperationsView() {
                     Calculate one offboarding request.
                   </p>
                 </div>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Offboarding request"
+                  className="w-full"
                   value={settlementRequestId}
-                  onChange={(event) =>
-                    setSettlementRequestId(event.target.value)
-                  }
-                >
-                  <option value="">Offboarding request</option>
-                  {offboardingRequests.map((row) => (
-                    <option key={rowId(row)} value={rowId(row)}>
-                      #{rowId(row)}{" "}
-                      {readString(
+                  placeholder="Offboarding request"
+                  onChange={setSettlementRequestId}
+                  options={[
+                    { value: "", label: "Offboarding request" },
+                    ...offboardingRequests.map((row) => ({
+                      value: rowId(row),
+                      label: `#${rowId(row)} ${readString(
                         row,
                         ["employeeName", "employee_name", "status"],
                         "",
-                      )}
-                    </option>
-                  ))}
-                </select>
+                      )}`,
+                    })),
+                  ]}
+                />
                 <button
                   type="button"
                   className={primaryButtonClass}
@@ -8326,54 +8309,58 @@ export function PayrollOperationsView() {
           <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
             <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto_auto] lg:items-end">
               <Field label="Report">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Report"
+                  className="w-full"
                   value={advancedForm.reportCode}
-                  onChange={(event) =>
+                  placeholder="Select report"
+                  onChange={(value) =>
                     setAdvancedForm((current) => ({
                       ...current,
-                      reportCode: event.target.value,
+                      reportCode: value,
                     }))
                   }
-                >
-                  <option value="">Select report</option>
-                  {(reportCatalog.length > 0
-                    ? reportCatalog
-                    : PAYROLL_REPORT_CODES.map((code) => ({ code }))
-                  ).map((row, index) => {
-                    const code = readString(row, ["code"], "");
-                    if (!code) return null;
-                    return (
-                      <option
-                        key={`payroll-report-${code}-${index}`}
-                        value={code}
-                      >
-                        {readString(row, ["name"], prettify(code))}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Select report" },
+                    ...(reportCatalog.length > 0
+                      ? reportCatalog
+                      : PAYROLL_REPORT_CODES.map((code) => ({ code }))
+                    ).flatMap((row) => {
+                      const code = readString(row, ["code"], "");
+                      if (!code) return [];
+                      return [
+                        {
+                          value: code,
+                          label: readString(row, ["name"], prettify(code)),
+                        },
+                      ];
+                    }),
+                  ]}
+                />
               </Field>
               <Field label="Run">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Run"
+                  className="w-full"
                   value={advancedForm.reportRunId}
-                  onChange={(event) =>
+                  placeholder="Any recent run"
+                  onChange={(value) =>
                     setAdvancedForm((current) => ({
                       ...current,
-                      reportRunId: event.target.value,
+                      reportRunId: value,
                     }))
                   }
-                >
-                  <option value="">Any recent run</option>
-                  {recentRuns.map((row) => (
-                    <option key={`report-run-${rowId(row)}`} value={rowId(row)}>
-                      {readPeriodLabel(row) !== "-"
-                        ? readPeriodLabel(row)
-                        : `Run #${rowId(row)}`}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "Any recent run" },
+                    ...recentRuns.map((row) => ({
+                      value: rowId(row),
+                      label:
+                        readPeriodLabel(row) !== "-"
+                          ? readPeriodLabel(row)
+                          : `Run #${rowId(row)}`,
+                    })),
+                  ]}
+                />
               </Field>
               <Field label="Year">
                 <input
@@ -8433,28 +8420,28 @@ export function PayrollOperationsView() {
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Bank import run">
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Bank import run"
+                    className="w-full"
                     value={advancedForm.bankImportRunId}
-                    onChange={(event) =>
+                    placeholder="Select run"
+                    onChange={(value) =>
                       setAdvancedForm((current) => ({
                         ...current,
-                        bankImportRunId: event.target.value,
+                        bankImportRunId: value,
                       }))
                     }
-                  >
-                    <option value="">Select run</option>
-                    {recentRuns.map((row) => (
-                      <option
-                        key={`bank-import-run-${rowId(row)}`}
-                        value={rowId(row)}
-                      >
-                        {readPeriodLabel(row) !== "-"
-                          ? readPeriodLabel(row)
-                          : `Run #${rowId(row)}`}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Select run" },
+                      ...recentRuns.map((row) => ({
+                        value: rowId(row),
+                        label:
+                          readPeriodLabel(row) !== "-"
+                            ? readPeriodLabel(row)
+                            : `Run #${rowId(row)}`,
+                      })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Bank batch ID">
                   <input
@@ -8567,19 +8554,21 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Format">
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Format"
+                    className="w-full"
                     value={advancedForm.exportFormat}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setAdvancedForm((current) => ({
                         ...current,
-                        exportFormat: event.target.value,
+                        exportFormat: value,
                       }))
                     }
-                  >
-                    <option value="csv">CSV</option>
-                    <option value="json">JSON</option>
-                  </select>
+                    options={[
+                      { value: "csv", label: "CSV" },
+                      { value: "json", label: "JSON" },
+                    ]}
+                  />
                 </Field>
                 <div className="flex flex-wrap gap-2 md:col-span-2">
                   <button
@@ -9124,25 +9113,20 @@ export function PayrollOperationsView() {
                 onChange={setSearch}
               />
               {["runs", "inputs", "sources", "profiles"].includes(tab) ? (
-                <select
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
+                <FluentSelect
+                  ariaLabel="Payroll period"
                   value={periodFilter}
-                  onChange={(event) => setPeriodFilter(event.target.value)}
-                >
-                  <option value="">All periods</option>
-                  {periods.map((row, index) => {
-                    const id = readNumber(row, ["id"]);
-                    if (id === null) return null;
-                    return (
-                      <option
-                        key={`period-filter-${id}-${index}`}
-                        value={String(id)}
-                      >
-                        {readPeriodLabel(row)}
-                      </option>
-                    );
-                  })}
-                </select>
+                  placeholder="All periods"
+                  onChange={setPeriodFilter}
+                  options={[
+                    { value: "", label: "All periods" },
+                    ...periods.flatMap((row) => {
+                      const id = readNumber(row, ["id"]);
+                      if (id === null) return [];
+                      return [{ value: String(id), label: readPeriodLabel(row) }];
+                    }),
+                  ]}
+                />
               ) : null}
               {[
                 "runs",
@@ -9518,30 +9502,26 @@ export function PayrollOperationsView() {
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Scheme">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Scheme"
+                  className="w-full"
                   value={ruleForm.schemeId}
-                  onChange={(event) =>
+                  placeholder="Select a scheme"
+                  onChange={(value) =>
                     setRuleForm((current) => ({
                       ...current,
-                      schemeId: event.target.value,
+                      schemeId: value,
                     }))
                   }
-                >
-                  <option value="">Select a scheme</option>
-                  {schemes.map((row, index) => {
-                    const id = readNumber(row, ["id"]);
-                    if (id === null) return null;
-                    return (
-                      <option
-                        key={`scheme-rule-${id}-${index}`}
-                        value={String(id)}
-                      >
-                        {optionLabel(row)}
-                      </option>
-                    );
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Select a scheme" },
+                    ...schemes.flatMap((row) => {
+                      const id = readNumber(row, ["id"]);
+                      if (id === null) return [];
+                      return [{ value: String(id), label: optionLabel(row) }];
+                    }),
+                  ]}
+                />
               </Field>
               <Field label="Version number">
                 <input
@@ -9556,22 +9536,21 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Calculation method">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Calculation method"
+                  className="w-full"
                   value={ruleForm.calculationMethod}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setRuleForm((current) => ({
                       ...current,
-                      calculationMethod: event.target.value,
+                      calculationMethod: value,
                     }))
                   }
-                >
-                  {CALCULATION_METHODS.map((value) => (
-                    <option key={value} value={value}>
-                      {prettify(value)}
-                    </option>
-                  ))}
-                </select>
+                  options={CALCULATION_METHODS.map((value) => ({
+                    value,
+                    label: prettify(value),
+                  }))}
+                />
               </Field>
               <Field label="Effective from">
                 <input
@@ -9636,19 +9615,21 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Deduct before tax">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Deduct before tax"
+                  className="w-full"
                   value={ruleForm.deductEmployeeBeforeTax}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setRuleForm((current) => ({
                       ...current,
-                      deductEmployeeBeforeTax: event.target.value,
+                      deductEmployeeBeforeTax: value,
                     }))
                   }
-                >
-                  <option value="false">No</option>
-                  <option value="true">Yes</option>
-                </select>
+                  options={[
+                    { value: "false", label: "No" },
+                    { value: "true", label: "Yes" },
+                  ]}
+                />
               </Field>
               <Field label="Band lower limit">
                 <input
@@ -9747,22 +9728,21 @@ export function PayrollOperationsView() {
           ) : null}
           <div className="grid gap-3">
             <Field label="Approval stage">
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Approval stage"
+                className="w-full"
                 value={approveForm.stage}
-                onChange={(event) =>
+                onChange={(value) =>
                   setApproveForm((current) => ({
                     ...current,
-                    stage: event.target.value,
+                    stage: value,
                   }))
                 }
-              >
-                {APPROVAL_STAGES.map((value) => (
-                  <option key={value} value={value}>
-                    {prettify(value)}
-                  </option>
-                ))}
-              </select>
+                options={APPROVAL_STAGES.map((value) => ({
+                  value,
+                  label: prettify(value),
+                }))}
+              />
             </Field>
             <Field label="Calculation hash">
               <input

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { SearchIcon } from "lucide-react"
+import { Field, SearchBox } from "@fluentui/react-components"
 
 import { cn } from "@/lib/utils"
 
@@ -103,52 +103,54 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
       }}
     >
-      <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
-      <input
-        ref={inputRef}
-        type="search"
-        value={query}
-        onFocus={() => setOpen(true)}
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setOpen(true)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault()
-            setActiveIndex((current) => Math.min(current + 1, Math.max(0, results.length - 1)))
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault()
-            setActiveIndex((current) => Math.max(0, current - 1))
-          } else if (event.key === "Enter") {
-            const result = results[activeIndex]
-            if (result) {
+      <Field label="Search in HRMS" size="small" className="min-w-0 gap-0 [&_label]:sr-only">
+        <SearchBox
+          ref={inputRef}
+          size="small"
+          value={query}
+          placeholder="Search HRMS"
+          onFocus={() => setOpen(true)}
+          onChange={(_event, data) => {
+            setQuery(data.value)
+            setOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
               event.preventDefault()
-              navigateToResult(result)
+              setActiveIndex((current) => Math.min(current + 1, Math.max(0, results.length - 1)))
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault()
+              setActiveIndex((current) => Math.max(0, current - 1))
+            } else if (event.key === "Enter") {
+              const result = results[activeIndex]
+              if (result) {
+                event.preventDefault()
+                navigateToResult(result)
+              }
+            } else if (event.key === "Escape") {
+              setOpen(false)
+              inputRef.current?.blur()
             }
-          } else if (event.key === "Escape") {
-            setOpen(false)
-            inputRef.current?.blur()
-          }
-        }}
-        placeholder="Search HRMS"
-        aria-label="Search in HRMS"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls="header-search-results"
-        className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[11px] text-foreground shadow-xs outline-none transition placeholder:text-muted-foreground focus:border-primary/45 focus:ring-2 focus:ring-primary/12 sm:w-48 sm:pr-13 lg:w-52"
-      />
-      <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted/60 px-1 py-0.5 text-[9px] font-semibold leading-none text-muted-foreground sm:inline-flex">
-        Ctrl /
-      </kbd>
+          }}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls="header-search-results"
+          className="w-[10.5rem] max-w-full !px-3 !py-1 sm:w-52 sm:pr-14"
+        />
+      </Field>
+      {!query ? (
+        <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted/60 px-1 py-px text-[9px] font-semibold leading-none text-muted-foreground sm:inline-flex">
+          Ctrl /
+        </kbd>
+      ) : null}
 
       {open ? (
         <div
           id="header-search-results"
           className="absolute left-0 top-[calc(100%+0.45rem)] z-[400] w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
         >
-          <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {normalizedQuery ? "Results" : recentItems.length > 0 ? "Recent" : "Quick navigation"}
           </p>
           <div className="max-h-72 overflow-y-auto">
@@ -165,9 +167,9 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => navigateToResult(result)}
               >
-                <span className="min-w-0 truncate text-xs font-medium">{result.title}</span>
+                <span className="min-w-0 truncate text-[13px] font-medium">{result.title}</span>
                 {result.section ? (
-                  <span className="shrink-0 text-[9px] text-muted-foreground">{result.section}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{result.section}</span>
                 ) : null}
               </button>
             )) : (

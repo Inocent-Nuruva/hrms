@@ -1,16 +1,13 @@
 "use client";
 
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
-import { showErrorAlert } from "@/lib/error-alert";
+import { Button, Checkbox, Field, Input, Link, Spinner } from "@fluentui/react-components";
 import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
 
-import { Checkbox } from "@/components/ui/checkbox";
-import { SecurityScanLoader } from "@/components/ui/security-scan-loader";
 import { useAuth } from "@/hooks/useAuth";
 import { markDashboardFromLogin } from "@/lib/dashboard-login-flag";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
 import type { AuthScope, DashboardType } from "@/types";
-import Link from "next/link";
 
 interface LoginFlowProps {
   defaultEmail?: string;
@@ -51,6 +48,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [errorField, setErrorField] = useState<"email" | "password" | "code" | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isDone, setIsDone] = useState(false);
@@ -115,9 +113,24 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     else window.location.href = redirect;
   };
 
+  const showCredentialError = (message: string) => {
+    const readable = message
+      .replace(/email must be an email/gi, "Enter a valid email address.")
+      .replace(/email should not be empty/gi, "Email is required.")
+      .replace(/password must be longer than or equal to 6 characters/gi, "Password must be at least 6 characters.")
+      .replace(/password should not be empty/gi, "Password is required.")
+      .replace(/^Bad Request\.?\s*/i, "")
+      .trim();
+    const text = readable || "Please check the email and password and try again.";
+    const emailOnly = /email/i.test(text) && !/password/i.test(text);
+    setErrorField(emailOnly ? "email" : "password");
+    setLoginError(text);
+  };
+
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     setLoginError(null);
+    setErrorField(null);
     // Drop any prior session (e.g. forced password-change then browser Back) so a
     // second account cannot inherit the previous user's identity in the UI/storage.
     clearSession();
@@ -127,15 +140,23 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     setStep("credentials");
 
     if (!normalizedEmail) {
-      const message = "Email is required.";
-      setLoginError(message);
-      showErrorAlert(message, "Invalid credentials");
+      setErrorField("email");
+      setLoginError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setErrorField("email");
+      setLoginError("Enter a valid email address.");
       return;
     }
     if (!password) {
-      const message = "Password is required.";
-      setLoginError(message);
-      showErrorAlert(message, "Invalid credentials");
+      setErrorField("password");
+      setLoginError("Password is required.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorField("password");
+      setLoginError("Password must be at least 6 characters.");
       return;
     }
 
@@ -147,10 +168,10 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
 
       if (response.requiresOtp) {
         if (!response.tempToken) {
-          const message =
-            "Two-factor authentication is required, but no temporary token was returned. Please try again.";
-          setLoginError(message);
-          showErrorAlert(message, "2FA required");
+          setErrorField("password");
+          setLoginError(
+            "Two-factor authentication is required, but no temporary token was returned. Please try again.",
+          );
           return;
         }
         // Prefer the email used for this attempt; fall back to API user email if present.
@@ -162,6 +183,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         setTwoFactorCode("");
         setStep("two-factor");
         setLoginError(null);
+        setErrorField(null);
         return;
       }
 
@@ -171,11 +193,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
           (response.requiresEmailVerification
             ? "Please verify your email address before continuing."
             : "Login response did not include tokens.");
-        setLoginError(message);
-        showErrorAlert(
-          message,
-          response.requiresEmailVerification ? "Email verification required" : "Invalid credentials",
-        );
+        showCredentialError(message);
         return;
       }
 
@@ -187,9 +205,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.scope,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed. Please try again.";
-      setLoginError(message);
-      showErrorAlert(message, "Invalid credentials");
+      showCredentialError(err instanceof Error ? err.message : "Login failed. Please try again.");
     }
   };
 
@@ -198,9 +214,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     setLoginError(null);
 
     if (!tempToken) {
-      const message = "Your 2FA session expired. Please sign in again.";
-      setLoginError(message);
-      showErrorAlert(message, "2FA expired");
+      setErrorField("password");
+      setLoginError("Your 2FA session expired. Please sign in again.");
       setStep("credentials");
       setTwoFactorAccountEmail("");
       return;
@@ -208,9 +223,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
 
     const code = twoFactorCode.trim();
     if (!isValidTwoFactorCode(code)) {
-      const message = "Enter a valid 6-digit authenticator code or backup code.";
-      setLoginError(message);
-      showErrorAlert(message, "Invalid code");
+      setErrorField("code");
+      setLoginError("Enter a valid 6-digit authenticator code or backup code.");
       return;
     }
 
@@ -226,10 +240,8 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.user.scope,
       );
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "2FA verification failed. Please try again.";
-      setLoginError(message);
-      showErrorAlert(message, "2FA verification failed");
+      setErrorField("code");
+      setLoginError(err instanceof Error ? err.message : "2FA verification failed. Please try again.");
     }
   };
 
@@ -252,6 +264,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     setTwoFactorAccountEmail("");
     setTwoFactorCode("");
     setLoginError(null);
+    setErrorField(null);
     // Keep the email field on the account that attempted 2FA so the user can retry.
     if (challengeEmail) {
       setEmail(challengeEmail);
@@ -266,13 +279,15 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         aria-live="polite"
         aria-busy="true"
       >
-        <SecurityScanLoader />
-        <div className="space-y-1 text-center">
-          <p className="text-xs font-medium text-foreground">Checking your access…</p>
-          <p className="text-[10px] text-muted-foreground">
-            Verifying permissions and signing you in securely
-          </p>
-        </div>
+        <Spinner
+          size="large"
+          appearance="primary"
+          labelPosition="below"
+          label="Checking your access…"
+        />
+        <p className="text-center text-sm text-muted-foreground">
+          Verifying permissions and signing you in securely
+        </p>
       </div>
     );
   }
@@ -299,50 +314,49 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label htmlFor="two-factor-code" className="text-[10px] font-medium text-foreground">
-              Authentication code
-            </label>
-            <input
+          <Field
+            label="Authentication code"
+            hint="6-digit app code, or a backup code if you have one."
+            validationState={errorField === "code" ? "error" : "none"}
+            validationMessage={errorField === "code" ? loginError ?? undefined : undefined}
+          >
+            <Input
               id="two-factor-code"
               type="text"
+              appearance="outline"
               inputMode="text"
               autoComplete="one-time-code"
               autoFocus
               value={twoFactorCode}
-              onChange={(event) => {
-                setTwoFactorCode(normalizeTwoFactorCode(event.target.value));
-                if (loginError) setLoginError(null);
+              onChange={(_event, data) => {
+                setTwoFactorCode(normalizeTwoFactorCode(data.value));
+                if (errorField === "code") {
+                  setLoginError(null);
+                  setErrorField(null);
+                }
               }}
               placeholder="123456"
-              className="flex h-9 w-full rounded-md border border-input bg-background px-2.5 py-1 text-center font-mono text-sm tracking-[0.25em] text-foreground ring-offset-background placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              className="w-full"
             />
-            <p className="text-[10px] text-muted-foreground">
-              6-digit app code, or a backup code if you have one.
-            </p>
-          </div>
+          </Field>
 
-          {loginError && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
-              {loginError}
-            </div>
-          )}
-
-          <button
+          <Button
             type="submit"
+            appearance="primary"
             disabled={isLoading || !isValidTwoFactorCode(twoFactorCode)}
-            className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full"
           >
             {isLoading ? "Verifying..." : "Verify & continue"}
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            appearance="secondary"
             onClick={handleBackToCredentials}
-            className="relative z-10 inline-flex h-9 w-full touch-manipulation items-center justify-center rounded-md border border-input bg-background px-3 text-[10px] font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground active:bg-accent"
+            className="w-full"
           >
             Back to sign in
-          </button>
+          </Button>
         </form>
       </div>
     );
@@ -360,18 +374,28 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
             transitionDelay: "60ms",
           }}
         >
-          <label className="text-[10px] font-medium text-foreground">Email</label>
-          <input
-            type="email"
-            value={email}
-            autoComplete="username"
-            onChange={(event) => {
-              setEmail(event.target.value);
-              if (loginError) setLoginError(null);
-            }}
-            placeholder="admin@company.com"
-            className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
-          />
+          <Field
+            label="Email"
+            required
+            validationState={errorField === "email" ? "error" : "none"}
+            validationMessage={errorField === "email" ? loginError ?? undefined : undefined}
+          >
+            <Input
+              type="email"
+              appearance="outline"
+              value={email}
+              autoComplete="username"
+              onChange={(_event, data) => {
+                setEmail(data.value);
+                if (errorField === "email") {
+                  setLoginError(null);
+                  setErrorField(null);
+                }
+              }}
+              placeholder="admin@company.com"
+              className="w-full"
+            />
+          </Field>
         </div>
 
         <div
@@ -383,73 +407,71 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
             transitionDelay: "140ms",
           }}
         >
-          <label className="text-[10px] font-medium text-foreground">Password</label>
-          <div className="relative">
-            <input
+          <Field
+            label="Password"
+            required
+            validationState={errorField === "password" ? "error" : "none"}
+            validationMessage={errorField === "password" ? loginError ?? undefined : undefined}
+          >
+            <Input
               type={showPassword ? "text" : "password"}
+              appearance="outline"
               value={password}
               autoComplete="current-password"
-              onChange={(event) => {
-                setPassword(event.target.value);
-                if (loginError) setLoginError(null);
-              }}
-              placeholder="Enter password"
-              className="flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 pr-9 text-xs text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:placeholder:text-muted-foreground/70"
-            />
-            <button
-              type="button"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {showPassword ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
-            </button>
-          </div>
-        </div>
-
-        {loginError && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[10px] text-destructive dark:border-destructive/40 dark:bg-destructive/15">
-            {loginError}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-2 text-[10px]">
-          <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
-            <Checkbox
-              checked={rememberMe}
-              onCheckedChange={(checked) => {
-                const nextValue = Boolean(checked);
-                setRememberMe(nextValue);
-                if (typeof window !== "undefined") {
-                  window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, String(nextValue));
-                  if (!nextValue) {
-                    window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
-                  }
+              onChange={(_event, data) => {
+                setPassword(data.value);
+                if (errorField === "password") {
+                  setLoginError(null);
+                  setErrorField(null);
                 }
               }}
-              className="data-checked:border-primary data-checked:bg-primary focus-visible:ring-primary/50"
+              placeholder="Enter password"
+              className="w-full"
+              contentAfter={
+                <Button
+                  type="button"
+                  appearance="transparent"
+                  size="small"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  icon={showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                  onClick={() => setShowPassword((current) => !current)}
+                />
+              }
             />
-            Remember me
-          </label>
+          </Field>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <Checkbox
+            checked={rememberMe}
+            size="medium"
+            labelPosition="after"
+            label={{ children: "Remember me", style: { lineHeight: "20px", whiteSpace: "nowrap" } }}
+            onChange={(_event, data) => {
+              const nextValue = Boolean(data.checked);
+              setRememberMe(nextValue);
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem(AUTH_STORAGE_KEYS.rememberMe, String(nextValue));
+                if (!nextValue) {
+                  window.localStorage.removeItem(AUTH_STORAGE_KEYS.rememberedEmail);
+                }
+              }
+            }}
+          />
           <Link
             href={
               email.trim()
                 ? `${ROUTES.forgotPassword}?email=${encodeURIComponent(email.trim().toLowerCase())}`
                 : ROUTES.forgotPassword
             }
-            className="font-medium text-primary transition hover:underline"
           >
             Forgot password?
           </Link>
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="inline-flex h-8 w-full items-center justify-center rounded-md bg-primary px-3 text-[10px] font-semibold text-primary-foreground transition-all hover:bg-[var(--brand-blue-dark)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {isLoading ? "Signing in..." : "Sign In"}
-        </button>
+        <Button type="submit" appearance="primary" disabled={isLoading} className="w-full">
+          {isLoading ? "Signing in..." : "Sign in"}
+        </Button>
       </form>
     </div>
   );

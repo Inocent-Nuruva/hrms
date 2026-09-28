@@ -11,6 +11,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Textarea } from "@/components/ui/textarea"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import {
@@ -700,20 +701,22 @@ export function AccessControlActivityView({
               onChange={(event) => setSearch(event.target.value)}
             />
             {activeSection === "access-credentials" ? (
-              <select
-                className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+              <FluentSelect
+                ariaLabel="Filter credentials by type"
+                size="small"
                 value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-                aria-label="Filter credentials by type"
-              >
-                <option value="">All types</option>
-                <option value="CARD">Card</option>
-                <option value="FINGERPRINT">Fingerprint</option>
-                <option value="FACE">Face</option>
-                <option value="PASSWORD">Password</option>
-                <option value="PIN">PIN</option>
-                <option value="QR">QR</option>
-              </select>
+                onChange={setTypeFilter}
+                placeholder="All types"
+                options={[
+                  { value: "", label: "All types" },
+                  { value: "CARD", label: "Card" },
+                  { value: "FINGERPRINT", label: "Fingerprint" },
+                  { value: "FACE", label: "Face" },
+                  { value: "PASSWORD", label: "Password" },
+                  { value: "PIN", label: "PIN" },
+                  { value: "QR", label: "QR" },
+                ]}
+              />
             ) : activeSection === "device-command-logs" ? (
               <input
                 className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
@@ -729,47 +732,51 @@ export function AccessControlActivityView({
                   value={typeFilter}
                   onChange={(event) => setTypeFilter(event.target.value)}
                 />
-                <select
-                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Filter by sync direction"
+                  size="small"
                   value={directionFilter}
-                  onChange={(event) => setDirectionFilter(event.target.value)}
-                  aria-label="Filter by sync direction"
-                >
-                  <option value="">All directions</option>
-                  <option value="PULL">Pull</option>
-                  <option value="PUSH">Push</option>
-                </select>
+                  onChange={setDirectionFilter}
+                  placeholder="All directions"
+                  options={[
+                    { value: "", label: "All directions" },
+                    { value: "PULL", label: "Pull" },
+                    { value: "PUSH", label: "Push" },
+                  ]}
+                />
               </>
             ) : null}
-            <select
-              className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+            <FluentSelect
+              ariaLabel="Filter by status"
+              size="small"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              aria-label="Filter by status"
-            >
-              <option value="">All statuses</option>
-              {activeSection === "access-credentials" ? (
-                <>
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="LOST">Lost</option>
-                  <option value="BLOCKED">Blocked</option>
-                  <option value="DELETED">Deleted</option>
-                </>
-              ) : activeSection === "hikvision-sync-logs" ? (
-                <>
-                  <option value="SUCCESS">Success</option>
-                  <option value="FAILED">Failed</option>
-                  <option value="PARTIAL">Partial</option>
-                </>
-              ) : (
-                <>
-                  <option value="PENDING">Pending</option>
-                  <option value="SUCCESS">Success</option>
-                  <option value="FAILED">Failed</option>
-                </>
-              )}
-            </select>
+              onChange={setStatusFilter}
+              placeholder="All statuses"
+              options={
+                activeSection === "access-credentials"
+                  ? [
+                      { value: "", label: "All statuses" },
+                      { value: "ACTIVE", label: "Active" },
+                      { value: "INACTIVE", label: "Inactive" },
+                      { value: "LOST", label: "Lost" },
+                      { value: "BLOCKED", label: "Blocked" },
+                      { value: "DELETED", label: "Deleted" },
+                    ]
+                  : activeSection === "hikvision-sync-logs"
+                    ? [
+                        { value: "", label: "All statuses" },
+                        { value: "SUCCESS", label: "Success" },
+                        { value: "FAILED", label: "Failed" },
+                        { value: "PARTIAL", label: "Partial" },
+                      ]
+                    : [
+                        { value: "", label: "All statuses" },
+                        { value: "PENDING", label: "Pending" },
+                        { value: "SUCCESS", label: "Success" },
+                        { value: "FAILED", label: "Failed" },
+                      ]
+              }
+            />
             <button
               type="button"
               onClick={() => void loadRows()}
@@ -827,17 +834,19 @@ export function AccessControlActivityView({
           <div className="grid gap-3">
             <label className="grid gap-1">
               <span className="text-xs font-medium uppercase text-slate-600">Action</span>
-              <select
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              <FluentSelect
+                ariaLabel="Action"
+                className="w-full"
                 value={actionKind}
-                onChange={(event) => setActionKind(event.target.value as CredentialLifecycleAction)}
-              >
-                <option value="enable">Enable</option>
-                <option value="disable">Disable</option>
-                <option value="block">Block</option>
-                <option value="lost">Mark lost</option>
-                <option value="revoke">Revoke</option>
-              </select>
+                onChange={(value) => setActionKind(value as CredentialLifecycleAction)}
+                options={[
+                  { value: "enable", label: "Enable" },
+                  { value: "disable", label: "Disable" },
+                  { value: "block", label: "Block" },
+                  { value: "lost", label: "Mark lost" },
+                  { value: "revoke", label: "Revoke" },
+                ]}
+              />
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-medium uppercase text-slate-600">Reason</span>
