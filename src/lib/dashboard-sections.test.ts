@@ -6,6 +6,7 @@ import {
   employeeSectionTabGroups,
   employeeAttendanceSectionTabGroups,
   findFirstAccessibleSectionUrl,
+  operationsReportSectionTabGroups,
   resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
 
@@ -48,6 +49,30 @@ describe("activity section navigation", () => {
       "Exceptions",
       "Setup",
     ])
+  })
+})
+
+describe("operations report navigation", () => {
+  it("lists report pages together and respects route permissions for the first accessible page", () => {
+    expect(operationsReportSectionTabGroups[0]?.items.map((item) => item.title)).toEqual([
+      "Reports & Analytics",
+      "Scheduled Reporting",
+      "SMTP Settings",
+    ])
+    expect(
+      findFirstAccessibleSectionUrl(
+        operationsReportSectionTabGroups,
+        ["scheduled_reports:read"],
+        "admin",
+      ),
+    ).toBe("/dashboard/operations/scheduled-reporting")
+    expect(
+      findFirstAccessibleSectionUrl(
+        operationsReportSectionTabGroups,
+        ["scheduled_reports:manage_smtp"],
+        "admin",
+      ),
+    ).toBe("/dashboard/operations/scheduled-reporting")
   })
 })
 

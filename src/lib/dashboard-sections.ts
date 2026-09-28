@@ -341,6 +341,17 @@ export const smsSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+export const operationsReportSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    title: "Reports",
+    items: [
+      { title: "Reports & Analytics", url: "/dashboard/operations/reports" },
+      { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting" },
+      { title: "SMTP Settings", url: "/dashboard/smtp" },
+    ],
+  },
+]
+
 export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My team",
@@ -446,6 +457,7 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     selfActivitySectionTabGroups,
     movementSectionTabGroups,
     smsSectionTabGroups,
+    operationsReportSectionTabGroups,
     selfTeamSectionTabGroups,
     structureSectionTabGroups,
     leaveManagementSectionTabGroups,
