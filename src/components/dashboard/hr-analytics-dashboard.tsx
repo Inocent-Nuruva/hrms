@@ -1220,6 +1220,7 @@ export default function HrAnalyticsDashboard({
   const [attendanceSummaries, setAttendanceSummaries] = React.useState<AdminRecord[]>(
     warm?.attendanceSummaries ?? []
   )
+  const [todayAttendanceSummaries, setTodayAttendanceSummaries] = React.useState<AdminRecord[]>([])
   const [onboardingRequests, setOnboardingRequests] = React.useState<AdminRecord[]>(
     warm?.onboardingRequests ?? []
   )
@@ -1318,6 +1319,7 @@ export default function HrAnalyticsDashboard({
       setDepartments([])
       setLeaveRequests([])
       setAttendanceSummaries([])
+      setTodayAttendanceSummaries([])
       setOnboardingRequests([])
       setOffboardingRequests([])
       setDepartmentHeadcounts([])
@@ -1343,6 +1345,13 @@ export default function HrAnalyticsDashboard({
     const attParams: Record<string, string | number> = { page: 1, limit: 100 }
     if (from_date) attParams.from_date = from_date
     if (to_date) attParams.to_date = to_date
+    const todayAttendanceDate = formatLocalDateKey(new Date())
+    const todayAttendanceParams: Record<string, string | number> = {
+      page: 1,
+      limit: 500,
+      from_date: todayAttendanceDate,
+      to_date: todayAttendanceDate,
+    }
 
     // Progressive paint: each slice updates as soon as it resolves (no waiting on the slowest).
     const tasks: Promise<void>[] = [
@@ -1404,6 +1413,12 @@ export default function HrAnalyticsDashboard({
         .then((attRes) => {
           setAttendanceSummaries(attRes.rows ?? [])
           markReady("attendance")
+        }),
+
+      listAttendanceDailySummariesPage(token, todayAttendanceParams, { cacheTtlMs: 0 })
+        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .then((attRes) => {
+          setTodayAttendanceSummaries(attRes.rows ?? [])
         }),
 
       listOnboardingRequests(token, { page: 1, limit: 50 })
@@ -1567,9 +1582,16 @@ export default function HrAnalyticsDashboard({
     "on_leave_today",
     "onLeaveToday",
   ])
+  const analyticsTodayTotalRecords = readNumberDeep(analyticsSummary, [
+    "today_total_records",
+    "todayTotalRecords",
+    "today_attendance_records",
+    "todayAttendanceRecords",
+  ])
   const todayAttendance = React.useMemo(() => {
     const rows = new Map<string, AdminRecord>()
-    attendanceSummaries.forEach((summary, index) => {
+    const sourceSummaries = [...attendanceSummaries, ...todayAttendanceSummaries]
+    sourceSummaries.forEach((summary, index) => {
       const date = recordDateKey(
         readDeepValue(summary, ["attendance_date", "work_date", "summary_date", "date", "record_date"])
       )
@@ -1579,7 +1601,7 @@ export default function HrAnalyticsDashboard({
       rows.set(employeeId !== null ? `id:${employeeId}` : employeeNo ? `no:${employeeNo}` : `row:${index}`, summary)
     })
     return Array.from(rows.values())
-  }, [attendanceSummaries, todayKey])
+  }, [attendanceSummaries, todayAttendanceSummaries, todayKey])
 
   const sampledTodayPresent = React.useMemo(
     () =>
@@ -1602,10 +1624,24 @@ export default function HrAnalyticsDashboard({
       }).length,
     [todayAttendance]
   )
-  const todayPresent = analyticsTodayPresent ?? sampledTodayPresent
+  const useAnalyticsTodayCounts =
+    todayAttendance.length === 0 &&
+    (analyticsTodayTotalRecords !== 0 || todayAttendanceSummaries.length === 0) &&
+    (analyticsTodayPresent !== null || analyticsTodayAbsent !== null || analyticsTodayLeave !== null)
+  const todayPresent =
+    useAnalyticsTodayCounts && analyticsTodayPresent !== null
+      ? analyticsTodayPresent
+      : sampledTodayPresent
 
   const sampledTodayLeave = React.useMemo(() => {
     const employeesOnLeave = new Set<string>()
+    todayAttendance.forEach((summary, index) => {
+      const status = getAttendanceStatus(summary)
+      if (!status.includes("leave")) return
+      const employeeId = readNumberDeep(summary, ["employee_id", "employeeId", "company_user_id", "user_id"])
+      const employeeNo = readStringDeep(summary, ["employee_no", "employeeNo", "staff_no"])
+      employeesOnLeave.add(employeeId !== null ? `id:${employeeId}` : employeeNo ? `no:${employeeNo}` : `attendance:${index}`)
+    })
     leaveRequests.forEach((request, index) => {
       const status = getLeaveStatus(request)
       if (status.includes("reject") || status.includes("cancel") || status.includes("pending") || status.includes("submitted")) {
@@ -1619,8 +1655,9 @@ export default function HrAnalyticsDashboard({
       employeesOnLeave.add(employeeId !== null ? `id:${employeeId}` : employeeNo ? `no:${employeeNo}` : `row:${index}`)
     })
     return employeesOnLeave.size
-  }, [leaveRequests, todayKey])
-  const todayLeave = analyticsTodayLeave ?? sampledTodayLeave
+  }, [leaveRequests, todayAttendance, todayKey])
+  const todayLeave =
+    useAnalyticsTodayCounts && analyticsTodayLeave !== null ? analyticsTodayLeave : sampledTodayLeave
 
   const explicitTodayAbsent = React.useMemo(
     () =>
@@ -1631,12 +1668,13 @@ export default function HrAnalyticsDashboard({
     [todayAttendance]
   )
   const todayAbsent =
-    analyticsTodayAbsent ??
-    (explicitTodayAbsent > 0
-      ? explicitTodayAbsent
-      : todayAttendance.length > 0
-        ? Math.max(0, totalHeadcount - todayPresent - todayLeave)
-        : 0)
+    useAnalyticsTodayCounts && analyticsTodayAbsent !== null
+      ? analyticsTodayAbsent
+      : explicitTodayAbsent > 0
+        ? explicitTodayAbsent
+        : todayAttendance.length > 0
+          ? Math.max(0, totalHeadcount - todayPresent - todayLeave)
+          : 0
   const percentageOfHeadcount = (value: number) =>
     totalHeadcount > 0 ? Math.min(100, Math.round((value / totalHeadcount) * 100)) : 0
   const toneForPercentage = (percentage: number): WorkforceMetricTone => {
