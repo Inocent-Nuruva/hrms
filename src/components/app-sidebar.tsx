@@ -17,7 +17,6 @@ import {
   Building2,
   Kanban,
   LayoutDashboard,
-  Mail,
   MapPin,
   Route,
   ShieldCheck,
@@ -49,7 +48,6 @@ const IField = <MapPin />
 const IActivities = <LayoutDashboard />
 const IMovements = <Route />
 const ISms = <Bell />
-const IMail = <Mail />
 const IStructure = <Kanban />
 const IInsights = <LayoutDashboard />
 const IDepartments = <Kanban />
@@ -309,8 +307,14 @@ const adminData: SidebarData = {
       matchUrls: [
         "/dashboard/operations/reports",
         "/dashboard/operations/scheduled-reporting",
+        "/dashboard/smtp",
       ],
       icon: IUsers,
+      items: [
+        { title: "Reports & Analytics", url: "/dashboard/operations/reports" },
+        { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting" },
+        { title: "SMTP Settings", url: "/dashboard/smtp" },
+      ],
     },
     {
       title: "Notifications",
@@ -328,11 +332,6 @@ const adminData: SidebarData = {
         "/dashboard/sms/platform",
       ],
       icon: ISms,
-    },
-    {
-      title: "SMTP",
-      url: "/dashboard/smtp",
-      icon: IMail,
     },
     {
       title: "Insights",
@@ -597,6 +596,7 @@ function filterNavByPermissions(
       }
       return {
         ...item,
+        url: accessibleUrl ?? filteredItems[0]?.url ?? item.url,
         items: filteredItems,
       }
     })
