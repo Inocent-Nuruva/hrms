@@ -349,7 +349,14 @@ export function ReportsAnalyticsView() {
           if (firstCode) setSelectedOperationalCode(firstCode)
         }
         if (datasetResult.status === "fulfilled") {
-          const rows = datasetResult.value || []
+          const seenDatasetCodes = new Set<string>()
+          const rows = (datasetResult.value || []).filter((row) => {
+            const code = readString(row, ["code", "datasetCode"])
+            if (!code) return false
+            if (seenDatasetCodes.has(code)) return false
+            seenDatasetCodes.add(code)
+            return true
+          })
           setDatasets(rows)
           const firstCode = readString(rows[0], ["code", "datasetCode"])
           if (firstCode) {
@@ -869,10 +876,10 @@ export function ReportsAnalyticsView() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Select data source</SelectItem>
-                    {datasets.map((dataset) => {
+                    {datasets.map((dataset, index) => {
                       const code = readString(dataset, ["code", "datasetCode"])
                       return (
-                        <SelectItem key={code} value={code}>
+                        <SelectItem key={`dataset-${code}-${index}`} value={code}>
                           {readString(dataset, ["name"], code)}
                         </SelectItem>
                       )
