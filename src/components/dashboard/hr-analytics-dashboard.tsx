@@ -1547,6 +1547,26 @@ export default function HrAnalyticsDashboard({
   }, [analyticsSummary, offboardingRequests])
 
   const todayKey = formatLocalDateKey(new Date())
+  const analyticsTodayPresent = readNumberDeep(analyticsSummary, [
+    "today_present",
+    "todayPresent",
+    "present_today",
+    "presentToday",
+  ])
+  const analyticsTodayAbsent = readNumberDeep(analyticsSummary, [
+    "today_absent",
+    "todayAbsent",
+    "absent_today",
+    "absentToday",
+  ])
+  const analyticsTodayLeave = readNumberDeep(analyticsSummary, [
+    "today_on_leave",
+    "todayOnLeave",
+    "employees_currently_on_leave",
+    "employeesCurrentlyOnLeave",
+    "on_leave_today",
+    "onLeaveToday",
+  ])
   const todayAttendance = React.useMemo(() => {
     const rows = new Map<string, AdminRecord>()
     attendanceSummaries.forEach((summary, index) => {
@@ -1561,12 +1581,18 @@ export default function HrAnalyticsDashboard({
     return Array.from(rows.values())
   }, [attendanceSummaries, todayKey])
 
-  const todayPresent = React.useMemo(
+  const sampledTodayPresent = React.useMemo(
     () =>
       todayAttendance.filter((summary) => {
         const status = getAttendanceStatus(summary)
         return (
           status.includes("present") ||
+          status.includes("late") ||
+          status.includes("early_departure") ||
+          status.includes("early departure") ||
+          status.includes("overtime") ||
+          status.includes("half_day") ||
+          status.includes("half day") ||
           status.includes("worked") ||
           status.includes("on_time") ||
           status.includes("ontime") ||
@@ -1576,8 +1602,9 @@ export default function HrAnalyticsDashboard({
       }).length,
     [todayAttendance]
   )
+  const todayPresent = analyticsTodayPresent ?? sampledTodayPresent
 
-  const todayLeave = React.useMemo(() => {
+  const sampledTodayLeave = React.useMemo(() => {
     const employeesOnLeave = new Set<string>()
     leaveRequests.forEach((request, index) => {
       const status = getLeaveStatus(request)
@@ -1593,6 +1620,7 @@ export default function HrAnalyticsDashboard({
     })
     return employeesOnLeave.size
   }, [leaveRequests, todayKey])
+  const todayLeave = analyticsTodayLeave ?? sampledTodayLeave
 
   const explicitTodayAbsent = React.useMemo(
     () =>
@@ -1603,11 +1631,12 @@ export default function HrAnalyticsDashboard({
     [todayAttendance]
   )
   const todayAbsent =
-    explicitTodayAbsent > 0
+    analyticsTodayAbsent ??
+    (explicitTodayAbsent > 0
       ? explicitTodayAbsent
       : todayAttendance.length > 0
         ? Math.max(0, totalHeadcount - todayPresent - todayLeave)
-        : 0
+        : 0)
   const percentageOfHeadcount = (value: number) =>
     totalHeadcount > 0 ? Math.min(100, Math.round((value / totalHeadcount) * 100)) : 0
   const toneForPercentage = (percentage: number): WorkforceMetricTone => {
