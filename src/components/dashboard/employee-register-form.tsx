@@ -3485,7 +3485,12 @@ export function EmployeeRegisterForm() {
                   <Field label="Employment Type" htmlFor="employmentType" delayMs={258}>
                     <Select
                       value={form.employmentType || "full_time"}
-                      onValueChange={(value) => updateField("employmentType", value ?? "full_time")}
+                      onValueChange={(value) =>
+                        updateField(
+                          "employmentType",
+                          (value ?? "full_time") as EmploymentType,
+                        )
+                      }
                     >
                       <SelectTrigger id="employmentType" className="w-full">
                         <SelectValue>{selectedEmploymentTypeLabel}</SelectValue>

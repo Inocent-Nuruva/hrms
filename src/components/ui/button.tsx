@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   Button as FluentButton,
   type ButtonProps as FluentButtonProps,
@@ -11,11 +12,17 @@ import {
 } from "@/components/animate-ui/components/buttons/liquid"
 
 const buttonVariants = liquidButtonVariants
+const FluentAnchorButton = FluentButton as React.ComponentType<
+  Omit<FluentButtonProps, "onClick"> & React.AnchorHTMLAttributes<HTMLAnchorElement>
+>
 
-type ButtonProps = Omit<FluentButtonProps, "appearance" | "size"> & {
+type ButtonProps = Omit<FluentButtonProps, "appearance" | "onClick" | "size"> & {
   variant?: LiquidButtonProps["variant"] | "result"
   appearance?: FluentButtonProps["appearance"]
   size?: LiquidButtonProps["size"] | "small" | "medium" | "large"
+  href?: string
+  onClick?: React.MouseEventHandler<HTMLButtonElement>
+  render?: React.ReactElement
 }
 
 function Button({
@@ -23,6 +30,8 @@ function Button({
   size = "default",
   appearance,
   className,
+  children,
+  render,
   ...props
 }: ButtonProps) {
   const fluentAppearance = appearance ?? (
@@ -56,13 +65,33 @@ function Button({
         ? "h-auto border-0 bg-transparent px-0 text-primary underline-offset-4 hover:bg-transparent hover:underline"
         : undefined
 
+  if (render && React.isValidElement(render)) {
+    const linkProps = render.props as React.AnchorHTMLAttributes<HTMLAnchorElement>
+
+    return (
+      <FluentAnchorButton
+        {...linkProps}
+        as="a"
+        appearance={fluentAppearance}
+        size={fluentSize}
+        className={cn(iconSizeClass, variantClass, linkProps.className, className)}
+      >
+        {children ?? linkProps.children}
+      </FluentAnchorButton>
+    )
+  }
+
+  const fluentProps = props as FluentButtonProps
+
   return (
     <FluentButton
-      {...props}
+      {...fluentProps}
       appearance={fluentAppearance}
       size={fluentSize}
       className={cn(iconSizeClass, variantClass, className)}
-    />
+    >
+      {children}
+    </FluentButton>
   )
 }
 

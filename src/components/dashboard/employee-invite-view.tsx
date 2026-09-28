@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import {
   InfoIcon,
   Loader2Icon,
@@ -1018,12 +1017,13 @@ export function EmployeeInviteView() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <SectionHeader title="Personal details" />
             {canPerformPermission(actor.permissionLabels, "employees:create") ? (
-              <Link
+              <Button
+                as="a"
                 href="/dashboard/employees/onboarding?tab=invitations"
-                className="inline-flex !no-underline hover:!no-underline focus:!no-underline [&_*]:!no-underline"
+                className="!no-underline hover:!no-underline focus:!no-underline"
               >
-                <Button as="span">View pending invitations</Button>
-              </Link>
+                View pending invitations
+              </Button>
             ) : null}
           </div>
           {loading ? (

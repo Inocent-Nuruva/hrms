@@ -11,16 +11,20 @@ type InputProps = Omit<FluentInputProps, "type"> & {
   type?: React.ComponentProps<"input">["type"]
 }
 
-function Input({ className, type, appearance = "outline", ...props }: InputProps) {
+const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className, type, appearance = "outline", ...props },
+  ref,
+) {
   return (
     <FluentInput
       {...props}
+      ref={ref}
       type={type as FluentInputProps["type"]}
       appearance={appearance}
       data-slot="input"
       className={cn("w-full min-w-0", className)}
     />
   )
-}
+})
 
 export { Input }
