@@ -395,19 +395,42 @@ export function playNotificationSound() {
  * HTTP requests but do not reliably proxy Socket.IO WebSocket upgrades.
  */
 export function resolveNotificationsSocketOrigin() {
-  const candidates = [
-    process.env.NEXT_PUBLIC_BACKEND_URL?.trim(),
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim(),
+  const browserOrigin =
     typeof window !== "undefined" &&
     (window.location.protocol.toLowerCase() === "http:" ||
       window.location.protocol.toLowerCase() === "https:")
       ? window.location.origin
-      : null,
+      : null
+  const browserBackendOrigin = (() => {
+    if (!browserOrigin) return null
+    try {
+      const url = new URL(browserOrigin)
+      if (url.port === "9990") {
+        url.port = "9999"
+        return url.origin
+      }
+      if (url.port === "8880") {
+        url.port = "8888"
+        return url.origin
+      }
+    } catch {
+      return null
+    }
+    return null
+  })()
+  const candidates = [
+    process.env.NEXT_PUBLIC_BACKEND_URL?.trim(),
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim(),
+    browserBackendOrigin,
+    browserOrigin,
     // Keep parity with admin-api default so local REST + socket share a host.
     "http://192.168.1.30:9999",
   ].filter((value): value is string => Boolean(value))
 
   for (const rawValue of candidates) {
+    if (rawValue.startsWith("/")) {
+      continue
+    }
     try {
       const url = new URL(rawValue)
       return url.origin

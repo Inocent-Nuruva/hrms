@@ -37,4 +37,18 @@ describe("notifications socket URL resolution", () => {
 
     expect(resolveNotificationsSocketOrigin()).toBe("http://192.168.1.50:3000");
   });
+
+  it("maps relative API config on UAT to the backend socket port", () => {
+    vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "/api");
+    vi.stubGlobal("window", {
+      location: {
+        origin: "http://192.168.1.30:9990",
+        protocol: "http:",
+      },
+    });
+
+    expect(resolveNotificationsSocketOrigin()).toBe("http://192.168.1.30:9999");
+    expect(resolveNotificationsSocketUrl()).toBe("http://192.168.1.30:9999/notifications");
+  });
 });
