@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Switch } from "@heroui/react"
+import { Switch } from "@/components/ui/switch"
 import { Pencil, Trash2 } from "lucide-react"
 
 import { LeaveCatalogFrame } from "@/components/dashboard/leave-catalog-frame"
@@ -164,17 +164,13 @@ export function LeavePoliciesCatalog({
                     {inactive ? "Inactive" : "Active"}
                   </span>
                   {canEdit ? (
-                    <Switch.Root
-                      isSelected={!inactive}
-                      onChange={() => onToggleStatus(item.row)}
+                    <Switch
+                      checked={!inactive}
+                      onCheckedChange={() => onToggleStatus(item.row)}
                       size="sm"
-                      isDisabled={saving}
+                      disabled={saving}
                       aria-label={`${inactive ? "Activate" : "Deactivate"} ${item.name}`}
-                    >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Root>
+                    />
                   ) : null}
                   {canEdit ? (
                     <button

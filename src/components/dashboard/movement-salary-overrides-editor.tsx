@@ -9,6 +9,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { cn } from "@/lib/utils";
 
 const inputClass =
@@ -418,22 +419,23 @@ export function MovementSalaryOverridesEditor({
                       : formatAmount(line.defaultAmount || "0")}
                   </p>
                 </div>
-                <select
-                  className={inputClass}
-                  aria-label={`${line.name} override`}
+                <FluentSelect
+                  ariaLabel={`${line.name} override`}
+                  className="w-full"
                   value={draft.mode}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     updateDraft(line.code, {
-                      mode: event.target.value as DraftMode,
+                      mode: value as DraftMode,
                       value: "",
                     })
                   }
-                >
-                  <option value="default">Use default</option>
-                  <option value="amount">Fixed amount</option>
-                  <option value="rate">% of base</option>
-                  <option value="exclude">Exclude</option>
-                </select>
+                  options={[
+                    { value: "default", label: "Use default" },
+                    { value: "amount", label: "Fixed amount" },
+                    { value: "rate", label: "% of base" },
+                    { value: "exclude", label: "Exclude" },
+                  ]}
+                />
                 <input
                   className={cn(inputClass, invalid && "border-rose-400")}
                   aria-label={`${line.name} override value`}

@@ -114,6 +114,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
 import ExampleProgress from "@/components/ui/progress-1"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -3705,21 +3706,23 @@ export function LeaveManagementView({
                 value={requestSearch}
                 onChange={setRequestSearch}
               />
-              <select
-                className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              <FluentSelect
+                ariaLabel="Filter leave request status"
+                size="small"
+                className="w-[8.5rem]"
                 value={requestStatusFilter}
-                onChange={(event) => setRequestStatusFilter(event.target.value)}
-                aria-label="Filter leave request status"
-              >
-                <option value="all">All statuses</option>
-                <option value="draft">draft</option>
-                <option value="submitted">submitted</option>
-                <option value="in_review">in_review</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
-                <option value="cancelled">cancelled</option>
-                <option value="completed">completed</option>
-              </select>
+                onChange={setRequestStatusFilter}
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "draft", label: "draft" },
+                  { value: "submitted", label: "submitted" },
+                  { value: "in_review", label: "in_review" },
+                  { value: "approved", label: "approved" },
+                  { value: "rejected", label: "rejected" },
+                  { value: "cancelled", label: "cancelled" },
+                  { value: "completed", label: "completed" },
+                ]}
+              />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {canCreateRequests ? (
@@ -3922,21 +3925,23 @@ export function LeaveManagementView({
                     value={requestSearch}
                     onChange={setRequestSearch}
                   />
-                  <select
-                    className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+                  <FluentSelect
+                    ariaLabel="Filter leave request status"
+                    size="small"
+                    className="w-[8.5rem]"
                     value={requestStatusFilter}
-                    onChange={(event) => setRequestStatusFilter(event.target.value)}
-                    aria-label="Filter leave request status"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="draft">draft</option>
-                    <option value="submitted">submitted</option>
-                    <option value="in_review">in_review</option>
-                    <option value="approved">approved</option>
-                    <option value="rejected">rejected</option>
-                    <option value="cancelled">cancelled</option>
-                    <option value="completed">completed</option>
-                  </select>
+                    onChange={setRequestStatusFilter}
+                    options={[
+                      { value: "all", label: "All statuses" },
+                      { value: "draft", label: "draft" },
+                      { value: "submitted", label: "submitted" },
+                      { value: "in_review", label: "in_review" },
+                      { value: "approved", label: "approved" },
+                      { value: "rejected", label: "rejected" },
+                      { value: "cancelled", label: "cancelled" },
+                      { value: "completed", label: "completed" },
+                    ]}
+                  />
                 </>
               }
               toolbarActions={
@@ -5040,51 +5045,53 @@ export function LeaveManagementView({
             {returnToEmployeeBalances ? null : (
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Employee</span>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Employee"
+                  className="w-full"
                   value={balanceForm.employee_id}
-                  onChange={(event) =>
+                  placeholder="Select employee"
+                  onChange={(value) =>
                     applyBalanceSelection({
-                      employee_id: event.target.value,
+                      employee_id: value,
                       leave_type_id: balanceForm.leave_type_id,
                       fiscal_year: balanceForm.fiscal_year,
                     })
                   }
-                >
-                  <option value="">Select employee</option>
-                  {employees.map((employee) => {
-                    const id = readNumber(employee, ["id", "employee_id", "user_id"])
-                    if (id === null) return null
-                    return <option key={id} value={String(id)}>{employeeLabel(id)}</option>
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Select employee" },
+                    ...employees.flatMap((employee) => {
+                      const id = readNumber(employee, ["id", "employee_id", "user_id"])
+                      if (id === null) return []
+                      return [{ value: String(id), label: employeeLabel(id) }]
+                    }),
+                  ]}
+                />
               </label>
             )}
             <label className="space-y-1">
               <span className="text-xs text-slate-500">Leave type</span>
-              <select
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+              <FluentSelect
+                ariaLabel="Leave type"
+                className="w-full"
                 value={balanceForm.leave_type_id}
-                onChange={(event) =>
+                placeholder="Select leave type"
+                onChange={(value) =>
                   applyBalanceSelection({
                     employee_id: balanceForm.employee_id,
-                    leave_type_id: event.target.value,
+                    leave_type_id: value,
                     fiscal_year: balanceForm.fiscal_year,
                   })
                 }
-              >
-                <option value="">Select leave type</option>
-                {(returnToEmployeeBalances && selectedBalanceGroup ? selectedBalanceGroup.rows : types).map((entry, index) => {
-                  const id = leaveTypeIdFromRow(entry) ?? readNumber(entry, ["id"])
-                  if (id === null) return null
-                  const label = returnToEmployeeBalances ? leaveTypeLabelFromRow(entry) : readString(entry, ["name"])
-                  return (
-                    <option key={`${id}-${index}`} value={String(id)}>
-                      {label}
-                    </option>
-                  )
-                })}
-              </select>
+                options={[
+                  { value: "", label: "Select leave type" },
+                  ...(returnToEmployeeBalances && selectedBalanceGroup ? selectedBalanceGroup.rows : types).flatMap((entry) => {
+                    const id = leaveTypeIdFromRow(entry) ?? readNumber(entry, ["id"])
+                    if (id === null) return []
+                    const name = returnToEmployeeBalances ? leaveTypeLabelFromRow(entry) : readString(entry, ["name"])
+                    return [{ value: String(id), label: name }]
+                  }),
+                ]}
+              />
             </label>
             {returnToEmployeeBalances ? null : (
               <label className="space-y-1">
@@ -5110,17 +5117,19 @@ export function LeaveManagementView({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Mode</span>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Mode"
+                  className="w-full"
                   value={balanceForm.mode}
-                  onChange={(event) =>
-                    setBalanceForm((prev) => ({ ...prev, mode: event.target.value as LeaveBalanceAdjustMode }))
+                  onChange={(value) =>
+                    setBalanceForm((prev) => ({ ...prev, mode: value as LeaveBalanceAdjustMode }))
                   }
-                >
-                  <option value="SET">Set remaining to</option>
-                  <option value="ADD">Add days</option>
-                  <option value="DEDUCT">Deduct days</option>
-                </select>
+                  options={[
+                    { value: "SET", label: "Set remaining to" },
+                    { value: "ADD", label: "Add days" },
+                    { value: "DEDUCT", label: "Deduct days" },
+                  ]}
+                />
               </label>
               <label className="space-y-1">
                 <span className="text-xs text-slate-500">Amount</span>
@@ -5297,10 +5306,15 @@ export function LeaveManagementView({
           <div className="grid gap-3 md:grid-cols-3">
             <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" placeholder="Holiday name" value={holidayForm.name} onChange={(event) => setHolidayForm((prev) => ({ ...prev, name: event.target.value }))} />
             <DatePickerPresets value={holidayForm.holiday_date} onChange={(value) => setHolidayForm((prev) => ({ ...prev, holiday_date: value }))} placeholder="Holiday date" />
-            <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={holidayForm.is_recurring} onChange={(event) => setHolidayForm((prev) => ({ ...prev, is_recurring: event.target.value }))}>
-              <option value="false">One-time</option>
-              <option value="true">Recurring</option>
-            </select>
+            <FluentSelect
+              ariaLabel="Holiday repeat"
+              value={holidayForm.is_recurring}
+              onChange={(value) => setHolidayForm((prev) => ({ ...prev, is_recurring: value }))}
+              options={[
+                { value: "false", label: "One-time" },
+                { value: "true", label: "Recurring" },
+              ]}
+            />
           </div>
           <DialogFooter>
             <button type="button" className="rounded-md border border-slate-300 px-4 py-2 text-sm" onClick={() => setHolidayDialogOpen(false)}>
@@ -5323,16 +5337,17 @@ export function LeaveManagementView({
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1">
                 <span className="block text-sm font-medium text-slate-700">Country</span>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Country"
+                  className="w-full"
                   value={holidayImportCountry}
-                  onChange={(event) => setHolidayImportCountry(event.target.value as HolidayImportCountryCode)}
                   disabled={holidayImportBusy}
-                >
-                  {HOLIDAY_IMPORT_COUNTRIES.map((entry) => (
-                    <option key={`import-country-${entry.code}`} value={entry.code}>{entry.label}</option>
-                  ))}
-                </select>
+                  onChange={(value) => setHolidayImportCountry(value as HolidayImportCountryCode)}
+                  options={HOLIDAY_IMPORT_COUNTRIES.map((entry) => ({
+                    value: entry.code,
+                    label: entry.label,
+                  }))}
+                />
               </label>
               <label className="space-y-1">
                 <span className="block text-sm font-medium text-slate-700">Year</span>
@@ -5410,16 +5425,17 @@ export function LeaveManagementView({
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1">
                 <span className="block text-sm font-medium text-slate-700">Country</span>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Country"
+                  className="w-full"
                   value={holidayRemoveCountry}
-                  onChange={(event) => setHolidayRemoveCountry(event.target.value as HolidayImportCountryCode)}
                   disabled={holidayRemoveBusy}
-                >
-                  {HOLIDAY_IMPORT_COUNTRIES.map((entry) => (
-                    <option key={`remove-country-${entry.code}`} value={entry.code}>{entry.label}</option>
-                  ))}
-                </select>
+                  onChange={(value) => setHolidayRemoveCountry(value as HolidayImportCountryCode)}
+                  options={HOLIDAY_IMPORT_COUNTRIES.map((entry) => ({
+                    value: entry.code,
+                    label: entry.label,
+                  }))}
+                />
               </label>
               <label className="space-y-1">
                 <span className="block text-sm font-medium text-slate-700">Year</span>
@@ -5596,17 +5612,20 @@ export function LeaveManagementView({
                 value={transactionSearch}
                 onChange={setTransactionSearch}
               />
-              <select
-                className="h-8 w-[11rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+              <FluentSelect
+                ariaLabel="Filter balance transaction type"
+                size="small"
+                className="w-[11rem]"
                 value={transactionTypeFilter}
-                onChange={(event) => setTransactionTypeFilter(event.target.value)}
-                aria-label="Filter balance transaction type"
-              >
-                <option value="all">All transaction types</option>
-                {transactionTypes.map((type) => (
-                  <option key={type} value={type}>{formatTransactionType(type)}</option>
-                ))}
-              </select>
+                onChange={setTransactionTypeFilter}
+                options={[
+                  { value: "all", label: "All transaction types" },
+                  ...transactionTypes.map((type) => ({
+                    value: type,
+                    label: formatTransactionType(type),
+                  })),
+                ]}
+              />
               <Tooltip>
                 <TooltipTrigger
                   render={

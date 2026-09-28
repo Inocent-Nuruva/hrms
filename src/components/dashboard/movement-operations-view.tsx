@@ -69,6 +69,7 @@ import {
   useLeaveIfForbidden,
 } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   MovementSalaryOverridesEditor,
@@ -1138,42 +1139,43 @@ export function MovementOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Employee</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Employee"
+                    className="w-full"
                     value={form.employee_id ?? ""}
-                    onChange={(event) =>
+                    placeholder="Select employee"
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        employee_id: event.target.value,
+                        employee_id: value,
                       }))
                     }
-                  >
-                    <option value="">Select employee</option>
-                    {employees.map((employee) => (
-                      <option key={rowId(employee)} value={rowId(employee)}>
-                        {employeeLabel(employee)}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "Select employee" },
+                      ...employees.map((employee) => ({
+                        value: rowId(employee),
+                        label: employeeLabel(employee),
+                      })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Type</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Type"
+                    className="w-full"
                     value={form.movement_type ?? "DEPARTMENT_TRANSFER"}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        movement_type: event.target.value,
+                        movement_type: value,
                       }))
                     }
-                  >
-                    {MOVEMENT_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {prettify(type)}
-                      </option>
-                    ))}
-                  </select>
+                    options={MOVEMENT_TYPES.map((type) => ({
+                      value: type,
+                      label: prettify(type),
+                    }))}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Title</span>
@@ -1220,23 +1222,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New branch</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New branch"
+                      className="w-full"
                       value={form.new_branch_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_branch_id: event.target.value,
+                          new_branch_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {branches.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {optionLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...branches.map((row) => ({
+                          value: rowId(row),
+                          label: optionLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1244,23 +1248,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New department</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New department"
+                      className="w-full"
                       value={form.new_department_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_department_id: event.target.value,
+                          new_department_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {departments.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {optionLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...departments.map((row) => ({
+                          value: rowId(row),
+                          label: optionLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1272,23 +1278,25 @@ export function MovementOperationsView({
                 ].includes(form.movement_type ?? "") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New position</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New position"
+                      className="w-full"
                       value={form.new_position_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_position_id: event.target.value,
+                          new_position_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {positions.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {optionLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...positions.map((row) => ({
+                          value: rowId(row),
+                          label: optionLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1296,23 +1304,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New grade</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New grade"
+                      className="w-full"
                       value={form.new_grade_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_grade_id: event.target.value,
+                          new_grade_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {grades.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {optionLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...grades.map((row) => ({
+                          value: rowId(row),
+                          label: optionLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1320,23 +1330,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New cost center</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New cost center"
+                      className="w-full"
                       value={form.new_cost_center_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_cost_center_id: event.target.value,
+                          new_cost_center_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {costCenters.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {optionLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...costCenters.map((row) => ({
+                          value: rowId(row),
+                          label: optionLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1344,23 +1356,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New manager</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New manager"
+                      className="w-full"
                       value={form.new_manager_employee_id ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_manager_employee_id: event.target.value,
+                          new_manager_employee_id: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {employees.map((row) => (
-                        <option key={rowId(row)} value={rowId(row)}>
-                          {employeeLabel(row)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...employees.map((row) => ({
+                          value: rowId(row),
+                          label: employeeLabel(row),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {showTarget &&
@@ -1368,23 +1382,25 @@ export function MovementOperationsView({
                   form.movement_type === "COMPOSITE") ? (
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">New employment type</span>
-                    <select
-                      className={inputClass}
+                    <FluentSelect
+                      ariaLabel="New employment type"
+                      className="w-full"
                       value={form.new_employment_type ?? ""}
-                      onChange={(event) =>
+                      placeholder="Select"
+                      onChange={(value) =>
                         setForm((current) => ({
                           ...current,
-                          new_employment_type: event.target.value,
+                          new_employment_type: value,
                         }))
                       }
-                    >
-                      <option value="">Select</option>
-                      {EMPLOYMENT_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {prettify(type)}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Select" },
+                        ...EMPLOYMENT_TYPES.map((type) => ({
+                          value: type,
+                          label: prettify(type),
+                        })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 {["SALARY_REVISION", "COMPOSITE"].includes(
@@ -1420,23 +1436,25 @@ export function MovementOperationsView({
                     <label className="grid gap-1.5 text-sm">
                       <span className="font-medium">Salary structure</span>
                       {salaryStructureCodes.length > 0 ? (
-                        <select
-                          className={inputClass}
+                        <FluentSelect
+                          ariaLabel="Salary structure"
+                          className="w-full"
                           value={form.salary_structure_code ?? ""}
-                          onChange={(event) =>
+                          placeholder="Keep current structure"
+                          onChange={(value) =>
                             setForm((current) => ({
                               ...current,
-                              salary_structure_code: event.target.value,
+                              salary_structure_code: value,
                             }))
                           }
-                        >
-                          <option value="">Keep current structure</option>
-                          {salaryStructureCodes.map((item) => (
-                            <option key={item.code} value={item.code}>
-                              {item.code} · {item.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Keep current structure" },
+                            ...salaryStructureCodes.map((item) => ({
+                              value: item.code,
+                              label: `${item.code} · ${item.name}`,
+                            })),
+                          ]}
+                        />
                       ) : (
                         <input
                           className={inputClass}
@@ -1483,20 +1501,22 @@ export function MovementOperationsView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Decision</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Decision"
+                    className="w-full"
                     value={form.decision ?? "APPROVE"}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        decision: event.target.value,
+                        decision: value,
                       }))
                     }
-                  >
-                    <option value="APPROVE">Approve</option>
-                    <option value="RETURN">Return</option>
-                    <option value="REJECT">Reject</option>
-                  </select>
+                    options={[
+                      { value: "APPROVE", label: "Approve" },
+                      { value: "RETURN", label: "Return" },
+                      { value: "REJECT", label: "Reject" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>

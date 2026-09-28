@@ -19,6 +19,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   StatusChip,
@@ -519,19 +520,20 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
         <div className="flex flex-wrap items-center gap-2">
           {mode === "self" ? (
             <>
-              <select
-                className={inputClass}
+              <FluentSelect
+                ariaLabel="Performance period"
+                className="w-full"
                 value={periodId}
-                onChange={(event) => setPeriodId(event.target.value)}
-                aria-label="Performance period"
-              >
-                <option value="">All periods</option>
-                {periods.map((period) => (
-                  <option key={rowId(period)} value={rowId(period)}>
-                    {optionLabel(period)} · {readString(period, ["status"])}
-                  </option>
-                ))}
-              </select>
+                onChange={setPeriodId}
+                placeholder="All periods"
+                options={[
+                  { value: "", label: "All periods" },
+                  ...periods.map((period) => ({
+                    value: rowId(period),
+                    label: `${optionLabel(period)} · ${readString(period, ["status"])}`,
+                  })),
+                ]}
+              />
               <button
                 type="button"
                 className={primaryButtonClass}
@@ -671,28 +673,25 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               {dialogMode === "create" ? (
                 <label className="grid gap-1.5 text-sm sm:col-span-2">
                   <span className="font-medium">Period</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Period"
+                    className="w-full"
                     value={form.performance_period_id ?? ""}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        performance_period_id: event.target.value,
+                        performance_period_id: value,
                       }))
                     }
-                  >
-                    {periods.filter(canProposeEmployeeKpis).map((period) => (
-                      <option
-                        key={employeeKpiPeriodId(period)}
-                        value={employeeKpiPeriodId(period)}
-                      >
-                        {optionLabel(period)}
-                        {readString(period, ["status"])
+                    options={periods.filter(canProposeEmployeeKpis).map((period) => ({
+                      value: employeeKpiPeriodId(period),
+                      label: `${optionLabel(period)}${
+                        readString(period, ["status"])
                           ? ` · ${readString(period, ["status"])}`
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
+                          : ""
+                      }`,
+                    }))}
+                  />
                 </label>
               ) : null}
               <label className="grid gap-1.5 text-sm sm:col-span-2">
@@ -723,46 +722,44 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Measurement</span>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Measurement"
+                  className="w-full"
                   value={form.measurement_type}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      measurement_type: event.target.value,
+                      measurement_type: value,
                     }))
                   }
-                >
-                  {[
+                  options={[
                     "NUMBER",
                     "PERCENTAGE",
                     "CURRENCY",
                     "BOOLEAN",
                     "RATING",
                     "MANUAL",
-                  ].map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
+                  ].map((value) => ({ value, label: value }))}
+                />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Progress source</span>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Progress source"
+                  className="w-full"
                   value={form.progress_source}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setForm((current) => ({
                       ...current,
-                      progress_source: event.target.value,
+                      progress_source: value,
                     }))
                   }
-                >
-                  <option value="MANUAL">Manual actual</option>
-                  <option value="APPROVED_ACTIVITIES">
-                    Approved activities
-                  </option>
-                  <option value="SYSTEM">System</option>
-                </select>
+                  options={[
+                    { value: "MANUAL", label: "Manual actual" },
+                    { value: "APPROVED_ACTIVITIES", label: "Approved activities" },
+                    { value: "SYSTEM", label: "System" },
+                  ]}
+                />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Target</span>

@@ -91,6 +91,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -2102,24 +2103,22 @@ export function OffboardingView() {
               {canManage && !isEmployeeMode ? (
               <label className="grid gap-0.5 text-[11px]">
                 <span className="font-medium text-muted-foreground">Employee</span>
-                <select
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                <FluentSelect
+                  ariaLabel="Employee"
                   value={requestForm.employee_id}
-                  onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, employee_id: event.target.value }))
+                  placeholder="Select employee"
+                  onChange={(value) =>
+                    setRequestForm((prev) => ({ ...prev, employee_id: value }))
                   }
-                >
-                  <option value="">Select employee</option>
-                  {employees.map((employee, index) => {
-                    const id = readNumber(employee, ["id", "employee_id", "user_id"])
-                    if (id === null) return null
-                    return (
-                      <option key={`off-emp-${id}-${index}`} value={String(id)}>
-                        {employeeLabel(employee)}
-                      </option>
-                    )
-                  })}
-                </select>
+                  options={[
+                    { value: "", label: "Select employee" },
+                    ...employees.flatMap((employee) => {
+                      const id = readNumber(employee, ["id", "employee_id", "user_id"])
+                      if (id === null) return []
+                      return [{ value: String(id), label: employeeLabel(employee) }]
+                    }),
+                  ]}
+                />
               </label>
               ) : (
                 <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">
@@ -2133,38 +2132,40 @@ export function OffboardingView() {
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-0.5 text-[11px]">
                   <span className="font-medium text-muted-foreground">Type</span>
-                  <select
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  <FluentSelect
+                    ariaLabel="Type"
                     value={requestForm.offboarding_type}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setRequestForm((prev) => ({
                         ...prev,
-                        offboarding_type: event.target.value,
+                        offboarding_type: value,
                       }))
                     }
-                  >
-                    <option value="resignation">Resignation</option>
-                    <option value="termination">Termination</option>
-                    <option value="retirement">Retirement</option>
-                    <option value="contract_end">Contract end</option>
-                    <option value="absconded">Absconded</option>
-                    <option value="deceased">Deceased</option>
-                    <option value="layoff">Layoff</option>
-                    <option value="other">Other</option>
-                  </select>
+                    options={[
+                      { value: "resignation", label: "Resignation" },
+                      { value: "termination", label: "Termination" },
+                      { value: "retirement", label: "Retirement" },
+                      { value: "contract_end", label: "Contract end" },
+                      { value: "absconded", label: "Absconded" },
+                      { value: "deceased", label: "Deceased" },
+                      { value: "layoff", label: "Layoff" },
+                      { value: "other", label: "Other" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-0.5 text-[11px]">
                   <span className="font-medium text-muted-foreground">Save mode</span>
-                  <select
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  <FluentSelect
+                    ariaLabel="Save mode"
                     value={requestForm.submit}
-                    onChange={(event) =>
-                      setRequestForm((prev) => ({ ...prev, submit: event.target.value }))
+                    onChange={(value) =>
+                      setRequestForm((prev) => ({ ...prev, submit: value }))
                     }
-                  >
-                    <option value="false">Save draft</option>
-                    <option value="true">Submit now</option>
-                  </select>
+                    options={[
+                      { value: "false", label: "Save draft" },
+                      { value: "true", label: "Submit now" },
+                    ]}
+                  />
                 </label>
               </div>
 
@@ -2218,24 +2219,22 @@ export function OffboardingView() {
               ) : (
                 <label className="grid gap-0.5 text-[11px]">
                   <span className="font-medium text-muted-foreground">Workflow</span>
-                  <select
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  <FluentSelect
+                    ariaLabel="Workflow"
                     value={requestForm.workflow_id}
-                    onChange={(event) =>
-                      setRequestForm((prev) => ({ ...prev, workflow_id: event.target.value }))
+                    placeholder="Optional"
+                    onChange={(value) =>
+                      setRequestForm((prev) => ({ ...prev, workflow_id: value }))
                     }
-                  >
-                    <option value="">Optional</option>
-                    {workflows.map((row, index) => {
-                      const id = readNumber(row, ["id", "workflow_id"])
-                      if (id === null) return null
-                      return (
-                        <option key={`off-wf-${id}-${index}`} value={String(id)}>
-                          {readString(row, ["name", "title"])}
-                        </option>
-                      )
-                    })}
-                  </select>
+                    options={[
+                      { value: "", label: "Optional" },
+                      ...workflows.flatMap((row) => {
+                        const id = readNumber(row, ["id", "workflow_id"])
+                        if (id === null) return []
+                        return [{ value: String(id), label: readString(row, ["name", "title"]) }]
+                      }),
+                    ]}
+                  />
                 </label>
               )}
 
@@ -2810,29 +2809,31 @@ export function OffboardingView() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-xs">
                   <span className="font-medium text-muted-foreground">Status</span>
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  <FluentSelect
+                    ariaLabel="Status"
                     value={workflowForm.status}
-                    onChange={(event) =>
-                      setWorkflowForm((prev) => ({ ...prev, status: event.target.value }))
+                    onChange={(value) =>
+                      setWorkflowForm((prev) => ({ ...prev, status: value }))
                     }
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                    options={[
+                      { value: "active", label: "Active" },
+                      { value: "inactive", label: "Inactive" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1 text-xs">
                   <span className="font-medium text-muted-foreground">Default</span>
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  <FluentSelect
+                    ariaLabel="Default"
                     value={workflowForm.is_default}
-                    onChange={(event) =>
-                      setWorkflowForm((prev) => ({ ...prev, is_default: event.target.value }))
+                    onChange={(value) =>
+                      setWorkflowForm((prev) => ({ ...prev, is_default: value }))
                     }
-                  >
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
+                    options={[
+                      { value: "false", label: "No" },
+                      { value: "true", label: "Yes" },
+                    ]}
+                  />
                 </label>
               </div>
             </div>
@@ -2923,48 +2924,51 @@ export function OffboardingView() {
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-xs">
                   <span className="font-medium text-muted-foreground">Team / type</span>
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  <FluentSelect
+                    ariaLabel="Team / type"
                     value={stepForm.task_type}
-                    onChange={(event) =>
-                      setStepForm((prev) => ({ ...prev, task_type: event.target.value }))
+                    onChange={(value) =>
+                      setStepForm((prev) => ({ ...prev, task_type: value }))
                     }
-                  >
-                    <option value="hr">HR</option>
-                    <option value="it">IT</option>
-                    <option value="finance">Finance</option>
-                    <option value="manager">Manager</option>
-                    <option value="other">Other</option>
-                  </select>
+                    options={[
+                      { value: "hr", label: "HR" },
+                      { value: "it", label: "IT" },
+                      { value: "finance", label: "Finance" },
+                      { value: "manager", label: "Manager" },
+                      { value: "other", label: "Other" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1 text-xs">
                   <span className="font-medium text-muted-foreground">Action</span>
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  <FluentSelect
+                    ariaLabel="Action"
                     value={stepForm.action_type}
-                    onChange={(event) =>
-                      setStepForm((prev) => ({ ...prev, action_type: event.target.value }))
+                    onChange={(value) =>
+                      setStepForm((prev) => ({ ...prev, action_type: value }))
                     }
-                  >
-                    <option value="verify">Verify</option>
-                    <option value="approve">Approve</option>
-                    <option value="recommend">Recommend</option>
-                    <option value="complete">Complete</option>
-                  </select>
+                    options={[
+                      { value: "verify", label: "Verify" },
+                      { value: "approve", label: "Approve" },
+                      { value: "recommend", label: "Recommend" },
+                      { value: "complete", label: "Complete" },
+                    ]}
+                  />
                 </label>
               </div>
               <label className="grid gap-1 text-xs">
                 <span className="font-medium text-muted-foreground">Required?</span>
-                <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Required?"
                   value={stepForm.is_required}
-                  onChange={(event) =>
-                    setStepForm((prev) => ({ ...prev, is_required: event.target.value }))
+                  onChange={(value) =>
+                    setStepForm((prev) => ({ ...prev, is_required: value }))
                   }
-                >
-                  <option value="true">Required</option>
-                  <option value="false">Optional</option>
-                </select>
+                  options={[
+                    { value: "true", label: "Required" },
+                    { value: "false", label: "Optional" },
+                  ]}
+                />
               </label>
             </div>
             <DialogFooter>
@@ -3252,56 +3256,53 @@ export function OffboardingView() {
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1 text-xs">
                           <span className="font-medium text-muted-foreground">Task type</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Task type"
                             value={taskForm.task_type}
-                            onChange={(event) =>
-                              setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))
+                            onChange={(value) =>
+                              setTaskForm((prev) => ({ ...prev, task_type: value }))
                             }
-                          >
-                            {OFFBOARDING_TASK_TYPE_OPTIONS.map((type) => (
-                              <option key={type} value={type}>
-                                {toTitleCaseWords(type)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_TASK_TYPE_OPTIONS.map((type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }))}
+                          />
                         </label>
                         <label className="grid gap-1 text-xs">
                           <span className="font-medium text-muted-foreground">Priority</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Priority"
                             value={taskForm.priority}
-                            onChange={(event) =>
-                              setTaskForm((prev) => ({ ...prev, priority: event.target.value }))
+                            onChange={(value) =>
+                              setTaskForm((prev) => ({ ...prev, priority: value }))
                             }
-                          >
-                            {OFFBOARDING_PRIORITY_OPTIONS.map((priority) => (
-                              <option key={priority} value={priority}>
-                                {toTitleCaseWords(priority)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_PRIORITY_OPTIONS.map((priority) => ({
+                              value: priority,
+                              label: toTitleCaseWords(priority),
+                            }))}
+                          />
                         </label>
                       </div>
                       <label className="grid gap-1 text-xs">
                         <span className="font-medium text-muted-foreground">Assigned user</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Assigned user"
                           value={taskForm.assigned_to_company_user_id}
-                          onChange={(event) =>
+                          placeholder="Optional assignee"
+                          onChange={(value) =>
                             setTaskForm((prev) => ({
                               ...prev,
-                              assigned_to_company_user_id: event.target.value,
+                              assigned_to_company_user_id: value,
                             }))
                           }
-                        >
-                          <option value="">Optional assignee</option>
-                          {employeeCompanyUserOptions.map((option) => (
-                            <option key={`offboarding-task-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Optional assignee" },
+                            ...employeeCompanyUserOptions.map((option) => ({
+                              value: String(option.companyUserId),
+                              label: option.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <label className="grid gap-1 text-xs">
                         <span className="font-medium text-muted-foreground">Due date</span>
@@ -3472,57 +3473,57 @@ export function OffboardingView() {
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
                       <label className="grid gap-1 text-xs">
                         <span className="font-medium text-muted-foreground">Clearance type</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Clearance type"
                           value={clearanceForm.clearance_type}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setClearanceForm((prev) => ({
                               ...prev,
-                              clearance_type: event.target.value,
+                              clearance_type: value,
                             }))
                           }
-                        >
-                          {OFFBOARDING_CLEARANCE_TYPE_OPTIONS.map((type) => (
-                            <option key={type} value={type}>
-                              {toTitleCaseWords(type)}
-                            </option>
-                          ))}
-                        </select>
+                          options={OFFBOARDING_CLEARANCE_TYPE_OPTIONS.map((type) => ({
+                            value: type,
+                            label: toTitleCaseWords(type),
+                          }))}
+                        />
                       </label>
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1 text-xs">
                           <span className="font-medium text-muted-foreground">Initial status</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Initial status"
                             value={clearanceForm.status}
-                            onChange={(event) =>
-                              setClearanceForm((prev) => ({ ...prev, status: event.target.value }))
+                            onChange={(value) =>
+                              setClearanceForm((prev) => ({ ...prev, status: value }))
                             }
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="cleared">Cleared</option>
-                            <option value="not_cleared">Not cleared</option>
-                          </select>
+                            options={[
+                              { value: "pending", label: "Pending" },
+                              { value: "cleared", label: "Cleared" },
+                              { value: "not_cleared", label: "Not cleared" },
+                            ]}
+                          />
                         </label>
                         <label className="grid gap-1 text-xs">
                           <span className="font-medium text-muted-foreground">Owner</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Owner"
                             value={clearanceForm.owner_company_user_id}
-                            onChange={(event) =>
+                            placeholder="Optional owner"
+                            onChange={(value) =>
                               setClearanceForm((prev) => ({
                                 ...prev,
-                                owner_company_user_id: event.target.value,
+                                owner_company_user_id: value,
                               }))
                             }
-                          >
-                            <option value="">Optional owner</option>
-                            {employeeCompanyUserOptions.map((option) => (
-                              <option key={`offboarding-clearance-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={[
+                              { value: "", label: "Optional owner" },
+                              ...employeeCompanyUserOptions.map((option) => ({
+                                value: String(option.companyUserId),
+                                label: option.label,
+                              })),
+                            ]}
+                          />
                         </label>
                       </div>
                       <label className="grid gap-1 text-xs">
@@ -3605,27 +3606,26 @@ export function OffboardingView() {
                               </div>
                               {normalizedStatus !== "cleared" && canManage ? (
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <select
-                                    className="h-7 max-w-[10rem] rounded-md border border-input bg-background px-2 text-[11px]"
-                                    defaultValue={ownerCompanyUserId == null ? "" : String(ownerCompanyUserId)}
+                                  <FluentSelect
+                                    ariaLabel="Assign clearance owner"
+                                    className="max-w-[10rem]"
+                                    size="small"
+                                    value={ownerCompanyUserId == null ? "" : String(ownerCompanyUserId)}
                                     disabled={saving}
-                                    onChange={(event) => {
-                                      if (event.target.value) {
-                                        void assignRequestClearance(clearanceRow, event.target.value)
+                                    placeholder="Assign owner"
+                                    onChange={(value) => {
+                                      if (value) {
+                                        void assignRequestClearance(clearanceRow, value)
                                       }
                                     }}
-                                    aria-label="Assign clearance owner"
-                                  >
-                                    <option value="">Assign owner</option>
-                                    {employeeCompanyUserOptions.map((option) => (
-                                      <option
-                                        key={`assign-clearance-${clearanceId}-${option.companyUserId}`}
-                                        value={String(option.companyUserId)}
-                                      >
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    options={[
+                                      { value: "", label: "Assign owner" },
+                                      ...employeeCompanyUserOptions.map((option) => ({
+                                        value: String(option.companyUserId),
+                                        label: option.label,
+                                      })),
+                                    ]}
+                                  />
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -3813,40 +3813,36 @@ export function OffboardingView() {
                     <div className="grid gap-2 md:grid-cols-2">
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Status</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Status"
                           value={exitInterviewForm.status}
                           disabled={!canManage && !canActOnSelected}
-                          onChange={(event) =>
-                            setExitInterviewForm((prev) => ({ ...prev, status: event.target.value }))
+                          onChange={(value) =>
+                            setExitInterviewForm((prev) => ({ ...prev, status: value }))
                           }
-                        >
-                          {OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS.map((status) => (
-                            <option key={status} value={status}>
-                              {toTitleCaseWords(status)}
-                            </option>
-                          ))}
-                        </select>
+                          options={OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS.map((status) => ({
+                            value: status,
+                            label: toTitleCaseWords(status),
+                          }))}
+                        />
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Knowledge transfer</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Knowledge transfer"
                           value={exitInterviewForm.knowledge_transfer_status}
                           disabled={!canManage && !canActOnSelected}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setExitInterviewForm((prev) => ({
                               ...prev,
-                              knowledge_transfer_status: event.target.value,
+                              knowledge_transfer_status: value,
                             }))
                           }
-                        >
-                          {OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS.map((status) => (
-                            <option key={status} value={status}>
-                              {toTitleCaseWords(status)}
-                            </option>
-                          ))}
-                        </select>
+                          options={OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS.map((status) => ({
+                            value: status,
+                            label: toTitleCaseWords(status),
+                          }))}
+                        />
                       </label>
                     </div>
                     <label className="grid gap-1">
@@ -3866,21 +3862,22 @@ export function OffboardingView() {
                     </label>
                     <label className="grid gap-1">
                       <span className="font-medium text-muted-foreground">Rehire eligible</span>
-                      <select
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      <FluentSelect
+                        ariaLabel="Rehire eligible"
                         value={exitInterviewForm.rehire_eligible}
                         disabled={!canManage && !canActOnSelected}
-                        onChange={(event) =>
+                        onChange={(value) =>
                           setExitInterviewForm((prev) => ({
                             ...prev,
-                            rehire_eligible: event.target.value,
+                            rehire_eligible: value,
                           }))
                         }
-                      >
-                        <option value="unknown">Not set</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
-                      </select>
+                        options={[
+                          { value: "unknown", label: "Not set" },
+                          { value: "true", label: "Yes" },
+                          { value: "false", label: "No" },
+                        ]}
+                      />
                     </label>
                     <label className="grid gap-1">
                       <span className="font-medium text-muted-foreground">Employee feedback</span>
@@ -3970,35 +3967,31 @@ export function OffboardingView() {
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Action type</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Action type"
                             value={actionForm.action_type}
-                            onChange={(event) =>
-                              setActionForm((prev) => ({ ...prev, action_type: event.target.value }))
+                            onChange={(value) =>
+                              setActionForm((prev) => ({ ...prev, action_type: value }))
                             }
-                          >
-                            {OFFBOARDING_ACTION_TYPE_OPTIONS.map((type) => (
-                              <option key={type} value={type}>
-                                {toTitleCaseWords(type)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_ACTION_TYPE_OPTIONS.map((type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }))}
+                          />
                         </label>
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Status</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Status"
                             value={actionForm.status}
-                            onChange={(event) =>
-                              setActionForm((prev) => ({ ...prev, status: event.target.value }))
+                            onChange={(value) =>
+                              setActionForm((prev) => ({ ...prev, status: value }))
                             }
-                          >
-                            {OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => (
-                              <option key={status} value={status}>
-                                {toTitleCaseWords(status)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => ({
+                              value: status,
+                              label: toTitleCaseWords(status),
+                            }))}
+                          />
                         </label>
                       </div>
                       <label className="grid gap-1">
@@ -4014,23 +4007,24 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Owner</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Owner"
                           value={actionForm.owner_company_user_id}
-                          onChange={(event) =>
+                          placeholder="Optional owner"
+                          onChange={(value) =>
                             setActionForm((prev) => ({
                               ...prev,
-                              owner_company_user_id: event.target.value,
+                              owner_company_user_id: value,
                             }))
                           }
-                        >
-                          <option value="">Optional owner</option>
-                          {employeeCompanyUserOptions.map((option) => (
-                            <option key={`offboarding-action-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Optional owner" },
+                            ...employeeCompanyUserOptions.map((option) => ({
+                              value: String(option.companyUserId),
+                              label: option.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>
@@ -4081,19 +4075,17 @@ export function OffboardingView() {
                               {toTitleCaseWords(readString(actionRow, ["action_type", "title", "name"]))}
                             </p>
                             {canManage ? (
-                              <select
-                                className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                              <FluentSelect
+                                ariaLabel="Update access action status"
+                                size="small"
                                 value={readString(actionRow, ["status"])}
                                 disabled={saving}
-                                onChange={(event) => void saveRequestActionStatus(actionRow, event.target.value)}
-                                aria-label="Update access action status"
-                              >
-                                {OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => (
-                                  <option key={status} value={status}>
-                                    {toTitleCaseWords(status)}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(value) => void saveRequestActionStatus(actionRow, value)}
+                                options={OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => ({
+                                  value: status,
+                                  label: toTitleCaseWords(status),
+                                }))}
+                              />
                             ) : (
                               <StatusDot status={readString(actionRow, ["status"])} />
                             )}
@@ -4147,35 +4139,31 @@ export function OffboardingView() {
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Asset type</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Asset type"
                             value={assetForm.asset_type}
-                            onChange={(event) =>
-                              setAssetForm((prev) => ({ ...prev, asset_type: event.target.value }))
+                            onChange={(value) =>
+                              setAssetForm((prev) => ({ ...prev, asset_type: value }))
                             }
-                          >
-                            {OFFBOARDING_ASSET_TYPE_OPTIONS.map((type) => (
-                              <option key={type} value={type}>
-                                {toTitleCaseWords(type)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_ASSET_TYPE_OPTIONS.map((type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }))}
+                          />
                         </label>
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Status</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Status"
                             value={assetForm.status}
-                            onChange={(event) =>
-                              setAssetForm((prev) => ({ ...prev, status: event.target.value }))
+                            onChange={(value) =>
+                              setAssetForm((prev) => ({ ...prev, status: value }))
                             }
-                          >
-                            {OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => (
-                              <option key={status} value={status}>
-                                {toTitleCaseWords(status)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => ({
+                              value: status,
+                              label: toTitleCaseWords(status),
+                            }))}
+                          />
                         </label>
                       </div>
                       <label className="grid gap-1">
@@ -4202,23 +4190,24 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Owner</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Owner"
                           value={assetForm.owner_company_user_id}
-                          onChange={(event) =>
+                          placeholder="Optional owner"
+                          onChange={(value) =>
                             setAssetForm((prev) => ({
                               ...prev,
-                              owner_company_user_id: event.target.value,
+                              owner_company_user_id: value,
                             }))
                           }
-                        >
-                          <option value="">Optional owner</option>
-                          {employeeCompanyUserOptions.map((option) => (
-                            <option key={`offboarding-asset-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Optional owner" },
+                            ...employeeCompanyUserOptions.map((option) => ({
+                              value: String(option.companyUserId),
+                              label: option.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>
@@ -4269,19 +4258,17 @@ export function OffboardingView() {
                               {readString(assetRow, ["asset_label", "title", "name"])}
                             </p>
                             {canManage ? (
-                              <select
-                                className="h-7 rounded-md border border-input bg-background px-2 text-[11px]"
+                              <FluentSelect
+                                ariaLabel="Update asset return status"
+                                size="small"
                                 value={readString(assetRow, ["status"])}
                                 disabled={saving}
-                                onChange={(event) => void saveRequestAssetStatus(assetRow, event.target.value)}
-                                aria-label="Update asset return status"
-                              >
-                                {OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => (
-                                  <option key={status} value={status}>
-                                    {toTitleCaseWords(status)}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(value) => void saveRequestAssetStatus(assetRow, value)}
+                                options={OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => ({
+                                  value: status,
+                                  label: toTitleCaseWords(status),
+                                }))}
+                              />
                             ) : (
                               <StatusDot status={readString(assetRow, ["status"])} />
                             )}
@@ -4333,35 +4320,31 @@ export function OffboardingView() {
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Item type</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Item type"
                             value={settlementForm.item_type}
-                            onChange={(event) =>
-                              setSettlementForm((prev) => ({ ...prev, item_type: event.target.value }))
+                            onChange={(value) =>
+                              setSettlementForm((prev) => ({ ...prev, item_type: value }))
                             }
-                          >
-                            {OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS.map((type) => (
-                              <option key={type} value={type}>
-                                {toTitleCaseWords(type)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS.map((type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }))}
+                          />
                         </label>
                         <label className="grid gap-1">
                           <span className="font-medium text-muted-foreground">Status</span>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          <FluentSelect
+                            ariaLabel="Status"
                             value={settlementForm.status}
-                            onChange={(event) =>
-                              setSettlementForm((prev) => ({ ...prev, status: event.target.value }))
+                            onChange={(value) =>
+                              setSettlementForm((prev) => ({ ...prev, status: value }))
                             }
-                          >
-                            {OFFBOARDING_SETTLEMENT_STATUS_OPTIONS.map((status) => (
-                              <option key={status} value={status}>
-                                {toTitleCaseWords(status)}
-                              </option>
-                            ))}
-                          </select>
+                            options={OFFBOARDING_SETTLEMENT_STATUS_OPTIONS.map((status) => ({
+                              value: status,
+                              label: toTitleCaseWords(status),
+                            }))}
+                          />
                         </label>
                       </div>
                       <label className="grid gap-1">
@@ -4400,23 +4383,24 @@ export function OffboardingView() {
                       </div>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Owner</span>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <FluentSelect
+                          ariaLabel="Owner"
                           value={settlementForm.owner_company_user_id}
-                          onChange={(event) =>
+                          placeholder="Optional owner"
+                          onChange={(value) =>
                             setSettlementForm((prev) => ({
                               ...prev,
-                              owner_company_user_id: event.target.value,
+                              owner_company_user_id: value,
                             }))
                           }
-                        >
-                          <option value="">Optional owner</option>
-                          {employeeCompanyUserOptions.map((option) => (
-                            <option key={`offboarding-settlement-owner-${option.companyUserId}`} value={String(option.companyUserId)}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: "", label: "Optional owner" },
+                            ...employeeCompanyUserOptions.map((option) => ({
+                              value: String(option.companyUserId),
+                              label: option.label,
+                            })),
+                          ]}
+                        />
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>

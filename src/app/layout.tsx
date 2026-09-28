@@ -8,6 +8,7 @@ import { SessionExpiryGuard } from "@/components/auth/session-expiry-guard";
 import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
 import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import { PwaProvider } from "@/components/pwa-provider";
+import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
@@ -101,14 +102,16 @@ export default function RootLayout({
           {accentBootstrapScript}
         </Script>
         <ThemeProvider>
-          <PwaProvider />
-          <SessionExpiryGuard />
-          <TooltipProvider>
-            {children}
-            <SuccessAlertOverlay />
-            <ErrorAlertOverlay />
-            <Toaster />
-          </TooltipProvider>
+          <AppFluentThemeProvider>
+            <PwaProvider />
+            <SessionExpiryGuard />
+            <TooltipProvider>
+              {children}
+              <SuccessAlertOverlay />
+              <ErrorAlertOverlay />
+              <Toaster />
+            </TooltipProvider>
+          </AppFluentThemeProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -55,6 +55,7 @@ import {
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
@@ -831,19 +832,15 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Type</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Type"
+                    className="w-full"
                     value={form.document_type_code ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, document_type_code: event.target.value }))
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, document_type_code: value }))
                     }
-                  >
-                    {DOCUMENT_TYPES.map((type) => (
-                      <option key={type.label} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={DOCUMENT_TYPES.map((type) => ({ value: type.value, label: type.label }))}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Expires (optional)</span>
@@ -872,20 +869,22 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">What should change</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="What should change"
+                    className="w-full"
                     value={form.request_type ?? "CONTACT_INFORMATION"}
-                    onChange={(event) =>
-                      setForm((current) => ({ request_type: event.target.value, reason: current.reason ?? "" }))
+                    onChange={(value) =>
+                      setForm((current) => ({ request_type: value, reason: current.reason ?? "" }))
                     }
-                  >
-                    <option value="CONTACT_INFORMATION">Phone or email</option>
-                    <option value="PERSONAL_INFORMATION">Name or personal details</option>
-                    <option value="ADDRESS_INFORMATION">Address</option>
-                    <option value="EMERGENCY_CONTACT">Emergency contact</option>
-                    <option value="PROFILE_PHOTO">Profile photo</option>
-                    <option value="OTHER_PROFILE_INFORMATION">Something else</option>
-                  </select>
+                    options={[
+                      { value: "CONTACT_INFORMATION", label: "Phone or email" },
+                      { value: "PERSONAL_INFORMATION", label: "Name or personal details" },
+                      { value: "ADDRESS_INFORMATION", label: "Address" },
+                      { value: "EMERGENCY_CONTACT", label: "Emergency contact" },
+                      { value: "PROFILE_PHOTO", label: "Profile photo" },
+                      { value: "OTHER_PROFILE_INFORMATION", label: "Something else" },
+                    ]}
+                  />
                 </label>
                 {form.request_type === "PROFILE_PHOTO" ? (
                   <label className="grid gap-1.5 text-sm">

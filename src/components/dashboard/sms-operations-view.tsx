@@ -59,6 +59,7 @@ import {
 } from "@/lib/dashboard-permissions"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { SmsRecipientPhoneInput } from "@/components/dashboard/sms-recipient-phone"
 import {
@@ -461,12 +462,19 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
           <div className="flex flex-wrap items-center gap-2">
             <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
             {activeTab === "logs" || (activeTab === "platform" && platformKind === "logs") ? (
-              <select className={inputClass + " max-w-40"} value={logStatus} onChange={(event) => setLogStatus(event.target.value)}>
-                <option value="">All statuses</option>
-                <option value="PENDING">Pending</option>
-                <option value="SENT">Sent</option>
-                <option value="FAILED">Failed</option>
-              </select>
+              <FluentSelect
+                ariaLabel="Log status"
+                className="max-w-40"
+                value={logStatus}
+                placeholder="All statuses"
+                onChange={setLogStatus}
+                options={[
+                  { value: "", label: "All statuses" },
+                  { value: "PENDING", label: "Pending" },
+                  { value: "SENT", label: "Sent" },
+                  { value: "FAILED", label: "Failed" },
+                ]}
+              />
             ) : null}
           </div>
           {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
@@ -522,10 +530,15 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Enabled</span>
-                  <select className={inputClass} value={form.is_enabled ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_enabled: event.target.value }))}>
-                    <option value="true">Enabled</option>
-                    <option value="false">Disabled</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Enabled"
+                    value={form.is_enabled ?? "true"}
+                    onChange={(value) => setForm((current) => ({ ...current, is_enabled: value }))}
+                    options={[
+                      { value: "true", label: "Enabled" },
+                      { value: "false", label: "Disabled" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Template</span><textarea className={textareaClass} value={form.sms_template ?? ""} onChange={(event) => setForm((current) => ({ ...current, sms_template: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>

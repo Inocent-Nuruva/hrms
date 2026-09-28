@@ -43,6 +43,7 @@ import { LumaSpin } from "@/components/ui/luma-spin"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -4186,23 +4187,23 @@ export function EmployeeHomeDashboard() {
                                 )}
                               </>
                             ) : field.type === "select" && field.options ? (
-                              <select
-                                value={val || (field.defaultValue ?? "")}
-                                onChange={(e) => updateFormValue(field.name, e.target.value)}
-                                className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                              >
-                                {field.options.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt === "true"
+                              <FluentSelect
+                                ariaLabel={field.label}
+                                className="w-full"
+                                value={String(val || (field.defaultValue ?? ""))}
+                                onChange={(value) => updateFormValue(field.name, value)}
+                                options={field.options.map((opt) => ({
+                                  value: opt,
+                                  label:
+                                    opt === "true"
                                       ? "Yes"
                                       : opt === "false"
                                         ? "No"
                                         : opt === opt.toUpperCase()
                                           ? opt
-                                          : opt.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase())}
-                                  </option>
-                                ))}
-                              </select>
+                                          : opt.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+                                }))}
+                              />
                             ) : field.type === "file" ? (
                               <div className="mt-1 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 dark:border-slate-700 dark:bg-slate-950">
                                 <Input

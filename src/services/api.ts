@@ -32,14 +32,49 @@ function buildUrl(path: string): string {
   return `${API_BASE_URL}${normalizedPath}`;
 }
 
+function validationLines(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object" || !("errors" in payload)) {
+    return [];
+  }
+  const validation = (payload as { errors?: { validation?: unknown } }).errors?.validation;
+  if (!Array.isArray(validation)) {
+    return [];
+  }
+  return validation.flatMap((entry) => {
+    if (typeof entry === "string" && entry.trim()) {
+      return [entry.trim()];
+    }
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+    const record = entry as { property?: unknown; constraints?: unknown };
+    const property = typeof record.property === "string" ? record.property : "";
+    const constraints =
+      record.constraints && typeof record.constraints === "object"
+        ? Object.values(record.constraints).filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+    return constraints.map((text) => (property ? `${property}: ${text}` : text));
+  });
+}
+
+function readableApiMessage(message: string | undefined, validation: string[], fallback: string) {
+  const generic = !message || message === "Bad Request" || message === "Validation failed";
+  if (generic && validation.length > 0) {
+    return validation.join(". ");
+  }
+  return message || fallback;
+}
+
 async function parseError(response: Response): Promise<ApiError> {
   let payload: ApiErrorResponse | null = null;
+  let raw: unknown = null;
 
   try {
     const text = await response.text();
     if (text) {
       try {
-        payload = JSON.parse(text) as ApiErrorResponse;
+        raw = JSON.parse(text);
+        payload = raw as ApiErrorResponse;
       } catch {
         payload = { message: text };
       }
@@ -54,7 +89,7 @@ async function parseError(response: Response): Promise<ApiError> {
       : response.status === 400
         ? "Please check the details you entered and try again."
         : `Request failed with status ${response.status}`;
-  const message = payload?.message || fallback;
+  const message = readableApiMessage(payload?.message, validationLines(raw), fallback);
   return new ApiError(message, response.status, payload?.details);
 }
 

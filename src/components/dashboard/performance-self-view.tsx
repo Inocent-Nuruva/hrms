@@ -61,6 +61,7 @@ import {
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type PerformanceSelfTab =
@@ -838,7 +839,7 @@ export function PerformanceSelfView({
               <div className="flex items-center gap-2">
                 <label className="relative sm:hidden"><SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none" /></label>
                 <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
-                <select value={overviewStatus} onChange={(event) => setOverviewStatus(event.target.value)} className="h-8 rounded-lg border border-border bg-background px-2 text-[10px] outline-none"><option value="ALL">All statuses</option>{overviewStatuses.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}</select>
+                <FluentSelect ariaLabel="Status" size="small" value={overviewStatus} onChange={setOverviewStatus} options={[{ value: "ALL", label: "All statuses" }, ...overviewStatuses.map((status) => ({ value: status, label: prettify(status) }))]} />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -952,12 +953,20 @@ export function PerformanceSelfView({
             {taskAudience === "employee" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Assigned to</span>
-                <select className={inputClass} value={taskForm.employee_id ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, employee_id: event.target.value }))}>
-                  <option value="">Select employee</option>
-                  {taskEmployees.map((employee) => (
-                    <option key={rowId(employee)} value={rowId(employee)}>{readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee))}</option>
-                  ))}
-                </select>
+                <FluentSelect
+                  ariaLabel="Assigned to"
+                  className="w-full"
+                  value={taskForm.employee_id ?? ""}
+                  onChange={(value) => setTaskForm((current) => ({ ...current, employee_id: value }))}
+                  placeholder="Select employee"
+                  options={[
+                    { value: "", label: "Select employee" },
+                    ...taskEmployees.map((employee) => ({
+                      value: rowId(employee),
+                      label: readString(employee, ["full_name", "fullName", "name"], employeeLabel(employee)),
+                    })),
+                  ]}
+                />
               </label>
             ) : (
               <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/25 px-3 py-2.5 text-sm">
@@ -966,8 +975,8 @@ export function PerformanceSelfView({
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Status</span><select className={inputClass} value="PLANNED" disabled><option value="PLANNED">Not started</option></select></label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><select className={inputClass} value={taskForm.priority ?? "MEDIUM"} onChange={(event) => setTaskForm((current) => ({ ...current, priority: event.target.value }))}><option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="URGENT">Urgent</option></select></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Status</span><FluentSelect ariaLabel="Status" className="w-full" value="PLANNED" disabled onChange={() => {}} options={[{ value: "PLANNED", label: "Not started" }]} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><FluentSelect ariaLabel="Priority" className="w-full" value={taskForm.priority ?? "MEDIUM"} onChange={(value) => setTaskForm((current) => ({ ...current, priority: value }))} options={[{ value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} /></label>
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><input type="date" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
             </div>
@@ -1137,11 +1146,17 @@ export function PerformanceSelfView({
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Status</span>
-                  <select className={inputClass} value={form.status ?? readString(actionRow, ["status"], "IN_PROGRESS")} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-                    <option value="OPEN">Open</option>
-                    <option value="IN_PROGRESS">In progress</option>
-                    <option value="COMPLETED">Completed</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Status"
+                    className="w-full"
+                    value={form.status ?? readString(actionRow, ["status"], "IN_PROGRESS")}
+                    onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+                    options={[
+                      { value: "OPEN", label: "Open" },
+                      { value: "IN_PROGRESS", label: "In progress" },
+                      { value: "COMPLETED", label: "Completed" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Progress percent</span>

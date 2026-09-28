@@ -2,12 +2,19 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import {
+  FluentProvider,
+  Tab,
+  TabList,
+  webDarkTheme,
+  webLightTheme,
+} from "@fluentui/react-components"
 
 import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
 import { RecruitmentPipelineView } from "@/components/dashboard/recruitment-pipeline-view"
 import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
-import { cn } from "@/lib/utils"
+import { useTheme } from "@/components/theme-provider"
 
 type RecruitmentTab = "pipeline" | "invite" | "registration" | "contracts"
 
@@ -22,7 +29,15 @@ export function RecruitmentView() {
   const pathname = usePathname() ?? "/dashboard/operations/recruitment"
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { resolvedTheme } = useTheme()
   const activeTab = resolveRecruitmentTab(searchParams?.get("tab") ?? null)
+  const fluentTheme = React.useMemo(
+    () => ({
+      ...(resolvedTheme === "dark" ? webDarkTheme : webLightTheme),
+      fontFamilyBase: "var(--font-comfortaa), Comfortaa, sans-serif",
+    }),
+    [resolvedTheme],
+  )
 
   const handleTabChange = React.useCallback(
     (nextTab: RecruitmentTab) => {
@@ -41,47 +56,44 @@ export function RecruitmentView() {
   )
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="tab-rail-scroll">
-        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
-          {([
-            { id: "pipeline", label: "Pipeline" },
-            { id: "invite", label: "Invite" },
-            { id: "registration", label: "Registration" },
-            { id: "contracts", label: "Contracts" },
-          ] as const).map((tab) => {
-            const isActive = activeTab === tab.id
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "shrink-0 border-b-2 px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors duration-200",
-                  isActive
-                    ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                )}
-              >
+    <FluentProvider theme={fluentTheme}>
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="tab-rail-scroll">
+          <TabList
+            aria-label="Recruitment sections"
+            selectedValue={activeTab}
+            onTabSelect={(_event, data) => {
+              if (typeof data.value === "string") {
+                handleTabChange(data.value as RecruitmentTab)
+              }
+            }}
+            className="min-w-full"
+          >
+            {([
+              { id: "pipeline", label: "Pipeline" },
+              { id: "invite", label: "Invite" },
+              { id: "registration", label: "Registration" },
+              { id: "contracts", label: "Contracts" },
+            ] as const).map((tab) => (
+              <Tab key={tab.id} value={tab.id}>
                 {tab.label}
-              </button>
-            )
-          })}
+              </Tab>
+            ))}
+          </TabList>
         </div>
-      </div>
 
-      {activeTab === "pipeline" ? (
-        <RecruitmentPipelineView />
-      ) : activeTab === "invite" ? (
-        <EmployeeInviteView />
-      ) : activeTab === "contracts" ? (
-        <EmploymentContractsView />
-      ) : (
-        <div className="min-w-0">
-          <EmployeeRegistrationView />
-        </div>
-      )}
-    </div>
+        {activeTab === "pipeline" ? (
+          <RecruitmentPipelineView />
+        ) : activeTab === "invite" ? (
+          <EmployeeInviteView />
+        ) : activeTab === "contracts" ? (
+          <EmploymentContractsView />
+        ) : (
+          <div className="min-w-0">
+            <EmployeeRegistrationView />
+          </div>
+        )}
+      </div>
+    </FluentProvider>
   )
 }

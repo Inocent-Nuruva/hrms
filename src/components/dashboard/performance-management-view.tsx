@@ -97,6 +97,7 @@ import {
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { forgetForbiddenRoute } from "@/lib/forbidden-routes"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { cn } from "@/lib/utils"
 
@@ -1822,10 +1823,16 @@ export function PerformanceManagementView({
                   <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none focus:border-primary" />
                 </label>
-                <select value={overviewStatus} onChange={(event) => setOverviewStatus(event.target.value)} className="h-8 rounded-lg border border-border bg-background px-2 text-[10px] text-foreground outline-none focus:border-primary">
-                  <option value="ALL">All statuses</option>
-                  {overviewStatuses.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}
-                </select>
+                <FluentSelect
+                  ariaLabel="Status"
+                  size="small"
+                  value={overviewStatus}
+                  onChange={(value) => setOverviewStatus(value)}
+                  options={[
+                    { value: "ALL", label: "All statuses" },
+                    ...overviewStatuses.map((status) => ({ value: status, label: prettify(status) })),
+                  ]}
+                />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -2053,29 +2060,45 @@ export function PerformanceManagementView({
                 <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
                 <Field label="End date"><input type="date" className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
                 <Field label="Aggregation">
-                  <select className={inputClass} value={form.annual_aggregation_method ?? ""} onChange={(event) => setForm((current) => ({ ...current, annual_aggregation_method: event.target.value }))}>
-                    <option value="">Default</option>
-                    {AGGREGATION_METHODS.map((item) => (
-                      <option key={item} value={item}>{prettify(item)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Aggregation"
+                    className="w-full"
+                    value={form.annual_aggregation_method ?? ""}
+                    placeholder="Default"
+                    onChange={(value) => setForm((current) => ({ ...current, annual_aggregation_method: value }))}
+                    options={[
+                      { value: "", label: "Default" },
+                      ...AGGREGATION_METHODS.map((item) => ({ value: item, label: prettify(item) })),
+                    ]}
+                  />
                 </Field>
               </>
             ) : null}
             {createMode === "period" ? (
               <>
                 <Field label="Financial year">
-                  <select className={inputClass} value={form.financial_year_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, financial_year_id: event.target.value }))}>
-                    <option value="">Select financial year</option>
-                    {years.map((year) => <option key={rowId(year)} value={rowId(year)}>{optionLabel(year)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Financial year"
+                    className="w-full"
+                    value={form.financial_year_id ?? ""}
+                    placeholder="Select financial year"
+                    onChange={(value) => setForm((current) => ({ ...current, financial_year_id: value }))}
+                    options={[
+                      { value: "", label: "Select financial year" },
+                      ...years.map((year) => ({ value: String(rowId(year)), label: optionLabel(year) })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Period type">
-                  <select className={inputClass} value={form.period_type ?? "MONTHLY"} onChange={(event) => setForm((current) => ({ ...current, period_type: event.target.value }))}>
-                    {PERIOD_TYPES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Period type"
+                    className="w-full"
+                    value={form.period_type ?? "MONTHLY"}
+                    onChange={(value) => setForm((current) => ({ ...current, period_type: value }))}
+                    options={PERIOD_TYPES.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Sequence"><input type="number" min="1" className={inputClass} value={form.sequence_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, sequence_number: event.target.value }))} /></Field>
                 <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
@@ -2087,21 +2110,23 @@ export function PerformanceManagementView({
                 {createMode === "kpi-version" ? (
                   <>
                     <Field label="KPI">
-                      <select
-                        className={inputClass}
+                      <FluentSelect
+                        ariaLabel="KPI"
+                        className="w-full"
                         value={form.kpi_id ?? ""}
-                        onChange={(event) => {
-                          const next = kpis.find((row) => rowId(row) === event.target.value)
-                          setForm(next ? seedKpiVersionForm(next) : { ...form, kpi_id: event.target.value })
+                        placeholder="Select KPI"
+                        onChange={(value) => {
+                          const next = kpis.find((row) => rowId(row) === value)
+                          setForm(next ? seedKpiVersionForm(next) : { ...form, kpi_id: value })
                         }}
-                      >
-                        <option value="">Select KPI</option>
-                        {kpis.map((kpi) => (
-                          <option key={rowId(kpi)} value={rowId(kpi)}>
-                            {readString(kpi, ["code"])} · {optionLabel(kpi)}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: "", label: "Select KPI" },
+                          ...kpis.map((kpi) => ({
+                            value: String(rowId(kpi)),
+                            label: `${readString(kpi, ["code"])} · ${optionLabel(kpi)}`,
+                          })),
+                        ]}
+                      />
                     </Field>
                     <p className="text-sm text-muted-foreground">
                       Creates a new version of the selected KPI. Templates, rules, and plans can pick it after save.
@@ -2114,44 +2139,62 @@ export function PerformanceManagementView({
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Unit"><input className={inputClass} value={form.measurement_unit ?? ""} onChange={(event) => setForm((current) => ({ ...current, measurement_unit: event.target.value }))} /></Field>
                 <Field label="Direction">
-                  <select className={inputClass} value={form.measurement_direction ?? "HIGHER_IS_BETTER"} onChange={(event) => setForm((current) => ({ ...current, measurement_direction: event.target.value }))}>
-                    {MEASUREMENT_DIRECTIONS.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Direction"
+                    className="w-full"
+                    value={form.measurement_direction ?? "HIGHER_IS_BETTER"}
+                    onChange={(value) => setForm((current) => ({ ...current, measurement_direction: value }))}
+                    options={MEASUREMENT_DIRECTIONS.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Formula">
-                  <select className={inputClass} value={form.scoring_formula ?? "PERCENT_TO_TARGET"} onChange={(event) => setForm((current) => ({ ...current, scoring_formula: event.target.value }))}>
-                    {SCORING_FORMULAS.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Formula"
+                    className="w-full"
+                    value={form.scoring_formula ?? "PERCENT_TO_TARGET"}
+                    onChange={(value) => setForm((current) => ({ ...current, scoring_formula: value }))}
+                    options={SCORING_FORMULAS.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Data source">
-                  <select className={inputClass} value={form.data_source_type ?? "MANUAL_EMPLOYEE"} onChange={(event) => setForm((current) => ({ ...current, data_source_type: event.target.value }))}>
-                    {DATA_SOURCES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Data source"
+                    className="w-full"
+                    value={form.data_source_type ?? "MANUAL_EMPLOYEE"}
+                    onChange={(value) => setForm((current) => ({ ...current, data_source_type: value }))}
+                    options={DATA_SOURCES.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Default target"><input className={inputClass} value={form.default_target_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, default_target_value: event.target.value }))} /></Field>
                 <Field label="Frequency">
-                  <select className={inputClass} value={form.frequency ?? "MONTHLY"} onChange={(event) => setForm((current) => ({ ...current, frequency: event.target.value }))}>
-                    {FREQUENCIES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Frequency"
+                    className="w-full"
+                    value={form.frequency ?? "MONTHLY"}
+                    onChange={(value) => setForm((current) => ({ ...current, frequency: value }))}
+                    options={FREQUENCIES.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
               </>
             ) : null}
             {createMode === "template" || createMode === "rule" || createMode === "plan" ? (
               <Field label="KPI version">
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="KPI version"
+                  className="w-full"
                   value={form.kpi_definition_version_id ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, kpi_definition_version_id: event.target.value }))
+                  placeholder="Select a published KPI version"
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, kpi_definition_version_id: value }))
                   }
-                >
-                  <option value="">Select a published KPI version</option>
-                  {kpiVersionOptions(kpis).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "Select a published KPI version" },
+                    ...kpiVersionOptions(kpis).map((option) => ({
+                      value: String(option.id),
+                      label: option.label,
+                    })),
+                  ]}
+                />
               </Field>
             ) : null}
             {createMode === "template" ? (
@@ -2166,12 +2209,17 @@ export function PerformanceManagementView({
               <>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
                 <Field label="Financial year">
-                  <select className={inputClass} value={form.financial_year_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, financial_year_id: event.target.value }))}>
-                    <option value="">Any year</option>
-                    {years.map((year) => (
-                      <option key={rowId(year)} value={rowId(year)}>{optionLabel(year)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Financial year"
+                    className="w-full"
+                    value={form.financial_year_id ?? ""}
+                    placeholder="Any year"
+                    onChange={(value) => setForm((current) => ({ ...current, financial_year_id: value }))}
+                    options={[
+                      { value: "", label: "Any year" },
+                      ...years.map((year) => ({ value: String(rowId(year)), label: optionLabel(year) })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Priority"><input className={inputClass} value={form.priority ?? ""} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} /></Field>
               </>
@@ -2208,10 +2256,16 @@ export function PerformanceManagementView({
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Default">
-                    <select className={inputClass} value={form.is_default ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_default: event.target.value }))}>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Default"
+                      className="w-full"
+                      value={form.is_default ?? "true"}
+                      onChange={(value) => setForm((current) => ({ ...current, is_default: value }))}
+                      options={[
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ]}
+                    />
                   </Field>
                   <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
                   <Field label="Effective to"><input type="date" className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
@@ -2229,10 +2283,16 @@ export function PerformanceManagementView({
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Default">
-                    <select className={inputClass} value={form.is_default ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_default: event.target.value }))}>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Default"
+                      className="w-full"
+                      value={form.is_default ?? "true"}
+                      onChange={(value) => setForm((current) => ({ ...current, is_default: value }))}
+                      options={[
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ]}
+                    />
                   </Field>
                   <Field label="Department ID"><input className={inputClass} inputMode="numeric" value={form.applies_to_department_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, applies_to_department_id: event.target.value }))} /></Field>
                   <Field label="Position ID"><input className={inputClass} inputMode="numeric" value={form.applies_to_position_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, applies_to_position_id: event.target.value }))} /></Field>
@@ -2244,20 +2304,33 @@ export function PerformanceManagementView({
             {createMode === "plan" || createMode === "generate-plan" ? (
               <>
                 <Field label="Employee">
-                  <select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}>
-                    <option value="">Select employee</option>
-                    {employees.map((employee) => (
-                      <option key={rowId(employee)} value={rowId(employee)}>{employeeLabel(employee)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Employee"
+                    className="w-full"
+                    value={form.employee_id ?? ""}
+                    placeholder="Select employee"
+                    onChange={(value) => setForm((current) => ({ ...current, employee_id: value }))}
+                    options={[
+                      { value: "", label: "Select employee" },
+                      ...employees.map((employee) => ({
+                        value: String(rowId(employee)),
+                        label: employeeLabel(employee),
+                      })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Financial year">
-                  <select className={inputClass} value={form.financial_year_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, financial_year_id: event.target.value }))}>
-                    <option value="">Select year</option>
-                    {years.map((year) => (
-                      <option key={rowId(year)} value={rowId(year)}>{optionLabel(year)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Financial year"
+                    className="w-full"
+                    value={form.financial_year_id ?? ""}
+                    placeholder="Select year"
+                    onChange={(value) => setForm((current) => ({ ...current, financial_year_id: value }))}
+                    options={[
+                      { value: "", label: "Select year" },
+                      ...years.map((year) => ({ value: String(rowId(year)), label: optionLabel(year) })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
                 <Field label="Effective to"><input type="date" className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
@@ -2269,12 +2342,20 @@ export function PerformanceManagementView({
             {createMode === "development" ? (
               <>
                 <Field label="Employee">
-                  <select className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))}>
-                    <option value="">Select employee</option>
-                    {employees.map((employee) => (
-                      <option key={rowId(employee)} value={rowId(employee)}>{employeeLabel(employee)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Employee"
+                    className="w-full"
+                    value={form.employee_id ?? ""}
+                    placeholder="Select employee"
+                    onChange={(value) => setForm((current) => ({ ...current, employee_id: value }))}
+                    options={[
+                      { value: "", label: "Select employee" },
+                      ...employees.map((employee) => ({
+                        value: String(rowId(employee)),
+                        label: employeeLabel(employee),
+                      })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Plan title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
@@ -2331,20 +2412,32 @@ export function PerformanceManagementView({
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Relationship">
-                    <select className={inputClass} value={form.relationship_type ?? "PEER"} onChange={(event) => setForm((current) => ({ ...current, relationship_type: event.target.value }))}>
-                      <option value="PEER">Peer</option>
-                      <option value="SUBORDINATE">Subordinate</option>
-                      <option value="STAKEHOLDER">Stakeholder</option>
-                      <option value="MANAGER">Manager</option>
-                      <option value="OTHER">Other</option>
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Relationship"
+                      className="w-full"
+                      value={form.relationship_type ?? "PEER"}
+                      onChange={(value) => setForm((current) => ({ ...current, relationship_type: value }))}
+                      options={[
+                        { value: "PEER", label: "Peer" },
+                        { value: "SUBORDINATE", label: "Subordinate" },
+                        { value: "STAKEHOLDER", label: "Stakeholder" },
+                        { value: "MANAGER", label: "Manager" },
+                        { value: "OTHER", label: "Other" },
+                      ]}
+                    />
                   </Field>
                   <Field label="Due date"><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
                   <Field label="Anonymous">
-                    <select className={inputClass} value={form.is_anonymous ?? "true"} onChange={(event) => setForm((current) => ({ ...current, is_anonymous: event.target.value }))}>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Anonymous"
+                      className="w-full"
+                      value={form.is_anonymous ?? "true"}
+                      onChange={(value) => setForm((current) => ({ ...current, is_anonymous: value }))}
+                      options={[
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ]}
+                    />
                   </Field>
                 </div>
               </>
@@ -2461,21 +2554,20 @@ function ScorecardComponentBuilder({
               </label>
               <label className="grid gap-1 text-xs lg:block">
                 <span className="font-semibold text-muted-foreground lg:hidden">Type</span>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Type"
+                  className="w-full"
                   value={component.type}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     updateComponent(component.id, {
-                      type: event.target.value as ScorecardComponentDraft["type"],
+                      type: value as ScorecardComponentDraft["type"],
                     })
                   }
-                >
-                  {SCORECARD_COMPONENT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {prettify(type)}
-                    </option>
-                  ))}
-                </select>
+                  options={SCORECARD_COMPONENT_TYPES.map((type) => ({
+                    value: type,
+                    label: prettify(type),
+                  }))}
+                />
               </label>
               <label className="grid gap-1 text-xs lg:block">
                 <span className="font-semibold text-muted-foreground lg:hidden">Weight</span>
@@ -2586,21 +2678,20 @@ function WorkflowStepBuilder({
               </label>
               <label className="grid gap-1 text-xs lg:block">
                 <span className="font-semibold text-muted-foreground lg:hidden">Approver</span>
-                <select
-                  className={inputClass}
+                <FluentSelect
+                  ariaLabel="Approver"
+                  className="w-full"
                   value={step.type}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     updateStep(step.id, {
-                      type: event.target.value as WorkflowStepDraft["type"],
+                      type: value as WorkflowStepDraft["type"],
                     })
                   }
-                >
-                  {WORKFLOW_STEP_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {prettify(type)}
-                    </option>
-                  ))}
-                </select>
+                  options={WORKFLOW_STEP_TYPES.map((type) => ({
+                    value: type,
+                    label: prettify(type),
+                  }))}
+                />
               </label>
               <label className="grid gap-1 text-xs lg:block">
                 <span className="font-semibold text-muted-foreground lg:hidden">Sequence</span>

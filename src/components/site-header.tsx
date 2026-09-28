@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   BellIcon,
   CheckCheckIcon,
+  Clock3Icon,
   ExpandIcon,
   MinimizeIcon,
   RefreshCwIcon,
@@ -58,8 +59,8 @@ function QuickSettingsMenu({
     <Popover>
       <PopoverTrigger
         className={cn(
-          buttonVariants({ variant: "outline", size: "icon-sm" }),
-          "relative rounded-lg border-border bg-muted/45 text-foreground shadow-none hover:border-primary/30 hover:bg-primary/5 hover:text-primary",
+          buttonVariants({ variant: "ghost", size: "icon-sm" }),
+          "relative rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary",
         )}
         aria-label="Open quick settings"
         title="Quick settings"
@@ -116,6 +117,7 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const [notificationsOpen, setNotificationsOpen] = React.useState(false)
   const [fullscreen, setFullscreen] = React.useState(false)
+  const [currentTime, setCurrentTime] = React.useState<Date | null>(null)
   const {
     connectSocket,
     connected,
@@ -131,6 +133,20 @@ export function SiteHeader({
       ? "bg-amber-500 animate-pulse"
       : "bg-slate-400"
   const liveStatusLabel = connected ? "Live" : socketConfigured ? "Connecting" : "REST only"
+  const clockParts = currentTime
+    ? new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).formatToParts(currentTime)
+    : []
+  const clockPart = (type: Intl.DateTimeFormatPartTypes) =>
+    clockParts.find((part) => part.type === type)?.value
+  const clockDate = currentTime?.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })
 
   React.useEffect(() => {
     if (scope === "platform") return
@@ -144,6 +160,13 @@ export function SiteHeader({
     updateFullscreen()
     document.addEventListener("fullscreenchange", updateFullscreen)
     return () => document.removeEventListener("fullscreenchange", updateFullscreen)
+  }, [])
+
+  React.useEffect(() => {
+    const updateClock = () => setCurrentTime(new Date())
+    updateClock()
+    const interval = window.setInterval(updateClock, 1000)
+    return () => window.clearInterval(interval)
   }, [])
 
   const toggleFullscreen = async () => {
@@ -175,6 +198,28 @@ export function SiteHeader({
         ) : null}
 
         <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+          <div
+            className="hidden h-10 items-center gap-2.5 px-2 text-foreground sm:inline-flex"
+            aria-label={currentTime ? `Current time ${currentTime.toLocaleTimeString()}` : "Current local time"}
+            title={currentTime ? currentTime.toLocaleDateString(undefined, { dateStyle: "full" }) : "Local time"}
+          >
+            <span className="inline-flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Clock3Icon className="size-4" aria-hidden="true" />
+            </span>
+            <span className="grid gap-0.5 leading-none">
+              <span className="flex items-baseline gap-1 tabular-nums">
+                <time className="text-sm font-bold tracking-tight" dateTime={currentTime?.toISOString()}>
+                  {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}
+                </time>
+                {clockPart("dayPeriod") ? (
+                  <span className="text-[9px] font-semibold uppercase text-muted-foreground">{clockPart("dayPeriod")}</span>
+                ) : null}
+                <span className="text-[10px] font-medium text-muted-foreground">:{clockPart("second") ?? "--"}</span>
+              </span>
+              <span className="text-[10px] font-medium text-muted-foreground">{clockDate ?? "Local time"}</span>
+            </span>
+          </div>
+
           <Button
             type="button"
             size="icon-sm"
@@ -216,7 +261,7 @@ export function SiteHeader({
               <DialogPopup
                 from="right"
                 showCloseButton
-                className="flex h-[min(92vh,880px)] w-[calc(100%-1rem)] max-w-none flex-col overflow-hidden p-4 sm:w-[min(48rem,calc(100%-2rem))] sm:p-5 lg:w-[min(52rem,calc(100%-2rem))]"
+                className="notification-dialog flex h-full min-h-0 flex-col overflow-hidden p-4 sm:p-5"
               >
                 <DialogHeader className="mb-0 shrink-0 space-y-0 pr-10 pb-1">
                   <div className="flex flex-col items-start gap-0.5">

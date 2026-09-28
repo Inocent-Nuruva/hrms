@@ -505,7 +505,9 @@ export function AttendancePunchActions({
         <Button
           type="button"
           size={compact ? "xs" : "sm"}
-          className={compact ? "h-6 gap-1 rounded-md px-2 text-[10px]" : "h-8 gap-1.5 px-2.5 text-xs"}
+          className={compact
+            ? "h-7 gap-1 rounded-md px-2 text-[11px] font-semibold shadow-sm"
+            : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
           onClick={() => void submitPunch("in")}
         >
@@ -520,7 +522,9 @@ export function AttendancePunchActions({
           type="button"
           variant="outline"
           size={compact ? "xs" : "sm"}
-          className={compact ? "h-6 gap-1 rounded-md px-2 text-[10px]" : "h-8 gap-1.5 px-2.5 text-xs"}
+          className={compact
+            ? "h-7 gap-1 rounded-md border-border bg-background px-2 text-[11px] font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5"
+            : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
           onClick={() => void submitPunch("out")}
         >
@@ -611,8 +615,26 @@ export function DashboardAttendanceQuickActions() {
 
   if (!checked || !state) return null
 
+  const statusLabel = state.checkOut
+    ? "Day complete"
+    : state.checkIn
+      ? "On shift"
+      : "Ready to start"
+  const statusDetail = state.checkIn
+    ? state.checkOut
+      ? `${state.checkIn} – ${state.checkOut}`
+      : `In ${state.checkIn}`
+    : "No check-in yet"
+
   return (
-    <div className="relative flex items-center justify-center">
+    <div className="relative flex items-center gap-2 rounded-lg border border-border/70 bg-card/90 p-1 shadow-sm">
+      <div className="hidden min-w-[76px] flex-col pl-1 leading-tight 2xl:flex">
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-foreground">
+          <span className={cn("size-1.5 rounded-full", state.checkOut ? "bg-muted-foreground/50" : "bg-emerald-500")} />
+          {statusLabel}
+        </span>
+        <span className="mt-0.5 text-[9px] tabular-nums text-muted-foreground">{statusDetail}</span>
+      </div>
       <AttendancePunchActions
         employeeId={state.employeeId}
         canCheckIn={state.canCheckIn}

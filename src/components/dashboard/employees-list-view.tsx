@@ -14,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Field } from "@fluentui/react-components";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1394,27 +1395,34 @@ export function EmployeesListView({
               login.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Input
-            type="password"
-            value={temporaryPassword}
-            onChange={(event) => setTemporaryPassword(event.target.value)}
-            minLength={8}
-            autoComplete="new-password"
-            placeholder="Temporary password"
-          />
+          <Field label="Temporary password" className="mt-4">
+            <Input
+              type="password"
+              appearance="outline"
+              value={temporaryPassword}
+              onChange={(_event, data) => setTemporaryPassword(data.value)}
+              minLength={8}
+              autoComplete="new-password"
+              placeholder="Enter a temporary password"
+              className="w-full"
+            />
+          </Field>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={passwordResetBusy}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
+              render={
+                <Button type="button">
+                  {passwordResetBusy ? "Updating..." : "Update"}
+                </Button>
+              }
               onClick={(event) => {
                 event.preventDefault();
                 void confirmPasswordReset();
               }}
               disabled={passwordResetBusy || !temporaryPassword.trim()}
-            >
-              {passwordResetBusy ? "Resetting..." : "Reset Password"}
-            </AlertDialogAction>
+            />
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,15 +1,69 @@
 "use client"
 
 import {
-  LiquidButton,
+  Button as FluentButton,
+  type ButtonProps as FluentButtonProps,
+} from "@fluentui/react-components"
+import { cn } from "@/lib/utils"
+import {
   liquidButtonVariants,
   type LiquidButtonProps,
 } from "@/components/animate-ui/components/buttons/liquid"
 
 const buttonVariants = liquidButtonVariants
 
-function Button(props: LiquidButtonProps) {
-  return <LiquidButton {...props} />
+type ButtonProps = Omit<FluentButtonProps, "appearance" | "size"> & {
+  variant?: LiquidButtonProps["variant"] | "result"
+  appearance?: FluentButtonProps["appearance"]
+  size?: LiquidButtonProps["size"] | "small" | "medium" | "large"
+}
+
+function Button({
+  variant = "default",
+  size = "default",
+  appearance,
+  className,
+  ...props
+}: ButtonProps) {
+  const fluentAppearance = appearance ?? (
+    variant === "default"
+      ? "primary"
+      : variant === "outline"
+        ? "outline"
+        : variant === "secondary"
+          ? "secondary"
+          : variant === "destructive"
+            ? "primary"
+        : "subtle"
+  )
+  const fluentSize =
+    size === "lg" || size === "large"
+      ? "large"
+      : size === "default" || size === "medium"
+        ? "medium"
+        : "small"
+  const iconSizeClass = size?.startsWith("icon")
+    ? size === "icon-lg"
+      ? "min-w-9 h-9 p-0"
+      : size === "icon-xs"
+        ? "min-w-6 h-6 p-0"
+        : "min-w-7 h-7 p-0"
+    : undefined
+  const variantClass =
+    variant === "destructive"
+      ? "!border-destructive !bg-destructive !text-white hover:!bg-destructive/90"
+      : variant === "link"
+        ? "h-auto border-0 bg-transparent px-0 text-primary underline-offset-4 hover:bg-transparent hover:underline"
+        : undefined
+
+  return (
+    <FluentButton
+      {...props}
+      appearance={fluentAppearance}
+      size={fluentSize}
+      className={cn(iconSizeClass, variantClass, className)}
+    />
+  )
 }
 
 export { Button, buttonVariants }

@@ -35,6 +35,7 @@ import {
 } from "@/hooks/use-forbidden-route-guard"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type ManagerSelfTab = "overview" | "members" | "attendance" | "actions"
@@ -223,12 +224,19 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
               </>
             ) : null}
             {activeTab === "actions" ? (
-              <select className={inputClass + " max-w-40"} value={actionStatus} onChange={(event) => setActionStatus(event.target.value)}>
-                <option value="">All statuses</option>
-                <option value="OPEN">Open</option>
-                <option value="PENDING">Pending</option>
-                <option value="DONE">Done</option>
-              </select>
+              <FluentSelect
+                ariaLabel="Action status"
+                className="max-w-40"
+                value={actionStatus}
+                placeholder="All statuses"
+                onChange={setActionStatus}
+                options={[
+                  { value: "", label: "All statuses" },
+                  { value: "OPEN", label: "Open" },
+                  { value: "PENDING", label: "Pending" },
+                  { value: "DONE", label: "Done" },
+                ]}
+              />
             ) : null}
           </div>
           {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}

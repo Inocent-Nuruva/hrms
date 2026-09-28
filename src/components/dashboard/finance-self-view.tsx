@@ -54,6 +54,7 @@ import {
 } from "@/lib/admin-api";
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
 function readStoredToken() {
@@ -694,23 +695,25 @@ export function FinanceSelfView() {
               <div className="grid gap-3">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Product</span>
-                  <select
-                    className={inputClass}
+                  <FluentSelect
+                    ariaLabel="Product"
+                    className="w-full"
                     value={form.product_id ?? ""}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        product_id: event.target.value,
+                        product_id: value,
                       }))
                     }
-                  >
-                    <option value="">Select product</option>
-                    {products.map((product) => (
-                      <option key={rowId(product)} value={rowId(product)}>
-                        {optionLabel(product)}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select product"
+                    options={[
+                      { value: "", label: "Select product" },
+                      ...products.map((product) => ({
+                        value: rowId(product),
+                        label: optionLabel(product),
+                      })),
+                    ]}
+                  />
                 </label>
                 {currentProduct ? (
                   <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm sm:grid-cols-3">

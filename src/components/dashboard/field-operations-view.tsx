@@ -59,6 +59,7 @@ import {
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type FieldOpsTab = "overview" | "visits" | "map" | "parties" | "setup"
@@ -418,9 +419,12 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Name</span><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span>
-                  <select className={inputClass} value={form.party_type ?? "CUSTOMER"} onChange={(event) => setForm((current) => ({ ...current, party_type: event.target.value }))}>
-                    {PARTY_TYPES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Type"
+                    value={form.party_type ?? "CUSTOMER"}
+                    onChange={(value) => setForm((current) => ({ ...current, party_type: value }))}
+                    options={PARTY_TYPES.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Contact</span><input className={inputClass} value={form.contact_person ?? ""} onChange={(event) => setForm((current) => ({ ...current, contact_person: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Phone</span><input className={inputClass} value={form.phone ?? ""} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></label>
@@ -438,11 +442,16 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
             {createMode === "review" ? (
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Decision</span>
-                  <select className={inputClass} value={form.decision ?? "APPROVE"} onChange={(event) => setForm((current) => ({ ...current, decision: event.target.value }))}>
-                    <option value="APPROVE">Approve</option>
-                    <option value="RETURN">Return</option>
-                    <option value="REJECT">Reject</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Decision"
+                    value={form.decision ?? "APPROVE"}
+                    onChange={(value) => setForm((current) => ({ ...current, decision: value }))}
+                    options={[
+                      { value: "APPROVE", label: "Approve" },
+                      { value: "RETURN", label: "Return" },
+                      { value: "REJECT", label: "Reject" },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Comments</span><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></label>
               </>

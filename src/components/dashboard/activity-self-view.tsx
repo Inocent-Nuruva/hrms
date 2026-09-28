@@ -41,6 +41,7 @@ import {
   submitMyActivityReport,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 
@@ -462,20 +463,29 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                 <>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Category</span>
-                    <select className={inputClass} value={form.activity_category_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_category_id: event.target.value }))}>
-                      <option value="">Select category</option>
-                      {categories.map((category) => (
-                        <option key={rowId(category)} value={rowId(category)}>{optionLabel(category)}</option>
-                      ))}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Category"
+                      className="w-full"
+                      value={form.activity_category_id ?? ""}
+                      onChange={(value) => setForm((current) => ({ ...current, activity_category_id: value }))}
+                      placeholder="Select category"
+                      options={[
+                        { value: "", label: "Select category" },
+                        ...categories.map((category) => ({ value: rowId(category), label: optionLabel(category) })),
+                      ]}
+                    />
                   </label>
                   <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
                   <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Status</span>
-                    <select className={inputClass} value={form.status ?? "COMPLETED"} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-                      {ENTRY_STATUSES.map((status) => <option key={status} value={status}>{prettify(status)}</option>)}
-                    </select>
+                    <FluentSelect
+                      ariaLabel="Status"
+                      className="w-full"
+                      value={form.status ?? "COMPLETED"}
+                      onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+                      options={ENTRY_STATUSES.map((status) => ({ value: status, label: prettify(status) }))}
+                    />
                   </label>
                 </>
               ) : null}

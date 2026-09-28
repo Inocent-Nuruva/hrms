@@ -87,6 +87,7 @@ import { showSuccessAlert } from "@/lib/success-alert"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -4686,36 +4687,34 @@ export function OnboardingView() {
                   value={requestSearch}
                   onChange={setRequestSearch}
                 />
-                <select
-                  className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                <FluentSelect
+                  ariaLabel="Filter request status"
+                  size="small"
+                  className="min-w-[8.5rem]"
                   value={requestStatusFilter}
-                  onChange={(event) => setRequestStatusFilter(event.target.value)}
-                  aria-label="Filter request status"
-                >
-                  {requestStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status === "all" ? "All statuses" : toTitleCaseWords(status)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setRequestStatusFilter}
+                  options={requestStatusOptions.map((status) => ({
+                    value: status,
+                    label: status === "all" ? "All statuses" : toTitleCaseWords(status),
+                  }))}
+                />
                 {isEmployeeMode ? null : (
-                  <select
-                    className="h-8 min-w-[9rem] max-w-[12rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                  <FluentSelect
+                    ariaLabel="Filter by employee"
+                    size="small"
+                    className="min-w-[9rem] max-w-[12rem]"
                     value={requestEmployeeFilter}
-                    onChange={(event) => setRequestEmployeeFilter(event.target.value)}
-                    aria-label="Filter by employee"
-                  >
-                    <option value="">All employees</option>
-                    {employees.map((row, index) => {
-                      const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                      if (employeeId === null) return null
-                      return (
-                        <option key={`req-emp-${employeeId}-${index}`} value={String(employeeId)}>
-                          {resolveEmployeeLabel(employeeId)}
-                        </option>
-                      )
-                    })}
-                  </select>
+                    placeholder="All employees"
+                    onChange={setRequestEmployeeFilter}
+                    options={[
+                      { value: "", label: "All employees" },
+                      ...employees.flatMap((row) => {
+                        const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
+                        if (employeeId === null) return []
+                        return [{ value: String(employeeId), label: resolveEmployeeLabel(employeeId) }]
+                      }),
+                    ]}
+                  />
                 )}
               </>
             }
@@ -6446,93 +6445,98 @@ export function OnboardingView() {
                         )}
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Task type
-                          <select
-                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                          <FluentSelect
+                            ariaLabel="Task type"
                             value={taskForm.task_type}
-                            onChange={(event) =>
+                            onChange={(value) =>
                               setTaskForm((prev) => ({
                                 ...prev,
-                                task_type: event.target.value,
+                                task_type: value,
                               }))
                             }
-                          >
-                            {ONBOARDING_TASK_TYPE_OPTIONS.map((type) => (
-                              <option key={type} value={type}>
-                                {toTitleCaseWords(type)}
-                              </option>
-                            ))}
-                          </select>
+                            options={ONBOARDING_TASK_TYPE_OPTIONS.map((type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }))}
+                          />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Department{taskForm.task_type === "asset" ? " *" : ""}
-                          <select
-                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
+                          <FluentSelect
+                            ariaLabel="Department"
                             value={taskForm.assigned_department_id}
-                            onChange={(event) =>
+                            placeholder={taskForm.task_type === "asset" ? "Select department" : "Optional department"}
+                            onChange={(value) =>
                               setTaskForm((prev) => ({
                                 ...prev,
-                                assigned_department_id: event.target.value,
+                                assigned_department_id: value,
                                 assigned_company_user_id: "",
                               }))
                             }
-                          >
-                            <option value="">
-                              {taskForm.task_type === "asset" ? "Select department" : "Optional department"}
-                            </option>
-                            {departments.map((row, index) => {
-                              const departmentId = readNumber(row, ["id", "department_id"])
-                              if (departmentId === null) return null
-                              return (
-                                <option
-                                  key={`onboarding-task-dept-${departmentId}-${index}`}
-                                  value={String(departmentId)}
-                                >
-                                  {resolveOptionLabel(
+                            options={[
+                              {
+                                value: "",
+                                label: taskForm.task_type === "asset" ? "Select department" : "Optional department",
+                              },
+                              ...departments.flatMap((row) => {
+                                const departmentId = readNumber(row, ["id", "department_id"])
+                                if (departmentId === null) return []
+                                return [{
+                                  value: String(departmentId),
+                                  label: resolveOptionLabel(
                                     departments,
                                     departmentId,
                                     ["id", "department_id"],
                                     ["name", "title"]
-                                  )}
-                                </option>
-                              )
-                            })}
-                          </select>
+                                  ),
+                                }]
+                              }),
+                            ]}
+                          />
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700">
                           Specific person (optional)
-                          <select
-                            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          <FluentSelect
+                            ariaLabel="Specific person"
                             value={taskForm.assigned_company_user_id}
-                            onChange={(event) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                assigned_company_user_id: event.target.value,
-                              }))
-                            }
                             disabled={taskForm.task_type === "asset" && !taskForm.assigned_department_id}
-                          >
-                            <option value="">
-                              {taskForm.assigned_department_id
+                            placeholder={
+                              taskForm.assigned_department_id
                                 ? "Everyone in the department"
                                 : taskForm.task_type === "asset"
                                   ? "Select a department first"
-                                  : "Optional user"}
-                            </option>
-                            {(taskForm.assigned_department_id ? taskAssignableUsers : users).map((row, index) => {
-                              const userId = preferredAssigneeId(row)
-                              if (userId === null) return null
-                              return (
-                                <option key={`onboarding-task-user-${userId}-${index}`} value={String(userId)}>
-                                  {resolveOptionLabel(
+                                  : "Optional user"
+                            }
+                            onChange={(value) =>
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                assigned_company_user_id: value,
+                              }))
+                            }
+                            options={[
+                              {
+                                value: "",
+                                label: taskForm.assigned_department_id
+                                  ? "Everyone in the department"
+                                  : taskForm.task_type === "asset"
+                                    ? "Select a department first"
+                                    : "Optional user",
+                              },
+                              ...(taskForm.assigned_department_id ? taskAssignableUsers : users).flatMap((row) => {
+                                const userId = preferredAssigneeId(row)
+                                if (userId === null) return []
+                                return [{
+                                  value: String(userId),
+                                  label: resolveOptionLabel(
                                     [row, ...users],
                                     userId,
                                     ["id", "company_user_id", "user_id"],
                                     ["full_name", "name", "email"]
-                                  )}
-                                </option>
-                              )
-                            })}
-                          </select>
+                                  ),
+                                }]
+                              }),
+                            ]}
+                          />
                           {taskForm.assigned_department_id ? (
                             <span className="font-normal text-slate-500">
                               Leave blank to notify and assign the whole department.
@@ -7060,18 +7064,17 @@ export function OnboardingView() {
                   value={workflowSearch}
                   onChange={setWorkflowSearch}
                 />
-                <select
-                  className="h-8 min-w-[8.5rem] rounded-md border border-border bg-background px-2 text-xs text-foreground"
+                <FluentSelect
+                  ariaLabel="Filter workflow status"
+                  size="small"
+                  className="min-w-[8.5rem]"
                   value={workflowStatusFilter}
-                  onChange={(event) => setWorkflowStatusFilter(event.target.value)}
-                  aria-label="Filter workflow status"
-                >
-                  {workflowStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status === "all" ? "All statuses" : toTitleCaseWords(status)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setWorkflowStatusFilter}
+                  options={workflowStatusOptions.map((status) => ({
+                    value: status,
+                    label: status === "all" ? "All statuses" : toTitleCaseWords(status),
+                  }))}
+                />
               </>
             }
             toolbarActions={

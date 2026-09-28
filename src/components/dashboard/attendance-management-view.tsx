@@ -22,6 +22,7 @@ import {
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1562,273 +1563,243 @@ function FieldInput({
   disabled?: boolean
 }) {
   if (field.key === "branch_id" || field.key === "branchId") {
+    const branchPlaceholder = branchesLoading ? "Loading branches..." : "Select branch"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {branchesLoading ? "Loading branches..." : "Select branch"}
-        </option>
-        {branches.map((branch, index) => {
-          const id = readNumberFromRecord(branch, ["id", "branch_id"])
-          if (id === null) {
-            return null
-          }
-          return (
-            <option key={`branch-${id}-${index}`} value={String(id)}>
-              {readStringFromRecord(branch, ["name", "title", "display_name"]) ?? `Branch ${id}`}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={branchPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: branchPlaceholder },
+          ...branches.flatMap((branch) => {
+            const id = readNumberFromRecord(branch, ["id", "branch_id"])
+            if (id === null) {
+              return []
+            }
+            return [{
+              value: String(id),
+              label: readStringFromRecord(branch, ["name", "title", "display_name"]) ?? `Branch ${id}`,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "geofence_id") {
+    const geofencePlaceholder = geofencesLoading ? "Loading geofences..." : "Select geofence"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {geofencesLoading ? "Loading geofences..." : "Select geofence"}
-        </option>
-        {geofences.map((geofence, index) => {
-          const id = readNumberFromRecord(geofence, ["id"])
-          if (id === null) {
-            return null
-          }
-          const name =
-            readStringFromRecord(geofence, ["name"]) ?? `Geofence ${id}`
-          const type = readStringFromRecord(geofence, ["type"])
-          return (
-            <option key={`geofence-${id}-${index}`} value={String(id)}>
-              {type ? `${name} (${type})` : name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={geofencePlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: geofencePlaceholder },
+          ...geofences.flatMap((geofence) => {
+            const id = readNumberFromRecord(geofence, ["id"])
+            if (id === null) {
+              return []
+            }
+            const name =
+              readStringFromRecord(geofence, ["name"]) ?? `Geofence ${id}`
+            const type = readStringFromRecord(geofence, ["type"])
+            return [{
+              value: String(id),
+              label: type ? `${name} (${type})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "wifi_network_id") {
+    const wifiNetworkPlaceholder = wifiNetworksLoading ? "Loading WiFi networks..." : "Select WiFi network"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {wifiNetworksLoading ? "Loading WiFi networks..." : "Select WiFi network"}
-        </option>
-        {wifiNetworks.map((network, index) => {
-          const id = readNumberFromRecord(network, ["id", "wifi_network_id"])
-          if (id === null) {
-            return null
-          }
-          const ssid = readStringFromRecord(network, ["ssid"])
-          const name = readStringFromRecord(network, ["name"]) ?? ssid ?? `WiFi ${id}`
-          const bssid = readStringFromRecord(network, ["bssid"])
-          return (
-            <option key={`wifi-network-${id}-${index}`} value={String(id)}>
-              {bssid ? `${name} (${bssid})` : name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={wifiNetworkPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: wifiNetworkPlaceholder },
+          ...wifiNetworks.flatMap((network) => {
+            const id = readNumberFromRecord(network, ["id", "wifi_network_id"])
+            if (id === null) {
+              return []
+            }
+            const ssid = readStringFromRecord(network, ["ssid"])
+            const name = readStringFromRecord(network, ["name"]) ?? ssid ?? `WiFi ${id}`
+            const bssid = readStringFromRecord(network, ["bssid"])
+            return [{
+              value: String(id),
+              label: bssid ? `${name} (${bssid})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "holiday_group_id") {
+    const holidayGroupPlaceholder = holidayGroupsLoading ? "Loading holiday groups..." : "Select holiday group"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {holidayGroupsLoading ? "Loading holiday groups..." : "Select holiday group"}
-        </option>
-        {holidayGroups.map((group, index) => {
-          const id = readNumberFromRecord(group, ["id", "holiday_group_id"])
-          if (id === null) {
-            return null
-          }
-          const name = readStringFromRecord(group, ["name", "title"]) ?? `Holiday Group ${id}`
-          return (
-            <option key={`holiday-group-${id}-${index}`} value={String(id)}>
-              {name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={holidayGroupPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: holidayGroupPlaceholder },
+          ...holidayGroups.flatMap((group) => {
+            const id = readNumberFromRecord(group, ["id", "holiday_group_id"])
+            if (id === null) {
+              return []
+            }
+            const name = readStringFromRecord(group, ["name", "title"]) ?? `Holiday Group ${id}`
+            return [{ value: String(id), label: name }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "policy_set_id") {
+    const policyPlaceholder = policiesLoading ? "Loading attendance policies..." : "Select attendance policy"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {policiesLoading ? "Loading attendance policies..." : "Select attendance policy"}
-        </option>
-        {policies.map((policy, index) => {
-          const id = readNumberFromRecord(policy, ["id", "policy_set_id"])
-          if (id === null) {
-            return null
-          }
-          const name = readStringFromRecord(policy, ["name", "title"]) ?? `Policy ${id}`
-          const status = readStringFromRecord(policy, ["status"])
-          return (
-            <option key={`policy-${id}-${index}`} value={String(id)}>
-              {status ? `${name} (${status})` : name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={policyPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: policyPlaceholder },
+          ...policies.flatMap((policy) => {
+            const id = readNumberFromRecord(policy, ["id", "policy_set_id"])
+            if (id === null) {
+              return []
+            }
+            const name = readStringFromRecord(policy, ["name", "title"]) ?? `Policy ${id}`
+            const status = readStringFromRecord(policy, ["status"])
+            return [{
+              value: String(id),
+              label: status ? `${name} (${status})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "device_id") {
+    const devicePlaceholder = devicesLoading ? "Loading devices..." : "Select device"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {devicesLoading ? "Loading devices..." : "Select device"}
-        </option>
-        {devices.map((device, index) => {
-          const id = readNumberFromRecord(device, ["id", "device_id", "attendance_device_id"])
-          if (id === null) {
-            return null
-          }
-          const name =
-            readStringFromRecord(device, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
-          const code = readStringFromRecord(device, ["device_code", "deviceCode"])
-          const serial = readStringFromRecord(device, ["device_serial_number", "deviceSerialNumber", "serial_no"])
-          return (
-            <option key={`device-${id}-${index}`} value={String(id)}>
-              {code ? `${name} (${code})` : serial ? `${name} (${serial})` : name}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={devicePlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: devicePlaceholder },
+          ...devices.flatMap((device) => {
+            const id = readNumberFromRecord(device, ["id", "device_id", "attendance_device_id"])
+            if (id === null) {
+              return []
+            }
+            const name =
+              readStringFromRecord(device, ["device_name", "name", "vendor_name"]) ?? `Device ${id}`
+            const code = readStringFromRecord(device, ["device_code", "deviceCode"])
+            const serial = readStringFromRecord(device, ["device_serial_number", "deviceSerialNumber", "serial_no"])
+            return [{
+              value: String(id),
+              label: code ? `${name} (${code})` : serial ? `${name} (${serial})` : name,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.key === "wifi_ssid") {
+    const wifiSsidPlaceholder = wifiNetworksLoading ? "Loading WiFi networks..." : "Select WiFi network"
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">
-          {wifiNetworksLoading ? "Loading WiFi networks..." : "Select WiFi network"}
-        </option>
-        {wifiNetworks.map((network, index) => {
-          const ssid = readStringFromRecord(network, ["ssid"])
-          if (!ssid) {
-            return null
-          }
-          const name =
-            readStringFromRecord(network, ["name"]) ?? ssid
-          const bssid = readStringFromRecord(network, ["bssid"])
-          return (
-            <option key={`wifi-${ssid}-${bssid ?? index}`} value={ssid}>
-              {bssid ? `${name} (${ssid} • ${bssid})` : `${name} (${ssid})`}
-            </option>
-          )
-        })}
-      </select>
+        placeholder={wifiSsidPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: wifiSsidPlaceholder },
+          ...wifiNetworks.flatMap((network) => {
+            const ssid = readStringFromRecord(network, ["ssid"])
+            if (!ssid) {
+              return []
+            }
+            const name =
+              readStringFromRecord(network, ["name"]) ?? ssid
+            const bssid = readStringFromRecord(network, ["bssid"])
+            return [{
+              value: ssid,
+              label: bssid ? `${name} (${ssid} • ${bssid})` : `${name} (${ssid})`,
+            }]
+          }),
+        ]}
+      />
     )
   }
 
   if (field.type === "select") {
+    const selectPlaceholder = `Select ${field.label}`
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        {(field.options ?? []).map((option) => {
-          const normalized =
+        placeholder={selectPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: selectPlaceholder },
+          ...(field.options ?? []).map((option) =>
             typeof option === "string" ? { label: option, value: option } : option
-          return (
-            <option key={normalized.value} value={normalized.value}>
-              {normalized.label}
-            </option>
-          )
-        })}
-      </select>
+          ),
+        ]}
+      />
     )
   }
 
   if (field.type === "boolean") {
+    const booleanPlaceholder = `Select ${field.label}`
     return (
-      <select
-        className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-          disabled
-            ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-            : "border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-        }`}
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </select>
+        placeholder={booleanPlaceholder}
+        onChange={onChange}
+        options={[
+          { value: "", label: booleanPlaceholder },
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]}
+      />
     )
   }
 
@@ -2963,52 +2934,55 @@ export function AttendanceManagementView({ section }: { section: string }) {
             />
             <label className="grid gap-0.5 text-[10px]">
               <span className="font-medium text-slate-600 dark:text-slate-300">Branch</span>
-              <select
-                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              <FluentSelect
+                ariaLabel="Branch"
+                size="small"
+                className="w-full"
                 value={deviceBranchFilter}
-                onChange={(event) => setDeviceBranchFilter(event.target.value)}
-              >
-                <option value="all">All branches</option>
-                {branches.map((branch, index) => {
-                  const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
-                  if (branchId === null) return null
-                  return (
-                    <option key={`device-branch-filter-${branchId}-${index}`} value={String(branchId)}>
-                      {resolveBranchName(branchId)}
-                    </option>
-                  )
-                })}
-              </select>
+                placeholder="All branches"
+                onChange={setDeviceBranchFilter}
+                options={[
+                  { value: "all", label: "All branches" },
+                  ...branches.flatMap((branch) => {
+                    const branchId = readNumberFromRecord(branch, ["id", "branch_id"])
+                    if (branchId === null) return []
+                    return [{ value: String(branchId), label: resolveBranchName(branchId) }]
+                  }),
+                ]}
+              />
             </label>
             <label className="grid gap-0.5 text-[10px]">
               <span className="font-medium text-slate-600 dark:text-slate-300">Vendor</span>
-              <select
-                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              <FluentSelect
+                ariaLabel="Vendor"
+                size="small"
+                className="w-full"
                 value={deviceVendorFilter}
-                onChange={(event) => setDeviceVendorFilter(event.target.value)}
-              >
-                <option value="all">All vendors</option>
-                {deviceVendorOptions.map((vendor) => (
-                  <option key={vendor} value={vendor}>
-                    {vendor}
-                  </option>
-                ))}
-              </select>
+                placeholder="All vendors"
+                onChange={setDeviceVendorFilter}
+                options={[
+                  { value: "all", label: "All vendors" },
+                  ...deviceVendorOptions.map((vendor) => ({ value: vendor, label: vendor })),
+                ]}
+              />
             </label>
             <label className="grid gap-0.5 text-[10px]">
               <span className="font-medium text-slate-600 dark:text-slate-300">Integration</span>
-              <select
-                className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              <FluentSelect
+                ariaLabel="Integration"
+                size="small"
+                className="w-full"
                 value={deviceIntegrationFilter}
-                onChange={(event) => setDeviceIntegrationFilter(event.target.value)}
-              >
-                <option value="all">All integrations</option>
-                {deviceIntegrationOptions.map((integration) => (
-                  <option key={integration} value={integration}>
-                    {integration}
-                  </option>
-                ))}
-              </select>
+                placeholder="All integrations"
+                onChange={setDeviceIntegrationFilter}
+                options={[
+                  { value: "all", label: "All integrations" },
+                  ...deviceIntegrationOptions.map((integration) => ({
+                    value: integration,
+                    label: integration,
+                  })),
+                ]}
+              />
             </label>
             <button
               type="button"

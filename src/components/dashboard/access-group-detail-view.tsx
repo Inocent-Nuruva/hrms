@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   assignAccessGroupDevices,
   assignAccessGroupDoors,
@@ -1288,47 +1289,48 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             {assignError ? <p className="text-sm text-red-600">{assignError}</p> : null}
             <label className="grid gap-1">
               <span className="text-xs font-medium uppercase text-slate-600">Door</span>
-              <select
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              <FluentSelect
+                ariaLabel="Door"
+                className="w-full"
                 value={selectedDoorId}
-                onChange={(event) => setSelectedDoorId(event.target.value)}
-              >
-                <option value="">Select door</option>
-                {assignableDoors.map((door, index) => {
-                  const doorId = readNumberFromRecord(door, ["id", "door_id", "doorId"])
-                  if (doorId === null) return null
-                  const doorName =
-                    readStringFromRecord(door, ["door_name", "doorName", "name"]) ?? `Door ${doorId}`
-                  const doorNo = readStringFromRecord(door, ["door_no", "doorNo"])
-                  return (
-                    <option key={`assignable-door-${doorId}-${index}`} value={String(doorId)}>
-                      {doorNo ? `${doorName} (#${doorNo})` : doorName}
-                    </option>
-                  )
-                })}
-              </select>
+                onChange={setSelectedDoorId}
+                placeholder="Select door"
+                options={[
+                  { value: "", label: "Select door" },
+                  ...assignableDoors.flatMap((door) => {
+                    const doorId = readNumberFromRecord(door, ["id", "door_id", "doorId"])
+                    if (doorId === null) return []
+                    const doorName =
+                      readStringFromRecord(door, ["door_name", "doorName", "name"]) ?? `Door ${doorId}`
+                    const doorNo = readStringFromRecord(door, ["door_no", "doorNo"])
+                    return [{
+                      value: String(doorId),
+                      label: doorNo ? `${doorName} (#${doorNo})` : doorName,
+                    }]
+                  }),
+                ]}
+              />
             </label>
             <label className="grid gap-1">
               <span className="text-xs font-medium uppercase text-slate-600">Schedule Template</span>
-              <select
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              <FluentSelect
+                ariaLabel="Schedule Template"
+                className="w-full"
                 value={selectedTemplateId}
-                onChange={(event) => setSelectedTemplateId(event.target.value)}
-              >
-                <option value="">Select schedule template</option>
-                {templates.map((template, index) => {
-                  const templateId = readNumberFromRecord(template, ["id", "template_id", "templateId"])
-                  if (templateId === null) return null
-                  const templateName =
-                    readStringFromRecord(template, ["template_name", "templateName", "name"]) ??
-                    `Template ${templateId}`
-                  return (
-                    <option key={`assign-template-${templateId}-${index}`} value={String(templateId)}>
-                      {templateName}
-                    </option>
-                  )
-                })}
-              </select>
+                onChange={setSelectedTemplateId}
+                placeholder="Select schedule template"
+                options={[
+                  { value: "", label: "Select schedule template" },
+                  ...templates.flatMap((template) => {
+                    const templateId = readNumberFromRecord(template, ["id", "template_id", "templateId"])
+                    if (templateId === null) return []
+                    const templateName =
+                      readStringFromRecord(template, ["template_name", "templateName", "name"]) ??
+                      `Template ${templateId}`
+                    return [{ value: String(templateId), label: templateName }]
+                  }),
+                ]}
+              />
             </label>
             {assignableDoors.length === 0 ? (
               <p className="text-sm text-slate-500">
@@ -1449,25 +1451,27 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
             {assignDeviceError ? <p className="text-sm text-red-600">{assignDeviceError}</p> : null}
             <label className="grid gap-1">
               <span className="text-xs font-medium uppercase text-slate-600">Device</span>
-              <select
-                className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+              <FluentSelect
+                ariaLabel="Device"
+                className="w-full"
                 value={selectedDeviceId}
-                onChange={(event) => setSelectedDeviceId(event.target.value)}
-              >
-                <option value="">Select device</option>
-                {assignableDevices.map((device, index) => {
-                  const deviceId = readNumberFromRecord(device, ["id", "device_id"])
-                  if (deviceId === null) return null
-                  const deviceName =
-                    readStringFromRecord(device, ["device_name", "deviceName", "name"]) ?? `Device ${deviceId}`
-                  const deviceCode = readStringFromRecord(device, ["device_code", "deviceCode"])
-                  return (
-                    <option key={`assign-device-${deviceId}-${index}`} value={String(deviceId)}>
-                      {deviceCode ? `${deviceName} (${deviceCode})` : deviceName}
-                    </option>
-                  )
-                })}
-              </select>
+                onChange={setSelectedDeviceId}
+                placeholder="Select device"
+                options={[
+                  { value: "", label: "Select device" },
+                  ...assignableDevices.flatMap((device) => {
+                    const deviceId = readNumberFromRecord(device, ["id", "device_id"])
+                    if (deviceId === null) return []
+                    const deviceName =
+                      readStringFromRecord(device, ["device_name", "deviceName", "name"]) ?? `Device ${deviceId}`
+                    const deviceCode = readStringFromRecord(device, ["device_code", "deviceCode"])
+                    return [{
+                      value: String(deviceId),
+                      label: deviceCode ? `${deviceName} (${deviceCode})` : deviceName,
+                    }]
+                  }),
+                ]}
+              />
             </label>
             {assignableDevices.length === 0 ? (
               <p className="text-sm text-slate-500">

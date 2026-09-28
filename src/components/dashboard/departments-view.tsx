@@ -4,6 +4,7 @@ import * as React from "react"
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Textarea } from "@/components/ui/textarea"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
@@ -789,19 +790,22 @@ export function DepartmentsView() {
                 setQuery((previous) => ({ ...previous, search: value }))
               }}
             />
-            <select
-              className="h-8 w-[8.5rem] shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900"
+            <FluentSelect
+              ariaLabel="Filter department status"
+              size="small"
+              className="w-[8.5rem]"
               value={query.status}
-              onChange={(event) => {
+              placeholder="All statuses"
+              onChange={(value) => {
                 setPage(1)
-                setQuery((previous) => ({ ...previous, status: event.target.value }))
+                setQuery((previous) => ({ ...previous, status: value }))
               }}
-              aria-label="Filter department status"
-            >
-              <option value="">All statuses</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
+              options={[
+                { value: "", label: "All statuses" },
+                { value: "active", label: "active" },
+                { value: "inactive", label: "inactive" },
+              ]}
+            />
           </>
         }
         toolbarActions={
@@ -847,24 +851,19 @@ export function DepartmentsView() {
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
-                <select
-                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Branch"
+                  placeholder="Select branch"
                   value={form.branch_id}
-                  onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value, position_ids: [] }))}
-                >
-                  <option value="">Select branch</option>
-                  {branches.map((branch) => {
-                    const id = readNumber(branch, ["id"])
-                    if (id === null) {
-                      return null
-                    }
-                    return (
-                      <option key={id} value={String(id)}>
-                        {readString(branch, ["name"])}
-                      </option>
-                    )
-                  })}
-                </select>
+                  onChange={(value) => setForm((prev) => ({ ...prev, branch_id: value, position_ids: [] }))}
+                  options={[
+                    { value: "", label: "Select branch" },
+                    ...branches.flatMap((branch) => {
+                      const id = readNumber(branch, ["id"])
+                      return id === null ? [] : [{ value: String(id), label: readString(branch, ["name"]) }]
+                    }),
+                  ]}
+                />
               </label>
               <label className="grid gap-1 md:col-span-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
@@ -872,36 +871,32 @@ export function DepartmentsView() {
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
-                <select className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.status} onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}>
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                </select>
+                <FluentSelect
+                  ariaLabel="Status"
+                  value={form.status}
+                  onChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
+                  options={[
+                    { value: "active", label: "active" },
+                    { value: "inactive", label: "inactive" },
+                  ]}
+                />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parent Department</span>
-                <select
-                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                <FluentSelect
+                  ariaLabel="Parent department"
+                  placeholder="No parent"
                   value={form.parent_id}
-                  onChange={(event) => setForm((prev) => ({ ...prev, parent_id: event.target.value }))}
-                >
-                  <option value="">No parent</option>
-                  {allDepartments
-                    .filter((department) => {
+                  onChange={(value) => setForm((prev) => ({ ...prev, parent_id: value }))}
+                  options={[
+                    { value: "", label: "No parent" },
+                    ...allDepartments.flatMap((department) => {
                       const id = readNumber(department, ["id"])
-                      return id !== null && (editingId === null || id !== editingId)
-                    })
-                    .map((department) => {
-                      const id = readNumber(department, ["id"])
-                      if (id === null) {
-                        return null
-                      }
-                      return (
-                        <option key={id} value={String(id)}>
-                          {readString(department, ["name"])}
-                        </option>
-                      )
-                    })}
-                </select>
+                      if (id === null || (editingId !== null && id === editingId)) return []
+                      return [{ value: String(id), label: readString(department, ["name"]) }]
+                    }),
+                  ]}
+                />
               </label>
               <fieldset className="grid gap-1 md:col-span-2">
                 <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">

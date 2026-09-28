@@ -49,6 +49,7 @@ import {
 } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type FieldSelfTab = "visits" | "plans" | "follow-ups"
@@ -486,15 +487,26 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><input type="date" className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span>
-                  <select className={inputClass} value={form.visit_type ?? "CUSTOMER_VISIT"} onChange={(event) => setForm((current) => ({ ...current, visit_type: event.target.value }))}>
-                    {VISIT_TYPES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Type"
+                    className="w-full"
+                    value={form.visit_type ?? "CUSTOMER_VISIT"}
+                    onChange={(value) => setForm((current) => ({ ...current, visit_type: value }))}
+                    options={VISIT_TYPES.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Party</span>
-                  <select className={inputClass} value={form.field_party_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, field_party_id: event.target.value }))}>
-                    <option value="">None</option>
-                    {parties.map((party) => <option key={rowId(party)} value={rowId(party)}>{optionLabel(party)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Party"
+                    className="w-full"
+                    value={form.field_party_id ?? ""}
+                    onChange={(value) => setForm((current) => ({ ...current, field_party_id: value }))}
+                    placeholder="None"
+                    options={[
+                      { value: "", label: "None" },
+                      ...parties.map((party) => ({ value: rowId(party), label: optionLabel(party) })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
               </>
@@ -513,13 +525,19 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Document id</span><input className={inputClass} value={form.document_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, document_id: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Type</span>
-                  <select className={inputClass} value={form.evidence_type ?? "DOCUMENT"} onChange={(event) => setForm((current) => ({ ...current, evidence_type: event.target.value }))}>
-                    <option value="DOCUMENT">Document</option>
-                    <option value="PHOTO">Photo</option>
-                    <option value="MEETING_NOTE">Meeting note</option>
-                    <option value="RECEIPT">Receipt</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Type"
+                    className="w-full"
+                    value={form.evidence_type ?? "DOCUMENT"}
+                    onChange={(value) => setForm((current) => ({ ...current, evidence_type: value }))}
+                    options={[
+                      { value: "DOCUMENT", label: "Document" },
+                      { value: "PHOTO", label: "Photo" },
+                      { value: "MEETING_NOTE", label: "Meeting note" },
+                      { value: "RECEIPT", label: "Receipt" },
+                      { value: "OTHER", label: "Other" },
+                    ]}
+                  />
                 </label>
               </>
             ) : null}
@@ -540,14 +558,21 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Linked visit</span>
-                  <select className={inputClass} value={form.field_visit_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, field_visit_id: event.target.value }))} disabled={Boolean(form.id)}>
-                    <option value="">Choose a visit</option>
-                    {visits.map((visit) => (
-                      <option key={rowId(visit)} value={rowId(visit)}>
-                        {prettify(readString(visit, ["visitType", "visit_type", "purpose"], `Visit #${rowId(visit)}`))} · {formatDate(visit.visitDate ?? visit.visit_date)}
-                      </option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Linked visit"
+                    className="w-full"
+                    value={form.field_visit_id ?? ""}
+                    disabled={Boolean(form.id)}
+                    onChange={(value) => setForm((current) => ({ ...current, field_visit_id: value }))}
+                    placeholder="Choose a visit"
+                    options={[
+                      { value: "", label: "Choose a visit" },
+                      ...visits.map((visit) => ({
+                        value: rowId(visit),
+                        label: `${prettify(readString(visit, ["visitType", "visit_type", "purpose"], `Visit #${rowId(visit)}`))} · ${formatDate(visit.visitDate ?? visit.visit_date)}`,
+                      })),
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>

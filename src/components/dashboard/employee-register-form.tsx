@@ -54,7 +54,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import { Switch } from "@/components/animate-ui/components/base/switch"
+import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,

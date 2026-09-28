@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1702,32 +1703,34 @@ function FormField({
 
   if (field.type === "select" || options.length > 0) {
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        {options.map((option) => (
-          <option key={`${field.key}-${option.value}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        placeholder={`Select ${field.label}`}
+        options={[
+          { value: "", label: `Select ${field.label}` },
+          ...options,
+        ]}
+      />
     )
   }
 
   if (field.type === "boolean") {
     return (
-      <select
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      <FluentSelect
+        ariaLabel={field.label}
+        className="w-full"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select {field.label}</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
-      </select>
+        onChange={onChange}
+        placeholder={`Select ${field.label}`}
+        options={[
+          { value: "", label: `Select ${field.label}` },
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]}
+      />
     )
   }
 

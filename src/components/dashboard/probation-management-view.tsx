@@ -61,6 +61,7 @@ import {
 } from "@/lib/admin-api"
 import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Sheet,
@@ -744,16 +745,17 @@ export function ProbationManagementView({
         <div className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <SearchToggleField value={search} onChange={setSearch} placeholder="Search cases or policies" />
-            <select
-              className={inputClass}
+            <FluentSelect
+              ariaLabel="Status"
+              className="w-full"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              {CASE_CYCLE.map((status) => (
-                <option key={status} value={status}>{prettify(status)}</option>
-              ))}
-            </select>
+              placeholder="All statuses"
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "All statuses" },
+                ...CASE_CYCLE.map((status) => ({ value: status, label: prettify(status) })),
+              ]}
+            />
           </div>
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
@@ -970,10 +972,17 @@ export function ProbationManagementView({
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
                 <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Employment type">
-                  <select className={inputClass} value={form.employment_type ?? ""} onChange={(event) => setForm((current) => ({ ...current, employment_type: event.target.value }))}>
-                    <option value="">Any</option>
-                    {EMPLOYMENT_TYPES.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Employment type"
+                    className="w-full"
+                    value={form.employment_type ?? ""}
+                    placeholder="Any"
+                    onChange={(value) => setForm((current) => ({ ...current, employment_type: value }))}
+                    options={[
+                      { value: "", label: "Any" },
+                      ...EMPLOYMENT_TYPES.map((item) => ({ value: item, label: prettify(item) })),
+                    ]}
+                  />
                 </Field>
                 <Field label="Probation days"><input className={inputClass} value={form.probation_period_days ?? "90"} onChange={(event) => setForm((current) => ({ ...current, probation_period_days: event.target.value }))} /></Field>
                 <Field label="Minimum score"><input className={inputClass} value={form.minimum_confirmation_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, minimum_confirmation_score: event.target.value }))} /></Field>
@@ -1052,9 +1061,13 @@ export function ProbationManagementView({
             {formMode === "manager-review" ? (
               <>
                 <Field label="Recommendation">
-                  <select className={inputClass} value={form.recommendation ?? "CONFIRM"} onChange={(event) => setForm((current) => ({ ...current, recommendation: event.target.value }))}>
-                    {MANAGER_RECOMMENDATIONS.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Recommendation"
+                    className="w-full"
+                    value={form.recommendation ?? "CONFIRM"}
+                    onChange={(value) => setForm((current) => ({ ...current, recommendation: value }))}
+                    options={MANAGER_RECOMMENDATIONS.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Comments"><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
                 <Field label="Extension days"><input className={inputClass} value={form.recommended_extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, recommended_extension_days: event.target.value }))} /></Field>
@@ -1063,9 +1076,13 @@ export function ProbationManagementView({
             {formMode === "hr-decision" ? (
               <>
                 <Field label="Decision">
-                  <select className={inputClass} value={form.decision ?? "CONFIRMED"} onChange={(event) => setForm((current) => ({ ...current, decision: event.target.value }))}>
-                    {HR_DECISIONS.map((item) => <option key={item} value={item}>{prettify(item)}</option>)}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Decision"
+                    className="w-full"
+                    value={form.decision ?? "CONFIRMED"}
+                    onChange={(value) => setForm((current) => ({ ...current, decision: value }))}
+                    options={HR_DECISIONS.map((item) => ({ value: item, label: prettify(item) }))}
+                  />
                 </Field>
                 <Field label="Comments"><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
                 <Field label="Confirmation date"><input type="date" className={inputClass} value={form.confirmation_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, confirmation_date: event.target.value }))} /></Field>
@@ -1077,12 +1094,17 @@ export function ProbationManagementView({
                 <Field label="Employee ID"><input className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))} /></Field>
                 <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
                 <Field label="Policy (optional)">
-                  <select className={inputClass} value={form.policy_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, policy_id: event.target.value }))}>
-                    <option value="">Auto-resolve</option>
-                    {policies.map((policy) => (
-                      <option key={rowId(policy)} value={rowId(policy)}>{optionLabel(policy)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Policy"
+                    className="w-full"
+                    value={form.policy_id ?? ""}
+                    placeholder="Auto-resolve"
+                    onChange={(value) => setForm((current) => ({ ...current, policy_id: value }))}
+                    options={[
+                      { value: "", label: "Auto-resolve" },
+                      ...policies.map((policy) => ({ value: rowId(policy), label: optionLabel(policy) })),
+                    ]}
+                  />
                 </Field>
               </>
             ) : null}
@@ -1091,12 +1113,17 @@ export function ProbationManagementView({
                 <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
                 <Field label="Due date"><input type="date" className={inputClass} value={form.current_due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, current_due_date: event.target.value }))} /></Field>
                 <Field label="Policy">
-                  <select className={inputClass} value={form.policy_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, policy_id: event.target.value }))}>
-                    <option value="">Keep current</option>
-                    {policies.map((policy) => (
-                      <option key={rowId(policy)} value={rowId(policy)}>{optionLabel(policy)}</option>
-                    ))}
-                  </select>
+                  <FluentSelect
+                    ariaLabel="Policy"
+                    className="w-full"
+                    value={form.policy_id ?? ""}
+                    placeholder="Keep current"
+                    onChange={(value) => setForm((current) => ({ ...current, policy_id: value }))}
+                    options={[
+                      { value: "", label: "Keep current" },
+                      ...policies.map((policy) => ({ value: rowId(policy), label: optionLabel(policy) })),
+                    ]}
+                  />
                 </Field>
               </>
             ) : null}
