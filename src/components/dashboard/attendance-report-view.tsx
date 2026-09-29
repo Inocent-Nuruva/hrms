@@ -16,7 +16,7 @@ import {
   ScrollTextIcon,
   XIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   downloadAttendanceReport,

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { cn } from "@/lib/utils";

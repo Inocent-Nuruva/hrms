@@ -12,7 +12,8 @@ import {
   RotateCcwIcon,
   ToggleLeftIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
+import { SearchBox } from "@fluentui/react-components"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
@@ -2288,11 +2289,13 @@ export function NotificationsView() {
         toolbarActions={
           <>
             {tab !== "settings" && tab !== "platform-settings" ? (
-              <input
-                className={cn(inputClass, "w-36 sm:w-44")}
+              <SearchBox
+                size="small"
+                className="!w-36 sm:!w-44"
                 placeholder="Search…"
+                aria-label={`Search ${sectionTitle.toLowerCase()}`}
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
+                onChange={(_event, data) => setSearchInput(data.value)}
               />
             ) : null}
 

@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
+import { AccessSkeleton } from "@/components/ui/access-skeleton";
 import { SiteHeader } from "@/components/site-header";
 import {
   accessControlSectionTabGroups,
@@ -24,7 +25,11 @@ import {
   resolveHomeDashboardKind,
 } from "@/lib/dashboard-home";
 import dynamic from "next/dynamic";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 
 const DataTable = dynamic(
   () => import("@/components/data-table").then((mod) => mod.DataTable),
@@ -402,6 +407,7 @@ export default function AdminDashboardView({
   const resolvedShowSettings =
     showSettings || currentPath === "/dashboard/settings";
   const resolvedUseApis = useApis || Boolean(resolvedActiveResource);
+
   // Keep Access Control tabs mounted in the shell so switching Devices → Roles
   // (different route trees) does not remount/refresh the tab rail.
   // Keep Access Control tabs mounted in the shell so switching Devices → Roles
@@ -1434,7 +1440,7 @@ export default function AdminDashboardView({
       <SidebarProvider
         style={
           {
-            "--sidebar-width": "15.75rem",
+            "--sidebar-width": "15.5rem",
             "--header-height": "calc(var(--spacing) * 14)",
           } as React.CSSProperties
         }
@@ -1448,6 +1454,11 @@ export default function AdminDashboardView({
         permissionLabels={effectivePermissionLabels}
         activeResource={resolvedActiveResource}
         onSelectResource={navigateToResource}
+      />
+      <SidebarTrigger
+        className="fixed left-3 top-2 z-[60] !hidden text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex"
+        aria-label="Toggle navigation"
+        title="Navigation"
       />
       <SidebarInset className="min-w-0 overflow-hidden">
         {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
@@ -1489,11 +1500,7 @@ export default function AdminDashboardView({
                   (showWorkforceDashboard || checkingEmployeeDashboardIdentity) ? null : (
                     children
                   )
-                ) : (
-                  <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-                    Checking your access…
-                  </div>
-                )}
+                ) : <AccessSkeleton className="min-h-40" variant="dashboard" />}
               </div>
               {accessIdentityReady &&
               resolvedActiveResource &&

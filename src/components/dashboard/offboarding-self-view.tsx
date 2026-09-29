@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { CheckIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,

@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import { Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CycleRail,
@@ -270,7 +271,7 @@ export function ProbationSelfView() {
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Overall comment</span>
-                <textarea className={textareaClass} value={comment} onChange={(event) => setComment(event.target.value)} />
+                <Textarea className={textareaClass} value={comment} onChange={(event) => setComment(event.target.value)} />
               </label>
               {ratings.map((item, index) => (
                 <div key={`${item.code}-${index}`} className="grid gap-2 rounded-xl bg-muted/40 p-3 md:grid-cols-[minmax(0,1fr)_120px]">

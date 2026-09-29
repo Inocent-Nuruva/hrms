@@ -1,8 +1,9 @@
 "use client";
 
+import { DateInput } from "@/components/ui/date-input"
 import * as React from "react";
 import { Loader2Icon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   Dialog,
@@ -447,8 +448,8 @@ export function PayrollEmployeeSalaryDialog({
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Effective from
                   </span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={effectiveFrom}
                     onChange={(event) => setEffectiveFrom(event.target.value)}

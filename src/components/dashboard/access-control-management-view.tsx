@@ -24,6 +24,7 @@ import {
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   commandAccessControlDoor,
   createAccessControlResource,
@@ -848,6 +849,8 @@ export function AccessControlManagementView({
   const [error, setError] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
     activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields)
   )
@@ -1427,7 +1430,6 @@ export function AccessControlManagementView({
   return (
     <div className="w-full space-y-2">
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="text-sm text-green-700">{message}</p> : null}
 
       <ResizableTable
         title={title}
@@ -1813,7 +1815,6 @@ export function AccessControlManagementView({
             </DialogDescription>
           </DialogHeader>
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-          {message ? <p className="text-sm text-green-700">{message}</p> : null}
           <div className="grid grid-cols-2 gap-2">
             {(
               [

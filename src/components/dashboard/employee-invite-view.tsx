@@ -9,7 +9,7 @@ import {
   RotateCcwIcon,
   UserPlus2Icon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   Label as FluentLabel,
 } from "@fluentui/react-components"

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import {
   CalendarDaysIcon,
   CheckCircle2Icon,
@@ -23,7 +24,7 @@ import {
   SparklesIcon,
   XIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   asRecord,
@@ -1942,11 +1943,11 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Notes</span>
-                <textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
+                <Textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Expected result <span className="font-normal text-slate-500">(optional)</span></span>
-                <textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
+                <Textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
               </label>
               <div className="grid content-start gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Checklist <span className="font-normal text-slate-500">(optional)</span></span>
@@ -2057,7 +2058,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </div>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Summary for your manager</span>
-                <textarea className={`${inputClass} min-h-20 py-2`} value={previewSummary} onChange={(event) => setPreviewSummary(event.target.value)} placeholder="What should your manager know about this day?" />
+                <Textarea className={`${inputClass} min-h-20 py-2`} value={previewSummary} onChange={(event) => setPreviewSummary(event.target.value)} placeholder="What should your manager know about this day?" />
               </label>
               {issues.length ? (
                 <ul className="space-y-1 text-sm text-rose-700">
@@ -2220,7 +2221,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <div className="space-y-3">
                       <label className="grid gap-1.5 text-sm">
                         <span className="font-medium">Outcome / actual result</span>
-                        <textarea className={`${inputClass} min-h-20 py-2`} value={taskOutcome} onChange={(event) => setTaskOutcome(event.target.value)} placeholder="Describe what was delivered, especially before marking the activity complete." />
+                        <Textarea className={`${inputClass} min-h-20 py-2`} value={taskOutcome} onChange={(event) => setTaskOutcome(event.target.value)} placeholder="Describe what was delivered, especially before marking the activity complete." />
                       </label>
                       <button type="button" className={secondaryButtonClass} onClick={() => void updateTaskStatus()}>Save progress</button>
                     </div>

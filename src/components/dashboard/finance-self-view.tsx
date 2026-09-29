@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Textarea } from "@/components/ui/textarea"
 import {
   CheckCircle2Icon,
   FileTextIcon,
@@ -10,7 +11,7 @@ import {
   ShieldCheckIcon,
   XCircleIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   CompactStatStrip,
@@ -802,7 +803,7 @@ export function FinanceSelfView() {
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Purpose</span>
-                    <textarea
+                    <Textarea
                       className={textareaClass}
                       value={form.purpose ?? ""}
                       onChange={(event) =>

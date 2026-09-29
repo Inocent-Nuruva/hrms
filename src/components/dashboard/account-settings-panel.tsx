@@ -18,7 +18,7 @@ import {
   Smartphone,
   Trash2,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   extractDefaultAvatarImageUrl,
   extractBackupCodes,
@@ -37,6 +37,7 @@ import {
 import { setMyProfilePhotoUrl } from "@/lib/my-profile-photo"
 import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import { authService } from "@/services/authService"
 import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -340,6 +341,8 @@ function AccountSettingsPanelContent({
   const [sessionActionId, setSessionActionId] = React.useState<string | null>(null)
   const [sessionMessage, setSessionMessage] = React.useState<string | null>(null)
   const [sessionError, setSessionError] = React.useState<string | null>(null)
+
+  useFluentToastState(sessionMessage, setSessionMessage, "success")
   const [logoutAllBusy, setLogoutAllBusy] = React.useState(false)
   const [notificationPreferences, setNotificationPreferences] = React.useState<NotificationPreference[]>([])
   const [notificationPreferencesLoading, setNotificationPreferencesLoading] = React.useState(false)
@@ -1454,11 +1457,6 @@ function AccountSettingsPanelContent({
                     </div>
                   </div>
 
-                  {sessionMessage ? (
-                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                      {sessionMessage}
-                    </div>
-                  ) : null}
                   {sessionError ? (
                     <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
                       {sessionError}

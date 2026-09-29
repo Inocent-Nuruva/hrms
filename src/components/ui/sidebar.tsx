@@ -18,21 +18,21 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Navigation20Regular } from "@fluentui/react-icons"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
-const SIDEBAR_WIDTH_STORAGE_KEY = "hrms.sidebar.width.v1"
-const SIDEBAR_DEFAULT_WIDTH_PX = 236
-const SIDEBAR_MIN_WIDTH_PX = 220
+const SIDEBAR_WIDTH_STORAGE_KEY = "hrms.sidebar.width.fluent.v2"
+const SIDEBAR_DEFAULT_WIDTH_PX = 248
+const SIDEBAR_MIN_WIDTH_PX = 248
 const SIDEBAR_MAX_WIDTH_PX = 380
 
 function readSidebarOpenState(defaultOpen: boolean) {
@@ -377,14 +377,14 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon-sm"
-      className={cn(className)}
+      className={cn("!w-7 !min-w-7 !p-0", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      <Navigation20Regular data-icon="inline-start" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

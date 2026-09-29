@@ -5,7 +5,6 @@ import Link from "next/link"
 import {
   BellIcon,
   CheckCheckIcon,
-  Clock3Icon,
   ExpandIcon,
   MinimizeIcon,
   RefreshCwIcon,
@@ -32,13 +31,13 @@ import { HeaderUserMenu } from "@/components/nav-user"
 import { NotificationCenter } from "@/components/notification-center"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { useNotifications } from "@/lib/notifications-store"
 import { cn } from "@/lib/utils"
 import type { AuthScope } from "@/types"
 
 const headerActionButtonClass =
-  "relative z-10 rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted"
+  "relative z-10 !size-6 !min-w-6 !p-0 rounded-md bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted [&_svg]:!size-3.5"
 
 interface SiteHeaderProps {
   onRefresh: () => void | Promise<void>
@@ -60,7 +59,7 @@ function QuickSettingsMenu({
       <PopoverTrigger
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "relative rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary",
+          headerActionButtonClass,
         )}
         aria-label="Open quick settings"
         title="Quick settings"
@@ -115,6 +114,7 @@ export function SiteHeader({
   scope = null,
   searchItems = [],
 }: SiteHeaderProps) {
+  const { isMobile, state: sidebarState } = useSidebar()
   const [notificationsOpen, setNotificationsOpen] = React.useState(false)
   const [fullscreen, setFullscreen] = React.useState(false)
   const [currentTime, setCurrentTime] = React.useState<Date | null>(null)
@@ -182,11 +182,16 @@ export function SiteHeader({
       data-slot="site-header"
       className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center border-b border-border bg-card transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
     >
-      <div className="flex w-full min-w-0 items-center gap-1.5 px-2.5 sm:px-3 lg:px-4">
+      <div
+        className={cn(
+          "flex w-full min-w-0 items-center gap-1.5 px-2.5 transition-[padding] sm:px-3 lg:px-4",
+          !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
+        )}
+      >
         <HeaderGlobalSearch items={searchItems} />
 
         <SidebarTrigger
-          className={headerActionButtonClass}
+          className={cn(headerActionButtonClass, "md:!hidden")}
           aria-label="Open navigation"
           title="Navigation"
         />
@@ -197,18 +202,15 @@ export function SiteHeader({
           </div>
         ) : null}
 
-        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <div
-            className="hidden h-10 items-center gap-2.5 px-2 text-foreground sm:inline-flex"
+            className="hidden h-9 items-center px-1.5 text-foreground sm:inline-flex"
             aria-label={currentTime ? `Current time ${currentTime.toLocaleTimeString()}` : "Current local time"}
             title={currentTime ? currentTime.toLocaleDateString(undefined, { dateStyle: "full" }) : "Local time"}
           >
-            <span className="inline-flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Clock3Icon className="size-4" aria-hidden="true" />
-            </span>
             <span className="grid gap-0.5 leading-none">
               <span className="flex items-baseline gap-1 tabular-nums">
-                <time className="text-sm font-bold tracking-tight" dateTime={currentTime?.toISOString()}>
+                <time className="text-[13px] font-semibold tracking-tight" dateTime={currentTime?.toISOString()}>
                   {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}
                 </time>
                 {clockPart("dayPeriod") ? (
@@ -266,7 +268,7 @@ export function SiteHeader({
                 <DialogHeader className="mb-0 shrink-0 space-y-0 pr-10 pb-1">
                   <div className="flex flex-col items-start gap-0.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <DialogTitle className="flex items-center gap-2 text-lg">
+                      <DialogTitle className="flex items-center gap-2 text-base font-semibold">
                         <span
                           className={cn("size-2 shrink-0 rounded-full", liveDotClassName)}
                           title={liveStatusLabel}
@@ -291,7 +293,7 @@ export function SiteHeader({
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <NotificationCenter open={notificationsOpen} onOpenChange={setNotificationsOpen} />
                 </div>
-                <DialogFooter className="shrink-0 border-t border-border pt-3">
+                <DialogFooter className="shrink-0 border-t border-border pt-2">
                   <DialogClose render={<Button variant="outline" size="sm">Close</Button>} />
                 </DialogFooter>
               </DialogPopup>

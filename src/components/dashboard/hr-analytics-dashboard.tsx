@@ -15,16 +15,15 @@ import {
   UserXIcon,
   FilterIcon,
   MoreHorizontalIcon,
-  SearchIcon,
   FileTextIcon,
 } from "lucide-react"
 import {
   getAnalyticsDashboard,
-  getAnalyticsFreshness,
   getHrDashboard,
   listAllEmployees,
   listDepartments,
   listLeaveRequests,
+  listAttendanceHolidays,
   listAttendanceDailySummariesPage,
   listOnboardingRequests,
   listOffboardingRequests,
@@ -41,9 +40,19 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card as UiCard, CardContent as UiCardContent } from "@/components/ui/card"
+import {
+  Badge as FluentBadge,
+  Caption1,
+  Card as FluentCard,
+  CardHeader as FluentCardHeader,
+  Persona,
+  SearchBox,
+  Skeleton as FluentSkeleton,
+  SkeletonItem,
+  Text as FluentText,
+} from "@fluentui/react-components"
+import { MoreHorizontal20Regular } from "@fluentui/react-icons"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
@@ -222,6 +231,12 @@ function recordDateKey(value: unknown) {
   if (direct) return direct
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? "" : formatLocalDateKey(parsed)
+}
+
+function holidayDateKey(row: AdminRecord) {
+  return recordDateKey(
+    row.date ?? row.holiday_date ?? row.holidayDate ?? row.start_date ?? row.startDate,
+  )
 }
 
 function shiftDays(value: Date, days: number) {
@@ -549,17 +564,6 @@ interface HrAnalyticsDashboardProps {
   showLeaveRequests?: boolean
 }
 
-function getInitials(value?: string | null) {
-  const initials = (value ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-  return initials || "HR"
-}
-
 function AnimatedMetricValue({ value }: { value: string | number }) {
   const [displayValue, setDisplayValue] = React.useState(() =>
     typeof value === "number" ? "0" : typeof value === "string" && value.endsWith("%") ? "0%" : String(value)
@@ -616,10 +620,10 @@ function AnimatedMetricValue({ value }: { value: string | number }) {
 
 function MetricValueSkeleton() {
   return (
-    <div className="mt-1.5 flex flex-col gap-1.5" aria-hidden="true">
-      <Skeleton className="h-6 w-12 rounded-md sm:h-7 sm:w-14" />
-      <Skeleton className="hidden h-2.5 w-16 rounded-md sm:block" />
-    </div>
+    <FluentSkeleton aria-label="Loading metric" className="mt-1.5 flex flex-col gap-1.5">
+      <SkeletonItem shape="rectangle" className="!h-6 !w-12 !rounded-md sm:!h-7 sm:!w-14" />
+      <SkeletonItem shape="rectangle" className="hidden !h-2.5 !w-16 !rounded-md sm:block" />
+    </FluentSkeleton>
   )
 }
 
@@ -636,43 +640,48 @@ function MetricCard({
 }) {
   const router = useRouter()
   const cardClassName = cn(
-    "dashboard-metric-card group relative block h-full w-full min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-card p-4",
-    "shadow-[0_14px_34px_-28px_rgb(15_23_42_/_0.45)] transition duration-300",
+    "dashboard-metric-card group relative block h-full w-full min-w-0 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-4 after:!border-border/70 before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:rounded-r-full before:bg-primary/55 dark:!border-border/80 dark:after:!border-border/80",
+    "shadow-sm transition duration-200",
     metric.href
-      ? "outline-none hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_18px_36px_-24px_rgb(var(--primary-rgb)_/_0.55)]"
+      ? "outline-none hover:-translate-y-px hover:shadow-md"
       : null,
   )
 
   const cardBody = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        {metric.href ? (
-          <Link href={metric.href} className="truncate text-xs font-semibold text-foreground !no-underline hover:!no-underline">
-            {metric.label}
-          </Link>
-        ) : (
-          <div className="truncate text-xs font-semibold text-foreground">{metric.label}</div>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-muted/40 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            aria-label={`${metric.label} actions`}
-          >
-            <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-36">
-            <DropdownMenuItem disabled={!metric.href} onClick={() => metric.href && router.push(metric.href)}>
-              Open records
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!metric.href}
-              onClick={() => metric.href && window.open(metric.href, "_blank", "noopener,noreferrer")}
+      <FluentCardHeader
+        className="!p-0"
+        header={
+          metric.href ? (
+            <Link href={metric.href} className="truncate !no-underline hover:!no-underline">
+              <FluentText size={200} weight="semibold">{metric.label}</FluentText>
+            </Link>
+          ) : (
+            <FluentText size={200} weight="semibold">{metric.label}</FluentText>
+          )
+        }
+        action={
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-label={`${metric.label} actions`}
             >
-              Open in new tab
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              <MoreHorizontal20Regular aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-36">
+              <DropdownMenuItem disabled={!metric.href} onClick={() => metric.href && router.push(metric.href)}>
+                Open records
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!metric.href}
+                onClick={() => metric.href && window.open(metric.href, "_blank", "noopener,noreferrer")}
+              >
+                Open in new tab
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
       {!metric.ready ? (
         <MetricValueSkeleton />
       ) : (
@@ -684,10 +693,10 @@ function MetricCard({
         </div>
       )}
       <div className="mt-4 flex items-end justify-between gap-3">
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-1 text-[9px] font-medium text-emerald-700 dark:text-emerald-400">
+        <FluentBadge color="success" appearance="tint" shape="rounded" size="small">
           <ArrowUpRightIcon className="size-2.5" aria-hidden="true" />
           Current period
-        </span>
+        </FluentBadge>
         {metric.label === "Departments" ? (
           <div className="flex h-7 items-end gap-1" aria-hidden="true">
             {[25, 42, 58, 78, 100].map((height, index) => (
@@ -715,7 +724,9 @@ function MetricCard({
       whileTap={reduce ? undefined : { scale: 0.985 }}
       className="h-full w-full min-w-0"
     >
-      <article className={cardClassName}>{cardBody}</article>
+      <FluentCard appearance="outline" size="small" className={cardClassName}>
+        {cardBody}
+      </FluentCard>
     </motion.div>
   )
 }
@@ -724,6 +735,7 @@ const workforceMetricTone = {
   emerald: {
     icon: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     pill: "bg-emerald-500 text-white",
+    accent: "before:bg-emerald-500/65",
     visual: "bg-emerald-500",
     soft: "bg-emerald-500/10",
     stroke: "rgb(16 185 129)",
@@ -731,6 +743,7 @@ const workforceMetricTone = {
   amber: {
     icon: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
     pill: "bg-orange-500 text-white",
+    accent: "before:bg-orange-500/65",
     visual: "bg-orange-500",
     soft: "bg-orange-500/12",
     stroke: "rgb(249 115 22)",
@@ -738,6 +751,7 @@ const workforceMetricTone = {
   rose: {
     icon: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
     pill: "bg-rose-500 text-white",
+    accent: "before:bg-rose-500/65",
     visual: "bg-rose-500",
     soft: "bg-rose-500/12",
     stroke: "rgb(244 63 94)",
@@ -807,20 +821,35 @@ function WorkforceMetricCard({
   variants: ReturnType<typeof useDashboardMotion>["metricCard"]
 }) {
   const tone = workforceMetricTone[metric.tone]
+  const badgeColor = metric.tone === "emerald"
+    ? "success"
+    : metric.tone === "amber"
+      ? "warning"
+      : "severe"
   const content = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <h2 className="truncate text-xs font-semibold text-foreground">{metric.label}</h2>
-          <InfoIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <span className={cn("inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-[10px] font-semibold tabular-nums", tone.pill)}>
-          <span className="inline-flex size-3.5 items-center justify-center rounded-full bg-white/90 text-slate-800">
-            <ArrowUpRightIcon className="size-2" aria-hidden="true" />
+      <FluentCardHeader
+        className="!p-0"
+        header={
+          <span className="flex min-w-0 items-center gap-1.5">
+            <FluentText size={200} weight="semibold" truncate>
+              {metric.label}
+            </FluentText>
+            <InfoIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           </span>
-          {metric.percentage}%
-        </span>
-      </div>
+        }
+        action={
+          <FluentBadge
+            color={badgeColor}
+            appearance="tint"
+            shape="rounded"
+            size="small"
+          >
+            <ArrowUpRightIcon className="size-2.5" aria-hidden="true" />
+            {metric.percentage}%
+          </FluentBadge>
+        }
+      />
 
       <div className="mt-4 flex items-center gap-2.5">
         <span className={cn("inline-flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone.icon)}>
@@ -833,9 +862,13 @@ function WorkforceMetricCard({
 
       <div className="mt-3 grid grid-cols-[minmax(58px,0.7fr)_minmax(0,1.3fr)] items-end gap-2.5">
         <WorkforceMetricVisual metric={metric} />
-        <p className="truncate text-[10px] leading-4 text-muted-foreground" title={typeof metric.description === "string" ? metric.description : undefined}>
+        <Caption1
+          block
+          className="truncate !text-muted-foreground"
+          title={typeof metric.description === "string" ? metric.description : undefined}
+        >
           {metric.description}
-        </p>
+        </Caption1>
       </div>
     </>
   )
@@ -845,14 +878,28 @@ function WorkforceMetricCard({
       {metric.href ? (
         <Link
           href={metric.href}
-          className="block h-full min-h-40 rounded-2xl border border-border/70 bg-card p-4 !no-underline shadow-[0_16px_40px_-34px_rgb(15_23_42_/_0.5)] transition hover:-translate-y-0.5 hover:border-primary/25 hover:!no-underline hover:shadow-[0_20px_44px_-32px_rgb(15_23_42_/_0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&_*]:!no-underline"
+          className="block h-full !no-underline hover:!no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&_*]:!no-underline"
         >
-          {content}
+          <FluentCard
+            appearance="outline"
+            className={cn(
+              "relative h-full min-h-40 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-4 shadow-sm transition duration-200 after:!border-border/70 before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:rounded-r-full hover:-translate-y-px hover:shadow-md dark:!border-border/80 dark:after:!border-border/80",
+              tone.accent,
+            )}
+          >
+            {content}
+          </FluentCard>
         </Link>
       ) : (
-        <article className="h-full min-h-40 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_16px_40px_-34px_rgb(15_23_42_/_0.5)]">
+        <FluentCard
+          appearance="outline"
+          className={cn(
+            "relative h-full min-h-40 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-4 shadow-sm after:!border-border/70 before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:rounded-r-full dark:!border-border/80 dark:after:!border-border/80",
+            tone.accent,
+          )}
+        >
           {content}
-        </article>
+        </FluentCard>
       )}
     </motion.div>
   )
@@ -1063,15 +1110,14 @@ function PeopleExperiencePanels({
             <p className="mt-0.5 text-[10px] text-muted-foreground">Latest generated employee payslips</p>
           </div>
           <div className="flex items-center gap-2">
-            <label className="relative hidden sm:block">
-              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={payrollSearch}
-                onChange={(event) => setPayrollSearch(event.target.value)}
-                placeholder="Search employee"
-                className="h-8 w-44 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] text-foreground outline-none focus:border-primary"
-              />
-            </label>
+            <SearchBox
+              size="small"
+              value={payrollSearch}
+              onChange={(_event, data) => setPayrollSearch(data.value)}
+              placeholder="Search employee"
+              aria-label="Search payroll employees"
+              className="hidden !w-44 sm:flex"
+            />
             {canOpenPayroll ? (
               <Link href="/dashboard/operations/payroll" className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[10px] font-semibold !text-primary-foreground !no-underline hover:!no-underline">
                 View payroll
@@ -1133,25 +1179,25 @@ function DashboardSurface({
   className?: string
 }) {
   return (
-    <Card
+    <UiCard
       size="sm"
       className={cn(
         "gap-0 rounded-2xl border-border/70 bg-card py-0 shadow-[0_18px_42px_-34px_rgb(var(--primary-rgb)_/_0.6)]",
         className,
       )}
     >
-      <CardContent className="p-4 sm:p-5">{children}</CardContent>
-    </Card>
+      <UiCardContent className="p-4 sm:p-5">{children}</UiCardContent>
+    </UiCard>
   )
 }
 
 function SectionSkeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="flex flex-col gap-2 py-1" aria-hidden="true">
+    <FluentSkeleton className="flex flex-col gap-2 py-1" aria-label="Loading content">
       {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} className="h-9 w-full rounded-md" />
+        <SkeletonItem key={i} shape="rectangle" className="!h-9 !w-full !rounded-md" />
       ))}
-    </div>
+    </FluentSkeleton>
   )
 }
 
@@ -1185,7 +1231,6 @@ function readInitialWarmSnapshot(): DashboardWarmSnapshot | null {
 
 export default function HrAnalyticsDashboard({
   refreshKey = 0,
-  companyName,
   adminRolesLabel,
   assignedRoleNames = [],
   userName,
@@ -1229,7 +1274,7 @@ export default function HrAnalyticsDashboard({
   )
   const [payrollPayslips, setPayrollPayslips] = React.useState<AdminRecord[]>([])
   const [analyticsSummary, setAnalyticsSummary] = React.useState<AdminRecord | null>(null)
-  const [analyticsFreshness, setAnalyticsFreshness] = React.useState<AdminRecord[]>([])
+  const [upcomingHoliday, setUpcomingHoliday] = React.useState<AdminRecord | null>(null)
 
   const employeesRef = React.useRef(employees)
   const departmentsRef = React.useRef(departments)
@@ -1322,6 +1367,7 @@ export default function HrAnalyticsDashboard({
       setTodayAttendanceSummaries([])
       setOnboardingRequests([])
       setOffboardingRequests([])
+      setUpcomingHoliday(null)
       setDepartmentHeadcounts([])
       setSliceReady(readySliceState())
       setLoading(false)
@@ -1373,12 +1419,6 @@ export default function HrAnalyticsDashboard({
           setAnalyticsSummary(summary)
         }),
 
-      getAnalyticsFreshness(token)
-        .catch(() => [])
-        .then((freshnessRows) => {
-          setAnalyticsFreshness(freshnessRows)
-        }),
-
       listAllEmployees(token, {}, listOpts)
         .catch((): AdminRecord[] => [])
         .then((empRows) => {
@@ -1419,6 +1459,19 @@ export default function HrAnalyticsDashboard({
         .catch((): PagedRowsResult => ({ rows: [], total: null }))
         .then((attRes) => {
           setTodayAttendanceSummaries(attRes.rows ?? [])
+        }),
+
+      listAttendanceHolidays(token, { page: 1, limit: 100 })
+        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .then((holidayResult) => {
+          const today = formatLocalDateKey(new Date())
+          const nextHoliday = [...(holidayResult.rows ?? [])]
+            .filter((holiday) => {
+              const date = holidayDateKey(holiday)
+              return Boolean(date && date >= today)
+            })
+            .sort((left, right) => holidayDateKey(left).localeCompare(holidayDateKey(right)))[0]
+          setUpcomingHoliday(nextHoliday ?? null)
         }),
 
       listOnboardingRequests(token, { page: 1, limit: 50 })
@@ -1879,7 +1932,6 @@ export default function HrAnalyticsDashboard({
   ]
 
   const leaveSectionReady = sliceReady.leave
-  const dashboardTitle = companyName?.trim() || "HRMS"
   const motionPreset = useDashboardMotion()
   const hrAnalyticsGroups = React.useMemo(() => {
     if (!analyticsSummary) return []
@@ -1944,18 +1996,6 @@ export default function HrAnalyticsDashboard({
       },
     ]
   }, [analyticsSummary])
-  const latestAnalyticsRefresh =
-    analyticsFreshness
-      .map((row) =>
-        readStringDeep(row, [
-          "refreshed_at",
-          "updated_at",
-          "last_refreshed_at",
-          "lastUpdatedAt",
-        ]),
-      )
-      .find(Boolean) ||
-    readStringDeep(analyticsSummary, ["generated_at", "generatedAt"])
   const dateRangePresets = [
     { label: "Last week", days: 7 },
     { label: "Last 2 weeks", days: 14 },
@@ -1981,6 +2021,10 @@ export default function HrAnalyticsDashboard({
       ...(adminRolesLabel?.split("•").map((role) => role.trim()).filter(Boolean) ?? []),
     ]),
   )
+  const upcomingHolidayName = upcomingHoliday
+    ? readString(upcomingHoliday, ["name", "holiday_name", "holidayName", "title"])
+    : ""
+  const upcomingHolidayDate = upcomingHoliday ? holidayDateKey(upcomingHoliday) : ""
 
   return (
     <motion.div
@@ -1998,53 +2042,54 @@ export default function HrAnalyticsDashboard({
           className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-primary/70 via-primary/20 to-transparent"
         />
         <div className="relative flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-start gap-3.5">
-            <Avatar className="mt-0.5 size-11 shrink-0 border-2 border-primary/25 bg-primary/10 shadow-sm ring-4 ring-primary/[0.06] sm:size-12">
-              {profilePhotoUrl ? (
-                <AvatarImage src={profilePhotoUrl} alt={userName || "HR profile"} />
-              ) : null}
-              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
-                {getInitials(userName)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
-                {userName || "Company user"}
-              </p>
-              <motion.h1
-                className="mt-0.5 truncate text-lg font-semibold tracking-tight text-foreground sm:text-xl"
-                initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.38, delay: 0.05 }}
-              >
-                {dashboardTitle}
-              </motion.h1>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Workforce overview
-                {latestAnalyticsRefresh
-                  ? ` · Updated ${formatDateShort(latestAnalyticsRefresh)}`
-                  : " · Live company snapshot"}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Assigned roles">
-                <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Roles
+          <div className="min-w-0">
+            <Persona
+              name={userName || "Company user"}
+              secondaryText="Available"
+              presence={{ status: "available" }}
+              avatar={{
+                color: "brand",
+                image: profilePhotoUrl
+                  ? { src: profilePhotoUrl, alt: userName || "HR profile" }
+                  : undefined,
+              }}
+              size="extra-large"
+              textAlignment="center"
+              className="min-h-14 min-w-[11.375rem] [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__secondaryText]:text-emerald-700 dark:[&_.fui-Persona__secondaryText]:text-emerald-400"
+            />
+          </div>
+          <div
+            className="mt-2 flex flex-wrap items-center gap-1.5 pl-[68px] sm:absolute sm:right-2 sm:top-1 sm:mt-0 sm:pl-0 xl:static xl:ml-auto"
+            aria-label="Assigned roles"
+          >
+            {visibleRoleNames.length > 0 ? (
+              visibleRoleNames.map((roleName) => (
+                <span
+                  key={roleName}
+                  className="inline-flex h-5 items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2 text-[9px] font-semibold text-primary"
+                >
+                  {roleName}
                 </span>
-                {visibleRoleNames.length > 0 ? (
-                  visibleRoleNames.map((roleName) => (
-                    <span
-                      key={roleName}
-                      className="inline-flex h-5 items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2 text-[9px] font-semibold text-primary"
-                    >
-                      {roleName}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-[10px] text-muted-foreground">No roles assigned</span>
-                )}
-              </div>
-            </div>
+              ))
+            ) : (
+              <span className="text-[10px] text-muted-foreground">No roles assigned</span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            {upcomingHoliday && upcomingHolidayDate ? (
+              <Link
+                href="/dashboard/attendance/holidays"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-primary/15 bg-background/80 px-2.5 text-[10px] text-foreground shadow-sm transition hover:border-primary/30 hover:bg-primary/[0.05]"
+                aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
+              >
+                <CalendarIcon className="size-3.5 text-primary" aria-hidden="true" />
+                <span className="text-muted-foreground">Upcoming</span>
+                <span className="max-w-40 truncate font-semibold">
+                  {upcomingHolidayName || "Holiday"}
+                </span>
+                <span className="text-muted-foreground">{formatDateShort(upcomingHolidayDate)}</span>
+              </Link>
+            ) : null}
             <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
               <PopoverTrigger
                 type="button"
@@ -2187,8 +2232,8 @@ export default function HrAnalyticsDashboard({
           </div>
           <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">
             {hrAnalyticsGroups.map((group) => (
-              <Card key={group.title} size="sm" className="gap-0 rounded-2xl border-border/70 py-0 shadow-sm">
-                <CardContent className="p-4">
+              <UiCard key={group.title} size="sm" className="gap-0 rounded-2xl border-border/70 py-0 shadow-sm">
+                <UiCardContent className="p-4">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
                     {group.title}
                   </h3>
@@ -2205,8 +2250,8 @@ export default function HrAnalyticsDashboard({
                       </div>
                     ))}
                   </dl>
-                </CardContent>
-              </Card>
+                </UiCardContent>
+              </UiCard>
             ))}
           </div>
         </motion.section>

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { DateInput } from "@/components/ui/date-input"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
@@ -39,6 +40,7 @@ import { countries as countryCodes } from "country-flag-icons"
 
 import { CountryFlag } from "@/components/country-flag"
 import { LumaSpin } from "@/components/ui/luma-spin"
+import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -2347,6 +2349,8 @@ function AttendancePunchActions({
     text: string
   } | null>(null)
 
+  useFluentToastResultState(message, setMessage)
+
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
       setMessage(null)
@@ -2444,19 +2448,6 @@ function AttendancePunchActions({
         </Button>
         <NetworkCheckButton />
       </div>
-      {message ? (
-        <p
-          className={cn(
-            "text-xs",
-            message.tone === "success"
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-destructive",
-          )}
-          role="status"
-        >
-          {message.text}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -4223,9 +4214,17 @@ export function EmployeeHomeDashboard() {
                                   {documentUploadFile ? `Selected: ${documentUploadFile.name}` : "Choose the attachment to upload with this document."}
                                 </p>
                               </div>
+                            ) : field.type === "date" ? (
+                              <DateInput
+                                value={String(val ?? "")}
+                                placeholder={field.placeholder}
+                                onChange={(event) => updateFormValue(field.name, event.target.value)}
+                                className="mt-1 h-9 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                required={!!field.required}
+                              />
                             ) : (
                               <Input
-                                type={field.type === "date" ? "date" : field.type || "text"}
+                                type={field.type || "text"}
                                 value={val}
                                 placeholder={field.placeholder}
                                 onChange={(e) => updateFormValue(field.name, e.target.value)}

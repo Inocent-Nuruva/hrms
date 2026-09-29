@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import { Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -524,7 +525,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                     }))
                   }
                 />
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Message</span><textarea className={textareaClass} value={form.message ?? ""} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Message</span><Textarea className={textareaClass} value={form.message ?? ""} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} /></label>
               </>
             ) : (
               <>
@@ -540,8 +541,8 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Template</span><textarea className={textareaClass} value={form.sms_template ?? ""} onChange={(event) => setForm((current) => ({ ...current, sms_template: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Template</span><Textarea className={textareaClass} value={form.sms_template ?? ""} onChange={(event) => setForm((current) => ({ ...current, sms_template: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
               </>
             )}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

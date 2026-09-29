@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
@@ -977,8 +979,8 @@ export function PerformanceSelfView({
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Status</span><FluentSelect ariaLabel="Status" className="w-full" value="PLANNED" disabled onChange={() => {}} options={[{ value: "PLANNED", label: "Not started" }]} /></label>
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><FluentSelect ariaLabel="Priority" className="w-full" value={taskForm.priority ?? "MEDIUM"} onChange={(value) => setTaskForm((current) => ({ ...current, priority: value }))} options={[{ value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} /></label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><input type="date" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><DateInput className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><DateInput className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
             </div>
 
             <div className="space-y-2">
@@ -992,7 +994,7 @@ export function PerformanceSelfView({
               ))}
             </div>
 
-            <label className="grid gap-1.5 text-sm"><span className="font-medium">Notes</span><textarea className={`${textareaClass} min-h-28`} placeholder="Describe the expected outcome and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} /></label>
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Notes</span><Textarea className={`${textareaClass} min-h-28`} placeholder="Describe the expected outcome and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} /></label>
             <p className="text-xs text-muted-foreground">After creation, open the task from Activities to update progress, complete the checklist, and continue the conversation.</p>
           </div>
           {taskError ? <p className="mx-4 mb-3 text-sm text-rose-600 sm:mx-6">{taskError}</p> : null}
@@ -1063,19 +1065,19 @@ export function PerformanceSelfView({
             {actionMode === "self-review" || actionMode === "manager-review" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Comment</span>
-                <textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "self-review" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Highlights</span>
-                <textarea className={textareaClass} value={form.highlights ?? ""} onChange={(event) => setForm((current) => ({ ...current, highlights: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.highlights ?? ""} onChange={(event) => setForm((current) => ({ ...current, highlights: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "appeal" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Reason</span>
-                <textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "achievement" || actionMode === "validate" ? (
@@ -1087,24 +1089,24 @@ export function PerformanceSelfView({
             {actionMode === "achievement" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Comment</span>
-                <textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "validate" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Manager comment</span>
-                <textarea className={textareaClass} value={form.manager_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, manager_comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.manager_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, manager_comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "manager-review" ? (
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Strengths (one per line)</span>
-                  <textarea className={textareaClass} value={form.areas_of_strength ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_of_strength: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.areas_of_strength ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_of_strength: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Improvements (one per line)</span>
-                  <textarea className={textareaClass} value={form.areas_for_improvement ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_for_improvement: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.areas_for_improvement ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_for_improvement: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -1130,15 +1132,15 @@ export function PerformanceSelfView({
                 </div>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Strengths</span>
-                  <textarea className={textareaClass} value={form.strengths ?? ""} onChange={(event) => setForm((current) => ({ ...current, strengths: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.strengths ?? ""} onChange={(event) => setForm((current) => ({ ...current, strengths: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Improvement areas</span>
-                  <textarea className={textareaClass} value={form.improvement_areas ?? ""} onChange={(event) => setForm((current) => ({ ...current, improvement_areas: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.improvement_areas ?? ""} onChange={(event) => setForm((current) => ({ ...current, improvement_areas: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>
-                  <textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -1164,7 +1166,7 @@ export function PerformanceSelfView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comment</span>
-                  <textarea className={textareaClass} value={form.employee_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_comment: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.employee_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_comment: event.target.value }))} />
                 </label>
               </>
             ) : null}

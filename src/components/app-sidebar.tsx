@@ -11,18 +11,51 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  BadgeCheck,
-  BarChart3,
-  Bell,
-  Building2,
-  Kanban,
-  LayoutDashboard,
-  MapPin,
-  Route,
-  ShieldCheck,
-  TrendingUp,
-  Users,
-} from "lucide-react"
+  Alert24Filled,
+  Alert24Regular,
+  ArrowSwap24Filled,
+  ArrowSwap24Regular,
+  ArrowTrendingLines24Filled,
+  ArrowTrendingLines24Regular,
+  Briefcase24Filled,
+  Briefcase24Regular,
+  Building24Filled,
+  Building24Regular,
+  BuildingMultiple24Filled,
+  BuildingMultiple24Regular,
+  bundleIcon,
+  CalendarLtr24Filled,
+  CalendarLtr24Regular,
+  Chat24Filled,
+  Chat24Regular,
+  ClipboardTaskListLtr24Filled,
+  ClipboardTaskListLtr24Regular,
+  Clock24Filled,
+  Clock24Regular,
+  DataBarVertical24Filled,
+  DataBarVertical24Regular,
+  DataTrending24Filled,
+  DataTrending24Regular,
+  Location24Filled,
+  Location24Regular,
+  Money24Filled,
+  Money24Regular,
+  Organization24Filled,
+  Organization24Regular,
+  Payment24Filled,
+  Payment24Regular,
+  PeopleTeam24Filled,
+  PeopleTeam24Regular,
+  PersonAdd24Filled,
+  PersonAdd24Regular,
+  ShieldKeyhole24Filled,
+  ShieldKeyhole24Regular,
+  TargetArrow24Filled,
+  TargetArrow24Regular,
+  Trophy24Filled,
+  Trophy24Regular,
+  type FluentIcon,
+} from "@fluentui/react-icons"
 import type { AdminResourceKey } from "@/lib/admin-api"
 import type { AuthScope } from "@/types"
 import {
@@ -32,28 +65,32 @@ import {
   isSelfServiceDashboardRoute,
   mergeUniqueNavItems,
 } from "@/lib/dashboard-nav"
+import { notificationAttentionIdsForRoute } from "@/lib/notification-attention"
+import { useNotifications } from "@/lib/notifications-store"
+import {
+  accessControlSectionTabGroups,
+  activitySectionTabGroups,
+  attendanceWorkspaceSectionTabGroups,
+  employeeSectionTabGroups,
+  fieldSectionTabGroups,
+  financeSectionTabGroups,
+  insightsSectionTabGroups,
+  leaveManagementSectionTabGroups,
+  movementSectionTabGroups,
+  operationsReportSectionTabGroups,
+  performanceSectionTabGroups,
+  probationSectionTabGroups,
+  smsSectionTabGroups,
+  structureSectionTabGroups,
+  type DashboardSectionTabGroup,
+} from "@/lib/dashboard-sections"
 import type { HomeDashboardKind } from "@/lib/dashboard-home"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import {
   useForbiddenPrefixes,
   useProbePlatformCompaniesAccess,
 } from "@/hooks/use-forbidden-route-guard"
-
-const IUsers = <Users />
-const ILeave = <Route />
-const IAttendance = <BarChart3 />
-const IPerformance = <BarChart3 />
-const IProbation = <BadgeCheck />
-const IField = <MapPin />
-const IActivities = <LayoutDashboard />
-const IMovements = <Route />
-const ISms = <Bell />
-const IStructure = <Kanban />
-const IInsights = <LayoutDashboard />
-const IDepartments = <Kanban />
-const ICompanies = <Building2 />
-const IGovernance = <ShieldCheck />
-const IPromotion = <TrendingUp />
+import { useNotificationAttentionRoutes } from "@/hooks/use-notification-attention"
 
 export type AppSidebarAccessMode = "admin" | "employee"
 
@@ -63,11 +100,48 @@ type SidebarNavItem = {
   url?: string
   matchUrls?: string[]
   items?: SidebarNavItem[]
-  icon?: React.ReactNode
+  icon?: FluentIcon
 }
 type SidebarData = {
   navMain: SidebarNavItem[]
 }
+
+function sidebarWorkspacesFromSections(
+  groups: DashboardSectionTabGroup[],
+): SidebarNavItem[] {
+  return groups.flatMap((group) => {
+    const firstItem = group.items[0]
+    if (!group.title || !firstItem) return []
+
+    return [{
+      title: group.title,
+      url: firstItem.url,
+      matchUrls: group.items.map((item) => item.url),
+    }]
+  })
+}
+
+const AccessControlIcon = bundleIcon(ShieldKeyhole24Filled, ShieldKeyhole24Regular)
+const AttendanceIcon = bundleIcon(Clock24Filled, Clock24Regular)
+const BranchesIcon = bundleIcon(Building24Filled, Building24Regular)
+const CompaniesIcon = bundleIcon(BuildingMultiple24Filled, BuildingMultiple24Regular)
+const DepartmentsIcon = bundleIcon(Organization24Filled, Organization24Regular)
+const EmployeesIcon = bundleIcon(PeopleTeam24Filled, PeopleTeam24Regular)
+const PromotionIcon = bundleIcon(ArrowTrendingLines24Filled, ArrowTrendingLines24Regular)
+const LeaveIcon = bundleIcon(CalendarLtr24Filled, CalendarLtr24Regular)
+const PerformanceIcon = bundleIcon(TargetArrow24Filled, TargetArrow24Regular)
+const ProbationIcon = bundleIcon(Trophy24Filled, Trophy24Regular)
+const FieldIcon = bundleIcon(Location24Filled, Location24Regular)
+const FinanceIcon = bundleIcon(Money24Filled, Money24Regular)
+const ActivitiesIcon = bundleIcon(ClipboardTaskListLtr24Filled, ClipboardTaskListLtr24Regular)
+const MovementsIcon = bundleIcon(ArrowSwap24Filled, ArrowSwap24Regular)
+const PositionsIcon = bundleIcon(Briefcase24Filled, Briefcase24Regular)
+const InviteIcon = bundleIcon(PersonAdd24Filled, PersonAdd24Regular)
+const PayrollIcon = bundleIcon(Payment24Filled, Payment24Regular)
+const ReportsIcon = bundleIcon(DataTrending24Filled, DataTrending24Regular)
+const NotificationsIcon = bundleIcon(Alert24Filled, Alert24Regular)
+const SmsIcon = bundleIcon(Chat24Filled, Chat24Regular)
+const InsightsIcon = bundleIcon(DataBarVertical24Filled, DataBarVertical24Regular)
 
 const adminData: SidebarData = {
   navMain: [
@@ -91,7 +165,8 @@ const adminData: SidebarData = {
         "/dashboard/roles",
         "/dashboard/permissions",
       ],
-      icon: IUsers,
+      icon: AccessControlIcon,
+      items: sidebarWorkspacesFromSections(accessControlSectionTabGroups),
     },
     {
       title: "Attendance",
@@ -103,22 +178,23 @@ const adminData: SidebarData = {
         "/dashboard/attendance/schedule-preview",
         "/dashboard/attendance/corrections",
       ],
-      icon: IAttendance,
+      icon: AttendanceIcon,
+      items: sidebarWorkspacesFromSections(attendanceWorkspaceSectionTabGroups),
     },
     {
       title: "Branches",
       url: "/dashboard/branches",
-      icon: IUsers,
+      icon: BranchesIcon,
     },
     {
       title: "Companies",
       url: "/dashboard/companies",
-      icon: IUsers,
+      icon: CompaniesIcon,
     },
     {
       title: "Departments",
       url: "/dashboard/departments",
-      icon: IDepartments,
+      icon: DepartmentsIcon,
     },
     {
       title: "Employees",
@@ -148,12 +224,13 @@ const adminData: SidebarData = {
         "/dashboard/me/team/attendance",
         "/dashboard/me/team/actions",
       ],
-      icon: IUsers,
+      icon: EmployeesIcon,
+      items: sidebarWorkspacesFromSections(employeeSectionTabGroups),
     },
     {
       title: "Promotion",
       url: "/dashboard/me/promotion",
-      icon: IPromotion,
+      icon: PromotionIcon,
     },
     {
       title: "Leave Management",
@@ -175,7 +252,8 @@ const adminData: SidebarData = {
         "/dashboard/me/leave/holidays",
         "/dashboard/me/leave/policies",
       ],
-      icon: ILeave,
+      icon: LeaveIcon,
+      items: sidebarWorkspacesFromSections(leaveManagementSectionTabGroups),
     },
     {
       title: "Performance",
@@ -198,7 +276,8 @@ const adminData: SidebarData = {
         "/dashboard/me/performance/team",
         "/dashboard/me/performance/manager-kpis",
       ],
-      icon: IPerformance,
+      icon: PerformanceIcon,
+      items: sidebarWorkspacesFromSections(performanceSectionTabGroups),
     },
     {
       title: "Probation",
@@ -211,7 +290,8 @@ const adminData: SidebarData = {
         "/dashboard/probation/team",
         "/dashboard/me/probation",
       ],
-      icon: IProbation,
+      icon: ProbationIcon,
+      items: sidebarWorkspacesFromSections(probationSectionTabGroups),
     },
     {
       title: "Field",
@@ -228,7 +308,8 @@ const adminData: SidebarData = {
         "/dashboard/me/field/plans",
         "/dashboard/me/field/follow-ups",
       ],
-      icon: IField,
+      icon: FieldIcon,
+      items: sidebarWorkspacesFromSections(fieldSectionTabGroups),
     },
     {
       title: "Finance",
@@ -244,7 +325,8 @@ const adminData: SidebarData = {
         "/dashboard/me/finance/payroll",
         "/dashboard/me/payroll",
       ],
-      icon: IUsers,
+      icon: FinanceIcon,
+      items: sidebarWorkspacesFromSections(financeSectionTabGroups),
     },
     {
       title: "Activities",
@@ -261,7 +343,8 @@ const adminData: SidebarData = {
         "/dashboard/me/activities/today",
         "/dashboard/me/activities/reports",
       ],
-      icon: IActivities,
+      icon: ActivitiesIcon,
+      items: sidebarWorkspacesFromSections(activitySectionTabGroups),
     },
     {
       title: "Movements",
@@ -273,12 +356,13 @@ const adminData: SidebarData = {
         "/dashboard/movements/operations",
         "/dashboard/me/movements",
       ],
-      icon: IMovements,
+      icon: MovementsIcon,
+      items: sidebarWorkspacesFromSections(movementSectionTabGroups),
     },
     {
       title: "Positions",
       url: "/dashboard/positions",
-      icon: IUsers,
+      icon: PositionsIcon,
     },
     {
       title: "Structure",
@@ -289,17 +373,18 @@ const adminData: SidebarData = {
         "/dashboard/structure/grades",
         "/dashboard/structure/numbering",
       ],
-      icon: IStructure,
+      icon: DepartmentsIcon,
+      items: sidebarWorkspacesFromSections(structureSectionTabGroups),
     },
     {
       title: "Invite & register",
       url: "/dashboard/operations/recruitment",
-      icon: IUsers,
+      icon: InviteIcon,
     },
     {
       title: "Payroll",
       url: "/dashboard/operations/payroll",
-      icon: IUsers,
+      icon: PayrollIcon,
     },
     {
       title: "Reports & Analytics",
@@ -309,17 +394,13 @@ const adminData: SidebarData = {
         "/dashboard/operations/scheduled-reporting",
         "/dashboard/smtp",
       ],
-      icon: IUsers,
-      items: [
-        { title: "Reports & Analytics", url: "/dashboard/operations/reports" },
-        { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting" },
-        { title: "SMTP Settings", url: "/dashboard/smtp" },
-      ],
+      icon: ReportsIcon,
+      items: sidebarWorkspacesFromSections(operationsReportSectionTabGroups),
     },
     {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
-      icon: IUsers,
+      icon: NotificationsIcon,
     },
     {
       title: "SMS",
@@ -331,7 +412,8 @@ const adminData: SidebarData = {
         "/dashboard/sms/logs",
         "/dashboard/sms/platform",
       ],
-      icon: ISms,
+      icon: SmsIcon,
+      items: sidebarWorkspacesFromSections(smsSectionTabGroups),
     },
     {
       title: "Insights",
@@ -344,7 +426,8 @@ const adminData: SidebarData = {
         "/dashboard/insights/sales-field",
         "/dashboard/insights/readiness",
       ],
-      icon: IInsights,
+      icon: InsightsIcon,
+      items: sidebarWorkspacesFromSections(insightsSectionTabGroups),
     },
   ],
 }
@@ -354,13 +437,13 @@ const platformData: SidebarData = {
     {
       title: "Companies",
       url: "/dashboard/companies",
-      icon: ICompanies,
+      icon: CompaniesIcon,
     },
     {
       title: "Access Governance",
       url: "/dashboard/roles",
       matchUrls: ["/dashboard/roles", "/dashboard/permissions"],
-      icon: IGovernance,
+      icon: AccessControlIcon,
       items: [
         { title: "Roles", url: "/dashboard/roles" },
         { title: "Permissions", url: "/dashboard/permissions" },
@@ -369,12 +452,12 @@ const platformData: SidebarData = {
     {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
-      icon: <Bell />,
+      icon: NotificationsIcon,
     },
     {
       title: "SMS Platform",
       url: "/dashboard/sms/platform",
-      icon: ISms,
+      icon: SmsIcon,
     },
   ],
 }
@@ -654,6 +737,9 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
+  const attentionUrls = useNotificationAttentionRoutes()
+  const { attentionItems, markAsRead } = useNotifications()
+  const acknowledgingAttentionIds = React.useRef(new Set<number>())
   const normalizedPermissions = React.useMemo(
     () => normalizePermissionLabels(permissionLabels),
     [permissionLabels]
@@ -676,6 +762,23 @@ export function AppSidebar({
       setOpenMobile(false)
     }
   }, [pathname, isMobile, setOpenMobile])
+
+  // An attention dot represents an unread notification for a specific page.
+  // Once that exact page is open, acknowledge only its notifications so the
+  // page/tab dot disappears without clearing attention elsewhere.
+  React.useEffect(() => {
+    if (!pathname) return
+
+    const ids = notificationAttentionIdsForRoute(attentionItems, pathname)
+      .filter((id) => !acknowledgingAttentionIds.current.has(id))
+
+    if (ids.length === 0) return
+
+    ids.forEach((id) => acknowledgingAttentionIds.current.add(id))
+    void Promise.allSettled(ids.map((id) => markAsRead(id))).finally(() => {
+      ids.forEach((id) => acknowledgingAttentionIds.current.delete(id))
+    })
+  }, [attentionItems, markAsRead, pathname])
 
   const permissionsResolved = navReady && identityReady
 
@@ -719,28 +822,16 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>
-      {/* Decorative ambient orbs (purely visual) */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-      >
-        <div className="absolute -left-8 top-10 h-28 w-28 rounded-full bg-primary/[0.07] blur-2xl dark:bg-primary/15" />
-        <div className="absolute -right-10 bottom-24 h-36 w-36 rounded-full bg-primary/[0.06] blur-3xl dark:bg-primary/12" />
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
-      </div>
-
-      <SidebarContent className="relative z-[1] gap-2 px-2 pt-3">
-        <div className="mb-1 px-1">
-          <div className="mt-1.5 h-1 w-20 rounded-full bg-gradient-to-r from-primary via-primary/70 to-transparent shadow-[0_0_10px_rgb(var(--primary-rgb)/0.22)]" />
-        </div>
+      <SidebarContent className="gap-2 px-0 pb-2 pt-10">
         {permissionsResolved ? (
           <NavMain
             items={navData.navMain}
+            attentionUrls={attentionUrls}
             activeResource={activeResource}
             onSelectResource={onSelectResource}
           />
         ) : (
-          <div className="space-y-1.5 px-1" aria-hidden>
+          <div className="flex flex-col gap-1.5 px-1" aria-hidden>
             {Array.from({ length: 8 }, (_, index) => (
               <div key={index} className="h-8 animate-pulse rounded-lg bg-muted/50" />
             ))}

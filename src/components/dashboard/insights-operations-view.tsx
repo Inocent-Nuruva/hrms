@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"

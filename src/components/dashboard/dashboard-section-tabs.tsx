@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -11,16 +10,10 @@ import { canSeeDashboardPage } from "@/lib/forbidden-routes"
 import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
-import { motion } from "framer-motion"
-import { useDashboardMotion } from "@/lib/dashboard-motion"
 
 type DashboardSectionTabsProps = {
   groups: DashboardSectionTabGroup[]
   className?: string
-}
-
-function isActivePath(currentPath: string, url: string) {
-  return currentPath === url || currentPath.startsWith(`${url}/`)
 }
 
 export function DashboardSectionTabs({
@@ -31,7 +24,6 @@ export function DashboardSectionTabs({
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
   const identity = useDashboardIdentity()
-  const motionPreset = useDashboardMotion()
   const forbiddenVersion = useForbiddenPrefixes()
   // Defer permission-filtered UI until after mount so SSR and the first client
   // paint both render the same placeholder (avoids hydration mismatch).
@@ -94,52 +86,15 @@ export function DashboardSectionTabs({
     return null
   }
 
-  if (hasGroupedTabs) {
-    return <Tabs2 groups={filteredGroups} currentPath={currentPath} className={cn(stickyClassName, className)} />
-  }
+  const tabGroups = hasGroupedTabs
+    ? filteredGroups
+    : [{ items: filteredGroups.flatMap((group) => group.items) }]
 
   return (
-    <div className={cn("flex flex-col gap-1.5", stickyClassName, className)}>
-      {filteredGroups.map((group) => (
-        <div key={group.title ?? group.items.map((item) => item.url).join("|")} className="flex flex-col gap-1">
-          {group.title ? (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              {group.title}
-            </p>
-          ) : null}
-          <div className="tab-rail-scroll">
-            <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
-              {group.items.map((item) => {
-                const isActive = isActivePath(currentPath, item.url)
-
-                return (
-                  <Link
-                    key={item.url}
-                    href={item.url}
-                    className={cn(
-                      "relative shrink-0 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-                      isActive
-                        ? "text-[var(--primary)]"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {item.title}
-                    {isActive && !motionPreset.reduce ? (
-                      <motion.span
-                        layoutId="dashboard-section-tab"
-                        className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]"
-                        transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      />
-                    ) : isActive ? (
-                      <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--primary)]" />
-                    ) : null}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
+    <Tabs2
+      groups={tabGroups}
+      currentPath={currentPath}
+      className={cn(stickyClassName, className)}
+    />
   )
 }

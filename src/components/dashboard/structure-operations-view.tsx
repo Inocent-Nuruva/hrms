@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -444,7 +445,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Notes (optional)</span>
-              <textarea
+              <Textarea
                 className={textareaClass}
                 value={form.description ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}

@@ -13,7 +13,7 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"

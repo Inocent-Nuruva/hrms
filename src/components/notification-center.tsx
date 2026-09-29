@@ -9,21 +9,20 @@ import {
   type Variants,
 } from "framer-motion"
 import {
-  Archive,
-  ArrowUpRight,
-  Bell,
-  Check,
-  CheckCheck,
-  Eye,
-  LoaderCircle,
-  RefreshCw,
-  Search,
-  Send,
-  X,
-} from "lucide-react"
+  Alert20Regular as Bell,
+  Archive20Regular as Archive,
+  ArrowSync20Regular as RefreshCw,
+  ArrowUpRight20Regular as ArrowUpRight,
+  Checkmark20Regular as Check,
+  CheckmarkCircle20Regular as CheckCheck,
+  Dismiss20Regular as X,
+  Eye20Regular as Eye,
+  Send20Regular as Send,
+} from "@fluentui/react-icons"
+import { Card, Field, SearchBox } from "@fluentui/react-components"
+import { LoaderCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -48,6 +47,10 @@ import {
   useNotifications,
 } from "@/lib/notifications-store"
 import { showErrorAlert } from "@/lib/error-alert"
+import {
+  isUnreadNotification,
+  resolveNotificationUrl,
+} from "@/lib/notification-attention"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
@@ -72,12 +75,6 @@ const PRIORITY_OPTIONS: Array<{ value: NotificationPriority; label: string }> = 
 
 type StatusFilterValue = "all" | NotificationStatus
 
-const STATUS_FILTER_LABELS: Record<StatusFilterValue, string> = {
-  all: "All",
-  UNREAD: "Unread",
-  READ: "Read",
-}
-
 function readStoredToken() {
   if (typeof window === "undefined") return ""
   const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
@@ -98,12 +95,6 @@ function readStoredToken() {
     window.localStorage.getItem("hrms.admin.accessToken")?.trim() ??
     ""
   )
-}
-
-function asRecord(value: unknown): AdminRecord | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as AdminRecord)
-    : null
 }
 
 function readString(row: AdminRecord | null, keys: string[]) {
@@ -154,43 +145,8 @@ function formatLabel(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function optionLabel(
-  options: Array<{ value: string; label: string }>,
-  value: string | null | undefined,
-  fallback = "All"
-) {
-  if (!value || value === "all") return fallback
-  return options.find((option) => option.value === value)?.label ?? formatLabel(value)
-}
-
-function readMetadata(row: AdminRecord) {
-  return asRecord(row.metadata)
-}
-
-function appendRequestHighlight(url: string, requestId: string) {
-  if (!url.startsWith("/") || !requestId) {
-    return url
-  }
-
-  const [pathWithQuery, hash = ""] = url.split("#")
-  const [path, query = ""] = pathWithQuery.split("?")
-  const params = new URLSearchParams(query)
-  if (!params.has("highlight") && !params.has("requestId") && !params.has("request_id")) {
-    params.set("highlight", requestId)
-  }
-  const nextQuery = params.toString()
-  return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`
-}
-
 function readNotificationId(row: AdminRecord) {
   return readNumber(row, ["id", "notification_id", "notificationId"])
-}
-
-function isUnreadNotification(row: AdminRecord) {
-  const status = readString(row, ["status"]).toUpperCase()
-  if (status === "READ") return false
-  if (status === "UNREAD") return true
-  return !readString(row, ["read_at", "readAt"])
 }
 
 function isSeenNotification(row: AdminRecord) {
@@ -214,13 +170,6 @@ function isArchivedNotification(row: AdminRecord) {
   }
   const status = readString(row, ["status"]).toUpperCase()
   return status === "ARCHIVED" || status === "DELETED" || status === "REMOVED"
-}
-
-function isTestNotification(row: AdminRecord) {
-  const type = readString(row, ["type"]).toLowerCase()
-  const metadata = readMetadata(row)
-  const source = readString(metadata, ["source"]).toLowerCase()
-  return type.includes("test") || source.includes("notification-center") || source.includes("test")
 }
 
 function notificationTypeLabel(row: AdminRecord) {
@@ -250,47 +199,6 @@ function formatNotificationTime(value: string) {
   const deltaDays = Math.round(deltaHours / 24)
   if (Math.abs(deltaDays) < 30) return formatter.format(deltaDays, "day")
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-}
-
-function resolveNotificationUrl(row: AdminRecord) {
-  if (isTestNotification(row)) return "/dashboard"
-  const direct = readString(row, ["action_url", "actionUrl", "url", "link"])
-  const metadata = readMetadata(row)
-  const requestId =
-    readString(row, ["entity_id", "entityId", "request_id", "requestId"]) ||
-    readString(metadata, ["request_id", "requestId", "entity_id", "entityId"])
-
-  if (direct.startsWith("/")) return appendRequestHighlight(direct, requestId)
-
-  if (metadata) {
-    const nested = readString(metadata, ["action_url", "actionUrl", "url", "link"])
-    if (nested.startsWith("/")) return appendRequestHighlight(nested, requestId)
-  }
-
-  const entityType = (
-    readString(row, ["entity_type", "entityType", "type"]) ||
-    readString(metadata, ["entity_type", "entityType", "type"])
-  ).toLowerCase()
-  const destinationByType: Record<string, string> = {
-    profile_update_request: "/dashboard/employees/profile-update-approvals",
-    profile_update_submitted: "/dashboard/employees/profile-update-approvals",
-    attendance_correction_request: "/dashboard/attendance/correction-requests",
-    attendance_correction_submitted: "/dashboard/attendance/correction-requests",
-    leave_request: "/dashboard/leave-management/requests",
-    leave_request_submitted: "/dashboard/leave-management/requests",
-    onboarding_request: "/dashboard/employees/onboarding",
-    onboarding_request_submitted: "/dashboard/employees/onboarding",
-    onboarding_task: "/dashboard/me/requests/actions",
-    onboarding_task_assigned: "/dashboard/me/requests/actions",
-    offboarding_request: "/dashboard/employees/offboarding",
-    offboarding_request_submitted: "/dashboard/employees/offboarding",
-  }
-  const destination = destinationByType[entityType]
-  if (destination) {
-    return appendRequestHighlight(destination, requestId)
-  }
-
-  return "/dashboard"
 }
 
 function readCurrentCompanyUserId() {
@@ -648,80 +556,83 @@ export function NotificationCenter({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Toolbar cluster — pulled up under the title, right-aligned */}
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        {/* Actions — right aligned */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {activeFilterCount > 0 ? (
-            <span className="text-xs font-medium text-primary">
-              {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
-            </span>
-          ) : null}
-          <div className="flex items-center gap-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-              onClick={() => void loadNotifications({ showErrors: true, markVisibleSeen: open })}
-              disabled={loading}
-              title="Refresh"
-              aria-label="Refresh notifications"
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-              onClick={() => void handleMarkAllRead()}
-              disabled={markingAll || unreadCount === 0}
-              title="Mark all as read"
-              aria-label="Mark all notifications as read"
-            >
-              {markingAll ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <CheckCheck className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-              onClick={() => void handleArchiveAllNotifications()}
-              disabled={clearingAll || loading || items.length === 0 || includeArchived}
-              title={
-                includeArchived
-                  ? "Switch off Archived to archive active notifications"
-                  : "Archive all notifications"
-              }
-              aria-label="Archive all notifications"
-            >
-              {clearingAll ? (
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Archive className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8 rounded-full text-primary hover:bg-primary/10 hover:text-primary"
-              onClick={() => void handleSendTestNotification()}
-              disabled={sendingTest || clearingAll || !hasRecipientForTest}
-              title={
-                hasRecipientForTest
-                  ? "Send a test notification to yourself"
-                  : "Current company user could not be determined"
-              }
-              aria-label="Send test notification"
-            >
-              <Send className={cn("h-3.5 w-3.5", sendingTest ? "animate-pulse" : "")} />
-            </Button>
+      <div className="flex shrink-0 flex-col gap-2.5">
+        <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Review recent activity and approval updates.
+          </p>
+          <div className="flex items-center gap-2">
+            {activeFilterCount > 0 ? (
+              <span className="text-xs font-medium text-primary">
+                {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            <div className="flex items-center gap-1" role="toolbar" aria-label="Notification actions">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => void loadNotifications({ showErrors: true, markVisibleSeen: open })}
+                disabled={loading}
+                title="Refresh"
+                aria-label="Refresh notifications"
+              >
+                <RefreshCw className={cn("size-4", loading ? "animate-spin" : "")} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => void handleMarkAllRead()}
+                disabled={markingAll || unreadCount === 0}
+                title="Mark all as read"
+                aria-label="Mark all notifications as read"
+              >
+                {markingAll ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCheck className="size-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => void handleArchiveAllNotifications()}
+                disabled={clearingAll || loading || items.length === 0 || includeArchived}
+                title={
+                  includeArchived
+                    ? "Switch off Archived to archive active notifications"
+                    : "Archive all notifications"
+                }
+                aria-label="Archive all notifications"
+              >
+                {clearingAll ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <Archive className="size-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => void handleSendTestNotification()}
+                disabled={sendingTest || clearingAll || !hasRecipientForTest}
+                title={
+                  hasRecipientForTest
+                    ? "Send a test notification to yourself"
+                    : "Current company user could not be determined"
+                }
+                aria-label="Send test notification"
+              >
+                <Send className={cn("size-4", sendingTest ? "animate-pulse" : "")} />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -731,162 +642,105 @@ export function NotificationCenter({
           </div>
         ) : null}
 
-        {/* Filters — single compact row, right aligned */}
-        <div className="flex w-full flex-wrap items-center justify-end gap-1.5">
-        <div className="relative w-[9.5rem] shrink-0 sm:w-[11rem]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchInput}
-            onChange={(_event, data) => setSearchInput(data.value)}
-            placeholder="Search…"
-            className="h-8 w-full rounded-lg border-border bg-muted/30 pl-8 text-xs shadow-none focus-visible:bg-background dark:bg-muted/20"
-          />
-        </div>
+        <div className="flex w-full flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <SearchBox
+                size="small"
+                value={searchInput}
+                onChange={(_event, data) => setSearchInput(data.value)}
+                placeholder="Search notifications"
+                aria-label="Search notifications"
+                className="w-full"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Switch
+                checked={includeArchived}
+                onCheckedChange={(checked) => setIncludeArchived(Boolean(checked))}
+                size="sm"
+                label="Include archived"
+                aria-label="Include archived notifications"
+              />
+              {activeFilterCount > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="!size-7 !min-w-7 shrink-0 rounded-md text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={clearFilters}
+                  title="Clear filters"
+                  aria-label="Clear filters"
+                >
+                  <X className="size-4" />
+                </Button>
+              ) : null}
+            </div>
+          </div>
 
-        <Select
-          value={statusFilter}
-          onValueChange={(value) => value && setStatusFilter(value as StatusFilterValue)}
-        >
-          <SelectTrigger
-            size="sm"
-            className="h-8 w-[7.25rem] shrink-0 rounded-lg border-border bg-background px-2 text-xs shadow-none"
-            title="Status"
-            aria-label="Status filter"
-          >
-            <SelectValue>
-              {(value) => (
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="shrink-0 text-muted-foreground">Status</span>
-                  <span className="shrink-0 text-border">·</span>
-                  <span className="truncate font-medium text-foreground">
-                    {STATUS_FILTER_LABELS[(value as StatusFilterValue) || "all"] ?? "All"}
-                  </span>
-                </span>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="rounded-xl" alignItemWithTrigger={false} align="start">
-            <SelectItem value="all" className="rounded-lg">
-              All
-            </SelectItem>
-            <SelectItem value="UNREAD" className="rounded-lg">
-              Unread
-            </SelectItem>
-            <SelectItem value="READ" className="rounded-lg">
-              Read
-            </SelectItem>
-          </SelectContent>
-        </Select>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Field label="Status" size="small">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => value && setStatusFilter(value as StatusFilterValue)}
+              >
+                <SelectTrigger size="sm" className="w-full" aria-label="Status filter">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="rounded-md">All</SelectItem>
+                  <SelectItem value="UNREAD" className="rounded-md">Unread</SelectItem>
+                  <SelectItem value="READ" className="rounded-md">Read</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
-        <Select
-          value={categoryFilter}
-          onValueChange={(value) =>
-            value && setCategoryFilter(value as NotificationCategory | "all")
-          }
-        >
-          <SelectTrigger
-            size="sm"
-            className="h-8 w-[8.5rem] shrink-0 rounded-lg border-border bg-background px-2 text-xs shadow-none"
-            title="Category"
-            aria-label="Category filter"
-          >
-            <SelectValue>
-              {(value) => (
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="shrink-0 text-muted-foreground">Category</span>
-                  <span className="shrink-0 text-border">·</span>
-                  <span className="truncate font-medium text-foreground">
-                    {optionLabel(CATEGORY_OPTIONS, value as string)}
-                  </span>
-                </span>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="rounded-xl" alignItemWithTrigger={false} align="start">
-            <SelectItem value="all" className="rounded-lg">
-              All
-            </SelectItem>
-            {CATEGORY_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="rounded-lg">
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Field label="Category" size="small">
+              <Select
+                value={categoryFilter}
+                onValueChange={(value) =>
+                  value && setCategoryFilter(value as NotificationCategory | "all")
+                }
+              >
+                <SelectTrigger size="sm" className="w-full" aria-label="Category filter">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="rounded-md">All</SelectItem>
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="rounded-md">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
 
-        <Select
-          value={priorityFilter}
-          onValueChange={(value) =>
-            value && setPriorityFilter(value as NotificationPriority | "all")
-          }
-        >
-          <SelectTrigger
-            size="sm"
-            className="h-8 w-[7.5rem] shrink-0 rounded-lg border-border bg-background px-2 text-xs shadow-none"
-            title="Priority"
-            aria-label="Priority filter"
-          >
-            <SelectValue>
-              {(value) => (
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="shrink-0 text-muted-foreground">Priority</span>
-                  <span className="shrink-0 text-border">·</span>
-                  <span className="truncate font-medium text-foreground">
-                    {optionLabel(PRIORITY_OPTIONS, value as string)}
-                  </span>
-                </span>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="rounded-xl" alignItemWithTrigger={false} align="start">
-            <SelectItem value="all" className="rounded-lg">
-              All
-            </SelectItem>
-            {PRIORITY_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="rounded-lg">
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <label
-          className={cn(
-            "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-lg border px-2 text-xs transition",
-            includeArchived
-              ? "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200"
-              : "border-border bg-background text-muted-foreground hover:bg-muted/40"
-          )}
-          title="Show archived notifications"
-        >
-          <Archive className="h-3.5 w-3.5 shrink-0" />
-          <span className="font-medium">Archived</span>
-          <Switch
-            checked={includeArchived}
-            onCheckedChange={(checked) => setIncludeArchived(Boolean(checked))}
-            size="sm"
-            aria-label="Show archived notifications"
-          />
-        </label>
-
-        {activeFilterCount > 0 ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="h-8 w-8 shrink-0 rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40"
-            onClick={clearFilters}
-            title="Clear filters"
-            aria-label="Clear filters"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
+            <Field label="Priority" size="small">
+              <Select
+                value={priorityFilter}
+                onValueChange={(value) =>
+                  value && setPriorityFilter(value as NotificationPriority | "all")
+                }
+              >
+                <SelectTrigger size="sm" className="w-full" aria-label="Priority filter">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="rounded-md">All</SelectItem>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="rounded-md">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         </div>
       </div>
 
-      {/* Feed — breathing room below toolbar, then scrollable list */}
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/60 pt-4 pr-0.5">
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/60 pt-3 pr-0.5">
         {error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
             {error}
@@ -908,11 +762,11 @@ export function NotificationCenter({
         ) : null}
 
         {items.length > 0 ? (
-          <div className="overflow-hidden rounded-xl border border-border">
+          <div>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={listAnimationKey}
-                className="divide-y divide-border"
+                className="grid gap-2"
                 variants={shouldAnimate ? notificationListVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
@@ -939,12 +793,16 @@ export function NotificationCenter({
                       initial={shouldAnimate ? "hidden" : false}
                       animate="visible"
                       exit={shouldAnimate ? "exit" : undefined}
-                      className={cn(
-                        "group relative flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-muted/40",
-                        unread ? "bg-primary/5" : "bg-background",
-                        archived ? "opacity-75" : null
-                      )}
+                      className={cn("group", archived ? "opacity-75" : null)}
                     >
+                      <Card
+                        appearance={unread ? "filled-alternative" : "outline"}
+                        size="small"
+                        className={cn(
+                          "relative !flex-row !items-center gap-2 !rounded-lg !px-2.5 !py-2 transition-colors",
+                          unread ? "border-primary/25" : null,
+                        )}
+                      >
                       {unread ? (
                         <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
                       ) : null}
@@ -1088,6 +946,7 @@ export function NotificationCenter({
                           </Button>
                         ) : null}
                       </div>
+                      </Card>
                     </motion.div>
                   )
                 })}

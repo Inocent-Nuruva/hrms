@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { HeadphonesIcon, Loader2Icon, SendIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { Button } from "@/components/ui/button"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"

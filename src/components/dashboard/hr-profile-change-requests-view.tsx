@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import { useSearchParams } from "next/navigation"
 import {
   ArrowRightIcon,
@@ -13,7 +14,7 @@ import {
   UserRoundIcon,
   XIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -880,13 +881,13 @@ export function HrProfileChangeRequestsView() {
           </DialogHeader>
           <div className="grid gap-3">
             {form.mode === "reject" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Rejection reason</span><textarea className={textareaClass} value={form.rejection_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, rejection_reason: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Rejection reason</span><Textarea className={textareaClass} value={form.rejection_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, rejection_reason: event.target.value }))} /></label>
             ) : null}
             {form.mode === "correct" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><Textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
             ) : null}
             {form.mode !== "approve" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>

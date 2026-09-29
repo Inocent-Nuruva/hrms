@@ -13,11 +13,11 @@ export const inputClass =
 export const textareaClass =
   "min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
 export const actionButtonClass =
-  "inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
+  "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
 export const primaryButtonClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+  "inline-flex h-8 min-w-24 items-center justify-center gap-1 rounded border border-transparent bg-primary px-3 text-sm font-semibold !text-white transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
 export const secondaryButtonClass =
-  "inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
+  "inline-flex h-8 min-w-24 items-center justify-center gap-1 rounded border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
 export const heroActionButtonClass =
   "inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-white/90 disabled:opacity-60"
 export const heroGhostButtonClass =

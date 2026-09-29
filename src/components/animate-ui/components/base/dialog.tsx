@@ -9,10 +9,11 @@ import {
   DialogBody,
   DialogSurface,
   DialogTitle as FluentDialogTitle,
-  DialogTrigger as FluentDialogTrigger,
+  DrawerHeader,
   dialogSurfaceSize,
   FluentDialogCloseButton,
   FluentDialogRoot,
+  FluentDialogTrigger,
 } from "@/components/ui/fluent-dialog"
 
 type PopupFrom = "top" | "bottom" | "left" | "right" | "center"
@@ -85,6 +86,7 @@ function DialogBackdrop() {
 
 export interface DialogPopupProps {
   className?: string
+  bodyClassName?: string
   children?: React.ReactNode
   from?: PopupFrom
   showCloseButton?: boolean
@@ -92,6 +94,7 @@ export interface DialogPopupProps {
 
 function DialogPopup({
   className,
+  bodyClassName,
   children,
   showCloseButton = true,
 }: DialogPopupProps) {
@@ -102,6 +105,7 @@ function DialogPopup({
         className={cn(
           "!flex !flex-col gap-3 overflow-y-auto",
           size === "full" ? "!h-full !max-h-none" : "!max-h-[min(90dvh,48rem)]",
+          bodyClassName,
         )}
       >
         {showCloseButton ? (
@@ -123,9 +127,9 @@ function DialogPopup({
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
+    <DrawerHeader
       data-slot="dialog-header"
-      className={cn("mb-4 flex flex-col gap-1.5 pr-9 text-start", className)}
+      className={cn("mb-4 !flex !flex-col gap-1.5 !px-0 !pt-1.5 pr-9 text-start", className)}
       {...props}
     />
   )

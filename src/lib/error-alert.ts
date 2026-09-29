@@ -1,15 +1,7 @@
 "use client"
 
-export const ERROR_ALERT_EVENT = "hrms:error-alert"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 export function showErrorAlert(message: string, title = "Something went wrong") {
-  if (typeof window === "undefined") {
-    return
-  }
-  window.dispatchEvent(
-    new CustomEvent(ERROR_ALERT_EVENT, {
-      detail: { title, message },
-    })
-  )
+  toast.error(title, { description: message })
 }
-

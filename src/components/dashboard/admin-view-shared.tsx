@@ -317,7 +317,10 @@ export function RecordDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className={cn("flex max-h-[min(90dvh,calc(100vh-1.5rem))] w-[calc(100%-1.5rem)] flex-col overflow-hidden sm:max-w-2xl", popupClassName)}>
+      <DialogPopup
+        className={cn("flex w-[calc(100%-1.5rem)] flex-col overflow-hidden sm:max-w-2xl", popupClassName)}
+        bodyClassName="!h-full !max-h-none !overflow-hidden"
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
@@ -327,47 +330,65 @@ export function RecordDetailsDialog({
         ) : !sections || (sections.fields.length === 0 && sections.lists.length === 0 && sections.lead.length === 0) ? (
           <p className="text-sm text-muted-foreground">No details available for this record.</p>
         ) : (
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
             {sections.lead.map((paragraph) => (
               <p key={paragraph} className="text-sm leading-6 text-muted-foreground">
                 {paragraph}
               </p>
             ))}
             {sections.fields.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {sections.fields.map((field) => (
-                  <div key={`${field.key}-${field.value}`} className="rounded-xl border border-border bg-card px-3 py-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {resolveLabel ? resolveLabel(field.key) : field.label}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-foreground">
-                      {row && resolveValue ? resolveValue(field.key, row) : field.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <RecordDetailList
+                items={sections.fields.map((field) => ({
+                  key: `${field.key}-${field.value}`,
+                  label: resolveLabel ? resolveLabel(field.key) : field.label,
+                  value: row && resolveValue ? resolveValue(field.key, row) : field.value,
+                }))}
+              />
             ) : null}
             {sections.lists.map((list) => (
-              <div key={list.title} className="rounded-xl border border-border bg-card p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <section key={list.title} className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">
                   {list.title}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                </h3>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                   {list.items.map((item) => (
                     <span
                       key={item}
-                      className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground"
+                      className="text-sm text-foreground"
                     >
                       {item}
                     </span>
                   ))}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
-        {footer ? <DialogFooter className="shrink-0">{footer}</DialogFooter> : null}
+        {footer ? (
+          <DialogFooter className="shrink-0 border-t border-border pt-3">
+            {footer}
+          </DialogFooter>
+        ) : null}
       </DialogPopup>
     </Dialog>
+  )
+}
+
+export function RecordDetailList({
+  items,
+  className,
+}: {
+  items: Array<{ key?: string; label: string; value: React.ReactNode }>
+  className?: string
+}) {
+  return (
+    <dl className={cn("grid gap-x-12 gap-y-6 sm:grid-cols-2", className)}>
+      {items.map((item, index) => (
+        <div key={item.key ?? `${item.label}-${index}`} className="min-w-0">
+          <dt className="text-sm font-semibold text-foreground">{item.label}</dt>
+          <dd className="mt-1 break-words text-sm leading-5 text-foreground">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }

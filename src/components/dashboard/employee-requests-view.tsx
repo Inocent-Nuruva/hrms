@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -727,8 +729,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </div>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Last working day</span>
-            <input
-              type="date"
+            <DateInput
+
               className={inputClass}
               value={form.last_working_date ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, last_working_date: event.target.value }))}
@@ -736,8 +738,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Notice date (optional)</span>
-            <input
-              type="date"
+            <DateInput
+
               className={inputClass}
               value={form.notice_date ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, notice_date: event.target.value }))}
@@ -745,7 +747,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Reason</span>
-            <textarea
+            <Textarea
               className={textareaClass}
               value={form.reason ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
@@ -844,8 +846,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Expires (optional)</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.expiry_date ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, expiry_date: event.target.value }))}
@@ -853,7 +855,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Notes (optional)</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.description ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -910,7 +912,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 )}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Why (optional)</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}

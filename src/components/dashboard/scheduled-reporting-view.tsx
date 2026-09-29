@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import {
   DownloadIcon,
@@ -13,7 +14,7 @@ import {
   SendIcon,
   Trash2Icon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
@@ -2085,14 +2086,14 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Description" className="md:col-span-2">
-        <textarea
+        <Textarea
           className={textareaClass}
           value={form.description}
           onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
         />
       </Field>
       <Field label="Email body" className="md:col-span-2">
-        <textarea
+        <Textarea
           className={textareaClass}
           value={form.emailBodyTemplate}
           onChange={(e) => setForm((c) => ({ ...c, emailBodyTemplate: e.target.value }))}

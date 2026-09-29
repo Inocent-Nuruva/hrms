@@ -63,6 +63,7 @@ import {
 import { BorderBeam } from "@/components/ui/border-beam";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state";
 
 const IMPORT_MODES: Array<{
   value: EmployeeImportMode;
@@ -2012,6 +2013,9 @@ export function EmployeeImportView() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  useFluentToastState(message, setMessage, "success");
+  useFluentToastState(error, setError, "error");
+
   const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([]);
   const [historyPage, setHistoryPage] = React.useState(1);
   const [historyLimit] = React.useState(20);
@@ -3113,19 +3117,6 @@ export function EmployeeImportView() {
             </div>
           ) : null}
 
-          {message ? (
-            <div className="flex items-start gap-2.5 rounded-xl bg-emerald-500/[0.07] px-3.5 py-2.5 text-sm text-emerald-800 ring-1 ring-emerald-500/15 dark:text-emerald-200">
-              <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <span className="leading-relaxed">{message}</span>
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="flex items-start gap-2.5 rounded-xl bg-rose-500/[0.07] px-3.5 py-2.5 text-sm text-rose-800 ring-1 ring-rose-500/15 dark:text-rose-200">
-              <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <span className="leading-relaxed">{error}</span>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 

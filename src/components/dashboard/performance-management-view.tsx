@@ -1,5 +1,7 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import {
   CalendarDaysIcon,
@@ -13,7 +15,7 @@ import {
   SearchIcon,
   SlidersHorizontalIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -2057,8 +2059,8 @@ export function PerformanceManagementView({
               <>
                 <Field label="Code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
-                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
-                <Field label="End date"><input type="date" className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
+                <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="End date"><DateInput className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
                 <Field label="Aggregation">
                   <FluentSelect
                     ariaLabel="Aggregation"
@@ -2090,7 +2092,7 @@ export function PerformanceManagementView({
                   />
                 </Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Period type">
                   <FluentSelect
                     ariaLabel="Period type"
@@ -2101,8 +2103,8 @@ export function PerformanceManagementView({
                   />
                 </Field>
                 <Field label="Sequence"><input type="number" min="1" className={inputClass} value={form.sequence_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, sequence_number: event.target.value }))} /></Field>
-                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
-                <Field label="End date"><input type="date" className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
+                <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="End date"><DateInput className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "kpi" || createMode === "kpi-edit" || createMode === "kpi-version" ? (
@@ -2136,7 +2138,7 @@ export function PerformanceManagementView({
                 <Field label="Code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
                 <Field label="Category"><input className={inputClass} value={form.category ?? ""} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Unit"><input className={inputClass} value={form.measurement_unit ?? ""} onChange={(event) => setForm((current) => ({ ...current, measurement_unit: event.target.value }))} /></Field>
                 <Field label="Direction">
                   <FluentSelect
@@ -2253,7 +2255,7 @@ export function PerformanceManagementView({
               <>
                 <Field label="Scorecard code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Scorecard name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Default">
                     <FluentSelect
@@ -2267,8 +2269,8 @@ export function PerformanceManagementView({
                       ]}
                     />
                   </Field>
-                  <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
-                  <Field label="Effective to"><input type="date" className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
+                  <Field label="Effective from"><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
+                  <Field label="Effective to"><DateInput className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
                 </div>
                 <ScorecardComponentBuilder
                   components={scorecardComponents}
@@ -2280,7 +2282,7 @@ export function PerformanceManagementView({
               <>
                 <Field label="Workflow code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Workflow name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Default">
                     <FluentSelect
@@ -2332,8 +2334,8 @@ export function PerformanceManagementView({
                     ]}
                   />
                 </Field>
-                <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
-                <Field label="Effective to"><input type="date" className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
+                <Field label="Effective from"><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
+                <Field label="Effective to"><DateInput className={inputClass} value={form.effective_to ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_to: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "plan" ? (
@@ -2358,35 +2360,35 @@ export function PerformanceManagementView({
                   />
                 </Field>
                 <Field label="Plan title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
-                  <Field label="Target date"><input type="date" className={inputClass} value={form.target_completion_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, target_completion_date: event.target.value }))} /></Field>
+                  <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                  <Field label="Target date"><DateInput className={inputClass} value={form.target_completion_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, target_completion_date: event.target.value }))} /></Field>
                   <Field label="Source review ID"><input className={inputClass} inputMode="numeric" value={form.source_review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, source_review_id: event.target.value }))} /></Field>
                 </div>
                 <Field label="First goal"><input className={inputClass} value={form.goal_title ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_title: event.target.value }))} /></Field>
-                <Field label="Goal notes"><textarea className={textareaClass} value={form.goal_description ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_description: event.target.value }))} /></Field>
+                <Field label="Goal notes"><Textarea className={textareaClass} value={form.goal_description ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_description: event.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Goal category"><input className={inputClass} value={form.goal_category ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_category: event.target.value }))} /></Field>
-                  <Field label="Goal target date"><input type="date" className={inputClass} value={form.goal_target_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_target_date: event.target.value }))} /></Field>
+                  <Field label="Goal target date"><DateInput className={inputClass} value={form.goal_target_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_target_date: event.target.value }))} /></Field>
                 </div>
-                <Field label="Success measure"><textarea className={textareaClass} value={form.success_measure ?? ""} onChange={(event) => setForm((current) => ({ ...current, success_measure: event.target.value }))} /></Field>
-                <Field label="Support required"><textarea className={textareaClass} value={form.support_required ?? ""} onChange={(event) => setForm((current) => ({ ...current, support_required: event.target.value }))} /></Field>
+                <Field label="Success measure"><Textarea className={textareaClass} value={form.success_measure ?? ""} onChange={(event) => setForm((current) => ({ ...current, success_measure: event.target.value }))} /></Field>
+                <Field label="Support required"><Textarea className={textareaClass} value={form.support_required ?? ""} onChange={(event) => setForm((current) => ({ ...current, support_required: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "pip" ? (
               <>
                 <Field label="Review ID"><input className={inputClass} value={form.review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_id: event.target.value }))} /></Field>
-                <Field label="Summary"><textarea className={textareaClass} value={form.summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))} /></Field>
-                <Field label="Objectives (one per line)"><textarea className={textareaClass} value={form.objectives ?? ""} onChange={(event) => setForm((current) => ({ ...current, objectives: event.target.value }))} /></Field>
+                <Field label="Summary"><Textarea className={textareaClass} value={form.summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))} /></Field>
+                <Field label="Objectives (one per line)"><Textarea className={textareaClass} value={form.objectives ?? ""} onChange={(event) => setForm((current) => ({ ...current, objectives: event.target.value }))} /></Field>
                 <Field label="First milestone"><input className={inputClass} value={form.milestone_title ?? ""} onChange={(event) => setForm((current) => ({ ...current, milestone_title: event.target.value }))} /></Field>
-                <Field label="Milestone due"><input type="date" className={inputClass} value={form.milestone_due ?? ""} onChange={(event) => setForm((current) => ({ ...current, milestone_due: event.target.value }))} /></Field>
+                <Field label="Milestone due"><DateInput className={inputClass} value={form.milestone_due ?? ""} onChange={(event) => setForm((current) => ({ ...current, milestone_due: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "moderate" || createMode === "reopen" ? (
               <>
                 <Field label="Review ID"><input className={inputClass} value={form.review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_id: event.target.value }))} /></Field>
-                <Field label="Reason"><textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></Field>
+                <Field label="Reason"><Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "moderate" ? (
@@ -2395,7 +2397,7 @@ export function PerformanceManagementView({
             {createMode === "approve" ? (
               <>
                 <Field label="Period assignment ID"><input className={inputClass} value={form.period_assignment_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, period_assignment_id: event.target.value }))} /></Field>
-                <Field label="HR comment"><textarea className={textareaClass} value={form.hr_review ?? ""} onChange={(event) => setForm((current) => ({ ...current, hr_review: event.target.value }))} /></Field>
+                <Field label="HR comment"><Textarea className={textareaClass} value={form.hr_review ?? ""} onChange={(event) => setForm((current) => ({ ...current, hr_review: event.target.value }))} /></Field>
                 <Field label="Adjustment score"><input className={inputClass} value={form.adjustment_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, adjustment_score: event.target.value }))} /></Field>
               </>
             ) : null}
@@ -2403,7 +2405,7 @@ export function PerformanceManagementView({
               <>
                 <Field label="Review ID"><input className={inputClass} value={form.review_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_id: event.target.value }))} /></Field>
                 <Field label="Rater employee IDs">
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     placeholder="One ID per line, or comma-separated"
                     value={form.rater_employee_ids ?? ""}
@@ -2426,7 +2428,7 @@ export function PerformanceManagementView({
                       ]}
                     />
                   </Field>
-                  <Field label="Due date"><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
+                  <Field label="Due date"><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
                   <Field label="Anonymous">
                     <FluentSelect
                       ariaLabel="Anonymous"
@@ -2445,7 +2447,7 @@ export function PerformanceManagementView({
             {createMode === "milestone" ? (
               <>
                 <Field label="Milestone ID"><input className={inputClass} value={form.milestone_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, milestone_id: event.target.value }))} /></Field>
-                <Field label="Comment"><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></Field>
+                <Field label="Comment"><Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></Field>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

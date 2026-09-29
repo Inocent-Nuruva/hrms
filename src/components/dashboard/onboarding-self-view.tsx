@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { CheckIcon, FileTextIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -570,7 +571,7 @@ export function OnboardingSelfView() {
               {needsAck(selected) ? (
                 <div className="w-full space-y-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-4">
                   <h2 className="text-sm font-semibold">Acknowledge</h2>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={ackNote}
                     onChange={(event) => setAckNote(event.target.value)}

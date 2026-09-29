@@ -3,20 +3,26 @@
 import * as React from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  useSidebar,
-} from "@/components/ui/sidebar"
+  CounterBadge,
+  Nav,
+  NavCategory,
+  NavCategoryItem,
+  NavItem,
+  NavSubItem,
+  NavSubItemGroup,
+  makeStyles,
+  tokens,
+} from "@fluentui/react-components"
+import {
+  bundleIcon,
+  Home24Filled,
+  Home24Regular,
+  type FluentIcon,
+} from "@fluentui/react-icons"
+
+import { useSidebar } from "@/components/ui/sidebar"
 import type { AdminResourceKey } from "@/lib/admin-api"
-import { ChevronDownIcon, LayoutDashboard } from "lucide-react"
-import { motion } from "framer-motion"
-import { useDashboardMotion } from "@/lib/dashboard-motion"
+import { routesNeedAttention } from "@/lib/notification-attention"
 
 type NavMainNode = {
   title: string
@@ -28,290 +34,335 @@ type NavMainNode = {
 }
 
 type NavMainItem = NavMainNode & {
-  icon?: React.ReactNode
+  icon?: FluentIcon
+}
+
+const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
+const Home = bundleIcon(Home24Filled, Home24Regular)
+
+const useStyles = makeStyles({
+  nav: {
+    backgroundColor: "var(--sidebar)",
+    color: tokens.colorNeutralForeground1,
+    fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
+  },
+  item: {
+    minHeight: "32px",
+    paddingInlineStart: "10px",
+    paddingInlineEnd: "8px",
+    columnGap: tokens.spacingHorizontalS,
+    backgroundColor: "var(--sidebar)",
+    color: tokens.colorNeutralForeground1,
+    fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
+    fontSize: "12px",
+    lineHeight: "16px",
+    "& .fui-NavItem__icon": {
+      minWidth: "18px",
+      minHeight: "18px",
+      fontSize: "18px",
+    },
+    "& .fui-NavCategoryItem__icon": {
+      minWidth: "18px",
+      minHeight: "18px",
+      fontSize: "18px",
+    },
+    "& .fui-NavCategoryItem__expandIcon": {
+      width: "16px",
+      height: "16px",
+      fontSize: "16px",
+    },
+    '&[data-active-category="true"] .fui-NavCategoryItem__icon': {
+      color: tokens.colorCompoundBrandForeground1,
+    },
+    "::after": {
+      width: "3px",
+      marginInlineStart: "-6px",
+      backgroundColor: tokens.colorBrandBackground,
+    },
+    ":hover": {
+      backgroundColor: "var(--sidebar-accent)",
+    },
+  },
+  subItem: {
+    minHeight: "28px",
+    paddingInlineStart: "38px",
+    backgroundColor: "var(--sidebar)",
+    color: tokens.colorNeutralForeground1,
+    fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
+    fontSize: "11px",
+    lineHeight: "16px",
+    "::after": {
+      width: "3px",
+      marginInlineStart: "-13px",
+      backgroundColor: tokens.colorBrandBackground,
+    },
+    ":hover": {
+      backgroundColor: "var(--sidebar-accent)",
+    },
+  },
+  label: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalXS,
+  },
+})
+
+function normalizedPath(url: string) {
+  const path = url.split("?")[0] ?? url
+  return path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path
 }
 
 function pathMatches(url: string | undefined, currentPath: string): boolean {
   if (!url) return false
-  return currentPath === url || currentPath.startsWith(`${url}/`)
+  const candidate = normalizedPath(url)
+  const current = normalizedPath(currentPath)
+  return current === candidate || current.startsWith(`${candidate}/`)
 }
 
 function nodeContainsCurrentPath(node: NavMainNode, currentPath: string): boolean {
-  if (pathMatches(node.url, currentPath)) {
-    return true
-  }
-  if ((node.matchUrls ?? []).some((url) => pathMatches(url, currentPath))) {
-    return true
-  }
-  return (node.items ?? []).some((child) => nodeContainsCurrentPath(child, currentPath))
-}
-
-/** Compact row styles — denser than default shadcn sidebar. */
-const SIDEBAR_ITEM_BASE =
-  "h-8 min-h-8 cursor-pointer rounded-lg px-2 py-1.5 text-[0.8125rem] font-medium leading-none text-foreground !no-underline hover:!no-underline hover:bg-muted duration-200 ease-linear"
-const SIDEBAR_ITEM_ACTIVE =
-  "data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!text-[var(--sidebar-active-link-color)] data-active:[&_svg]:!text-[var(--sidebar-active-link-color)]"
-const SIDEBAR_ITEM_ICON = "[&_svg]:!size-[1.125rem] [&_svg]:!text-[var(--sidebar-icon-color)]"
-
-function NavActiveGlow({ active }: { active: boolean }) {
-  const motionPreset = useDashboardMotion()
-  if (!active) return null
-  if (motionPreset.reduce) {
-    return <span className="pointer-events-none absolute inset-0 rounded-lg bg-primary/10" />
-  }
   return (
-    <motion.span
-      layoutId="admin-nav-active"
-      className="pointer-events-none absolute inset-0 rounded-lg bg-primary/10"
-      transition={{ type: "spring", stiffness: 380, damping: 32 }}
-    />
+    pathMatches(node.url, currentPath) ||
+    (node.matchUrls ?? []).some((url) => pathMatches(url, currentPath)) ||
+    (node.items ?? []).some((child) => nodeContainsCurrentPath(child, currentPath))
   )
 }
 
-function collectOpenableNodes(nodes: NavMainNode[]): string[] {
-  return nodes.flatMap((node) => [
-    ...(node.items?.length ? [node.title] : []),
-    ...collectOpenableNodes(node.items ?? []),
-  ])
+function categoryValue(item: NavMainNode) {
+  return `category:${item.title}`
+}
+
+function nodeNeedsAttention(node: NavMainNode, attentionUrls: string[]): boolean {
+  const ownUrls = [node.url, ...(node.matchUrls ?? [])].filter(
+    (url): url is string => Boolean(url),
+  )
+  return routesNeedAttention(ownUrls, attentionUrls) ||
+    (node.items ?? []).some((child) => nodeNeedsAttention(child, attentionUrls))
+}
+
+function AttentionLabel({
+  title,
+  attention,
+  className,
+}: {
+  title: string
+  attention: boolean
+  className: string
+}) {
+  return (
+    <span className={className}>
+      <span>{title}</span>
+      {attention ? (
+        <CounterBadge
+          dot
+          size="tiny"
+          color="danger"
+          aria-label={`${title} needs attention`}
+          title="Unread attention — clears when its page is opened"
+        />
+      ) : null}
+    </span>
+  )
+}
+
+function collectLeafNodes(nodes: NavMainNode[]): NavMainNode[] {
+  return nodes.flatMap((node) =>
+    node.items?.length ? collectLeafNodes(node.items) : node.url ? [node] : [],
+  )
+}
+
+function selectedNavValue(items: NavMainItem[], currentPath: string) {
+  if (normalizedPath(currentPath) === "/dashboard") return "/dashboard"
+  return collectLeafNodes(items)
+    .map((node) => ({
+      node,
+      matchLength: [node.url, ...(node.matchUrls ?? [])]
+        .filter((url): url is string => Boolean(url) && pathMatches(url, currentPath))
+        .reduce(
+          (longest, url) => Math.max(longest, normalizedPath(url).length),
+          -1,
+        ),
+    }))
+    .filter(({ matchLength }) => matchLength >= 0)
+    .sort((left, right) => right.matchLength - left.matchLength)[0]?.node.url
+}
+
+function renderSubItems(
+  nodes: NavMainNode[],
+  subItemClassName: string,
+  labelClassName: string,
+  attentionUrls: string[],
+): React.ReactNode {
+  return nodes.map((node) => {
+    const key = `${node.title}-${node.url ?? "section"}`
+
+    if (node.items?.length) {
+      return renderSubItems(node.items, subItemClassName, labelClassName, attentionUrls)
+    }
+
+    if (!node.url) return null
+
+    return (
+      <NavSubItem
+        key={key}
+        value={node.url}
+        disabled={node.disabled}
+        className={subItemClassName}
+      >
+        <AttentionLabel
+          title={node.title}
+          attention={nodeNeedsAttention(node, attentionUrls)}
+          className={labelClassName}
+        />
+      </NavSubItem>
+    )
+  })
 }
 
 export function NavMain({
   items,
+  attentionUrls = [],
 }: {
   items: NavMainItem[]
+  attentionUrls?: string[]
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
 }) {
-  const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.open-groups.v1"
   const router = useRouter()
   const pathname = usePathname()
   const { isMobile, setOpenMobile } = useSidebar()
-  const currentPath = pathname ?? ""
+  const styles = useStyles()
+  const currentPath = pathname ?? "/dashboard"
+  const selectedValue = selectedNavValue(items, currentPath) ?? ""
+  const selectedCategory = items.find(
+    (item) => item.items?.length && nodeContainsCurrentPath(item, currentPath),
+  )
+  const activeCategoryValue = selectedCategory
+    ? categoryValue(selectedCategory)
+    : ""
+  const [openCategories, setOpenCategories] = React.useState<string[]>([])
 
   const navigateTo = React.useCallback(
     (url: string) => {
       router.push(url)
-      if (isMobile) {
-        setOpenMobile(false)
-      }
+      if (isMobile) setOpenMobile(false)
     },
-    [isMobile, router, setOpenMobile]
+    [isMobile, router, setOpenMobile],
   )
-
-  const defaultOpenGroups = React.useMemo(
-    () =>
-      Object.fromEntries(
-        collectOpenableNodes(items).map((title) => [
-          title,
-          items.some((item) => {
-            const matchNode = (node: NavMainNode): boolean => {
-              if (node.title === title) {
-                return nodeContainsCurrentPath(node, currentPath)
-              }
-              return (node.items ?? []).some((child) => matchNode(child))
-            }
-            return matchNode(item)
-          }),
-        ])
-      ),
-    [items, currentPath]
-  )
-  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(() => {
-    return defaultOpenGroups
-  })
-  React.useEffect(() => {
-    setOpenGroups((previous) => ({ ...defaultOpenGroups, ...previous }))
-  }, [defaultOpenGroups])
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
     try {
-      const raw = window.localStorage.getItem(OPEN_GROUPS_STORAGE_KEY)
-      if (!raw) return
-      const stored = JSON.parse(raw) as Record<string, boolean>
-      setOpenGroups((previous) => ({ ...previous, ...stored }))
+      const stored = JSON.parse(
+        window.localStorage.getItem(OPEN_GROUPS_STORAGE_KEY) ?? "[]",
+      ) as unknown
+      if (Array.isArray(stored)) {
+        setOpenCategories(stored.filter((value): value is string => typeof value === "string"))
+      }
     } catch {
-      // ignore invalid cache
+      // Ignore invalid navigation preferences.
     }
   }, [])
 
   React.useEffect(() => {
-    setOpenGroups((previous) => {
-      const next: Record<string, boolean> = { ...previous }
-      for (const title of collectOpenableNodes(items)) {
-        const matchesCurrentPath = items.some((item) => {
-          const matchNode = (node: NavMainNode): boolean => {
-            if (node.title === title) {
-              return nodeContainsCurrentPath(node, currentPath)
-            }
-            return (node.items ?? []).some((child) => matchNode(child))
-          }
-          return matchNode(item)
-        })
-        if (matchesCurrentPath) {
-          next[title] = true
-        }
-      }
-      return next
-    })
-  }, [items, currentPath])
+    if (!activeCategoryValue) return
+    setOpenCategories((current) =>
+      current.includes(activeCategoryValue)
+        ? current
+        : [...current, activeCategoryValue],
+    )
+  }, [activeCategoryValue])
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
-    window.localStorage.setItem(OPEN_GROUPS_STORAGE_KEY, JSON.stringify(openGroups))
-  }, [openGroups])
-
-  function renderNode(node: NavMainNode, depth: number): React.ReactNode {
-    const hasChildren = Boolean(node.items?.length)
-    const isActive = hasChildren ? nodeContainsCurrentPath(node, currentPath) : currentPath === node.url
-    const key = `${depth}-${node.title}-${node.url ?? "group"}`
-
-    if (hasChildren) {
-      return (
-        <SidebarMenuSubItem key={key}>
-          <SidebarMenuSubButton
-            className={`cursor-pointer rounded-lg text-foreground !no-underline hover:!no-underline hover:bg-muted data-active:!bg-transparent data-active:!text-[var(--sidebar-active-link-color)] ${
-              depth === 0 ? "py-3 text-[0.78rem] font-medium leading-snug" : "py-3 text-[0.82rem] font-medium leading-snug"
-            }`}
-            isActive={isActive}
-            onClick={() =>
-              setOpenGroups((previous) => ({
-                ...previous,
-                [node.title]: !previous[node.title],
-              }))
-            }
-          >
-            <span className="min-w-0 flex-1 truncate">{node.title}</span>
-            <ChevronDownIcon
-              className={
-                openGroups[node.title]
-                  ? "ml-auto transition-transform duration-300 rotate-180"
-                  : "ml-auto transition-transform duration-300"
-              }
-            />
-          </SidebarMenuSubButton>
-          <div
-            aria-hidden={!openGroups[node.title]}
-            className={
-              openGroups[node.title]
-                ? "grid grid-rows-[1fr] opacity-100 transition-all duration-300 ease-in-out"
-                : "grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-in-out pointer-events-none"
-            }
-          >
-            <div className="overflow-hidden">
-              <SidebarMenuSub
-                className={
-                  depth > 0
-                    ? "ml-3 space-y-1 border-l border-slate-200 pl-2 pt-1"
-                    : "mx-1.5 space-y-1.5 border-l-0 px-0 pt-1"
-                }
-              >
-                {node.items?.map((child) => renderNode(child, depth + 1))}
-              </SidebarMenuSub>
-            </div>
-          </div>
-        </SidebarMenuSubItem>
-      )
-    }
-
-    return (
-      <SidebarMenuSubItem key={key}>
-        <SidebarMenuSubButton
-          className={`rounded-lg !no-underline ${
-            node.disabled
-              ? "cursor-not-allowed py-2.5 text-[0.82rem] leading-snug text-slate-400"
-              : "cursor-pointer py-2.5 text-[0.8rem] leading-snug text-foreground hover:!no-underline hover:bg-muted data-active:!bg-primary/10 dark:data-active:!bg-[#262626] data-active:!font-semibold data-active:!text-[var(--sidebar-active-link-color)]"
-          }`}
-          isActive={!node.disabled && nodeContainsCurrentPath(node, currentPath)}
-          onClick={() => {
-            if (!node.disabled && node.url) {
-              navigateTo(node.url)
-            }
-          }}
-        >
-          <span className="min-w-0 flex-1 truncate">{node.title}</span>
-        </SidebarMenuSubButton>
-      </SidebarMenuSubItem>
+    window.localStorage.setItem(
+      OPEN_GROUPS_STORAGE_KEY,
+      JSON.stringify(openCategories),
     )
-  }
+  }, [openCategories])
 
   return (
-    <SidebarGroup className="p-0">
-      <SidebarGroupContent className="flex flex-col gap-1">
-        <SidebarMenu className="gap-0.5">
-          <SidebarMenuItem className="flex items-center gap-1.5">
-            <SidebarMenuButton
-              tooltip="Dashboard"
-              className={`relative ${SIDEBAR_ITEM_BASE} min-w-0 flex-1 bg-transparent ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
-              isActive={currentPath === "/dashboard"}
-              onClick={() => {
-                navigateTo("/dashboard")
-              }}
-            >
-              <NavActiveGlow active={currentPath === "/dashboard"} />
-              <LayoutDashboard className="size-4" />
-              <span className="relative z-[1] min-w-0 flex-1 truncate text-left">Dashboard</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <SidebarMenu className="gap-0.5">
-          {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton
-                tooltip={item.title}
-                className={`relative ${SIDEBAR_ITEM_BASE} ${SIDEBAR_ITEM_ACTIVE} ${SIDEBAR_ITEM_ICON}`}
-                isActive={nodeContainsCurrentPath(item, currentPath)}
-                onClick={() => {
-                  if (item.items?.length) {
-                    const isOpen = Boolean(openGroups[item.title])
-                    // Toggle expand/collapse; first open also goes to default section URL.
-                    setOpenGroups((previous) => ({
-                      ...previous,
-                      [item.title]: !isOpen,
-                    }))
-                    if (!isOpen && item.url && !nodeContainsCurrentPath(item, currentPath)) {
-                      navigateTo(item.url)
-                    }
-                    return
-                  }
-                  if (item.url) {
-                    navigateTo(item.url)
-                  }
-                }}
+    <Nav
+      aria-label="Main navigation"
+      density="small"
+      multiple
+      selectedValue={selectedValue}
+      openCategories={openCategories}
+      className={`${styles.nav} w-full min-w-0`}
+      onNavCategoryItemToggle={(_event, data) => {
+        const value = String(data.categoryValue ?? data.value)
+        setOpenCategories((current) =>
+          current.includes(value)
+            ? current.filter((category) => category !== value)
+            : [...current, value],
+        )
+      }}
+      onNavItemSelect={(_event, data) => {
+        const url = String(data.value)
+        if (url.startsWith("/")) navigateTo(url)
+      }}
+    >
+      <NavItem
+        value="/dashboard"
+        icon={<Home />}
+        className={styles.item}
+      >
+        <AttentionLabel
+          title="Dashboard"
+          attention={routesNeedAttention(["/dashboard"], attentionUrls)}
+          className={styles.label}
+        />
+      </NavItem>
+
+      {items.map((item) => {
+        const Icon = item.icon
+
+        if (item.items?.length) {
+          const value = categoryValue(item)
+          const isActiveCategory = nodeContainsCurrentPath(item, currentPath)
+          return (
+            <NavCategory key={value} value={value}>
+              <NavCategoryItem
+                icon={Icon ? <Icon /> : undefined}
+                className={styles.item}
+                data-active-category={isActiveCategory ? "true" : undefined}
               >
-                <NavActiveGlow active={nodeContainsCurrentPath(item, currentPath)} />
-                {item.icon}
-                <span className="relative z-[1] min-w-0 flex-1 truncate text-left">{item.title}</span>
-                {item.items ? (
-                  <ChevronDownIcon
-                    className={
-                      openGroups[item.title]
-                        ? "relative z-[1] ml-auto size-3.5 shrink-0 transition-transform duration-300 rotate-180"
-                        : "relative z-[1] ml-auto size-3.5 shrink-0 transition-transform duration-300"
-                    }
-                  />
-                ) : null}
-              </SidebarMenuButton>
-              {item.items ? (
-                <div
-                  aria-hidden={!openGroups[item.title]}
-                  className={
-                    openGroups[item.title]
-                      ? "grid grid-rows-[1fr] opacity-100 transition-all duration-300 ease-in-out"
-                      : "grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-in-out pointer-events-none"
-                  }
-                >
-                  <div className="overflow-hidden">
-                    <SidebarMenuSub className="mx-1.5 space-y-1 border-l border-border/70 pl-2 pt-1">
-                      {item.items.map((subItem) => renderNode(subItem, 0))}
-                    </SidebarMenuSub>
-                  </div>
-                </div>
-              ) : null}
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+                <AttentionLabel
+                  title={item.title}
+                  attention={nodeNeedsAttention(item, attentionUrls)}
+                  className={styles.label}
+                />
+              </NavCategoryItem>
+              <NavSubItemGroup className="!overflow-visible">
+                {renderSubItems(
+                  item.items,
+                  styles.subItem,
+                  styles.label,
+                  attentionUrls,
+                )}
+              </NavSubItemGroup>
+            </NavCategory>
+          )
+        }
+
+        if (!item.url) return null
+
+        return (
+          <NavItem
+            key={`${item.title}-${item.url}`}
+            value={item.url}
+            icon={Icon ? <Icon /> : undefined}
+            disabled={item.disabled}
+            className={styles.item}
+          >
+            <AttentionLabel
+              title={item.title}
+              attention={nodeNeedsAttention(item, attentionUrls)}
+              className={styles.label}
+            />
+          </NavItem>
+        )
+      })}
+    </Nav>
   )
 }

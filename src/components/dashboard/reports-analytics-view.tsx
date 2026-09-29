@@ -11,7 +11,7 @@ import {
   SaveIcon,
   Trash2Icon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   downloadOperationalAnalyticsReport,

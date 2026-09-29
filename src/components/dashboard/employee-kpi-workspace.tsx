@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
 import {
   CheckIcon,
@@ -9,7 +11,7 @@ import {
   RotateCcwIcon,
   XIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   Dialog,
@@ -644,7 +646,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
                   Comment{" "}
                   {form.decision === "APPROVE" ? "(optional)" : "(required)"}
                 </span>
-                <textarea
+                <Textarea
                   className={textareaClass}
                   value={form.comment ?? ""}
                   onChange={(event) =>
@@ -709,7 +711,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Description</span>
-                <textarea
+                <Textarea
                   className={textareaClass}
                   value={form.description ?? ""}
                   onChange={(event) =>
@@ -806,9 +808,9 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Start date</span>
-                <input
+                <DateInput
                   className={inputClass}
-                  type="date"
+
                   value={form.start_date ?? ""}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -820,9 +822,9 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Due date</span>
-                <input
+                <DateInput
                   className={inputClass}
-                  type="date"
+
                   value={form.due_date ?? ""}
                   onChange={(event) =>
                     setForm((current) => ({

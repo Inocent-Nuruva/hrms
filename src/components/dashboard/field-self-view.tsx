@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   HeroBand,
@@ -485,7 +487,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           <div className="grid gap-3">
             {createMode === "plan" || createMode === "unplanned" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><input type="date" className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><DateInput className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span>
                   <FluentSelect
                     ariaLabel="Type"
@@ -508,11 +510,11 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><Textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
               </>
             ) : null}
             {createMode === "unplanned" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Why unplanned</span><textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Why unplanned</span><Textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></label>
             ) : null}
             {createMode === "expense" ? (
               <>
@@ -543,14 +545,14 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             ) : null}
             {createMode === "checkout" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Outcome</span><input className={inputClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="size-4 accent-sky-700" checked={form.follow_up_required === "true"} onChange={(event) => setForm((current) => ({ ...current, follow_up_required: event.target.checked ? "true" : "false" }))} />
                   <span>Create a follow-up from this visit</span>
                 </label>
                 {form.follow_up_required === "true" ? (
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><input type="date" className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><DateInput className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
                 ) : null}
               </>
             ) : null}
@@ -574,12 +576,12 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><Textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
               </>
             ) : null}
             {createMode === "complete-follow-up" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><Textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>

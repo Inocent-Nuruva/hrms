@@ -3,7 +3,23 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon, FilterIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, XIcon } from "lucide-react"
+import { CircleHelpIcon, FilterIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import {
+  Button,
+  Field,
+  InfoLabel,
+  Input,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  TeachingPopover,
+  TeachingPopoverBody,
+  TeachingPopoverFooter,
+  TeachingPopoverHeader,
+  TeachingPopoverSurface,
+  TeachingPopoverTitle,
+  TeachingPopoverTrigger,
+} from "@fluentui/react-components"
 import {
   Dialog,
   DialogDescription,
@@ -13,12 +29,22 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   buildFormDraftStorageKey,
   clearPersistedFormState,
   formatAdminValue,
   persistFormState,
   readPersistedFormState,
   readStoredCompanyName,
+  RecordDetailList,
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -36,6 +62,7 @@ import {
 } from "@/components/ui/tooltip"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 
 import {
   approveAttendanceMobilePunchOverride,
@@ -144,30 +171,35 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "allow_early_checkin",
     label: "Allow Early Check-In",
+    description: "Allow employees to check in before their scheduled shift start.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "allow_late_checkout",
     label: "Allow Late Check-Out",
+    description: "Allow employees to check out after the scheduled shift end.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "auto_absent_if_no_checkin",
     label: "Auto-Mark Absent If No Check-In",
+    description: "Automatically mark a scheduled employee absent when no check-in is recorded.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "ignore_missing_checkout_if_hours_valid",
     label: "Ignore Missing Check-Out If Hours Are Enough",
+    description: "Do not flag a missing check-out when the recorded work duration already satisfies the shift.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "max_missing_punch_allowed",
     label: "Maximum Missing Punches Allowed",
+    description: "Maximum missing check-in or check-out punches tolerated before the record needs attention.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
@@ -191,18 +223,21 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "auto_mark_weekend_as_off",
     label: "Auto-Mark Weekends As Off Days",
+    description: "Automatically classify configured weekend days as off days when no shift overrides them.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "treat_weekend_as_absent_if_scheduled",
     label: "Treat Weekend As Absent If Scheduled",
+    description: "Mark an employee absent when they miss a shift that was explicitly scheduled on a weekend.",
     type: "boolean",
     defaultValue: "false",
   },
   {
     key: "holiday_policy_mode",
     label: "Holiday Policy Mode",
+    description: "Choose how public holidays affect attendance and pay calculations.",
     type: "select",
     options: ["OFF", "PAID", "UNPAID", "OPTIONAL"],
     defaultValue: "OFF",
@@ -218,18 +253,21 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "require_geo_fencing",
     label: "Require Geo-Fencing",
+    description: "Require mobile attendance punches to occur inside an approved geofence.",
     type: "boolean",
     defaultValue: "false",
   },
   {
     key: "allow_multi_device_login",
     label: "Allow Multiple Device Login",
+    description: "Allow the same employee account to remain signed in on more than one device.",
     type: "boolean",
     defaultValue: "false",
   },
   {
     key: "auto_calculate_attendance",
     label: "Calculate Attendance Automatically",
+    description: "Run daily attendance calculations automatically at the configured calculation time.",
     type: "boolean",
     defaultValue: "true",
   },
@@ -244,30 +282,35 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "consider_shift_roster",
     label: "Use Shift Roster",
+    description: "Use assigned roster shifts as the schedule when calculating attendance.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "requires_manager_approval_for_overtime",
     label: "Require Manager Approval For Overtime",
+    description: "Require a manager to approve overtime before it is finalized.",
     type: "boolean",
     defaultValue: "false",
   },
   {
     key: "overtime_requires_approval",
     label: "Overtime Requires Approval",
+    description: "Only count overtime entries that have passed the configured approval flow.",
     type: "boolean",
     defaultValue: "false",
   },
   {
     key: "overtime_auto_calculate",
     label: "Auto-Calculate Overtime",
+    description: "Automatically calculate overtime from approved attendance and shift records.",
     type: "boolean",
     defaultValue: "true",
   },
   {
     key: "overtime_start_after_minutes",
     label: "Start Overtime After (Minutes)",
+    description: "Minutes beyond the scheduled shift end before overtime starts accumulating.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
@@ -275,6 +318,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "max_overtime_minutes_per_day",
     label: "Daily Overtime Limit (Minutes)",
+    description: "Maximum overtime minutes that can be counted for one employee in a day; use 0 for no limit.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
@@ -282,6 +326,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "max_overtime_minutes_per_month",
     label: "Monthly Overtime Limit (Minutes)",
+    description: "Maximum overtime minutes that can be counted for one employee in a month; use 0 for no limit.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
@@ -289,6 +334,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "overtime_rate_multiplier",
     label: "Normal Overtime Rate Multiplier",
+    description: "Pay multiplier applied to overtime worked on normal working days.",
     type: "number",
     placeholder: "e.g 1",
     defaultValue: "1",
@@ -296,6 +342,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "holiday_overtime_multiplier",
     label: "Holiday Overtime Rate Multiplier",
+    description: "Pay multiplier applied to overtime worked on configured holidays.",
     type: "number",
     placeholder: "e.g 1",
     defaultValue: "1",
@@ -303,6 +350,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "weekend_overtime_multiplier",
     label: "Weekend Overtime Rate Multiplier",
+    description: "Pay multiplier applied to overtime worked on configured weekend days.",
     type: "number",
     placeholder: "e.g 1",
     defaultValue: "1",
@@ -640,6 +688,11 @@ const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
 const READ_ONLY_SECTIONS = new Set<AttendanceSectionKey>([
   "device-sync-logs",
   "mobile-punches",
+])
+
+const COMPACT_SINGLE_COLUMN_FORM_SECTIONS = new Set<AttendanceSectionKey>([
+  "holiday-groups",
+  "holidays",
 ])
 
 function readStoredToken() {
@@ -1334,23 +1387,6 @@ function resolveAttendanceCellValue(
   return formatAdminValue(raw)
 }
 
-function AttendanceDetailField({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-background px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-sm text-foreground">{value}</p>
-    </div>
-  )
-}
-
 function buildAttendanceDetailTitle(
   section: AttendanceSectionKey,
   row: AdminRecord,
@@ -1454,42 +1490,36 @@ function AttendanceDetailsContent({
       : null,
     row.type !== undefined ? { label: "Type", value: String(resolveAttendanceCellValue("type", row, lookupMaps)) } : null,
   ].filter((entry): entry is { label: string; value: string } => Boolean(entry && entry.value && entry.value !== "-"))
+  const summaryLabels = new Set(summaryCandidates.map((entry) => entry.label))
+  const detailEntries = entries.filter((entry) => !summaryLabels.has(entry.label))
 
   return (
-    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Attendance details
-            </p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Review the selected {section.replaceAll("-", " ")} record in a readable summary.
-            </p>
-          </div>
+    <div className="max-h-[65vh] space-y-7 overflow-auto pr-1">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Attendance details
+          </p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review the selected {section.replaceAll("-", " ")} record in a readable summary.
+          </p>
+        </div>
           {summaryCandidates.find((entry) => entry.label === "Status") ? (
             <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
               {summaryCandidates.find((entry) => entry.label === "Status")?.value}
             </div>
           ) : null}
-        </div>
       </div>
 
       {summaryCandidates.length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {summaryCandidates.map((entry) => (
-            <AttendanceDetailField key={entry.label} label={entry.label} value={entry.value} />
-          ))}
-        </div>
+        <RecordDetailList items={summaryCandidates.map((entry) => ({ ...entry, key: entry.label }))} />
       ) : null}
 
-      {entries.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {entries.map((entry) => (
-            <AttendanceDetailField key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
-          ))}
-        </div>
+      {detailEntries.length > 0 ? (
+        <RecordDetailList
+          items={detailEntries.map((entry) => ({ ...entry, key: `${entry.label}-${entry.value}` }))}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">No readable details are available for this record.</p>
       )}
@@ -1864,48 +1894,29 @@ function FieldInput({
   }
 
   return (
-    <input
-      className={`w-full rounded-md border px-2 py-1.5 text-sm ${
-        disabled
-          ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-          : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
-      }`}
+    <Input
+      appearance="outline"
+      className="w-full"
       type={field.type === "number" ? "number" : field.type === "password" ? "password" : "text"}
       value={value}
       disabled={disabled}
       readOnly={disabled}
       placeholder={field.placeholder}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(_event, data) => onChange(data.value)}
     />
   )
 }
 
 function FieldLabel({ field }: { field: FieldConfig }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs font-medium uppercase text-slate-600 dark:text-slate-100">
-        {field.label}
-        {field.required ? <span className="text-red-600"> *</span> : null}
-      </span>
-      {field.description ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200"
-                aria-label={`About ${field.label}`}
-              />
-            }
-          >
-            <CircleHelpIcon className="h-3.5 w-3.5" />
-          </TooltipTrigger>
-          <TooltipContent side="top" align="start" className="max-w-64 text-left leading-relaxed">
-            {field.description}
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
+    <InfoLabel
+      className="text-xs font-medium uppercase text-slate-600 dark:text-slate-100"
+      info={field.description}
+      required={field.required}
+      size="small"
+    >
+      {field.label}
+    </InfoLabel>
   )
 }
 
@@ -1944,6 +1955,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const router = useRouter()
   const activeSection = ROUTE_TO_SECTION[section] ?? "settings"
   const isDeviceSyncLogsSection = activeSection === "device-sync-logs"
+  const usesCompactSingleColumnForm = COMPACT_SINGLE_COLUMN_FORM_SECTIONS.has(activeSection)
   const canOpenAccessControlDevices =
     actor.ready &&
     canSeeDashboardPage(
@@ -1988,14 +2000,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [formError, setFormError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
 
+  useFluentToastState(message, setMessage, "success")
+
   const fields = React.useMemo(() => SECTION_FIELDS[activeSection], [activeSection])
   const initialCreateState = React.useMemo(() => buildInitialState(fields), [fields])
   const createDraftKey = React.useMemo(
     () => buildFormDraftStorageKey(`attendance:${activeSection}:create`),
-    [activeSection]
-  )
-  const guidanceStorageKey = React.useMemo(
-    () => buildFormDraftStorageKey(`attendance:${activeSection}:guidance-hidden`),
     [activeSection]
   )
   const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
@@ -2018,7 +2028,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
   const [mobilePunchReviewNote, setMobilePunchReviewNote] = React.useState("")
   const [mobilePunchActionBusy, setMobilePunchActionBusy] = React.useState<"" | "approve" | "reject">("")
-  const [guidanceDismissed, setGuidanceDismissed] = React.useState(false)
   const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
     readStoredCompanyName()
   )
@@ -2076,13 +2085,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
     persistFormState(editDraftKey, editValues)
   }, [editDraftKey, editValues])
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-    setGuidanceDismissed(window.localStorage.getItem(guidanceStorageKey) === "true")
-  }, [guidanceStorageKey])
 
   React.useEffect(() => {
     setCurrentCompanyName(readStoredCompanyName())
@@ -2886,21 +2888,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
           </TooltipContent>
         </Tooltip>
       ) : null}
-      {sectionGuidance.length && guidanceDismissed ? (
-        <button
-          type="button"
-          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-100"
-          aria-label="Show setup guidance"
-          onClick={() => {
-            setGuidanceDismissed(false)
-            if (typeof window !== "undefined") {
-              window.localStorage.removeItem(guidanceStorageKey)
-            }
-          }}
-        >
-          <InfoIcon className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
     </div>
   )
 
@@ -3005,18 +2992,112 @@ export function AttendanceManagementView({ section }: { section: string }) {
       </DropdownMenu>
     ) : null
 
+  const renderMissingPrerequisites = (
+    values: Record<string, string>,
+    closeDrawer: () => void,
+  ) => {
+    const missing: Array<{ href: string; label: string; action: string }> = []
+
+    const needsBranch = fields.some(
+      (field) => field.key === "branch_id" || field.key === "branchId",
+    )
+    if (needsBranch && !branchesLoading && branches.length === 0) {
+      missing.push({
+        href: "/dashboard/branches",
+        label: "A branch has not been created yet.",
+        action: "Create a branch",
+      })
+    }
+
+    if (activeSection === "checkpoints") {
+      if (!policiesLoading && policies.length === 0) {
+        missing.push({
+          href: "/dashboard/attendance/policies",
+          label: "An attendance policy has not been created yet.",
+          action: "Create an attendance policy",
+        })
+      }
+
+      if (values.type === "DEVICE" && !devicesLoading && devices.length === 0) {
+        missing.push({
+          href: "/dashboard/attendance/devices",
+          label: "No attendance device is available for this Device checkpoint.",
+          action: "Create an attendance device",
+        })
+      }
+
+      if (values.type === "GPS" && !geofencesLoading && geofences.length === 0) {
+        missing.push({
+          href: "/dashboard/attendance/geofences",
+          label: "No geofence is available for this GPS checkpoint.",
+          action: "Create a geofence",
+        })
+      }
+
+      if (values.type === "WIFI" && !wifiNetworksLoading && wifiNetworks.length === 0) {
+        missing.push({
+          href: "/dashboard/attendance/wifi-networks",
+          label: "No Wi-Fi network is available for this Wi-Fi checkpoint.",
+          action: "Create a Wi-Fi network",
+        })
+      }
+    }
+
+    if (activeSection === "holidays" && !holidayGroupsLoading && holidayGroups.length === 0) {
+      missing.push({
+        href: "/dashboard/attendance/holiday-groups",
+        label: "A holiday group has not been created yet.",
+        action: "Create a holiday group",
+      })
+    }
+
+    if (missing.length === 0) return null
+
+    return (
+      <MessageBar className="[grid-column:1/-1]" intent="warning" layout="multiline">
+        <MessageBarBody>
+          <MessageBarTitle>Complete setup first</MessageBarTitle>
+          <div className="mt-1 grid gap-1.5">
+            {missing.map((item) => (
+              <p key={item.href}>
+                {item.label}{" "}
+                <Link
+                  href={item.href}
+                  className="font-semibold text-primary underline underline-offset-2"
+                  onClick={closeDrawer}
+                >
+                  {item.action}
+                </Link>
+                .
+              </p>
+            ))}
+          </div>
+        </MessageBarBody>
+      </MessageBar>
+    )
+  }
+
   return (
-    <div className="w-full space-y-2">
+    <div className="mt-1.5 w-full space-y-2">
       {activeSection === "policies" ? <AttendanceSetupWizard /> : null}
       {/* Dialogs stay mounted at root so toolbar actions only open them. */}
       {supportsCreate ? (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
+                <DialogPopup
+                  className={usesCompactSingleColumnForm
+                    ? "flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-lg"
+                    : "flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-2xl"}
+                >
                   {renderSectionDialogHeader("Create")}
                   {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-                  <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 pb-2">
+                  <div
+                    className={usesCompactSingleColumnForm
+                      ? "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2"
+                      : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
+                  >
+                    {renderMissingPrerequisites(createValues, () => setCreateOpen(false))}
                     {activeSection === "wifi-networks" ? (
-                      <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+                      <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 [grid-column:1/-1] dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
                         <p className="font-medium">Wi-Fi details helper</p>
                         <p className="mt-1 text-sky-900 dark:text-sky-200">
                           Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
@@ -3028,8 +3109,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     {fields
                       .filter((field) => shouldShowField(activeSection, field.key, createValues))
                       .map((field) => (
-                      <label key={`create-${field.key}`} className="grid gap-1">
-                        <FieldLabel field={field} />
+                      <Field
+                        key={`create-${field.key}`}
+                        className="w-full"
+                        label={<FieldLabel field={field} />}
+                      >
                         <FieldInput
                           field={field}
                           value={createValues[field.key] ?? ""}
@@ -3048,37 +3132,46 @@ export function AttendanceManagementView({ section }: { section: string }) {
                           disabled={isFieldDisabled(activeSection, field.key, createValues)}
                           onChange={(next) => setCreateValues((prev) => ({ ...prev, [field.key]: next }))}
                         />
-                      </label>
+                      </Field>
                     ))}
                   </div>
                   <DialogFooter className="mt-0 border-t border-slate-200 pt-3 dark:border-slate-800">
-                    <button
+                    <Button
                       type="button"
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                      appearance="secondary"
                       onClick={() => {
                         setCreateOpen(false)
                         setFormError(null)
                       }}
                     >
                       Cancel
-                    </button>
-                    <button type="button" onClick={() => void onCreate()} className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95">
+                    </Button>
+                    <Button type="button" appearance="primary" onClick={() => void onCreate()}>
                       Create
-                    </button>
+                    </Button>
                   </DialogFooter>
                 </DialogPopup>
               </Dialog>
           ) : null}
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogPopup className="flex max-h-[90vh] w-[min(920px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
+            <DialogPopup
+              className={usesCompactSingleColumnForm
+                ? "flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-lg"
+                : "flex max-h-[90vh] w-full flex-col overflow-hidden sm:max-w-2xl"}
+            >
               {renderSectionDialogHeader("Edit")}
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
               {editingLoading ? (
                 <p className="text-sm text-slate-500">Loading latest record details...</p>
               ) : null}
-              <div className="grid min-h-0 flex-1 gap-2 overflow-y-auto pr-1 pb-2">
+              <div
+                className={usesCompactSingleColumnForm
+                  ? "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2"
+                  : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
+              >
+                {renderMissingPrerequisites(editValues, () => setEditOpen(false))}
                 {activeSection === "wifi-networks" ? (
-                  <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 [grid-column:1/-1] dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
                     <p className="font-medium">Wi-Fi details helper</p>
                     <p className="mt-1 text-sky-900 dark:text-sky-200">
                       Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
@@ -3090,8 +3183,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 {fields
                   .filter((field) => shouldShowField(activeSection, field.key, editValues))
                   .map((field) => (
-                  <label key={`edit-${field.key}`} className="grid gap-1">
-                    <FieldLabel field={field} />
+                  <Field
+                    key={`edit-${field.key}`}
+                    className="w-full"
+                    label={<FieldLabel field={field} />}
+                  >
                     <FieldInput
                       field={field}
                       value={editValues[field.key] ?? ""}
@@ -3110,63 +3206,55 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       disabled={Boolean(field.readOnlyOnEdit) || isFieldDisabled(activeSection, field.key, editValues)}
                       onChange={(next) => setEditValues((prev) => ({ ...prev, [field.key]: next }))}
                     />
-                  </label>
+                  </Field>
                 ))}
               </div>
               <DialogFooter className="mt-0 border-t border-slate-200 pt-3 dark:border-slate-800">
-                <button
+                <Button
                   type="button"
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  appearance="secondary"
                   onClick={() => {
                     setEditOpen(false)
                     setFormError(null)
                   }}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  appearance="primary"
                   onClick={() => void onEdit()}
                   disabled={!supportsEditDelete}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
                 >
                   Update
-                </button>
+                </Button>
               </DialogFooter>
             </DialogPopup>
           </Dialog>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <DialogPopup className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Delete {activeSection.replaceAll("-", " ")}</DialogTitle>
-                <DialogDescription>This will remove the selected record.</DialogDescription>
-              </DialogHeader>
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogContent className="max-w-md">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {activeSection.replaceAll("-", " ")}</AlertDialogTitle>
+                <AlertDialogDescription>This will remove the selected record.</AlertDialogDescription>
+              </AlertDialogHeader>
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 Record ID: {deletingId || "-"}
               </div>
-              <DialogFooter>
-                <button
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setFormError(null)}>Cancel</AlertDialogCancel>
+                <Button
                   type="button"
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                  onClick={() => {
-                    setDeleteOpen(false)
-                    setFormError(null)
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
+                  appearance="primary"
                   onClick={() => void onDelete()}
                   disabled={!supportsEditDelete}
-                  className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 disabled:opacity-50"
+                  className="min-w-24 !bg-red-600 !text-white hover:!bg-red-700 disabled:opacity-50"
                 >
                   Delete
-                </button>
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Dialog
             open={validateOpen}
             onOpenChange={(open) => {
@@ -3358,57 +3446,128 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     </button>
                   </div>
                 </div>
+              ) : supportsEditDelete && selectedRow ? (
+                <div className="flex w-full flex-wrap justify-end gap-2">
+                  {(activeSection === "policies" || activeSection === "settings") &&
+                  !(selectedRow.is_active === true || selectedRow.isActive === true) ? (
+                    <Button
+                      appearance="secondary"
+                      disabled={activatingId === String(selectedRow.id)}
+                      onClick={() => {
+                        setDetailsOpen(false)
+                        void onActivatePolicy(selectedRow)
+                      }}
+                    >
+                      {activatingId === String(selectedRow.id) ? "Activating…" : "Activate"}
+                    </Button>
+                  ) : null}
+                  {activeSection === "geofences" || activeSection === "wifi-networks" ? (
+                    <>
+                      <Button
+                        appearance="secondary"
+                        disabled={activatingId === String(selectedRow.id)}
+                        onClick={() => {
+                          setDetailsOpen(false)
+                          void onToggleLocation(selectedRow, !isAttendanceLocationActive(selectedRow))
+                        }}
+                      >
+                        {activatingId === String(selectedRow.id)
+                          ? "Saving…"
+                          : isAttendanceLocationActive(selectedRow)
+                            ? "Deactivate"
+                            : "Activate"}
+                      </Button>
+                      <Button
+                        appearance="secondary"
+                        onClick={() => {
+                          setDetailsOpen(false)
+                          openValidateLocation(selectedRow)
+                        }}
+                      >
+                        Validate
+                      </Button>
+                    </>
+                  ) : null}
+                  <Button
+                    appearance="secondary"
+                    icon={<PencilIcon className="h-3.5 w-3.5" />}
+                    onClick={() => {
+                      setDetailsOpen(false)
+                      openEditDialog(selectedRow)
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    appearance="primary"
+                    className="!bg-red-600 !text-white hover:!bg-red-700"
+                    icon={<Trash2Icon className="h-3.5 w-3.5" />}
+                    onClick={() => {
+                      setDetailsOpen(false)
+                      openDeleteDialog(selectedRow)
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
               ) : null
             }
           />
 
-      {sectionGuidance.length && !guidanceDismissed ? (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/35 dark:text-sky-100">
-          <div className="mb-1.5 flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-sky-900 dark:text-sky-100">
-              <InfoIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">Setup Guidance</span>
-            </div>
-            <button
-              type="button"
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-sky-700 transition hover:bg-sky-100 hover:text-sky-950 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-50"
-              aria-label="Hide setup guidance"
-              onClick={() => {
-                setGuidanceDismissed(true)
-                if (typeof window !== "undefined") {
-                  window.localStorage.setItem(guidanceStorageKey, "true")
-                }
-              }}
-            >
-              <XIcon className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {sectionGuidance.map((line, index) => (
-            <p key={`${activeSection}-guidance-${index}`} className="leading-relaxed">
-              {line}
-            </p>
-          ))}
-        </div>
+      {sectionGuidance.length ? (
+        <TeachingPopover positioning="below-start">
+          <TeachingPopoverTrigger>
+            <Button appearance="outline" icon={<InfoIcon className="h-4 w-4" />}>
+              Setup guidance
+            </Button>
+          </TeachingPopoverTrigger>
+          <TeachingPopoverSurface>
+            <TeachingPopoverHeader>Tips</TeachingPopoverHeader>
+            <TeachingPopoverBody>
+              <TeachingPopoverTitle>{sectionDisplayTitle} setup</TeachingPopoverTitle>
+              <div className="grid gap-2 text-sm leading-relaxed">
+                {sectionGuidance.map((line, index) => (
+                  <p key={`${activeSection}-guidance-${index}`}>{line}</p>
+                ))}
+              </div>
+            </TeachingPopoverBody>
+            <TeachingPopoverFooter primary="Got it" />
+          </TeachingPopoverSurface>
+        </TeachingPopover>
       ) : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="text-sm text-green-700">{message}</p> : null}
       {isDeviceSyncLogsSection ? (
-        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-          <p className="font-medium">Device sync logs are read-only.</p>
-          <p className="mt-1 text-sky-900">
-            Use this page to review sync failures, record counts, and timestamps. Open the related
-            device to retry sync, confirm connectivity and credentials, or inspect the employees
-            assigned to that terminal.
-          </p>
-          {canOpenAccessControlDevices ? (
-            <Link
-              href="/dashboard/access-control/devices"
-              className="mt-2 inline-flex text-sm font-medium text-sky-800 underline underline-offset-4 hover:text-sky-950"
-            >
-              Go to devices
-            </Link>
-          ) : null}
+        <div className="mb-4">
+          <TeachingPopover appearance="brand" positioning="below-start">
+            <TeachingPopoverTrigger>
+              <Button appearance="outline" icon={<InfoIcon className="h-4 w-4" />}>
+                About sync logs
+              </Button>
+            </TeachingPopoverTrigger>
+            <TeachingPopoverSurface className="!w-[min(26rem,calc(100vw-1.5rem))] !max-w-[26rem]">
+              <TeachingPopoverHeader>Review guidance</TeachingPopoverHeader>
+              <TeachingPopoverBody>
+                <TeachingPopoverTitle>Device sync logs are read-only</TeachingPopoverTitle>
+                <div className="grid gap-3 text-sm leading-relaxed">
+                  <p>
+                    Review sync failures, record counts, and timestamps here. Open the related
+                    device to retry sync, confirm connectivity and credentials, or inspect the
+                    employees assigned to that terminal.
+                  </p>
+                  {canOpenAccessControlDevices ? (
+                    <Link
+                      href="/dashboard/access-control/devices"
+                      className="font-semibold text-inherit underline underline-offset-4"
+                    >
+                      Go to devices
+                    </Link>
+                  ) : null}
+                </div>
+              </TeachingPopoverBody>
+              <TeachingPopoverFooter primary="Got it" />
+            </TeachingPopoverSurface>
+          </TeachingPopover>
         </div>
       ) : null}
 
@@ -3484,6 +3643,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
         ]}
         itemsPerPage={20}
         loading={loading}
+        compact
         showExport={false}
         toolbarStart={sectionTitleBlock}
         toolbarActions={

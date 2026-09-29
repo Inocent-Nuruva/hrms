@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
+import { makeStyles, Tab, TabList } from "@fluentui/react-components"
 import {
   ArrowLeft,
   ArrowRightIcon,
@@ -26,6 +27,7 @@ import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroGhostButtonClass, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import {
@@ -87,7 +89,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -119,6 +121,16 @@ function BackToSettingsLink() {
 
 type SelfLeaveTab = "requests" | "balances" | "holidays" | "policies"
 type SelfProfileTab = "summary" | "assignments" | "personal" | "records" | "updates"
+
+const useProfileNavigationStyles = makeStyles({
+  tabList: {
+    minWidth: "max-content",
+  },
+  tab: {
+    fontSize: "10.72px",
+    lineHeight: "16px",
+  },
+})
 
 type EmployeeSelfServiceLeaveViewProps = {
   tab: SelfLeaveTab
@@ -3792,10 +3804,13 @@ export function EmployeeSelfServiceProfileView() {
   const { url: myProfilePhotoUrl, refresh: refreshMyProfilePhoto } = useMyProfilePhoto(token)
   const searchParams = useSearchParams()
   const pathname = usePathname()
+  const router = useRouter()
+  const profileNavigationStyles = useProfileNavigationStyles()
   const activeTab = (searchParams?.get("tab") as SelfProfileTab) || "summary"
   const editTarget = searchParams?.get("edit") ?? ""
   const autoOpenedEditTargetRef = React.useRef("")
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const tabs: Array<{ key: SelfProfileTab; label: string }> = [
     { key: "summary", label: "Summary" },
     { key: "assignments", label: "Assignments" },
@@ -4394,26 +4409,31 @@ export function EmployeeSelfServiceProfileView() {
         </div>
       ) : null}
       <DoodleSprites />
-      <div className="tab-rail-scroll">
-        <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+      <div className="tab-rail-scroll border-b border-border/80">
+        <TabList
+          aria-label="Profile sections"
+          size="small"
+          selectedValue={activeTab}
+          onTabSelect={(_event, data) => {
+            const nextTab = String(data.value)
+            if (tabs.some((tab) => tab.key === nextTab)) {
+              router.push(`${pathname}?tab=${nextTab}`, { scroll: false })
+            }
+          }}
+          className={profileNavigationStyles.tabList}
+        >
           {tabs.map((tab) => {
-            const isActive = activeTab === tab.key
             return (
-              <Link
+              <Tab
                 key={tab.key}
-                href={`${pathname}?tab=${tab.key}`}
-                className={cn(
-                  "shrink-0 border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
-                  isActive
-                    ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                )}
+                value={tab.key}
+                className={profileNavigationStyles.tab}
               >
                 {tab.label}
-              </Link>
+              </Tab>
             )
           })}
-        </div>
+        </TabList>
       </div>
 
       {loading ? (
@@ -4631,7 +4651,6 @@ export function EmployeeSelfServiceProfileView() {
             </DialogPopup>
           </Dialog>
 
-      {message ? <p className="px-1 text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
     </div>
   )
 }
@@ -4689,6 +4708,7 @@ export function EmployeePromotionView() {
   const [selectedMovement, setSelectedMovement] = React.useState<AdminRecord | null>(null)
   const [acknowledgingId, setAcknowledgingId] = React.useState<number | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const [statusFilter, setStatusFilter] = React.useState<"all" | "awaiting" | "applied">("all")
 
   const loadMovements = React.useCallback(async () => {
@@ -4873,11 +4893,6 @@ export function EmployeePromotionView() {
           })}
         </div>
       </div>
-      {message ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {message}
-        </div>
-      ) : null}
       {movementsError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {movementsError}
@@ -5545,6 +5560,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [holidays, setHolidays] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
   const [requestToCancel, setRequestToCancel] = React.useState<number | string | null>(null)
@@ -6451,7 +6467,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </motion.div>
         ) : null}
 
-        {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
         {error ? <p className="text-xs text-red-600">{error}</p> : null}
       </motion.section>
     )
@@ -6750,7 +6765,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
             </div>
-            {message ? <p className="text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRequestDialogOpen(false)}>

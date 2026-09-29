@@ -6,6 +6,7 @@ import { Loader2, RefreshCw, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   getEmployeeNumbering,
   updateEmployeeNumbering,
@@ -121,6 +122,8 @@ export function EmployeeSetupView() {
   const [numberingSaving, setNumberingSaving] = React.useState(false)
   const [numberingError, setNumberingError] = React.useState<string | null>(null)
   const [numberingMessage, setNumberingMessage] = React.useState<string | null>(null)
+
+  useFluentToastState(numberingMessage, setNumberingMessage, "success")
 
   const loadData = React.useCallback(async () => {
     const accessToken = readStoredToken()
@@ -330,7 +333,6 @@ export function EmployeeSetupView() {
           <p className="text-xs text-muted-foreground">
             Prefix can be blank, or 2–20 letters and digits. Digit width is 3–12.
           </p>
-          {numberingMessage ? <p className="text-sm text-emerald-600">{numberingMessage}</p> : null}
           {numberingError ? <p className="text-sm text-rose-600">{numberingError}</p> : null}
           <div className="flex justify-end">
             <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading || !isDirty}>

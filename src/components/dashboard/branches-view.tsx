@@ -739,7 +739,7 @@ export function BranchesView() {
   ]
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 pt-3">
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <div className="overflow-hidden border border-border bg-background shadow-sm">
@@ -757,22 +757,23 @@ export function BranchesView() {
                 setQuery((previous) => ({ ...previous, search: data.value }))
               }}
             />
-            <FluentSelect
-              ariaLabel="Filter branch status"
-              size="medium"
-              className="!w-44 shrink-0"
-              value={query.status || "all"}
-              placeholder="All statuses"
-              onChange={(value) => {
-                setPage(1)
-                setQuery((previous) => ({ ...previous, status: value === "all" ? "" : value }))
-              }}
-              options={[
-                { value: "all", label: "All statuses" },
-                { value: "active", label: "active" },
-                { value: "inactive", label: "inactive" },
-              ]}
-            />
+            <div className="w-44 shrink-0 self-center">
+              <FluentSelect
+                ariaLabel="Filter branch status"
+                size="medium"
+                value={query.status || "all"}
+                placeholder="All statuses"
+                onChange={(value) => {
+                  setPage(1)
+                  setQuery((previous) => ({ ...previous, status: value === "all" ? "" : value }))
+                }}
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "active", label: "active" },
+                  { value: "inactive", label: "inactive" },
+                ]}
+              />
+            </div>
             {canCreateBranches ? (
               <button
                 type="button"

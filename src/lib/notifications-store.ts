@@ -47,6 +47,7 @@ function resolveNotificationSoundUrl() {
 
 export interface NotificationsState {
   items: NotificationItem[]
+  attentionItems: NotificationItem[]
   unreadCount: number
   loading: boolean
   error: string | null
@@ -120,6 +121,7 @@ let authUnsubscribe: (() => void) | null = null
 let socket: Socket | null = null
 let initialized = false
 let listRequestSequence = 0
+let attentionRequestSequence = 0
 let unreadRequestSequence = 0
 let resyncTimer: ReturnType<typeof setTimeout> | null = null
 let socketConfigWarningShown = false
@@ -136,6 +138,7 @@ let suppressUnreadIncreaseSoundUntil = 0
 
 let state: InternalNotificationsState = {
   items: [],
+  attentionItems: [],
   unreadCount: 0,
   loading: false,
   error: null,
@@ -150,6 +153,7 @@ let state: InternalNotificationsState = {
 
 let publicState: NotificationsState = {
   items: state.items,
+  attentionItems: state.attentionItems,
   unreadCount: state.unreadCount,
   loading: state.loading,
   error: state.error,
@@ -500,6 +504,7 @@ function isNotFoundError(error: unknown) {
 function syncPublicState() {
   publicState = {
     items: state.items,
+    attentionItems: state.attentionItems,
     unreadCount: state.unreadCount,
     loading: state.loading,
     error: state.error,
@@ -770,6 +775,37 @@ async function loadUnreadCount(
   }
 }
 
+async function loadAttentionItems(tokenOverride?: string) {
+  ensureInitialized()
+  const token = tokenOverride ?? (state.token || readStoredToken())
+  if (!token) {
+    setState({ attentionItems: [] })
+    return [] as NotificationItem[]
+  }
+
+  const requestId = ++attentionRequestSequence
+  try {
+    const result = await notificationsApi.list(token, {
+      ...DEFAULT_NOTIFICATION_QUERY,
+      limit: 100,
+      status: "UNREAD",
+    }, {
+      cacheTtlMs: 0,
+      dedupe: false,
+    })
+    if (requestId !== attentionRequestSequence || token !== state.token) {
+      return state.attentionItems
+    }
+    const attentionItems = result.rows.filter(
+      (item) => isUnreadNotificationItem(item) && !isArchivedNotificationItem(item),
+    )
+    setState({ attentionItems })
+    return attentionItems
+  } catch {
+    return state.attentionItems
+  }
+}
+
 async function loadNotifications(
   params: NotificationQueryParams = state.currentQuery,
   options: LoadNotificationsOptions = {}
@@ -874,6 +910,7 @@ function refreshCurrentQueryIfNeeded() {
 function reloadCurrentQueryAndUnreadCount(token: string) {
   return Promise.all([
     loadUnreadCount({ tokenOverride: token }),
+    loadAttentionItems(token),
     loadNotifications(state.currentQuery, {
       tokenOverride: token,
       markVisibleSeen: state.drawerOpen,
@@ -1141,6 +1178,7 @@ function connectSocket(token: string) {
       playNotificationSound()
       suppressUnreadIncreaseSoundUntil = Date.now() + 2_000
       void loadUnreadCount({ tokenOverride: token })
+      void loadAttentionItems(token)
       return
     }
 
@@ -1168,6 +1206,9 @@ function connectSocket(token: string) {
             itemIsUnread && !alreadyPresent
               ? current.unreadCount + 1
               : current.unreadCount,
+          attentionItems: itemIsUnread
+            ? prependNotification(current.attentionItems, item, 100)
+            : current.attentionItems,
         }
       })
     } else {
@@ -1178,6 +1219,7 @@ function connectSocket(token: string) {
           return {
             unreadCount:
               alreadyPresent ? current.unreadCount : current.unreadCount + 1,
+            attentionItems: prependNotification(current.attentionItems, item, 100),
           }
         })
       }
@@ -1200,6 +1242,9 @@ function connectSocket(token: string) {
 
     setState((current) => ({
       items: upsertNotification(current.items, item),
+      attentionItems: isUnreadNotificationItem(item) && !isArchivedNotificationItem(item)
+        ? prependNotification(current.attentionItems, item, 100)
+        : current.attentionItems.filter((entry) => readItemId(entry) !== readItemId(item)),
     }))
 
     scheduleCurrentQueryResync()
@@ -1217,6 +1262,7 @@ function connectSocket(token: string) {
 
     const previousUnread = state.unreadCount
     setState({ unreadCount })
+    void loadAttentionItems(token)
     if (unreadCount > previousUnread) {
       if (Date.now() >= suppressUnreadIncreaseSoundUntil) {
         playNotificationSound()
@@ -1234,6 +1280,7 @@ function connectSocket(token: string) {
     if (action.includes("mark_all_as_read")) {
       setState((current) => ({
         items: current.items.map((item) => markItemRead(item)),
+        attentionItems: [],
         unreadCount: 0,
       }))
       void loadNotifications(state.currentQuery, { markVisibleSeen: state.drawerOpen })
@@ -1283,6 +1330,7 @@ function syncTokenFromStorage() {
     setState({
       token: "",
       items: [],
+      attentionItems: [],
       unreadCount: 0,
       loading: false,
       error: null,
@@ -1313,6 +1361,7 @@ function syncTokenFromStorage() {
 
   void Promise.all([
     loadUnreadCount({ tokenOverride: nextToken }),
+    loadAttentionItems(nextToken),
     loadNotifications(nextQuery, {
       tokenOverride: nextToken,
       markVisibleSeen: state.drawerOpen,
@@ -1413,6 +1462,7 @@ async function markAsRead(id: number) {
       }
       return updatedItem ?? markItemRead(item)
     }),
+    attentionItems: current.attentionItems.filter((item) => readItemId(item) !== id),
     unreadCount: targetWasUnread ? Math.max(0, current.unreadCount - 1) : current.unreadCount,
   }))
   if (!archived) {
@@ -1430,6 +1480,7 @@ async function markAllAsRead() {
   await notificationsApi.markAllRead(token)
   setState((current) => ({
     items: current.items.map((item) => markItemRead(item)),
+    attentionItems: [],
     unreadCount: 0,
   }))
   refreshCurrentQueryIfNeeded()
@@ -1447,6 +1498,7 @@ async function archiveNotification(id: number) {
   await notificationsApi.archive(token, id)
   setState((current) => ({
     items: current.items.filter((item) => readItemId(item) !== id),
+    attentionItems: current.attentionItems.filter((item) => readItemId(item) !== id),
     unreadCount: targetWasUnread ? Math.max(0, current.unreadCount - 1) : current.unreadCount,
   }))
   void loadUnreadCount({ tokenOverride: token })
@@ -1491,6 +1543,10 @@ async function clearAllNotifications() {
 
   setState((current) => ({
     items: current.items.filter((item) => {
+      const id = readItemId(item)
+      return id === null || !successfulIds.has(id)
+    }),
+    attentionItems: current.attentionItems.filter((item) => {
       const id = readItemId(item)
       return id === null || !successfulIds.has(id)
     }),

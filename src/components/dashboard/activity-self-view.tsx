@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -456,7 +458,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
               {createMode === "report" ? (
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Activity date</span>
-                  <input type="date" className={inputClass} value={form.activity_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
+                  <DateInput className={inputClass} value={form.activity_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
                 </label>
               ) : null}
               {createMode === "entry" ? (
@@ -476,7 +478,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                     />
                   </label>
                   <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Status</span>
                     <FluentSelect
@@ -491,8 +493,8 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
               ) : null}
               {createMode === "submit" ? (
                 <>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Summary</span><textarea className={textareaClass} value={form.employee_summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_summary: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Remarks</span><textarea className={textareaClass} value={form.overall_remarks ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_remarks: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Summary</span><Textarea className={textareaClass} value={form.employee_summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_summary: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Remarks</span><Textarea className={textareaClass} value={form.overall_remarks ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_remarks: event.target.value }))} /></label>
                 </>
               ) : null}
               {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}

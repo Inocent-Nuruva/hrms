@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AccessSkeleton } from "@/components/ui/access-skeleton"
 import { Check, Loader2, Pencil } from "lucide-react"
 
 import {
@@ -554,11 +555,7 @@ export function AttendanceBusinessTripsView() {
   const selectedMeta = getStatusMeta(selectedStatus || selectedTrip?.status)
 
   if (!actor.ready || !canView) {
-    return (
-      <div className="rounded-md border border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-500">
-        Checking access…
-      </div>
-    )
+    return <AccessSkeleton />
   }
 
   return (

@@ -1,5 +1,7 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import {
   Loader2Icon,
@@ -8,7 +10,7 @@ import {
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -1192,7 +1194,7 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
@@ -1205,8 +1207,8 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Effective date</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.effective_date ?? ""}
                     onChange={(event) =>
@@ -1483,7 +1485,7 @@ export function MovementOperationsView({
                     />
                     <label className="grid gap-1.5 text-sm">
                       <span className="font-medium">Justification</span>
-                      <textarea
+                      <Textarea
                         className={textareaClass}
                         value={form.justification ?? ""}
                         onChange={(event) =>
@@ -1520,7 +1522,7 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.comments ?? ""}
                     onChange={(event) =>

@@ -68,9 +68,9 @@ export function FluentSelect({
         id={dropdownId}
         aria-label={ariaLabel ?? label}
         size={size}
-        className="w-full min-w-0"
+        className="!w-full !min-w-0"
         placeholder={placeholder}
-        value={selected?.label}
+        value={selected?.label ?? ""}
         selectedOptions={selected ? [selected.value] : []}
         disabled={disabled}
         onOptionSelect={(_event, data) => onChange(data.optionValue ?? "")}

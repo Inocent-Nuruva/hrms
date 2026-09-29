@@ -1,9 +1,11 @@
 "use client";
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { StatStrip } from "@/components/dashboard/talent-visuals";
@@ -5392,7 +5394,7 @@ export function PayrollOperationsView() {
           </Field>
           <div className="md:col-span-2">
             <Field label="CSV or TSV rows">
-              <textarea
+              <Textarea
                 className={cn(textareaClass, "min-h-40 font-mono text-xs")}
                 value={advancedForm.importText}
                 onChange={(event) =>
@@ -5694,7 +5696,7 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Reason" className="md:col-span-2">
-            <textarea
+            <Textarea
               className={textareaClass}
               value={advancedForm.reason}
               onChange={(event) =>
@@ -5937,9 +5939,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -5950,9 +5952,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6073,9 +6075,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6086,9 +6088,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6131,9 +6133,9 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Effective from">
-              <input
+              <DateInput
                 className={inputClass}
-                type="date"
+
                 value={profileForm.effectiveFrom}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -6144,9 +6146,9 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Effective to">
-              <input
+              <DateInput
                 className={inputClass}
-                type="date"
+
                 value={profileForm.effectiveTo}
                 onChange={(event) =>
                   setProfileForm((current) => ({
@@ -6343,7 +6345,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Hold reason" className="md:col-span-2">
-              <textarea
+              <Textarea
                 className={textareaClass}
                 value={profileForm.payrollHoldReason}
                 onChange={(event) =>
@@ -6712,9 +6714,9 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Effective from">
-              <input
+              <DateInput
                 className={inputClass}
-                type="date"
+
                 disabled={linesLocked}
                 value={structureForm.effectiveFrom}
                 onChange={(event) =>
@@ -6726,9 +6728,9 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Effective to">
-              <input
+              <DateInput
                 className={inputClass}
-                type="date"
+
                 value={structureForm.effectiveTo}
                 onChange={(event) =>
                   setStructureForm((current) => ({
@@ -6739,7 +6741,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Description" className="md:col-span-2">
-              <textarea
+              <Textarea
                 className={textareaClass}
                 value={structureForm.description}
                 onChange={(event) =>
@@ -7119,9 +7121,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7132,9 +7134,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7237,9 +7239,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7250,9 +7252,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7374,9 +7376,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7387,9 +7389,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7508,9 +7510,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective from">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveFrom}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7521,9 +7523,9 @@ export function PayrollOperationsView() {
             />
           </Field>
           <Field label="Effective to">
-            <input
+            <DateInput
               className={inputClass}
-              type="date"
+
               value={advancedForm.effectiveTo}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -7585,7 +7587,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by project">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.projectDebitMap}
             onChange={(event) =>
@@ -7598,7 +7600,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by project">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.projectCreditMap}
             onChange={(event) =>
@@ -7611,7 +7613,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by cost center">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.costCenterDebitMap}
             onChange={(event) =>
@@ -7624,7 +7626,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by cost center">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.costCenterCreditMap}
             onChange={(event) =>
@@ -7637,7 +7639,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by department">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.departmentDebitMap}
             onChange={(event) =>
@@ -7650,7 +7652,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by department">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.departmentCreditMap}
             onChange={(event) =>
@@ -7663,7 +7665,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by branch">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.branchDebitMap}
             onChange={(event) =>
@@ -7676,7 +7678,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by branch">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.branchCreditMap}
             onChange={(event) =>
@@ -7689,7 +7691,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by category">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.categoryDebitMap}
             onChange={(event) =>
@@ -7702,7 +7704,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by category">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.categoryCreditMap}
             onChange={(event) =>
@@ -7715,7 +7717,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Debit by payroll group">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.groupDebitMap}
             onChange={(event) =>
@@ -7728,7 +7730,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Credit by payroll group">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.groupCreditMap}
             onChange={(event) =>
@@ -7741,7 +7743,7 @@ export function PayrollOperationsView() {
           />
         </Field>
         <Field label="Dimensions JSON" className="md:col-span-2">
-          <textarea
+          <Textarea
             className={textareaClass}
             value={mappingForm.dimensionsJson}
             onChange={(event) =>
@@ -8469,9 +8471,9 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <Field label="Payment date">
-                  <input
+                  <DateInput
                     className={inputClass}
-                    type="date"
+
                     value={advancedForm.paymentDate}
                     onChange={(event) =>
                       setAdvancedForm((current) => ({
@@ -8483,7 +8485,7 @@ export function PayrollOperationsView() {
                 </Field>
                 <div className="md:col-span-2">
                   <Field label="Bank statement rows">
-                    <textarea
+                    <Textarea
                       className={cn(
                         textareaClass,
                         "min-h-28 font-mono text-xs",
@@ -9371,8 +9373,8 @@ export function PayrollOperationsView() {
             </DialogDescription>
           </DialogHeader>
           <Field label="Effective from">
-            <input
-              type="date"
+            <DateInput
+
               className={inputClass}
               value={versionEffectiveFrom}
               onChange={(event) => setVersionEffectiveFrom(event.target.value)}
@@ -9553,9 +9555,9 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Effective from">
-                <input
+                <DateInput
                   className={inputClass}
-                  type="date"
+
                   value={ruleForm.effectiveFrom}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -9566,9 +9568,9 @@ export function PayrollOperationsView() {
                 />
               </Field>
               <Field label="Effective to">
-                <input
+                <DateInput
                   className={inputClass}
-                  type="date"
+
                   value={ruleForm.effectiveTo}
                   onChange={(event) =>
                     setRuleForm((current) => ({
@@ -9757,7 +9759,7 @@ export function PayrollOperationsView() {
               />
             </Field>
             <Field label="Comments">
-              <textarea
+              <Textarea
                 className={textareaClass}
                 value={approveForm.comments}
                 onChange={(event) =>

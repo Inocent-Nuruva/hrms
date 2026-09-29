@@ -1,8 +1,10 @@
 "use client";
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
 import { Loader2Icon, PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
@@ -1305,8 +1307,8 @@ export function FinanceOperationsView({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">From</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={reportFilters.date_from ?? ""}
                     onChange={(event) =>
@@ -1319,8 +1321,8 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">To</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={reportFilters.date_to ?? ""}
                     onChange={(event) =>
@@ -2467,7 +2469,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Description</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.description ?? ""}
                     onChange={(event) =>
@@ -2681,8 +2683,8 @@ export function FinanceOperationsView({
                 </div>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Effective from</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.effective_from ?? ""}
                     onChange={(event) =>
@@ -2712,8 +2714,8 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Payment date</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.payment_date ?? ""}
                     onChange={(event) =>
@@ -2756,7 +2758,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
@@ -2786,7 +2788,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>

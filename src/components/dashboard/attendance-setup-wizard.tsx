@@ -2,13 +2,14 @@
 
 import * as React from "react"
 import { Loader2Icon } from "lucide-react"
-import { toast } from "sonner"
+import { Button, Field, Input } from "@fluentui/react-components"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { getHrAttendanceSetupStatus, runHrAttendanceSetupWizard } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { readStoredSessionTokens } from "@/lib/session-client"
-import { primaryButtonClass, readString, secondaryButtonClass } from "@/components/dashboard/talent-visuals"
+import { readString } from "@/components/dashboard/talent-visuals"
 
 export function AttendanceSetupWizard() {
   const actor = useDashboardActor()
@@ -57,19 +58,29 @@ export function AttendanceSetupWizard() {
         <p className="text-sm text-foreground">{status || "Create the first company attendance policy from the documented wizard."}</p>
       </div>
       {canRun ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            className="h-9 rounded-md border border-border bg-background px-2.5 text-sm"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => void run()}>
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Policy name" size="small" className="min-w-56">
+            <Input
+              aria-label="Policy name created by the attendance setup wizard"
+              size="small"
+              className="w-full"
+              value={name}
+              onChange={(_event, data) => setName(data.value)}
+            />
+          </Field>
+          <Button
+            type="button"
+            appearance="primary"
+            size="small"
+            disabled={busy || !name.trim()}
+            onClick={() => void run()}
+          >
             {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
             Run wizard
-          </button>
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()}>
+          </Button>
+          <Button type="button" appearance="outline" size="small" onClick={() => void load()}>
             Refresh
-          </button>
+          </Button>
         </div>
       ) : null}
     </div>

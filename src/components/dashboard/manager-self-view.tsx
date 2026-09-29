@@ -1,5 +1,6 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
 import * as React from "react"
 import { Loader2Icon, RefreshCwIcon } from "lucide-react"
 
@@ -219,8 +220,8 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             ) : null}
             {activeTab === "attendance" ? (
               <>
-                <input type="date" className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-                <input type="date" className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+                <DateInput className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+                <DateInput className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
               </>
             ) : null}
             {activeTab === "actions" ? (

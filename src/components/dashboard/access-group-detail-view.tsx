@@ -14,6 +14,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   assignAccessGroupDevices,
   assignAccessGroupDoors,
@@ -159,6 +160,8 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [assignOpen, setAssignOpen] = React.useState(false)
   const [selectedDoorId, setSelectedDoorId] = React.useState("")
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("")
@@ -899,7 +902,6 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
           </div>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">

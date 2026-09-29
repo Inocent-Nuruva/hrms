@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { CheckIcon, Loader2Icon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   createMyOvertimeRequest,
@@ -153,7 +155,7 @@ export function OvertimeRequestsPanel({ token }: { token: string | null }) {
 
       {queue === "mine" ? (
         <form onSubmit={(event) => void submit(event)} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto] md:items-end">
-          <label className="grid gap-1 text-sm"><span>Work date</span><input type="date" required value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
+          <label className="grid gap-1 text-sm"><span>Work date</span><DateInput required value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
           <label className="grid gap-1 text-sm"><span>Minutes</span><input type="number" required min={1} max={1440} step={1} value={requestedMinutes} onChange={(event) => setRequestedMinutes(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
           <label className="grid gap-1 text-sm"><span>Reason</span><input type="text" required maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
           <button type="submit" disabled={saving || !token} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50">
@@ -192,7 +194,7 @@ export function OvertimeRequestsPanel({ token }: { token: string | null }) {
 
       {reviewing && queue !== "mine" ? (
         <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <label className="grid gap-1 text-sm"><span>Review comments</span><textarea rows={2} maxLength={2000} value={comments} onChange={(event) => setComments(event.target.value)} className="min-w-0 rounded-md border border-input bg-background px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm"><span>Review comments</span><Textarea rows={2} maxLength={2000} value={comments} onChange={(event) => setComments(event.target.value)} className="min-w-0 rounded-md border border-input bg-background px-3 py-2" /></label>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void decide("approve")} disabled={saving} className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"><CheckIcon className="size-4" /> Approve</button>
             <button type="button" onClick={() => void decide("reject")} disabled={saving || !comments.trim()} className="inline-flex h-9 items-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive disabled:opacity-50"><XIcon className="size-4" /> Reject</button>

@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { SearchIcon } from "lucide-react"
+import { SearchBox } from "@fluentui/react-components"
 import {
   Dialog,
   DialogHeader,
@@ -246,15 +246,16 @@ export function NavSecondary({
                       <DialogHeader className="sr-only">
                         <DialogTitle>Search</DialogTitle>
                       </DialogHeader>
-                      <div className="flex h-10 items-center gap-2 border-b border-slate-200 px-3 dark:border-border">
-                        <SearchIcon className="size-3.5 shrink-0 text-primary" />
-                        <input
+                      <div className="flex items-center gap-2 border-b border-slate-200 p-3 dark:border-border">
+                        <SearchBox
                           ref={searchInputRef}
+                          size="medium"
                           value={query}
-                          onChange={(event) => setQuery(event.target.value)}
+                          onChange={(_event, data) => setQuery(data.value)}
                           placeholder="Search pages…"
+                          aria-label="Search pages"
                           autoFocus
-                          className="h-10 min-w-0 flex-1 border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-foreground dark:placeholder:text-muted-foreground"
+                          className="min-w-0 flex-1"
                         />
                         <kbd className="rounded border border-slate-200 px-1 py-px text-[10px] text-slate-500 dark:border-border">
                           Esc

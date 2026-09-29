@@ -5,8 +5,6 @@ import { KeyRoundIcon } from "lucide-react"
 
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
-import { ErrorAlertOverlay } from "@/components/error-alert-overlay"
-import { SuccessAlertOverlay } from "@/components/success-alert-overlay"
 import { BorderBeam } from "@/components/ui/border-beam"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/hooks/useAuth"
@@ -80,8 +78,6 @@ export default function ChangePasswordPage() {
       </Head>
 
       <Toaster position="top-right" />
-      <SuccessAlertOverlay />
-      <ErrorAlertOverlay />
 
       <div className="pointer-events-none fixed inset-0 bg-background" />
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />

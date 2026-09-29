@@ -14,6 +14,7 @@ import {
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { Textarea } from "@/components/ui/textarea"
 import { ResizableTable } from "@/components/ui/resizable-table"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   getAccessAuditLogById,
   getAccessCredentialById,
@@ -434,6 +435,8 @@ export function AccessControlActivityView({
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState("")
@@ -633,7 +636,6 @@ export function AccessControlActivityView({
   return (
     <div className="w-full space-y-2">
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="text-sm text-green-700">{message}</p> : null}
 
       <ResizableTable
         title={config.title}

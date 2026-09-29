@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { useRouter } from "next/navigation";
 
 import {
@@ -14,10 +13,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Field } from "@fluentui/react-components";
-import { Switch } from "@/components/ui/switch";
+import {
+  Avatar as FluentAvatar,
+  Field,
+  Switch as FluentSwitch,
+  TableCellLayout,
+} from "@fluentui/react-components";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -62,14 +64,15 @@ import {
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import { env } from "@/lib/env";
 import {
+  Add16Regular,
+  ArrowClockwise16Regular,
+} from "@fluentui/react-icons";
+import {
   KeyRound,
-  PlusIcon,
-  RefreshCwIcon,
-  SlidersHorizontalIcon,
   Trash2,
   UsersIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt";
@@ -932,22 +935,24 @@ export function EmployeesListView({
           const position = employeePosition(row);
           const number = employeeNumber(row);
           const photoUrl = employeePhotoUrl(row);
+          const description = `${position !== "—" && position !== "-" ? position : "Position not assigned"}${number !== "-" ? ` · ${number}` : ""}`;
           return (
-            <div className="flex min-w-0 items-center gap-2.5 py-1">
-              <Avatar className="size-8 shrink-0 ring-1 ring-border">
-                {photoUrl ? <AvatarImage src={photoUrl} alt={name} /> : null}
-                <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">
-                  {employeeInitials(row)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-foreground">{name}</p>
-                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  {position !== "—" && position !== "-" ? position : "Position not assigned"}
-                  {number !== "-" ? ` · ${number}` : ""}
-                </p>
-              </div>
-            </div>
+            <TableCellLayout
+              appearance="primary"
+              className="min-w-0 py-1"
+              description={description}
+              media={
+                <FluentAvatar
+                  color="brand"
+                  image={photoUrl ? { src: photoUrl } : undefined}
+                  initials={employeeInitials(row)}
+                  name={name}
+                  size={32}
+                />
+              }
+            >
+              <span className="truncate">{name}</span>
+            </TableCellLayout>
           );
         },
       },
@@ -1040,20 +1045,17 @@ export function EmployeesListView({
         },
       },
       {
-        key: "actions",
-        label: "Actions",
-        defaultWidth: 175,
+        key: "twoFactor",
+        label: "2FA",
+        defaultWidth: 82,
         sortable: false,
         render: (row: AdminRecord) => (
           <div
-            className="flex items-center justify-end gap-2"
+            className="flex items-center"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="text-[10px] font-medium text-muted-foreground">
-              2FA
-            </span>
-            <Switch
-              size="sm"
+            <FluentSwitch
+              size="small"
               checked={employeeTwoFactorEnabled(row)}
               disabled={!canManageTwoFactor || employeeUserId(row) == null}
               aria-label={`Toggle 2FA for ${employeeDisplayName(row)}`}
@@ -1066,9 +1068,22 @@ export function EmployeesListView({
                       ? "2FA is enabled — click to disable"
                       : "2FA is off — click to require setup on next login"
               }
-              onCheckedChange={() => requestTwoFactorChange(row)}
+              onChange={() => requestTwoFactorChange(row)}
               onClick={(event) => event.stopPropagation()}
             />
+          </div>
+        ),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        defaultWidth: 92,
+        sortable: false,
+        render: (row: AdminRecord) => (
+          <div
+            className="flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
@@ -1116,17 +1131,17 @@ export function EmployeesListView({
   );
 
   return (
-    <section className="overflow-hidden border border-border bg-background shadow-sm">
+    <section className="mt-2 overflow-hidden border border-border bg-background shadow-sm">
       <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
             {directoryMode === "inactive" ? "Inactive employees" : "All employees"}
           </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {directoryMode === "inactive"
-              ? "Review former employees and retained employment records"
-              : "Manage employee records, account security, and workforce access"}
-          </p>
+          {directoryMode === "inactive" ? (
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Review former employees and retained employment records
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
@@ -1181,48 +1196,60 @@ export function EmployeesListView({
         className="[&>div:last-child]:mb-2"
         toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
         frameClassName="rounded-none border-0 shadow-none"
-        toolbarStart={
-          <>
-            <span className="hidden shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:flex">
-              <SlidersHorizontalIcon className="size-3" /> Filters
-            </span>
-            <SearchToggleField
-              className="min-w-0 !w-auto !max-w-[15rem] !flex-none"
-              placeholder="Search employees"
-              value={query.search}
-              onChange={(value) => {
-                setPage(1);
-                setQuery((previous) => ({ ...previous, search: value }));
-              }}
-            />
-            {directoryMode === "current" ? (
-              <Select
-                value={query.employment_status || ALL_STATUSES_VALUE}
-                onValueChange={(value) => {
+        fluent
+        filterCount={Number(Boolean(query.search.trim())) + Number(Boolean(query.employment_status))}
+        filterContent={
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Search employees</span>
+              <Input
+                size="small"
+                aria-label="Search employees"
+                className="[&>input]:!h-[26px] [&>input]:!text-xs"
+                placeholder="Name, employee number…"
+                value={query.search}
+                onChange={(_event, data) => {
                   setPage(1);
-                  setQuery((previous) => ({
-                    ...previous,
-                    employment_status:
-                      value === ALL_STATUSES_VALUE
-                        ? ""
-                        : (value as typeof previous.employment_status),
-                  }));
+                  setQuery((previous) => ({ ...previous, search: data.value }));
                 }}
-              >
-                <SelectTrigger size="sm" className="w-36 bg-background" aria-label="Filter employment status">
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
-                    <SelectItem value="onboarding">Onboarding</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              />
+            </div>
+            {directoryMode === "current" ? (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Employment status</span>
+                <Select
+                  value={query.employment_status || ALL_STATUSES_VALUE}
+                  onValueChange={(value) => {
+                    setPage(1);
+                    setQuery((previous) => ({
+                      ...previous,
+                      employment_status:
+                        value === ALL_STATUSES_VALUE
+                          ? ""
+                          : (value as typeof previous.employment_status),
+                    }));
+                  }}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full bg-background"
+                    controlClassName="[&>button]:!h-6 [&>button]:!min-h-6 [&>button]:!text-[8px]"
+                    aria-label="Filter employment status"
+                  >
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={ALL_STATUSES_VALUE}>All</SelectItem>
+                      <SelectItem value="onboarding">Onboarding</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
             ) : null}
-          </>
+          </div>
         }
         toolbarActions={
           <>
@@ -1245,20 +1272,22 @@ export function EmployeesListView({
               type="button"
               variant="outline"
               size="icon-sm"
+              className="!w-[47px] !min-w-[47px] !px-1 !py-0.5"
               disabled={loading}
               aria-label="Refresh employees"
               title="Refresh employees"
               onClick={() => void fetchEmployees()}
             >
-              <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
+              <ArrowClockwise16Regular className={loading ? "animate-spin" : undefined} />
             </Button>
             {canAddEmployee ? (
               <Button
                 type="button"
                 size="sm"
+                className="!py-1.5"
                 onClick={() => router.push("/dashboard/employees/registration")}
               >
-                <PlusIcon data-icon="inline-start" />
+                <Add16Regular data-icon="inline-start" />
                 Add employee
               </Button>
             ) : null}

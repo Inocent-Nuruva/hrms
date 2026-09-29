@@ -1,8 +1,10 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -437,7 +439,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
               </>
             ) : null}
             {createMode === "policy" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Effective from</span><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Effective from</span><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
             ) : null}
             {createMode === "review" ? (
               <>
@@ -453,7 +455,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Comments</span><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Comments</span><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></label>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
