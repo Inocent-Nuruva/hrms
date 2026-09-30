@@ -178,9 +178,10 @@ input:focus {
 }
 
 .fui-DialogSurface[data-size="full"] {
-  width: calc(100vw - 1rem) !important;
+  width: 100vw !important;
   max-width: none !important;
-  height: calc(100dvh - 1rem);
+  height: 100dvh !important;
+  max-height: 100dvh !important;
 }
 
 .fui-OverlayDrawer[data-app-drawer="true"] {

@@ -16,9 +16,14 @@ import {
 import {
   Briefcase20Color,
   Building20Color,
+  CalendarClock20Color,
+  CalendarSync20Color,
+  Camera20Color,
+  ContactCard20Color,
   Edit16Regular,
   PeopleTeam20Color,
   Person20Color,
+  PersonKey20Color,
 } from "@fluentui/react-icons"
 import {
   ArrowLeft, ArrowRightIcon, CheckCircle2, BriefcaseIcon, Building2Icon, CalendarIcon, ClockIcon, DownloadIcon, FileTextIcon, PencilIcon, RefreshCwIcon, UserIcon, UsersIcon } from "lucide-react";
@@ -2183,7 +2188,7 @@ function AssignmentSection({
       <div className="flex">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} />}
+            {Icon ? <Icon className="size-5 shrink-0" /> : <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} />}
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground">{title}</h3>
               {subtitle ? (
@@ -2299,7 +2304,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
           <AssignmentSection
             title="Department"
             subtitle="Your org placement"
-            icon={Building2Icon}
+            icon={Building20Color}
             count={departments.length}
           >
             {departments.length ? (
@@ -2342,7 +2347,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
           <AssignmentSection
             title="Position"
             subtitle="Role assignment"
-            icon={BriefcaseIcon}
+            icon={Briefcase20Color}
             count={positionAssignments.length}
           >
             {positionAssignments.length ? (
@@ -2388,7 +2393,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         <AssignmentSection
           title="Attendance assignment"
           subtitle="Shifts, timetables, and overrides"
-          icon={ClockIcon}
+          icon={CalendarClock20Color}
           count={assignmentSummaryRows.length}
         >
           {assignmentSummaryRows.length ? (
@@ -2420,7 +2425,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         <AssignmentSection
           title="Upcoming schedule"
           subtitle="Next published work days"
-          icon={CalendarIcon}
+          icon={CalendarSync20Color}
           count={previewDays.length}
           barClassName="bg-sky-500"
         >
@@ -2705,12 +2710,10 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
 function ProfileRecordsTab({
   employee,
   correctionRequests,
-  profileUpdateRequests,
   teamAttendance,
 }: {
   employee: AdminRecord | null
   correctionRequests: AdminRecord[]
-  profileUpdateRequests: AdminRecord[]
   teamAttendance: AdminRecord[]
 }) {
   const identifications = asRecordList(employee?.identifications)
@@ -2737,11 +2740,6 @@ function ProfileRecordsTab({
             label: "Corrections",
             value: String(correctionRequests.length),
             highlight: pendingCorrections > 0,
-          },
-          {
-            label: "Profile updates",
-            value: String(profileUpdateRequests.length),
-            highlight: false,
           },
           { label: "Team today", value: String(teamAttendance.length), highlight: false },
           { label: "IDs", value: String(identifications.length), highlight: false },
@@ -2770,8 +2768,8 @@ function ProfileRecordsTab({
         ))}
       </motion.div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <motion.div variants={profileTabItem}>
+      <div className="divide-y divide-border/70">
+        <motion.div variants={profileTabItem} className="py-4 first:pt-0">
           <SelfServiceSectionCard
             title="Attendance corrections"
             count={correctionRequests.length}
@@ -2781,7 +2779,8 @@ function ProfileRecordsTab({
             {correctionRequests.length === 0 ? (
               <ProfileEmptyRow message="No attendance correction requests found." />
             ) : (
-              correctionRequests.map((row, index) => {
+              <div role="list" aria-label="Attendance correction requests" className="max-h-64 divide-y divide-border/50 overflow-y-auto overscroll-contain">
+              {correctionRequests.map((row, index) => {
                 const titleText =
                   readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
                   readString(row, ["reason", "request_type", "change_type"], "Correction request")
@@ -2790,52 +2789,24 @@ function ProfileRecordsTab({
                     ? formatDateTime(row.created_at)
                     : formatDate(row.date)
                 return (
+                  <div key={String(row.id ?? index)} role="listitem" className="py-1">
                   <ProfileRequestRow
-                    key={String(row.id ?? index)}
                     title={titleText}
                     status={readString(row, ["status"], "draft")}
                     dateLabel={createdAt}
                   />
+                  </div>
                 )
               })
+              }
+              </div>
             )}
           </SelfServiceSectionCard>
         </motion.div>
 
-        <motion.div variants={profileTabItem}>
-          <SelfServiceSectionCard
-            title="Profile update requests"
-            count={profileUpdateRequests.length}
-            subtitle="Recent change requests"
-            barClassName="bg-sky-500"
-          >
-            {profileUpdateRequests.length === 0 ? (
-              <ProfileEmptyRow message="No profile update requests found." />
-            ) : (
-              profileUpdateRequests.map((row, index) => {
-                const titleText =
-                  readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
-                  readString(row, ["reason", "request_type", "change_type"], "Profile update")
-                const createdAt =
-                  formatDateTime(row.created_at) !== "-"
-                    ? formatDateTime(row.created_at)
-                    : formatDate(row.date)
-                return (
-                  <ProfileRequestRow
-                    key={String(row.id ?? index)}
-                    title={titleText}
-                    status={readString(row, ["status"], "draft")}
-                    dateLabel={createdAt}
-                    detail={readString(row, ["reason"], "") || undefined}
-                  />
-                )
-              })
-            )}
-          </SelfServiceSectionCard>
-        </motion.div>
       </div>
 
-      <motion.div variants={profileTabItem}>
+      <motion.div variants={profileTabItem} className="py-4">
         <SelfServiceSectionCard
           title="Direct reports today"
           count={teamAttendance.length}
@@ -2844,7 +2815,8 @@ function ProfileRecordsTab({
           {teamAttendance.length === 0 ? (
             <ProfileEmptyRow message="No team attendance rows were returned for your account." />
           ) : (
-            teamAttendance.map((row, index) => {
+            <div role="list" aria-label="Direct reports attendance" className="max-h-80 divide-y divide-border/50 overflow-y-auto overscroll-contain">
+            {teamAttendance.map((row, index) => {
               const nestedEmployee = asRecord(row.employee)
               const employeeLabel =
                 readString(row, ["employee_name", "full_name", "name"], "") ||
@@ -2859,8 +2831,8 @@ function ProfileRecordsTab({
               const status = readString(row, ["status", "attendance_status"], "—")
               const checkIn = formatUnknownValue(row.check_in_at ?? row.first_punch_at)
               return (
+                <div key={String(row.id ?? index)} role="listitem">
                 <ProfileDataItem
-                  key={String(row.id ?? index)}
                   title={employeeLabel}
                   barClassName={
                     status.toLowerCase().includes("absent")
@@ -2884,8 +2856,11 @@ function ProfileRecordsTab({
                     { label: "Check in", value: checkIn },
                   ]}
                 />
+                </div>
               )
             })
+            }
+            </div>
           )}
         </SelfServiceSectionCard>
       </motion.div>
@@ -3078,6 +3053,34 @@ function ProfileRecordsTab({
   )
 }
 
+function UpdateActionTile({
+  title,
+  description,
+  icon: Icon,
+  onClick,
+}: {
+  title: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Request ${title.toLowerCase()} update`}
+      className="group flex min-h-[4.75rem] min-w-0 items-center gap-3 border border-border/70 bg-background px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <Icon className="size-6 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold leading-5 text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{description}</span>
+      </span>
+      <ArrowRightIcon className="size-4 shrink-0 text-primary/70 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+    </button>
+  )
+}
+
 function ProfileUpdatesTab({
   profileUpdateRequests,
   openSectionEditor,
@@ -3119,6 +3122,7 @@ function ProfileUpdatesTab({
       description: "Name, email, phone, and city",
       fields: ["first_name", "last_name", "email", "phone", "city"] as EditableUserField[],
       label: "Personal Details",
+      icon: Person20Color,
     },
     {
       key: "contact-details",
@@ -3126,6 +3130,7 @@ function ProfileUpdatesTab({
       description: "Email, phone, and city",
       fields: ["email", "phone", "city"] as EditableUserField[],
       label: "Contact Details",
+      icon: ContactCard20Color,
     },
     {
       key: "profile-photo",
@@ -3133,6 +3138,7 @@ function ProfileUpdatesTab({
       description: "Change your picture",
       fields: ["profile_photo_url"] as EditableUserField[],
       label: "Profile Picture",
+      icon: Camera20Color,
     },
     {
       key: "password",
@@ -3140,6 +3146,7 @@ function ProfileUpdatesTab({
       description: "Update sign-in password",
       fields: ["password"] as EditableUserField[],
       label: "Password",
+      icon: PersonKey20Color,
     },
   ]
 
@@ -3221,38 +3228,27 @@ function ProfileUpdatesTab({
 
       {/* Quick update types */}
       <motion.div variants={profileTabItem} className="min-w-0 max-w-full">
-        <div className="overflow-hidden border-b border-border/60">
-          <div className="flex min-w-0">
-            <div className="w-1 shrink-0 bg-primary" />
-            <div className="min-w-0 flex-1 px-3 py-2.5">
-              <h3 className="text-sm font-semibold text-foreground">What do you want to change?</h3>
-              <p className="text-[11px] text-muted-foreground">
-                Each request is sent to HR for approval.
-              </p>
-            </div>
+        <section aria-labelledby="profile-update-actions-title">
+          <div className="mb-3">
+            <h3 id="profile-update-actions-title" className="text-sm font-semibold text-foreground">
+              What do you want to change?
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              Each request is sent to HR for approval.
+            </p>
           </div>
-          <div className="grid min-w-0 gap-0 border-y border-border/50 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
             {updateActions.map((action) => (
-              <button
+              <UpdateActionTile
                 key={action.key}
-                type="button"
+                title={action.title}
+                description={action.description}
+                icon={action.icon}
                 onClick={() => openSectionEditor(action.key, action.label, action.fields)}
-                className="flex min-w-0 items-center gap-2.5 border-b border-border/70 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:gap-3 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <PencilIcon className="size-3.5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {action.title}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">{action.description}</span>
-                </span>
-                <span className="shrink-0 text-xs font-medium text-primary">Request →</span>
-              </button>
+              />
             ))}
           </div>
-        </div>
+        </section>
       </motion.div>
 
       <motion.div variants={profileTabItem}>
@@ -4520,7 +4516,6 @@ export function EmployeeSelfServiceProfileView() {
             <ProfileRecordsTab
               employee={employee}
               correctionRequests={correctionRequests}
-              profileUpdateRequests={profileUpdateRequests}
               teamAttendance={teamAttendance}
             />
           ) : null}

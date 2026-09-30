@@ -307,6 +307,7 @@ export function OnboardingSelfView() {
     <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
+        variant="dashboard"
         eyebrow="My onboarding"
         title={
           selected
