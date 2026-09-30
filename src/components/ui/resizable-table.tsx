@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   ArrowDownload16Regular,
+  ArrowSort16Regular,
   ChevronDown16Regular,
   ColumnTriple20Regular,
   Filter16Regular,
@@ -417,6 +418,8 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   showToolbar?: boolean;
   /** Content on the left side of the toolbar (e.g. titles). */
   toolbarStart?: React.ReactNode;
+  /** Optional compact summary row rendered immediately above the table frame. */
+  toolbarSummary?: React.ReactNode;
   /** Controls grouped inside one Filter popover. Sort is included automatically. */
   filterContent?: React.ReactNode;
   /** Number of active page filters shown on the Filter trigger. */
@@ -490,6 +493,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   showSort = true,
   showToolbar = true,
   toolbarStart,
+  toolbarSummary,
   filterContent,
   filterCount = 0,
   toolbarActions,
@@ -1204,9 +1208,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                   aria-label="Sort"
                   title="Sort"
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-primary">
-                    <path d="M3 6L6 3L9 6M6 3V13M13 10L10 13L7 10M10 13V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <ArrowSort16Regular className="size-3.5 text-primary" />
                   <span className="hidden sm:inline">Sort</span>
                   {sortField ? (
                     <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
@@ -1301,6 +1303,12 @@ export function ResizableTable<T = Record<string, unknown>>({
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {toolbarSummary ? (
+        <div className="mb-2 flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-1 pb-1.5 text-[10px] text-muted-foreground">
+          {toolbarSummary}
         </div>
       ) : null}
 

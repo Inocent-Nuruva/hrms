@@ -3,10 +3,10 @@
 import * as React from "react"
 import {
   Input as FluentInput,
-  SearchBox as FluentSearchBox,
   type InputProps as FluentInputProps,
   type SearchBoxProps as FluentSearchBoxProps,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { TimeInput } from "@/components/ui/time-input"
 import { cn } from "@/lib/utils"
 

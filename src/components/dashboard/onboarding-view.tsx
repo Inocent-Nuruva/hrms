@@ -9,7 +9,6 @@ import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import {
   Field,
-  SearchBox,
   Table as FluentTable,
   TableBody as FluentTableBody,
   TableCell as FluentTableCell,
@@ -18,6 +17,7 @@ import {
   TableHeaderCell,
   TableRow as FluentTableRow,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
   ClipboardTaskListLtr20Regular,
   Delete16Regular,
@@ -4516,7 +4516,7 @@ export function OnboardingView() {
             getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
             onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
-              <SearchBox
+              <FluentSearchBox
                 size="small"
                 aria-label="Search pending invitations"
                 className="!w-[14rem] max-w-full shrink-0"
@@ -4700,7 +4700,7 @@ export function OnboardingView() {
             }}
             toolbarStart={
               <>
-                <SearchBox
+                <FluentSearchBox
                   size="small"
                   aria-label="Search onboarding requests"
                   className="!w-[14rem] max-w-full shrink-0"
@@ -7077,7 +7077,7 @@ export function OnboardingView() {
             }}
             toolbarStart={
               <>
-                <SearchBox
+                <FluentSearchBox
                   size="small"
                   aria-label="Search onboarding workflows"
                   className="!w-[14rem] max-w-full shrink-0"

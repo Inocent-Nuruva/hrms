@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, InfoIcon, Loader2Icon, SearchIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, InfoIcon, Loader2Icon } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"

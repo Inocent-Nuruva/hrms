@@ -3,7 +3,16 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon, FilterIcon, InfoIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import {
+  CircleCheckIcon,
+  CircleHelpIcon,
+  FilterIcon,
+  InfoIcon,
+  PencilIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+} from "lucide-react"
 import {
   Button,
   Field,
@@ -2593,6 +2602,38 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
   }
 
+  const onActivateCheckpoint = async (row: AdminRecord) => {
+    if (activeSection !== "checkpoints") return
+
+    const rowId = row.id
+    if (rowId === null || rowId === undefined) {
+      setFormError("This checkpoint does not have an id to activate.")
+      return
+    }
+    const recordId = rowId as string | number
+
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+
+    setActivatingId(String(recordId))
+    try {
+      await updateAttendanceResourceById(token, "checkpoints", recordId, {
+        status: "ACTIVE",
+      })
+      setMessage("Checkpoint activated successfully.")
+      setError(null)
+      setFormError(null)
+      await fetchRows()
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Activation failed.")
+    } finally {
+      setActivatingId("")
+    }
+  }
+
   const onToggleLocation = async (row: AdminRecord, nextActive: boolean) => {
     if (activeSection !== "geofences" && activeSection !== "wifi-networks") return
     const recordId = row.id
@@ -2891,6 +2932,32 @@ export function AttendanceManagementView({ section }: { section: string }) {
     </div>
   )
 
+  const setupGuidanceControl = sectionGuidance.length ? (
+    <TeachingPopover positioning="below-start">
+      <TeachingPopoverTrigger>
+        <Button
+          appearance="outline"
+          icon={<InfoIcon className="h-4 w-4" />}
+          className="w-full self-start justify-start sm:w-auto sm:justify-center"
+        >
+          Setup guidance
+        </Button>
+      </TeachingPopoverTrigger>
+      <TeachingPopoverSurface>
+        <TeachingPopoverHeader>Tips</TeachingPopoverHeader>
+        <TeachingPopoverBody>
+          <TeachingPopoverTitle>{sectionDisplayTitle} setup</TeachingPopoverTitle>
+          <div className="grid gap-2 text-sm leading-relaxed">
+            {sectionGuidance.map((line, index) => (
+              <p key={`${activeSection}-guidance-${index}`}>{line}</p>
+            ))}
+          </div>
+        </TeachingPopoverBody>
+        <TeachingPopoverFooter primary="Got it" />
+      </TeachingPopoverSurface>
+    </TeachingPopover>
+  ) : null
+
   const deviceFiltersControl =
     activeSection === "devices" ? (
       <DropdownMenu>
@@ -3078,8 +3145,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
   }
 
   return (
-    <div className="mt-1.5 w-full space-y-2">
-      {activeSection === "policies" ? <AttendanceSetupWizard /> : null}
+    <div className="mt-1.5 flex w-full flex-col gap-2">
+      {activeSection === "policies" ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {setupGuidanceControl}
+          <AttendanceSetupWizard />
+        </div>
+      ) : null}
       {/* Dialogs stay mounted at root so toolbar actions only open them. */}
       {supportsCreate ? (
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -3451,7 +3523,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   {(activeSection === "policies" || activeSection === "settings") &&
                   !(selectedRow.is_active === true || selectedRow.isActive === true) ? (
                     <Button
-                      appearance="secondary"
+                      appearance="primary"
+                      icon={<CircleCheckIcon className="size-4" />}
                       disabled={activatingId === String(selectedRow.id)}
                       onClick={() => {
                         setDetailsOpen(false)
@@ -3459,6 +3532,20 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       }}
                     >
                       {activatingId === String(selectedRow.id) ? "Activating…" : "Activate"}
+                    </Button>
+                  ) : null}
+                  {activeSection === "checkpoints" &&
+                  readStringFromRecord(selectedRow, ["status"])?.toUpperCase() !== "ACTIVE" ? (
+                    <Button
+                      appearance="primary"
+                      icon={<CircleCheckIcon className="size-4" />}
+                      disabled={activatingId === String(selectedRow.id)}
+                      onClick={() => {
+                        setDetailsOpen(false)
+                        void onActivateCheckpoint(selectedRow)
+                      }}
+                    >
+                      {activatingId === String(selectedRow.id) ? "Activating…" : "Activate checkpoint"}
                     </Button>
                   ) : null}
                   {activeSection === "geofences" || activeSection === "wifi-networks" ? (
@@ -3514,27 +3601,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
             }
           />
 
-      {sectionGuidance.length ? (
-        <TeachingPopover positioning="below-start">
-          <TeachingPopoverTrigger>
-            <Button appearance="outline" icon={<InfoIcon className="h-4 w-4" />}>
-              Setup guidance
-            </Button>
-          </TeachingPopoverTrigger>
-          <TeachingPopoverSurface>
-            <TeachingPopoverHeader>Tips</TeachingPopoverHeader>
-            <TeachingPopoverBody>
-              <TeachingPopoverTitle>{sectionDisplayTitle} setup</TeachingPopoverTitle>
-              <div className="grid gap-2 text-sm leading-relaxed">
-                {sectionGuidance.map((line, index) => (
-                  <p key={`${activeSection}-guidance-${index}`}>{line}</p>
-                ))}
-              </div>
-            </TeachingPopoverBody>
-            <TeachingPopoverFooter primary="Got it" />
-          </TeachingPopoverSurface>
-        </TeachingPopover>
-      ) : null}
+      {activeSection !== "policies" ? setupGuidanceControl : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {isDeviceSyncLogsSection ? (
@@ -3601,17 +3668,35 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 : undefined,
           })),
           ...(showDeviceContextColumn ? [{ key: "related_device", label: "Device", defaultWidth: 75 }] : []),
-          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: activeSection === "geofences" || activeSection === "wifi-networks" ? 120 : 55, sortable: false, render: (row: AdminRecord) => (
+          ...(supportsEditDelete ? [{ key: "actions", label: "Actions", defaultWidth: activeSection === "geofences" || activeSection === "wifi-networks" || activeSection === "policies" || activeSection === "settings" || activeSection === "checkpoints" ? 120 : 55, sortable: false, render: (row: AdminRecord) => (
             <div className="flex justify-end gap-1" onClick={e=>e.stopPropagation()}>
               {(activeSection === "policies" || activeSection === "settings") &&
               !(row.is_active === true || row.isActive === true) ? (
-                <button
-                  className="admin-table-icon-button"
+                <Button
+                  type="button"
+                  appearance="primary"
+                  size="small"
+                  icon={<CircleCheckIcon className="size-4" />}
+                  aria-label="Activate attendance policy"
                   disabled={activatingId === String(row.id)}
                   onClick={() => void onActivatePolicy(row)}
                 >
                   {activatingId === String(row.id) ? "Activating…" : "Activate"}
-                </button>
+                </Button>
+              ) : null}
+              {activeSection === "checkpoints" &&
+              readStringFromRecord(row, ["status"])?.toUpperCase() !== "ACTIVE" ? (
+                <Button
+                  type="button"
+                  appearance="primary"
+                  size="small"
+                  icon={<CircleCheckIcon className="size-4" />}
+                  aria-label="Activate attendance checkpoint"
+                  disabled={activatingId === String(row.id)}
+                  onClick={() => void onActivateCheckpoint(row)}
+                >
+                  {activatingId === String(row.id) ? "Activating…" : "Activate"}
+                </Button>
               ) : null}
               {activeSection === "geofences" || activeSection === "wifi-networks" ? (
                 <>

@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Field, SearchBox } from "@fluentui/react-components"
+import { Field } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
 import { cn } from "@/lib/utils"
 
@@ -104,7 +105,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
       }}
     >
       <Field label="Search in HRMS" size="small" className="min-w-0 gap-0 [&_label]:sr-only">
-        <SearchBox
+        <FluentSearchBox
           ref={inputRef}
           size="small"
           value={query}

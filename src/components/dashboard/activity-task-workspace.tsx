@@ -18,12 +18,12 @@ import {
   MessageSquareIcon,
   MoreHorizontalIcon,
   PlusIcon,
-  SearchIcon,
   SendIcon,
   SlidersHorizontalIcon,
   SparklesIcon,
   XIcon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {

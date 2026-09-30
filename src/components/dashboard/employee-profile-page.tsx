@@ -9,12 +9,12 @@ import {
   DownloadIcon,
   PencilIcon,
   PlusIcon,
-  SearchIcon,
   Trash2Icon,
   UnlinkIcon,
   UploadIcon,
   UserRoundXIcon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
 

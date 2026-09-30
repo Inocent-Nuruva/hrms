@@ -2,7 +2,13 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Clock3Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { Clock3Icon, PlusIcon } from "lucide-react"
+import {
+  Add16Regular,
+  ArrowSync20Regular,
+  Delete16Regular,
+  Edit16Regular,
+} from "@fluentui/react-icons"
 import {
   Avatar,
   Button,
@@ -17,8 +23,16 @@ import {
   TagPickerInput,
   TagPickerList,
   TagPickerOption,
+  TeachingPopover,
+  TeachingPopoverBody,
+  TeachingPopoverFooter,
+  TeachingPopoverHeader,
+  TeachingPopoverSurface,
+  TeachingPopoverTitle,
+  TeachingPopoverTrigger,
 } from "@fluentui/react-components"
 import { Person20Regular } from "@fluentui/react-icons"
+import { Info20Regular } from "@fluentui/react-icons"
 
 import {
   buildFormDraftStorageKey,
@@ -83,6 +97,87 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type ScheduleSectionKey = ShiftResourceKey | TimetableResourceKey
 type ScheduleModuleKey = "shift" | "timetable"
+
+const scheduleSectionGuides: Partial<Record<ScheduleSectionKey, { label: string; title: string; tips: string[] }>> = {
+  shifts: {
+    label: "Shift guide",
+    title: "Create reusable shifts",
+    tips: [
+      "Set the shift name, code, and expected working hours once, then reuse it in schedules and assignments.",
+      "Mark overnight shifts when their end time falls on the following day.",
+      "Use search and status filters to find existing shifts; use the row actions to edit or remove one.",
+    ],
+  },
+  "shift-breaks": {
+    label: "Break guide",
+    title: "Set up a shift break",
+    tips: [
+      "Each break belongs to a shift. Choose the shift, give the break a name and type, then set its start time, end time, and duration.",
+      "Mark it paid or unpaid according to your policy. Use Fixed for a set break time, or Flexible when employees may take the break within the configured window.",
+      "Use search or the break filter to find saved breaks. Select Create to add one, or use the row actions to edit or delete it.",
+    ],
+  },
+  "shift-assignments": {
+    label: "Assignment guide",
+    title: "Assign a shift to an employee",
+    tips: [
+      "Choose one employee and a shift, then set when the assignment starts and, if needed, when it ends.",
+      "Optionally link a rotation group. Mark an assignment Primary when it should take precedence as the employee’s main shift assignment.",
+      "Use search and the status filter to find assignments; use the row actions to update or remove one.",
+    ],
+  },
+  "shift-rotation-groups": {
+    label: "Rotation guide",
+    title: "Set up a rotation cycle",
+    tips: [
+      "Create a named group and set how many days are in its repeating cycle.",
+      "After creating the group, add rotation rules for each cycle day to specify the shift or mark a rest day.",
+      "Use the group’s code to identify it when linking assignments or templates.",
+    ],
+  },
+  "shift-rotation-rules": {
+    label: "Rule guide",
+    title: "Define each day in a rotation",
+    tips: [
+      "Choose a rotation group and enter the day index within its cycle.",
+      "Choose a shift for a working day, or mark the rule as an off day.",
+      "Make sure the group’s rules cover its full cycle so the pattern repeats as intended.",
+    ],
+  },
+}
+
+function ScheduleSectionGuide({ section }: { section: ScheduleSectionKey }) {
+  const guide = scheduleSectionGuides[section]
+  if (!guide) return null
+
+  return (
+    <TeachingPopover appearance="brand" positioning="below-start">
+      <TeachingPopoverTrigger>
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Info20Regular />}
+          className="!h-7 !min-h-7 shrink-0 !px-1.5"
+          aria-label={guide.label}
+          title={guide.label}
+        >
+          <span className="hidden sm:inline">{guide.label}</span>
+        </Button>
+      </TeachingPopoverTrigger>
+      <TeachingPopoverSurface className="!w-[min(26rem,calc(100vw-1.5rem))] !max-w-[26rem]">
+        <TeachingPopoverHeader>Quick guide</TeachingPopoverHeader>
+        <TeachingPopoverBody>
+          <TeachingPopoverTitle>{guide.title}</TeachingPopoverTitle>
+          <div className="grid gap-2 text-sm leading-relaxed">
+            {guide.tips.map((tip) => <p key={tip}>{tip}</p>)}
+          </div>
+        </TeachingPopoverBody>
+        <TeachingPopoverFooter primary="Got it" />
+      </TeachingPopoverSurface>
+    </TeachingPopover>
+  )
+}
+
 type FieldType =
   | "text"
   | "number"
@@ -134,6 +229,7 @@ type LookupState = {
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
 const SINGLE_COLUMN_TIMETABLE_FORMS = new Set<ScheduleSectionKey>([
+  "shift-assignments",
   "timetables",
   "timetable-holiday-rules",
   "timetable-rotations",
@@ -2076,7 +2172,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
       return [...scalarValues, ...relationLabels].some((value) => value.toLowerCase().includes(query))
     })
   }, [activeSection, enhancedShiftList, lookupMaps, managementFilter, managementSearch, rows])
-  const activeShiftCount = React.useMemo(
+  const activeStatusCount = React.useMemo(
     () => rows.filter((row) => (readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE") === "ACTIVE").length,
     [rows]
   )
@@ -2160,7 +2256,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   void openEdit(rowId)
                 }}
               >
-                <PencilIcon className="h-3.5 w-3.5" />
+                <Edit16Regular className="h-3.5 w-3.5" />
               </button>
               <button
                 className="admin-table-icon-button"
@@ -2173,7 +2269,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   setDeleteOpen(true)
                 }}
               >
-                <Trash2Icon className="h-3.5 w-3.5" />
+                <Delete16Regular className="h-3.5 w-3.5" />
               </button>
             </div>
           )
@@ -2805,50 +2901,30 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setDetailsOpen(true)
   }
 
-  const enhancedListMeta: Partial<Record<ScheduleSectionKey, { title: string; description: string }>> = {
+  const enhancedListMeta: Partial<Record<ScheduleSectionKey, { title: string }>> = {
     shifts: {
       title: "Shift management",
-      description: "Create and maintain reusable working-hour definitions",
     },
     "shift-breaks": {
       title: "Shift breaks",
-      description: "Manage paid, unpaid, fixed, and flexible break windows",
     },
     "shift-assignments": {
       title: "Shift assignments",
-      description: "Track who owns each shift and when the assignment applies",
     },
     "shift-rotation-groups": {
       title: "Rotation groups",
-      description: "Organize repeating shift cycles and their rules",
     },
     "shift-rotation-rules": {
       title: "Rotation rules",
-      description: "Define the working and off days inside each rotation cycle",
     },
   }
   const activeEnhancedListMeta = enhancedListMeta[activeSection]
 
   const sectionTitleBlock = activeEnhancedListMeta ? (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
         <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{activeEnhancedListMeta.title}</h1>
-        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{activeEnhancedListMeta.description}</p>
-      </div>
-      <div className="hidden shrink-0 items-center gap-1.5 xl:flex">
-        <span className="text-[10px] font-semibold text-foreground">{rows.length} total</span>
-        {activeSection === "shift-breaks" ? (
-          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{paidBreakCount} paid</span>
-        ) : activeSection === "shift-rotation-rules" ? (
-          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">{offDayRuleCount} off day</span>
-        ) : (
-          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{activeShiftCount} active</span>
-        )}
-        {activeSection === "shifts" && nightShiftCount > 0 ? (
-          <span className="text-[10px] font-semibold text-primary">{nightShiftCount} night</span>
-        ) : activeSection === "shift-assignments" && primaryAssignmentCount > 0 ? (
-          <span className="text-[10px] font-semibold text-primary">{primaryAssignmentCount} primary</span>
-        ) : null}
+        <ScheduleSectionGuide section={activeSection} />
       </div>
     </div>
   ) : (
@@ -2861,6 +2937,26 @@ export function ScheduleManagementView({ section }: { section: string }) {
       </h1>
     </div>
   )
+
+  const enhancedListSummary = enhancedShiftList ? (
+    <>
+      <span><span className="font-semibold text-foreground">{rows.length}</span> total</span>
+      {activeSection === "shifts" ? (
+        <>
+          <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{activeStatusCount}</span> active</span>
+          <span><span className="font-semibold text-primary">{nightShiftCount}</span> night</span>
+        </>
+      ) : activeSection === "shift-breaks" ? (
+        <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{paidBreakCount}</span> paid</span>
+      ) : activeSection === "shift-assignments" ? (
+        <span><span className="font-semibold text-primary">{primaryAssignmentCount}</span> primary</span>
+      ) : activeSection === "shift-rotation-groups" ? (
+        <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{activeStatusCount}</span> active</span>
+      ) : activeSection === "shift-rotation-rules" ? (
+        <span><span className="font-semibold text-amber-700 dark:text-amber-400">{offDayRuleCount}</span> off day</span>
+      ) : null}
+    </>
+  ) : null
 
   return (
     <div className="mt-1.5 w-full min-w-0 max-w-none space-y-2">
@@ -2902,6 +2998,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
         showExport={false}
         storageKey={`schedule-${activeSection}`}
         toolbarStart={sectionTitleBlock}
+        toolbarSummary={enhancedListSummary}
         toolbarActions={
           <>
             {enhancedShiftList ? (
@@ -2917,7 +3014,14 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   />
                 </div>
                 <Select value={managementFilter} onValueChange={(value) => setManagementFilter(value || "ALL")}>
-                  <SelectTrigger size="sm" className="w-31 rounded-lg bg-background" aria-label={`Filter ${config.title.toLowerCase()}`}>
+                  <SelectTrigger
+                    className={cn(
+                      "h-8 rounded-lg bg-background text-xs whitespace-nowrap",
+                      activeSection === "shift-rotation-rules" ? "w-40" : "w-31",
+                    )}
+                    controlClassName="!h-8 !min-h-8 !px-2 !text-xs !whitespace-nowrap"
+                    aria-label={`Filter ${config.title.toLowerCase()}`}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2955,7 +3059,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               aria-label={`Create ${config.title}`}
               title="Create"
             >
-              <PlusIcon className="h-3.5 w-3.5" />
+              <Add16Regular className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Create</span>
             </Button>
             <Button
@@ -2971,7 +3075,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
               aria-label="Refresh"
               title="Refresh"
             >
-              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              <ArrowSync20Regular className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
             </Button>
           </>
         }
@@ -2996,7 +3100,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
           <div className="flex w-full flex-wrap justify-end gap-2">
             <Button
               appearance="secondary"
-              icon={<PencilIcon className="h-3.5 w-3.5" />}
+              icon={<Edit16Regular className="h-3.5 w-3.5" />}
               onClick={() => {
                 const rowId = String(resolveRowId(selectedRow, -1))
                 setDetailsOpen(false)
@@ -3008,7 +3112,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             <Button
               appearance="primary"
               className="!bg-red-600 !text-white hover:!bg-red-700"
-              icon={<Trash2Icon className="h-3.5 w-3.5" />}
+              icon={<Delete16Regular className="h-3.5 w-3.5" />}
               onClick={() => {
                 const rowId = String(resolveRowId(selectedRow, -1))
                 setDetailsOpen(false)

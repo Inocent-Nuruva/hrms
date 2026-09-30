@@ -47,11 +47,11 @@ import {
   Card as FluentCard,
   CardHeader as FluentCardHeader,
   Persona,
-  SearchBox,
   Skeleton as FluentSkeleton,
   SkeletonItem,
   Text as FluentText,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { MoreHorizontal20Regular } from "@fluentui/react-icons"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
@@ -1110,7 +1110,7 @@ function PeopleExperiencePanels({
             <p className="mt-0.5 text-[10px] text-muted-foreground">Latest generated employee payslips</p>
           </div>
           <div className="flex items-center gap-2">
-            <SearchBox
+            <FluentSearchBox
               size="small"
               value={payrollSearch}
               onChange={(_event, data) => setPayrollSearch(data.value)}

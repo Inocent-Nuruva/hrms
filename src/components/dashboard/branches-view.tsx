@@ -12,13 +12,13 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
-  SearchBox,
   createTableColumn,
   useTableFeatures,
   useTableSort,
   type TableColumnDefinition,
   type TableColumnId,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
@@ -746,7 +746,7 @@ export function BranchesView() {
         <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-sm font-semibold tracking-tight">Branches</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <SearchBox
+            <FluentSearchBox
               size="medium"
               placeholder="Search branch"
               aria-label="Search branches"
