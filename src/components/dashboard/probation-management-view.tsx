@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -543,7 +544,7 @@ export function ProbationManagementView({
                     void onDeletePolicy(row)
                   }}
                 >
-                  {busyId === `policy-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+                  {busyId === `policy-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
                 </button>
               ) : null}
             </div>
@@ -602,7 +603,7 @@ export function ProbationManagementView({
                   void onDeleteCase(row)
                 }}
               >
-                {busyId === `case-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+                {busyId === `case-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
               </button>
             ) : null}
           </div>
@@ -624,7 +625,7 @@ export function ProbationManagementView({
             description="Open cases, upcoming due dates, and how the confirmation cycle is moving."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -724,7 +725,7 @@ export function ProbationManagementView({
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "policies" && canCreatePolicy ? (
@@ -802,7 +803,7 @@ export function ProbationManagementView({
           </SheetHeader>
           {caseLoading ? (
             <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading case...
             </div>
           ) : caseDetail ? (
@@ -919,7 +920,7 @@ export function ProbationManagementView({
                   void onDeleteCase(caseDetail)
                 }}
               >
-                {busyId === `case-${rowId(caseDetail)}` ? <Loader2Icon className="size-4 animate-spin" /> : "Delete case"}
+                {busyId === `case-${rowId(caseDetail)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Delete case"}
               </button>
             ) : null}
             {canGenerateLetter ? (
@@ -940,7 +941,7 @@ export function ProbationManagementView({
                     .finally(() => setBusyId(""))
                 }}
               >
-                {busyId === "letter" ? <Loader2Icon className="size-4 animate-spin" /> : "Generate letter"}
+                {busyId === "letter" ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Generate letter"}
               </button>
             ) : null}
           </SheetFooter>
@@ -1143,7 +1144,7 @@ export function ProbationManagementView({
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setFormOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}
             </button>
           </DialogFooter>
         </DialogPopup>

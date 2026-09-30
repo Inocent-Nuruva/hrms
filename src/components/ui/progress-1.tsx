@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Progress } from "@base-ui-components/react/progress"
+import { ProgressBar } from "@fluentui/react-components"
 
 type ExampleProgressProps = {
   label?: string
@@ -31,17 +31,13 @@ export default function ExampleProgress({
   const resolvedValue = typeof value === "number" ? value : internalValue
 
   return (
-    <Progress.Root className="grid w-full gap-y-2" value={resolvedValue}>
+    <div className="grid w-full gap-y-2">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <Progress.Label className="truncate text-sm font-medium text-foreground">
-          {label}
-        </Progress.Label>
-        <Progress.Value className="text-right text-sm text-muted-foreground" />
+        <span className="truncate text-sm font-medium text-foreground">{label}</span>
+        <span className="text-right text-sm text-muted-foreground">{Math.round(resolvedValue)}%</span>
       </div>
-      <Progress.Track className="h-1.5 overflow-hidden rounded bg-slate-200 shadow-[inset_0_0_0_1px] shadow-slate-200">
-        <Progress.Indicator className="block h-full bg-slate-600 transition-all duration-500" />
-      </Progress.Track>
+      <ProgressBar value={resolvedValue} max={100} thickness="large" aria-label={label} />
       {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
-    </Progress.Root>
+    </div>
   )
 }

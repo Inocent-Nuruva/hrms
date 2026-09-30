@@ -1,8 +1,8 @@
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { CheckCircle2Icon, Loader2Icon, UserRoundCheckIcon } from "lucide-react"
-
+import { CheckCircle2Icon, UserRoundCheckIcon } from "lucide-react";
 import {
   acceptEmployeeInvitation,
   getPublicEmployeeInvitation,
@@ -134,7 +134,7 @@ export default function InvitationRegistrationPage() {
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
                 Checking invitation
               </div>
             ) : complete ? (
@@ -209,7 +209,7 @@ export default function InvitationRegistrationPage() {
 
                 <Button type="submit" disabled={submitting} className="w-full">
                   {submitting ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : null}
                   {submitting ? "Creating account…" : "Complete registration"}
                 </Button>

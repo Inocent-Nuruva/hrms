@@ -1,8 +1,8 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Loader2, RefreshCw, Save } from "lucide-react"
-
+import { RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -237,7 +237,7 @@ export function EmployeeSetupView() {
                 <p className="mt-1 text-xs text-muted-foreground">Updates as you type. Saved only when you confirm.</p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={() => void loadData()} disabled={loading}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               </Button>
             </div>
             <div className="mt-5 flex flex-wrap items-end gap-2.5">
@@ -336,7 +336,7 @@ export function EmployeeSetupView() {
           {numberingError ? <p className="text-sm text-rose-600">{numberingError}</p> : null}
           <div className="flex justify-end">
             <Button type="button" onClick={() => void saveNumbering()} disabled={numberingSaving || loading || !isDirty}>
-              {numberingSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+              {numberingSaving ? <FluentLoadingIndicator className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
               {isDirty ? "Save numbering" : "Saved"}
             </Button>
           </div>

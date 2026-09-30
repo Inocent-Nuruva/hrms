@@ -228,8 +228,10 @@ type LookupState = {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
-const SINGLE_COLUMN_TIMETABLE_FORMS = new Set<ScheduleSectionKey>([
+const SINGLE_COLUMN_SCHEDULE_FORMS = new Set<ScheduleSectionKey>([
+  "shift-breaks",
   "shift-assignments",
+  "shift-rotation-groups",
   "timetables",
   "timetable-holiday-rules",
   "timetable-rotations",
@@ -2795,10 +2797,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
     mode: "create" | "edit"
   ) => {
     const isScheduleCreate = activeSection === "shift-schedules" && mode === "create"
-    const usesSingleColumnForm = SINGLE_COLUMN_TIMETABLE_FORMS.has(activeSection)
+    const usesSingleColumnForm = SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection)
 
     return (
-      <div className={cn("grid gap-4", !usesSingleColumnForm && "md:grid-cols-2")}>
+      <div className={cn("grid items-start gap-4", !usesSingleColumnForm && "md:grid-cols-2")}>
         {isScheduleCreate ? (
           <Field
             className="md:col-span-2"
@@ -3130,7 +3132,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
         <DialogPopup
           className={cn(
             "flex w-full flex-col overflow-hidden",
-            SINGLE_COLUMN_TIMETABLE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
+            SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
           )}
           bodyClassName="!h-full !max-h-none !overflow-hidden"
         >
@@ -3168,7 +3170,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
         <DialogPopup
           className={cn(
             "flex w-full flex-col overflow-hidden",
-            SINGLE_COLUMN_TIMETABLE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
+            SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
           )}
           bodyClassName="!h-full !max-h-none !overflow-hidden"
         >

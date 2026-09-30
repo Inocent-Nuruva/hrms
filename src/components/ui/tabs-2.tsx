@@ -34,6 +34,10 @@ const useStyles = makeStyles({
     paddingRight: tokens.spacingHorizontalXS,
     fontSize: tokens.fontSizeBase200,
     lineHeight: tokens.lineHeightBase200,
+    "&[data-fui-focus-visible]:not(:focus-visible)": {
+      outline: "none",
+      boxShadow: "none",
+    },
   },
   tabLabel: {
     display: "flex",

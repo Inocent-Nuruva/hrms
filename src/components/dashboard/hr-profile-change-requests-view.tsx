@@ -1,19 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { useSearchParams } from "next/navigation"
 import {
-  ArrowRightIcon,
-  CheckIcon,
-  FilterIcon,
-  HistoryIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  UserRoundIcon,
-  XIcon,
-} from "lucide-react"
+  ArrowRightIcon, CheckIcon, FilterIcon, HistoryIcon, RefreshCwIcon, RotateCcwIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -252,7 +244,7 @@ function PhotoFrame({
     <figure className="flex min-w-0 flex-col items-center text-center">
       <div className="flex size-36 items-center justify-center overflow-hidden rounded-full bg-slate-100 sm:size-40">
         {loading ? (
-          <Loader2Icon className="size-5 animate-spin text-slate-400" />
+          <FluentLoadingIndicator className="size-5 animate-spin text-slate-400" />
         ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt="" className="size-full object-cover" />
@@ -830,7 +822,7 @@ export function HrProfileChangeRequestsView() {
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `rev-${detailId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+                  {busyId === `rev-${detailId}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : null}
                   Start review
                 </button>
               ) : null}
@@ -899,7 +891,7 @@ export function HrProfileChangeRequestsView() {
               onClick={() => void onDecide()}
               disabled={saving}
             >
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               {form.mode === "approve" ? "Approve request" : form.mode === "reject" ? "Decline request" : "Send back"}
             </button>
           </DialogFooter>

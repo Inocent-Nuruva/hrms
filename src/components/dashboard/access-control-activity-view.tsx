@@ -1,8 +1,8 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { EyeIcon, Loader2Icon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react"
-
+import { EyeIcon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
 import {
   Dialog,
   DialogDescription,
@@ -802,7 +802,7 @@ export function AccessControlActivityView({
           {detailError ? <p className="text-sm text-red-600">{detailError}</p> : null}
           {detailLoading ? (
             <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-              <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+              <FluentLoadingIndicator className="mr-2 h-4 w-4 animate-spin" />
               Loading details…
             </div>
           ) : (
@@ -875,7 +875,7 @@ export function AccessControlActivityView({
               disabled={actionLoading}
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95 disabled:opacity-60"
             >
-              {actionLoading ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : null}
+              {actionLoading ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : null}
               {actionLoading ? "Updating…" : resolveCredentialActionLabel(actionKind)}
             </button>
           </DialogFooter>

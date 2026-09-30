@@ -1,12 +1,8 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import {
-  Loader2,
-  MapPin,
-  Network,
-  Wifi,
-} from "lucide-react"
+import { MapPin, Network, Wifi } from "lucide-react";
 import {
   ArrowEnter16Regular,
   ArrowExit16Regular,
@@ -325,7 +321,7 @@ export function NetworkCheckButton({
           <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
             {checking ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+                <FluentLoadingIndicator className="size-6 animate-spin text-primary" aria-hidden="true" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Checking your connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -504,20 +500,25 @@ export function AttendancePunchActions({
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
-      <div className={cn("flex flex-wrap", compact ? "gap-1" : "gap-2")}>
+      <div className={cn(
+        "flex flex-wrap",
+        compact
+          ? "items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-sm"
+          : "gap-2",
+      )}>
         <Button
           type="button"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-8 min-h-8 gap-1.5 rounded-md px-2.5 text-xs font-semibold shadow-sm"
+            ? "h-8 min-h-8 min-w-[5.25rem] gap-1.5 rounded-md px-2.5 text-xs font-semibold shadow-none disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
           onClick={() => void submitPunch("in")}
         >
           {busyAction === "in" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
-            <ArrowEnter16Regular aria-hidden="true" />
+            <ArrowEnter16Regular className="size-4" aria-hidden="true" />
           )}
           {busyAction === "in" ? "Checking in…" : "Check in"}
         </Button>
@@ -526,15 +527,15 @@ export function AttendancePunchActions({
           variant="outline"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-8 min-h-8 gap-1.5 rounded-md border-border bg-background px-2.5 text-xs font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5"
+            ? "h-8 min-h-8 min-w-[5.5rem] gap-1.5 rounded-md border-border/70 bg-background px-2.5 text-xs font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5 disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
           onClick={() => void submitPunch("out")}
         >
           {busyAction === "out" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
-            <ArrowExit16Regular aria-hidden="true" />
+            <ArrowExit16Regular className="size-4" aria-hidden="true" />
           )}
           {busyAction === "out" ? "Checking out…" : "Check out"}
         </Button>

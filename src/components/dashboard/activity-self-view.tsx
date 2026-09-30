@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -220,7 +221,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
             onClick={() => void load()}
             disabled={mounted ? loading : undefined}
           >
-            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -261,7 +262,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {loading && !todayReport ? (
             <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading today&apos;s report...
             </div>
           ) : todayReport ? (
@@ -358,7 +359,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {loading && reports.length === 0 ? (
             <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading your reports...
             </div>
           ) : reports.length === 0 ? (
@@ -502,7 +503,7 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           </div>
           <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

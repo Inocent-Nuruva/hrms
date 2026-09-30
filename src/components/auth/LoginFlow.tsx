@@ -43,6 +43,16 @@ function isValidTwoFactorCode(value: string) {
   return /^(\d{6}|[A-Fa-f0-9]{10}|[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5})$/.test(value.trim());
 }
 
+function readableAuthError(error: unknown, fallback: string) {
+  if (error instanceof TypeError && /fetch|network/i.test(error.message)) {
+    return "We couldn’t connect to the sign-in service. Check your connection and try again.";
+  }
+  if (error instanceof Error && /failed to fetch|network request failed/i.test(error.message)) {
+    return "We couldn’t connect to the sign-in service. Check your connection and try again.";
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowProps) {
   const homePath = safeNextPath(nextPath)
   const [email, setEmail] = useState(defaultEmail);
@@ -205,7 +215,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.scope,
       );
     } catch (err) {
-      showCredentialError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      showCredentialError(readableAuthError(err, "We couldn’t sign you in. Please try again."));
     }
   };
 
@@ -241,7 +251,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       );
     } catch (err) {
       setErrorField("code");
-      setLoginError(err instanceof Error ? err.message : "2FA verification failed. Please try again.");
+      setLoginError(readableAuthError(err, "We couldn’t verify your code. Please try again."));
     }
   };
 

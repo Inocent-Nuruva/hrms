@@ -1,16 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import {
-  BarChart3Icon,
-  DownloadIcon,
-  FileSpreadsheetIcon,
-  Loader2Icon,
-  PlayIcon,
-  SaveIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { BarChart3Icon, DownloadIcon, FileSpreadsheetIcon, PlayIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -800,11 +793,11 @@ export function ReportsAnalyticsView() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               <Button type="button" onClick={() => void runOperational()} disabled={running || loading || !selectedOperationalCode}>
-                {running ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <PlayIcon data-icon="inline-start" />}
+                {running ? <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" /> : <PlayIcon data-icon="inline-start" />}
                 Run report
               </Button>
               <Button type="button" variant="outline" onClick={() => void exportOperational()} disabled={exporting || loading || !selectedOperationalCode}>
-                {exporting ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <DownloadIcon data-icon="inline-start" />}
+                {exporting ? <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" /> : <DownloadIcon data-icon="inline-start" />}
                 Export {outputFormat}
               </Button>
             </div>
@@ -943,11 +936,11 @@ export function ReportsAnalyticsView() {
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={() => void runPreview()} disabled={running || loading}>
-                {running ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <PlayIcon data-icon="inline-start" />}
+                {running ? <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" /> : <PlayIcon data-icon="inline-start" />}
                 Preview
               </Button>
               <Button type="button" variant="outline" onClick={() => void exportCurrentReport()} disabled={exporting || loading}>
-                {exporting ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <DownloadIcon data-icon="inline-start" />}
+                {exporting ? <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" /> : <DownloadIcon data-icon="inline-start" />}
                 Export {outputFormat}
               </Button>
             </div>
@@ -1009,7 +1002,7 @@ export function ReportsAnalyticsView() {
                   </Field>
                 ) : null}
                 <Button type="button" variant="outline" onClick={() => void saveCurrentReport()} disabled={saving}>
-                  {saving ? <Loader2Icon data-icon="inline-start" className="animate-spin" /> : <SaveIcon data-icon="inline-start" />}
+                  {saving ? <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" /> : <SaveIcon data-icon="inline-start" />}
                   {editingSavedId ? "Update report" : "Save report"}
                 </Button>
                 {editingSavedId ? (
@@ -1061,7 +1054,7 @@ export function ReportsAnalyticsView() {
                         aria-label="Delete saved report"
                       >
                         {deletingSavedId === id ? (
-                          <Loader2Icon className="size-4 animate-spin" />
+                          <FluentLoadingIndicator className="size-4 animate-spin" />
                         ) : (
                           <Trash2Icon className="size-4" />
                         )}

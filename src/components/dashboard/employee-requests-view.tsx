@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -635,7 +636,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               disabled={busyId === `onboarding-${actionId}`}
               onClick={() => void completeAssignedOnboardingTask(row)}
             >
-              {busyId === `onboarding-${actionId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Mark done"}
+              {busyId === `onboarding-${actionId}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Mark done"}
             </button>
           )
         },
@@ -695,7 +696,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               onClick={() => void load()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "documents" ? (
@@ -764,7 +765,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             }}
             disabled={saving}
           >
-            {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Send to HR"}
+            {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Send to HR"}
           </button>
         </div>
       ) : (
@@ -928,7 +929,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               Cancel
             </button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
             </button>
           </DialogFooter>
         </DialogPopup>

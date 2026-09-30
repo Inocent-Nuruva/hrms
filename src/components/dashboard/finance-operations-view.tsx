@@ -1,9 +1,10 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
-import { Loader2Icon, PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
@@ -1147,7 +1148,7 @@ export function FinanceOperationsView({
                 disabled={loading}
               >
                 {loading ? (
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                 ) : (
                   <RefreshCwIcon className="size-4" />
                 )}
@@ -1214,7 +1215,7 @@ export function FinanceOperationsView({
               disabled={loading}
             >
               {loading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -1342,7 +1343,7 @@ export function FinanceOperationsView({
                   disabled={reportLoading}
                 >
                   {reportLoading ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : (
                     <RefreshCwIcon className="size-4" />
                   )}
@@ -1350,7 +1351,7 @@ export function FinanceOperationsView({
                 </button>
                 <label className={`${secondaryButtonClass} cursor-pointer`}>
                   {importingPayments ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : (
                     <UploadIcon className="size-4" />
                   )}
@@ -1374,7 +1375,7 @@ export function FinanceOperationsView({
                   disabled={postingAccounting}
                 >
                   {postingAccounting ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : null}
                   Post ERP
                 </button>
@@ -1633,7 +1634,7 @@ export function FinanceOperationsView({
                   <div className="divide-y divide-border">
                     {applicationLoading ? (
                       <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                        <Loader2Icon className="size-4 animate-spin" /> Loading
+                        <FluentLoadingIndicator className="size-4 animate-spin" /> Loading
                         documents
                       </div>
                     ) : applicationDocuments.length ? (
@@ -1868,7 +1869,7 @@ export function FinanceOperationsView({
               disabled={!applicationDetail || applicationLoading}
             >
               {applicationLoading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -2043,7 +2044,7 @@ export function FinanceOperationsView({
                       Installment schedule
                     </h3>
                     {accountLoading ? (
-                      <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                      <FluentLoadingIndicator className="size-4 animate-spin text-muted-foreground" />
                     ) : null}
                   </div>
                   <div className="max-h-80 overflow-auto">
@@ -2385,7 +2386,7 @@ export function FinanceOperationsView({
               disabled={!accountDetail || accountLoading}
             >
               {accountLoading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -2820,7 +2821,7 @@ export function FinanceOperationsView({
               disabled={saving}
             >
               {saving ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 "Save"
               )}

@@ -1,8 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, Loader2Icon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
@@ -887,7 +888,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               disabled={syncingGroup}
             >
-              {syncingGroup ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
+              {syncingGroup ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
               {syncingGroup ? "Syncing..." : "Sync Group"}
             </button>
             <button

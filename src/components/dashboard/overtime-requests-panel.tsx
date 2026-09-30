@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CheckIcon, Loader2Icon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
+import { CheckIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -135,7 +136,7 @@ export function OvertimeRequestsPanel({ token }: { token: string | null }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Overtime</h2>
         <button type="button" title="Refresh overtime requests" aria-label="Refresh overtime requests" onClick={() => void load()} disabled={loading || !token} className="inline-flex size-9 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50">
-          {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+          {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
         </button>
       </div>
 
@@ -159,7 +160,7 @@ export function OvertimeRequestsPanel({ token }: { token: string | null }) {
           <label className="grid gap-1 text-sm"><span>Minutes</span><input type="number" required min={1} max={1440} step={1} value={requestedMinutes} onChange={(event) => setRequestedMinutes(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
           <label className="grid gap-1 text-sm"><span>Reason</span><input type="text" required maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
           <button type="submit" disabled={saving || !token} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            {saving ? <Loader2Icon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />} Request
+            {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PlusIcon className="size-4" />} Request
           </button>
         </form>
       ) : null}

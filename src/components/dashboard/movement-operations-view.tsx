@@ -1,15 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import {
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -699,7 +694,7 @@ export function MovementOperationsView({
                       onClick={() => void openEdit(row)}
                     >
                       {busyId === `edit-${id}` ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
+                        <FluentLoadingIndicator className="size-3.5 animate-spin" />
                       ) : (
                         <PencilIcon className="size-3.5" />
                       )}
@@ -714,7 +709,7 @@ export function MovementOperationsView({
                       onClick={() => void deleteMovement(row)}
                     >
                       {busyId === `delete-${id}` ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
+                        <FluentLoadingIndicator className="size-3.5 animate-spin" />
                       ) : (
                         <Trash2Icon className="size-3.5" />
                       )}
@@ -782,7 +777,7 @@ export function MovementOperationsView({
                   onClick={() => void generateLetter(row)}
                 >
                   {busyId === `letter-${id}` ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : null}
                   Generate letter
                 </button>
@@ -901,7 +896,7 @@ export function MovementOperationsView({
                 disabled={loading}
               >
                 {loading ? (
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                 ) : (
                   <RefreshCwIcon className="size-4" />
                 )}
@@ -1037,7 +1032,7 @@ export function MovementOperationsView({
               disabled={loading}
             >
               {loading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -1554,7 +1549,7 @@ export function MovementOperationsView({
               disabled={saving}
             >
               {saving ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 "Save"
               )}

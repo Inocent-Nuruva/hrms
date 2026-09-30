@@ -1,9 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { CheckCircle2, Filter, Loader2, RefreshCw, XCircle } from "lucide-react"
-
+import { CheckCircle2, Filter, RefreshCw, XCircle } from "lucide-react";
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -1231,7 +1231,7 @@ export function HrAttendanceCorrectionApprovalsView() {
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
             {detailLoading && !activeRequest ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-xs text-muted-foreground">
-                <Loader2 className="size-5 animate-spin text-primary" />
+                <FluentLoadingIndicator className="size-5 animate-spin text-primary" />
                 Loading request details…
               </div>
             ) : null}
@@ -1240,7 +1240,7 @@ export function HrAttendanceCorrectionApprovalsView() {
               <>
                 {detailLoading ? (
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" />
+                    <FluentLoadingIndicator className="size-3 animate-spin" />
                     Refreshing details…
                   </div>
                 ) : null}
@@ -1366,7 +1366,7 @@ export function HrAttendanceCorrectionApprovalsView() {
                 disabled={statusMeta.terminal || actionLoading !== null}
               >
                 {actionLoading === "approve" ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <CheckCircle2 className="size-3.5" />
                 )}
@@ -1379,7 +1379,7 @@ export function HrAttendanceCorrectionApprovalsView() {
                 disabled={statusMeta.terminal || actionLoading !== null}
               >
                 {actionLoading === "reject" ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <XCircle className="size-3.5" />
                 )}

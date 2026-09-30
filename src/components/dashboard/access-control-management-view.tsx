@@ -1,18 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import {
-  DoorOpenIcon,
-  DownloadIcon,
-  EyeIcon,
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-  UploadIcon,
-} from "lucide-react"
+import { DoorOpenIcon, DownloadIcon, EyeIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import {
   Dialog,
   DialogDescription,
@@ -1610,7 +1601,7 @@ export function AccessControlManagementView({
                   title={activeSection === "week-plans" ? "Pull week plans from device" : "Pull templates from device"}
                 >
                   {syncing ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <DownloadIcon className="h-3.5 w-3.5" />
                   )}
@@ -1842,7 +1833,7 @@ export function AccessControlManagementView({
               disabled={Boolean(doorBusy)}
               onClick={() => void onDoorCommand("sync")}
             >
-              {doorBusy === "sync" ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {doorBusy === "sync" ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
               {doorBusy === "sync" ? "Syncing…" : "Sync to device"}
             </button>
             <button
@@ -1924,7 +1915,7 @@ export function AccessControlManagementView({
               disabled={syncing || !syncToDeviceId}
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95 disabled:opacity-60"
             >
-              {syncing ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {syncing ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
               {syncing ? "Syncing…" : "Sync to device"}
             </button>
           </DialogFooter>

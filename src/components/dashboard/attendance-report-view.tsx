@@ -1,21 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import {
-  CalendarClockIcon,
-  ChevronDownIcon,
-  DownloadIcon,
-  FileSpreadsheetIcon,
-  Loader2Icon,
-  MailIcon,
-  PlayIcon,
-  RefreshCwIcon,
-  ScaleIcon,
-  ScrollTextIcon,
-  XIcon,
-} from "lucide-react"
+  CalendarClockIcon, ChevronDownIcon, DownloadIcon, FileSpreadsheetIcon, MailIcon, PlayIcon, RefreshCwIcon, ScaleIcon, ScrollTextIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -952,7 +942,7 @@ function AttendanceReportDialog({
           <Button type="button" onClick={handleDownload} disabled={downloading || loading}>
             {downloading ? (
               <>
-                <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                 Downloading…
               </>
             ) : (
@@ -1987,7 +1977,7 @@ export function AttendanceReportView() {
                           disabled={runningStatutory}
                         >
                           {runningStatutory ? (
-                            <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                            <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                           ) : (
                             <ScrollTextIcon data-icon="inline-start" />
                           )}
@@ -2001,7 +1991,7 @@ export function AttendanceReportView() {
                           disabled={reconciling}
                         >
                           {reconciling ? (
-                            <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                            <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                           ) : (
                             <ScaleIcon data-icon="inline-start" />
                           )}
@@ -2020,7 +2010,7 @@ export function AttendanceReportView() {
               </p>
               <Button type="button" onClick={() => void onRunCustomReport()} disabled={runningCustom}>
                 {runningCustom ? (
-                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                  <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                 ) : (
                   <PlayIcon data-icon="inline-start" />
                 )}
@@ -2028,7 +2018,7 @@ export function AttendanceReportView() {
               </Button>
               <Button type="button" variant="outline" onClick={() => void onExportReport()} disabled={exporting}>
                 {exporting ? (
-                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                  <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                 ) : (
                   <DownloadIcon data-icon="inline-start" />
                 )}
@@ -2041,7 +2031,7 @@ export function AttendanceReportView() {
                 disabled={isRefreshingDataset || !datasetCode.trim()}
               >
                 {isRefreshingDataset ? (
-                  <Loader2Icon data-icon="inline-start" className="animate-spin" />
+                  <FluentLoadingIndicator data-icon="inline-start" className="animate-spin" />
                 ) : (
                   <RefreshCwIcon data-icon="inline-start" />
                 )}

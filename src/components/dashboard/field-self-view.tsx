@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -313,7 +314,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `cancel-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Cancel"}
+                  {busyId === `cancel-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Cancel"}
                 </button>
               </div>
             )
@@ -359,7 +360,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           return (
             <div className="flex flex-wrap gap-1">
               <button type="button" className={actionButtonClass} disabled={busyId === `in-${id}`} onClick={(event) => { event.stopPropagation(); void onCheckIn(row) }}>
-                {busyId === `in-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Check in"}
+                {busyId === `in-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Check in"}
               </button>
               <button type="button" className={actionButtonClass} onClick={(event) => {
                 event.stopPropagation()
@@ -397,7 +398,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           actions={
             <div className="flex flex-wrap gap-2">
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
               <button type="button" className={actionButtonClass} onClick={() => {
@@ -421,7 +422,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>
@@ -587,7 +588,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           </div>
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

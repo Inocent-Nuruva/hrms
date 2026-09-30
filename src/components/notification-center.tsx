@@ -1,5 +1,6 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -21,8 +22,6 @@ import {
 } from "@fluentui/react-icons"
 import { Card, Field } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
-import { LoaderCircle } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -592,7 +591,7 @@ export function NotificationCenter({
                 aria-label="Mark all notifications as read"
               >
                 {markingAll ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <CheckCheck className="size-4" />
                 )}
@@ -612,7 +611,7 @@ export function NotificationCenter({
                 aria-label="Archive all notifications"
               >
                 {clearingAll ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <Archive className="size-4" />
                 )}
@@ -890,7 +889,7 @@ export function NotificationCenter({
                         onClick={(event) => event.stopPropagation()}
                       >
                         {busy ? (
-                          <LoaderCircle className="mx-1 h-3.5 w-3.5 animate-spin text-primary" />
+                          <FluentLoadingIndicator className="mx-1 h-3.5 w-3.5 animate-spin text-primary" />
                         ) : null}
                         <Button
                           type="button"

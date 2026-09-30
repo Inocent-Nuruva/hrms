@@ -7,25 +7,23 @@ import {
   ArrowDownload20Regular,
   ArrowSync20Regular,
   CalendarClock24Color,
+  CalendarLtr20Regular,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
   Copy20Regular,
+  Delete16Regular,
   Filter20Regular,
+  LockClosed16Regular,
+  PeopleTeam24Regular,
+  ReOrderDotsVertical20Regular,
+  Settings20Regular,
 } from "@fluentui/react-icons"
-import {
-  CalendarDaysIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  GripVerticalIcon,
-  LockKeyholeIcon,
-  PlusIcon,
-  Settings2Icon,
-  Trash2Icon,
-  UsersIcon,
-} from "lucide-react"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -506,7 +504,7 @@ function ScheduleCell({
                 }}
                 onKeyDown={(event) => event.stopPropagation()}
               >
-                <Trash2Icon className="size-3.5" />
+                <Delete16Regular className="size-3.5" />
               </button>
             ) : null}
           </span>
@@ -528,7 +526,7 @@ function ScheduleCell({
           title="Shifts cannot be assigned to previous days."
           aria-label={`${date} is locked because it is in the past`}
         >
-          <LockKeyholeIcon className="size-3" aria-hidden />
+          <LockClosed16Regular className="size-3" aria-hidden />
         </div>
       )
     }
@@ -555,7 +553,7 @@ function ScheduleCell({
             onCreate({ employeeId, scheduleDate: date })
           }}
         >
-          <PlusIcon className="size-3.5" />
+          <Add20Regular className="size-3.5" />
         </button>
       </div>
     )
@@ -599,10 +597,10 @@ function ScheduleCell({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <Trash2Icon className="size-3.5" />
+            <Delete16Regular className="size-3.5" />
           </button>
         ) : isPastDate ? (
-          <LockKeyholeIcon className="absolute right-2 top-2 size-3 text-muted-foreground/55" aria-hidden />
+          <LockClosed16Regular className="absolute right-2 top-2 size-3 text-muted-foreground/55" aria-hidden />
         ) : null}
       </div>
     )
@@ -643,12 +641,12 @@ function ScheduleCell({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <Trash2Icon className="size-3.5" />
+            <Delete16Regular className="size-3.5" />
           </button>
         ) : isPastDate ? (
-          <LockKeyholeIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground/55" aria-hidden />
+          <LockClosed16Regular className="mt-0.5 size-3 shrink-0 text-muted-foreground/55" aria-hidden />
         ) : (
-          <GripVerticalIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+          <ReOrderDotsVertical20Regular className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
         )}
       </div>
       {shift?.startTime || shift?.endTime ? (
@@ -679,6 +677,7 @@ export function ShiftWeeklyScheduler({
   const [viewMode, setViewMode] = React.useState<RosterViewMode>("employee")
   const [departmentFilter, setDepartmentFilter] = React.useState(ALL_DEPARTMENTS_VALUE)
   const [designationFilter, setDesignationFilter] = React.useState(ALL_DESIGNATIONS_VALUE)
+  const [employeeSearch, setEmployeeSearch] = React.useState("")
   const weekDays = React.useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
   const weekEnd = weekDays[6]
   const isCurrentWeek = dateKey(weekStart) === dateKey(mondayFor(new Date()))
@@ -696,11 +695,23 @@ export function ShiftWeeklyScheduler({
     [employeeViews]
   )
   const filteredEmployeeViews = React.useMemo(
-    () => employeeViews.filter((employee) =>
-      (departmentFilter === ALL_DEPARTMENTS_VALUE || employee.department === departmentFilter)
-      && (designationFilter === ALL_DESIGNATIONS_VALUE || employee.designation === designationFilter)
-    ),
-    [departmentFilter, designationFilter, employeeViews]
+    () => {
+      const query = employeeSearch.trim().toLocaleLowerCase()
+      return employeeViews.filter((employee) => {
+        const matchesSearch = !query || [
+          employee.name,
+          employee.code,
+          employee.department,
+          employee.designation,
+          employee.team,
+        ].some((value) => value.toLocaleLowerCase().includes(query))
+
+        return matchesSearch
+          && (departmentFilter === ALL_DEPARTMENTS_VALUE || employee.department === departmentFilter)
+          && (designationFilter === ALL_DESIGNATIONS_VALUE || employee.designation === designationFilter)
+      })
+    },
+    [departmentFilter, designationFilter, employeeSearch, employeeViews]
   )
   const shiftsById = React.useMemo(() => new Map(shiftViews.map((shift) => [shift.id, shift])), [shiftViews])
   const visibleDateKeys = React.useMemo(() => new Set(weekDays.map(dateKey)), [weekDays])
@@ -854,14 +865,14 @@ export function ShiftWeeklyScheduler({
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
             <div className="flex h-9 items-center justify-between gap-1 rounded-lg border border-border bg-background p-1 sm:justify-start">
               <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" aria-label="Previous week" title="Previous week" onClick={() => setWeekStart((current) => addDays(current, -7))}>
-                <ChevronLeftIcon data-icon="inline-start" />
+                <ChevronLeft20Regular />
               </Button>
               <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1 text-xs font-semibold text-foreground sm:min-w-48">
-                <CalendarDaysIcon className="hidden size-4 shrink-0 text-primary sm:block" />
+                <CalendarLtr20Regular className="hidden size-4 shrink-0 text-primary sm:block" />
                 <span className="truncate">{formatLongRange(weekStart, weekEnd)}</span>
               </div>
               <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" aria-label="Next week" title="Next week" onClick={() => setWeekStart((current) => addDays(current, 7))}>
-                <ChevronRightIcon data-icon="inline-start" />
+                <ChevronRight20Regular />
               </Button>
             </div>
             {!isCurrentWeek ? (
@@ -892,6 +903,14 @@ export function ShiftWeeklyScheduler({
           <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             <Filter20Regular className="size-3.5" /> Filters
           </span>
+          <Input
+            type="search"
+            value={employeeSearch}
+            onChange={(event) => setEmployeeSearch(event.target.value)}
+            placeholder="Search employees"
+            className="w-full bg-background sm:w-44"
+            aria-label="Search employees by name, employee number, department, designation, or team"
+          />
           <Select value={designationFilter} onValueChange={(value) => setDesignationFilter(value || ALL_DESIGNATIONS_VALUE)}>
             <SelectTrigger size="sm" className="w-full bg-background sm:w-44" aria-label="Filter by designation">
               <SelectValue placeholder={ALL_DESIGNATIONS_VALUE} />
@@ -995,7 +1014,7 @@ export function ShiftWeeklyScheduler({
               </div>
             ) : groupedEmployees.length === 0 ? (
               <div className="flex min-h-60 flex-col items-center justify-center px-6 text-center">
-                <UsersIcon className="size-8 text-muted-foreground/50" />
+                <PeopleTeam24Regular className="size-8 text-muted-foreground/50" />
                 <p className="mt-3 text-sm font-semibold text-foreground">No employees available</p>
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">Employees will appear here once they are available for shift scheduling.</p>
               </div>
@@ -1073,7 +1092,7 @@ export function ShiftWeeklyScheduler({
                 href="/dashboard/attendance/shifts"
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Settings2Icon className="size-3" />
+                <Settings20Regular className="size-3" />
                 Manage
               </Link>
             </div>
@@ -1109,7 +1128,7 @@ export function ShiftWeeklyScheduler({
                   ) : null}
                   {!shift.active ? <span className="mt-0.5 block text-[9px] font-medium text-muted-foreground">Inactive</span> : null}
                 </span>
-                <GripVerticalIcon className="size-4 shrink-0 text-muted-foreground" />
+                <ReOrderDotsVertical20Regular className="size-4 shrink-0 text-muted-foreground" />
               </button>
             ))}
           </div>

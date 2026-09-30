@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -301,7 +302,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
             description="Open visits, exceptions, and the parties your team is covering."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -330,7 +331,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "parties" ? (
@@ -462,7 +463,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
           </div>
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

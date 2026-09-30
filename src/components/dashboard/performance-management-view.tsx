@@ -1,19 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import {
-  CalendarDaysIcon,
-  CheckCircle2Icon,
-  Clock3Icon,
-  GaugeIcon,
-  ListChecksIcon,
-  Loader2Icon,
-  PlusIcon,
-  RefreshCwIcon,
-  SlidersHorizontalIcon,
-} from "lucide-react"
+  CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon } from "lucide-react";
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -1155,7 +1147,7 @@ export function PerformanceManagementView({
                       }, `${format.toUpperCase()} export downloaded.`)
                     }}
                   >
-                    {busyId === `${code}-${format}` ? <Loader2Icon className="size-3.5 animate-spin" /> : format.toUpperCase()}
+                    {busyId === `${code}-${format}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : format.toUpperCase()}
                   </button>
                 ))}
               </div>
@@ -1295,7 +1287,7 @@ export function PerformanceManagementView({
                       void runAction(`activate-${id}`, (token) => activatePerformancePeriod(token, id), "Performance period activated.")
                     }}
                   >
-                    {busyId === `activate-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Activate"}
+                    {busyId === `activate-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Activate"}
                   </button>
                 ) : null}
                 {canClosePeriod && !["DRAFT", "LOCKED", "CANCELLED"].includes(status) ? (
@@ -1308,7 +1300,7 @@ export function PerformanceManagementView({
                       void runAction(`close-period-${id}`, (token) => closePerformancePeriod(token, id), "Performance period closed.")
                     }}
                   >
-                    {busyId === `close-period-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Close"}
+                    {busyId === `close-period-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Close"}
                   </button>
                 ) : null}
                 <button
@@ -1320,7 +1312,7 @@ export function PerformanceManagementView({
                     void runAction(`close-${id}`, (token) => closePerformanceImprovementPlan(token, id), "Improvement plan closed.")
                   }}
                 >
-                  {busyId === `close-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Close"}
+                  {busyId === `close-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Close"}
                 </button>
                 <button
                   type="button"
@@ -1463,7 +1455,7 @@ export function PerformanceManagementView({
                     void runAction(`gen-${id}`, (token) => generatePerformancePeriods(token, id), "Periods generated.")
                   }}
                 >
-                  {busyId === `gen-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Generate periods"}
+                  {busyId === `gen-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Generate periods"}
                 </button>
                 <button
                   type="button"
@@ -1478,7 +1470,7 @@ export function PerformanceManagementView({
                     )
                   }}
                 >
-                  {busyId === `agg-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Aggregates"}
+                  {busyId === `agg-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Aggregates"}
                 </button>
               </div>
             )
@@ -1529,7 +1521,7 @@ export function PerformanceManagementView({
                     void runAction(`assign-${id}`, (token) => createPerformancePeriodAssignments(token, id), "Assignments created.")
                   }}
                 >
-                  {busyId === `assign-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Assign"}
+                  {busyId === `assign-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Assign"}
                 </button>
                 <button
                   type="button"
@@ -1540,7 +1532,7 @@ export function PerformanceManagementView({
                     void runAction(`sync-${id}`, (token) => syncPerformanceSystemKpis(token, id), "System KPIs synced.")
                   }}
                 >
-                  {busyId === `sync-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Sync KPIs"}
+                  {busyId === `sync-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Sync KPIs"}
                 </button>
               </div>
             )
@@ -1716,7 +1708,7 @@ export function PerformanceManagementView({
                 />
               </label>
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             </div>
@@ -1912,7 +1904,7 @@ export function PerformanceManagementView({
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "setup" && canCreatePerformance ? (
@@ -2457,7 +2449,7 @@ export function PerformanceManagementView({
               Cancel
             </button>
             <button type="button" className={primaryButtonClass} onClick={() => void onCreate()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}
             </button>
           </DialogFooter>
         </DialogPopup>

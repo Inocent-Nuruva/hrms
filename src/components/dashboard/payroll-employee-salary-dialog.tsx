@@ -1,8 +1,9 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import * as React from "react";
-import { Loader2Icon } from "lucide-react";
+
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
@@ -286,7 +287,7 @@ export function PayrollEmployeeSalaryDialog({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {loading && !salary ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading salary…
             </div>
           ) : null}
@@ -598,7 +599,7 @@ export function PayrollEmployeeSalaryDialog({
               disabled={saving}
               onClick={() => void onAssign()}
             >
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               Assign salary
             </button>
           ) : null}

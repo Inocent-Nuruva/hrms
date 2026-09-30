@@ -1,16 +1,11 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
 import {
-  CheckIcon,
-  Loader2Icon,
-  PlusIcon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  XIcon,
-} from "lucide-react";
+  CheckIcon, PlusIcon, RefreshCwIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
@@ -561,7 +556,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
             disabled={loading}
           >
             {loading ? (
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
             ) : (
               <RefreshCwIcon className="size-4" />
             )}{" "}
@@ -851,7 +846,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               disabled={saving}
             >
               {saving ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 "Save"
               )}

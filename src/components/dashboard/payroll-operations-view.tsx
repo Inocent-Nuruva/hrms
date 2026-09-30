@@ -1,9 +1,10 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/fluent-toast-store";
 
@@ -2517,7 +2518,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {processingRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Process"
                     )}
@@ -2548,7 +2549,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {lockingRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Lock"
                     )}
@@ -2564,7 +2565,7 @@ export function PayrollOperationsView() {
                   }}
                 >
                   {validatingRunId === id ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : (
                     "Validate"
                   )}
@@ -2582,7 +2583,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {payslipRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Payslips"
                     )}
@@ -2599,7 +2600,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {bankingRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Bank file"
                     )}
@@ -2616,7 +2617,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {reconcilingRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Reconcile"
                     )}
@@ -2632,7 +2633,7 @@ export function PayrollOperationsView() {
                   }}
                 >
                   {journalRunId === id ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : (
                     "Journals"
                   )}
@@ -2648,7 +2649,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {paidRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Paid"
                     )}
@@ -2665,7 +2666,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {closingRunId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Close"
                     )}
@@ -2770,7 +2771,7 @@ export function PayrollOperationsView() {
                   }}
                 >
                   {approvingInputId === id ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : (
                     "Approve"
                   )}
@@ -2869,7 +2870,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {sourceActionId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Approve"
                     )}
@@ -2886,7 +2887,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {sourceActionId === id ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Post"
                     )}
@@ -3319,7 +3320,7 @@ export function PayrollOperationsView() {
                     }}
                   >
                     {busy ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       "Activate"
                     )}
@@ -7852,7 +7853,7 @@ export function PayrollOperationsView() {
   if (!actor.ready) {
     return (
       <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-        <Loader2Icon className="size-4 animate-spin" />
+        <FluentLoadingIndicator className="size-4 animate-spin" />
         Checking payroll access…
       </div>
     );
@@ -8092,7 +8093,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onRunReconciliation()}
                 >
                   {reportBusy === "reconciliation" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Run
                 </button>
@@ -8149,7 +8150,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onRunVariance()}
                 >
                   {reportBusy === "variance" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Compare
                 </button>
@@ -8186,7 +8187,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onCalculateSettlement()}
                 >
                   {reportBusy === "settlement" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Calculate
                 </button>
@@ -8279,7 +8280,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onLoadReadiness()}
                 >
                   {reportBusy === "readiness" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Readiness
                 </button>
@@ -8290,7 +8291,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onLoadIntegrations()}
                 >
                   {reportBusy === "integrations" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Integrations
                 </button>
@@ -8301,7 +8302,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onLoadNotificationCatalog()}
                 >
                   {reportBusy === "notifications" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Notifications
                 </button>
@@ -8383,7 +8384,7 @@ export function PayrollOperationsView() {
                 onClick={() => void onRunCatalog()}
               >
                 {reportBusy === "catalog" ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
                 Catalog
               </button>
@@ -8396,7 +8397,7 @@ export function PayrollOperationsView() {
                 onClick={() => void onRunCatalogReport()}
               >
                 {reportBusy === "catalog-report" ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
                 Load
               </button>
@@ -8412,7 +8413,7 @@ export function PayrollOperationsView() {
               >
                 {reportBusy === "catalog-report" &&
                 advancedForm.reportCode === "payroll-run-reconciliation" ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
                 Reconcile run
               </button>
@@ -8510,7 +8511,7 @@ export function PayrollOperationsView() {
                   onClick={() => void onImportBankStatement()}
                 >
                   {reportBusy === "bank-import" ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
                   Import bank
                 </button>
@@ -8580,7 +8581,7 @@ export function PayrollOperationsView() {
                     onClick={() => void onExportJournal()}
                   >
                     {reportBusy === "journal-export" ? (
-                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
                     Export
                   </button>
@@ -8591,7 +8592,7 @@ export function PayrollOperationsView() {
                     onClick={() => void onPostJournal()}
                   >
                     {reportBusy === "journal-post" ? (
-                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
                     Post
                   </button>
@@ -8602,7 +8603,7 @@ export function PayrollOperationsView() {
                     onClick={() => void onReverseJournal()}
                   >
                     {reportBusy === "journal-reverse" ? (
-                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
                     Reverse
                   </button>
@@ -9439,7 +9440,7 @@ export function PayrollOperationsView() {
         footer={
           detailLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading latest details…
             </div>
           ) : null

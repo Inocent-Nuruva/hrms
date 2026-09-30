@@ -1,7 +1,8 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -137,7 +138,7 @@ export function MovementSelfView() {
             onClick={() => void load()}
             disabled={mounted ? loading : undefined}
           >
-            {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -157,7 +158,7 @@ export function MovementSelfView() {
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {loading && rows.length === 0 ? (
           <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
+            <FluentLoadingIndicator className="size-4 animate-spin" />
             Loading your movements...
           </div>
         ) : rows.length === 0 ? (
@@ -213,7 +214,7 @@ export function MovementSelfView() {
                           disabled={busyId === id}
                           onClick={() => void acknowledge(row)}
                         >
-                          {busyId === id ? <Loader2Icon className="size-4 animate-spin" /> : "Acknowledge"}
+                          {busyId === id ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Acknowledge"}
                         </button>
                       </div>
                     ) : null}

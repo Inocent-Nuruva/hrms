@@ -1,16 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import {
-  ArrowLeftIcon,
-  DownloadIcon,
-  Loader2Icon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-  UploadIcon,
-} from "lucide-react"
+import { ArrowLeftIcon, DownloadIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
@@ -653,7 +646,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                     onClick={() => void onSyncFromDevice()}
                     disabled={syncingFromDevice || !syncDeviceId}
                   >
-                    {syncingFromDevice ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <DownloadIcon className="h-4 w-4" />}
+                    {syncingFromDevice ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <DownloadIcon className="h-4 w-4" />}
                     {syncingFromDevice ? "Pulling..." : "Pull from device"}
                   </button>
                   <button
@@ -662,7 +655,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                     onClick={() => void onSyncToDevice()}
                     disabled={syncingToDevice || !syncDeviceId}
                   >
-                    {syncingToDevice ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <UploadIcon className="h-4 w-4" />}
+                    {syncingToDevice ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <UploadIcon className="h-4 w-4" />}
                     {syncingToDevice ? "Pushing..." : "Push to device"}
                   </button>
                 </div>

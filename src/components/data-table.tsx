@@ -1,5 +1,6 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "@/components/ui/fluent-toast-store";
@@ -9,125 +10,34 @@ import { cn } from "@/lib/utils";
 import { requestDashboardAccessRefresh } from "@/lib/dashboard-permissions";
 
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-} from "@/components/animate-ui/components/base/dialog";
+  Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPopup, DialogTitle, } from "@/components/animate-ui/components/base/dialog";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+  Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger, } from "@/components/ui/drawer";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import type {
-  AdminRecord,
-  AdminResourceKey,
-  SortOrder,
-  UsersQueryParams,
-} from "@/lib/admin-api";
+  AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams, } from "@/lib/admin-api";
 import {
-  RESOURCE_LABELS,
-  assignPermissionToCurrentCompanyUser,
-  assignPermissionToRole,
-  assignUserToRole,
-  assignUserAvatar,
-  disableUserTwoFactor,
-  enableUserTwoFactor,
-  readForceTwoFactor,
-  setUserForceTwoFactor,
-  extractDefaultAvatarImageUrl,
-  getPermissionById,
-  getRoleById,
-  isSelectableDefaultAvatar,
-  listAllCurrentCompanyUsers,
-  listDefaultAvatars,
-  listResource,
-  listResourcePage,
-  listRolePermissions,
-  readDefaultAvatarId,
-  listRoleUsers,
-  readTwoFactorEnabled,
-  revokePermissionFromCurrentCompanyUser,
-  revokePermissionFromRole,
-  revokeUserFromRole,
-} from "@/lib/admin-api";
+  RESOURCE_LABELS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listResourcePage, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
 import {
-  PermissionPicker,
-  canonicalizePermissionNames,
-  isPermissionSelected,
-  permissionGroupFromName,
-  permissionTokenFromAssignment,
-  toPermissionOptions,
-  type PermissionOption,
-} from "@/components/dashboard/permission-picker";
+  PermissionPicker, canonicalizePermissionNames, isPermissionSelected, permissionGroupFromName, permissionTokenFromAssignment, toPermissionOptions, type PermissionOption, } from "@/components/dashboard/permission-picker";
 import { RoleSuggestionStrip } from "@/components/dashboard/role-suggestion-strip";
 import {
-  availableRoleSuggestions,
-  resolveSuggestionPermissions,
-  type ResolvedRoleSuggestion,
-} from "@/components/dashboard/role-suggestions";
+  availableRoleSuggestions, resolveSuggestionPermissions, type ResolvedRoleSuggestion, } from "@/components/dashboard/role-suggestions";
 import {
-  CheckIcon,
-  CopyIcon,
-  EllipsisVerticalIcon,
-  ImageIcon,
-  KeyRoundIcon,
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  ShieldAlertIcon,
-  ShieldCheckIcon,
-  ShieldOffIcon,
-  Trash2Icon,
-  UsersIcon,
-  UserPlusIcon,
-  UserMinusIcon,
-} from "lucide-react";
+  CheckIcon, CopyIcon, EllipsisVerticalIcon, ImageIcon, KeyRoundIcon, PencilIcon, PlusIcon, ShieldAlertIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, UsersIcon, UserPlusIcon, UserMinusIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePublishedCompanyModules } from "@/hooks/use-company-modules";
@@ -750,7 +660,7 @@ type DetailSheetTab = "general" | "assigned" | "permissions";
 function SectionLoader({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12">
-      <Loader2Icon className="size-6 animate-spin text-primary" />
+      <FluentLoadingIndicator className="size-6 animate-spin text-primary" />
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
@@ -4316,7 +4226,7 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon
+                  <FluentLoadingIndicator
                     className="size-3.5 animate-spin"
                     data-icon="inline-start"
                   />
@@ -4454,7 +4364,7 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon
+                  <FluentLoadingIndicator
                     className="size-3.5 animate-spin"
                     data-icon="inline-start"
                   />

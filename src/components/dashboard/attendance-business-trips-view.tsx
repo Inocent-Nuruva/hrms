@@ -1,9 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { AccessSkeleton } from "@/components/ui/access-skeleton"
-import { Check, Loader2, Pencil } from "lucide-react"
-
+import { Check, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogDescription,
@@ -1058,7 +1058,7 @@ export function AttendanceBusinessTripsView() {
               onClick={() => void handleTripAction()}
               disabled={saving}
             >
-              {saving ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+              {saving ? <FluentLoadingIndicator className="mr-1 size-3.5 animate-spin" /> : null}
               {pendingAction === "submit"
                 ? "Send"
                 : pendingAction === "approve"

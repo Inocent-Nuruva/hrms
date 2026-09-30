@@ -1,14 +1,8 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import {
-  InfoIcon,
-  Loader2Icon,
-  MailIcon,
-  PhoneIcon,
-  RotateCcwIcon,
-  UserPlus2Icon,
-} from "lucide-react"
+import { InfoIcon, MailIcon, PhoneIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   Label as FluentLabel,
@@ -1296,7 +1290,7 @@ export function EmployeeInviteView() {
             appearance="primary"
             size="large"
             disabled={submitting || loading}
-            icon={submitting ? <Loader2Icon className="animate-spin" /> : <UserPlus2Icon />}
+            icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
           >
             {submitting ? "Sending…" : "Send email & SMS invitation"}
           </Button>

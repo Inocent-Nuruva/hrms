@@ -1,30 +1,30 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { motion } from "framer-motion"
-import { makeStyles, Tab, TabList } from "@fluentui/react-components"
 import {
-  ArrowLeft,
-  ArrowRightIcon,
-  CheckCircle2,
-  BriefcaseIcon,
-  Building2Icon,
-  CalendarIcon,
-  ClockIcon,
-  DownloadIcon,
-  FileTextIcon,
-  Loader2,
-  PencilIcon,
-  RefreshCwIcon,
-  UserIcon,
-  UsersIcon,
-} from "lucide-react"
-
+  Button as FluentButton,
+  Card as FluentCard,
+  CardFooter as FluentCardFooter,
+  makeStyles,
+  Tab,
+  TabList,
+  Text as FluentText,
+} from "@fluentui/react-components"
+import {
+  Briefcase20Color,
+  Building20Color,
+  Edit16Regular,
+  PeopleTeam20Color,
+  Person20Color,
+} from "@fluentui/react-icons"
+import {
+  ArrowLeft, ArrowRightIcon, CheckCircle2, BriefcaseIcon, Building2Icon, CalendarIcon, ClockIcon, DownloadIcon, FileTextIcon, PencilIcon, RefreshCwIcon, UserIcon, UsersIcon } from "lucide-react";
 import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 
-import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
@@ -3414,11 +3414,11 @@ function ProfileSummaryFieldRow({
   value: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="grid min-h-10 grid-cols-[minmax(6.5rem,0.9fr)_minmax(0,1.1fr)] items-center gap-3 py-1.5">
+      <FluentText size={100} weight="semibold" className="truncate uppercase tracking-wide text-muted-foreground">
         {label}
-      </span>
-      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words">{value}</span>
+      </FluentText>
+      <FluentText size={300} className="min-w-0 text-right text-foreground [overflow-wrap:anywhere]">{value}</FluentText>
     </div>
   )
 }
@@ -3429,34 +3429,27 @@ function ProfileSummarySection({
   icon: Icon,
   action,
   children,
-  barClassName = "bg-primary",
 }: {
   title: string
   subtitle?: string
   icon: React.ComponentType<{ className?: string }>
-  action?: React.ReactNode
+  action?: React.ReactElement | null
   children: React.ReactNode
-  barClassName?: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex">
-        <div className={cn("w-1 shrink-0", barClassName)} />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 border-r border-t border-primary/40 px-3 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <Icon className="size-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">{title}</div>
-              {subtitle ? (
-                <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>
-              ) : null}
-            </div>
+    <section className="min-w-0">
+      <div className="mb-2 flex min-h-11 min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <Icon className="size-5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <FluentText size={300} weight="semibold" className="block" truncate>{title}</FluentText>
+            {subtitle ? <FluentText size={200} className="block truncate text-muted-foreground">{subtitle}</FluentText> : null}
           </div>
-          {action}
         </div>
+        {action}
       </div>
-      <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   )
 }
 
@@ -3538,33 +3531,42 @@ function ProfileSummaryTab({
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
       <div
-        className={cn(heroPanelClass, pageBleedClass)}
-        style={{ backgroundColor: "var(--primary)" }}
+        className={cn(
+          heroPanelClass,
+          pageBleedClass,
+          "!rounded-xl border border-border/70 !bg-card !py-4 !text-foreground shadow-sm sm:!px-5",
+        )}
       >
-        <div className="relative z-10 space-y-4">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1 overflow-hidden rounded-t-xl" aria-hidden>
+          <span className="w-1/4 bg-[#f25022]" />
+          <span className="w-1/4 bg-[#7fba00]" />
+          <span className="w-1/4 bg-[#00a4ef]" />
+          <span className="w-1/4 bg-[#ffb900]" />
+        </div>
+        <div className="relative z-10 space-y-4 pt-1">
           <div className="flex min-w-0 items-start gap-3">
-            <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
+            <Avatar className="size-14 shrink-0 ring-2 ring-primary/15 md:size-16">
               {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-              <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
+              <AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">
                 {initials || "ME"}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
                   {displayName}
                 </h1>
-                <span className="text-[11px] font-semibold capitalize text-white/85">
+                <span className="inline-flex items-center rounded-full border border-primary/15 bg-primary/5 px-2 py-0.5 text-[11px] font-medium capitalize text-primary">
                   {employmentStatusLabel}
                 </span>
               </div>
               <div className="flex min-w-0 items-center gap-2">
-                <p className="min-w-0 truncate text-xs font-semibold text-white/90">{positionLabel}</p>
+                <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">{positionLabel}</p>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 shrink-0 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="h-7 shrink-0 border-border bg-background px-2.5 text-xs text-foreground hover:bg-muted"
                   onClick={() =>
                     openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
                   }
@@ -3584,10 +3586,10 @@ function ProfileSummaryTab({
               { label: "Joined", value: hireDateLabel },
             ].map((field) => (
               <div key={field.label} className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {field.label}
                 </p>
-                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
+                <p className="truncate text-xs font-semibold text-foreground">{field.value}</p>
               </div>
             ))}
           </div>
@@ -3705,18 +3707,23 @@ function ProfileSummaryTab({
         </div>
       </div>
 
-      {/* My info sections — compact bordered lists */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* One Fluent surface keeps the summary aligned without nested cards or heavy dividers. */}
+      <FluentCard
+        appearance="outline"
+        size="small"
+        className="w-full min-w-0 !gap-0 !rounded-xl !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5"
+      >
+      <div className="grid min-w-0 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
         <ProfileSummarySection
           title="Contact"
           subtitle="Personal details"
-          icon={UserIcon}
+          icon={Person20Color}
           action={
-            <Button
+            <FluentButton
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              appearance="subtle"
+              size="small"
+              icon={<Edit16Regular />}
               onClick={() =>
                 openSectionEditor("contact-details", "Contact Details", [
                   "first_name",
@@ -3726,45 +3733,46 @@ function ProfileSummaryTab({
                 ])
               }
             >
-              <PencilIcon className="mr-1 size-3.5" />
               Edit
-            </Button>
+            </FluentButton>
           }
         >
           <ProfileSummaryFieldRow label="Email" value={email} />
           <ProfileSummaryFieldRow label="Phone" value={phone} />
           <ProfileSummaryFieldRow label="Employee ID" value={empId} />
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2">
-            <button
+          <FluentCardFooter className="mt-2 flex flex-wrap items-center gap-1 !px-0 !py-0">
+            <FluentButton
               type="button"
-              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              appearance="subtle"
+              size="small"
               onClick={() => openSectionEditor("password", "Password", ["password"])}
             >
               Change Password
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton
               type="button"
-              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              appearance="subtle"
+              size="small"
               onClick={() =>
                 openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
               }
             >
               Change Photo
-            </button>
-          </div>
+            </FluentButton>
+          </FluentCardFooter>
         </ProfileSummarySection>
 
         <ProfileSummarySection
           title="Organization"
           subtitle="Work placement"
-          icon={Building2Icon}
+          icon={Building20Color}
         >
           <ProfileSummaryFieldRow label="Branch" value={branchLabel} />
           <ProfileSummaryFieldRow label="Department" value={departmentLabel} />
           <ProfileSummaryFieldRow label="Position" value={positionLabel} />
         </ProfileSummarySection>
 
-        <ProfileSummarySection title="Reporting" subtitle="Manager chain" icon={UsersIcon}>
+        <ProfileSummarySection title="Reporting" subtitle="Manager chain" icon={PeopleTeam20Color}>
           <ProfileSummaryFieldRow label="Reports to" value={manager.name || "—"} />
           <ProfileSummaryFieldRow label="Manager no." value={manager.employeeNo || "—"} />
           <ProfileSummaryFieldRow label="Full name" value={displayName} />
@@ -3773,7 +3781,7 @@ function ProfileSummaryTab({
         <ProfileSummarySection
           title="Employment"
           subtitle="Status & tenure"
-          icon={BriefcaseIcon}
+          icon={Briefcase20Color}
         >
           <ProfileSummaryFieldRow
             label="Status"
@@ -3794,6 +3802,7 @@ function ProfileSummaryTab({
           <ProfileSummaryFieldRow label="Hired" value={hireDateLabel} />
         </ProfileSummarySection>
       </div>
+      </FluentCard>
     </div>
   )
 }
@@ -4140,6 +4149,19 @@ export function EmployeeSelfServiceProfileView() {
       return
     }
 
+    const hasChangedValue = sectionEditor.fields.some((field) => {
+      if (field === "password") return Boolean(sectionValues[field].trim())
+      if (field === "profile_photo_url") return false
+      return sectionValues[field].trim() !== baseEditorValues[field].trim()
+    })
+    if (!hasChangedValue) {
+      setSectionError(null)
+      setSectionErrorLines([])
+      setSectionEditor(null)
+      setMessage("No changes to submit.")
+      return
+    }
+
     const requestedChanges: AdminRecord = {}
     for (const field of sectionEditor.fields) {
       const nextValue = sectionValues[field].trim()
@@ -4152,10 +4174,9 @@ export function EmployeeSelfServiceProfileView() {
       if (field === "profile_photo_url") {
         continue
       }
-      if (nextValue) {
-        const apiField = field === "phone" ? "phone_number" : field
-        requestedChanges[apiField] = nextValue
-      }
+      if (nextValue === baseEditorValues[field].trim()) continue
+      const apiField = field === "phone" ? "phone_number" : field
+      requestedChanges[apiField] = nextValue
     }
     if (!Object.keys(requestedChanges).length) {
       setSectionError("Nothing to update for this section.")
@@ -4213,6 +4234,7 @@ export function EmployeeSelfServiceProfileView() {
   }, [
     profilePhotoFileName,
     profilePhotoPreviewUrl,
+    baseEditorValues,
     refresh,
     refreshMyProfilePhoto,
     sectionEditor,
@@ -4438,7 +4460,7 @@ export function EmployeeSelfServiceProfileView() {
 
       {loading ? (
         <div className="flex flex-col items-center justify-center gap-4 py-10">
-          <LumaSpin />
+          <FluentLoadingIndicator size="large" />
           <p className="text-sm text-muted-foreground">Loading your profile...</p>
         </div>
       ) : null}
@@ -4557,7 +4579,7 @@ export function EmployeeSelfServiceProfileView() {
                           </p>
                           {defaultAvatarsLoading ? (
                             <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Loader2 className="size-3.5 animate-spin" />
+                              <FluentLoadingIndicator className="size-3.5 animate-spin" />
                               Loading avatars…
                             </p>
                           ) : defaultAvatars.length === 0 ? (
@@ -4640,7 +4662,7 @@ export function EmployeeSelfServiceProfileView() {
                       selectedDefaultAvatarId == null)
                   }
                 >
-                  {sectionSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                  {sectionSaving ? <FluentLoadingIndicator className="mr-1 size-4 animate-spin" /> : null}
                   {sectionEditor?.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
                     ? selectedDefaultAvatarId != null
                       ? "Apply Avatar"
@@ -4668,7 +4690,7 @@ export function EmployeeOrganizationView() {
         <CardContent>
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-4 py-10">
-              <LumaSpin />
+              <FluentLoadingIndicator size="large" />
               <p className="text-sm text-muted-foreground">Loading organization details...</p>
             </div>
           ) : null}
@@ -4858,7 +4880,7 @@ export function EmployeePromotionView() {
             onClick={() => void loadMovements()}
             disabled={listLoading || !token}
           >
-            {listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -4901,7 +4923,7 @@ export function EmployeePromotionView() {
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {listLoading ? (
           <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+            <FluentLoadingIndicator className="size-4 animate-spin" />
             Loading your movements…
           </div>
         ) : visibleMovements.length === 0 ? (
@@ -4975,7 +4997,7 @@ export function EmployeePromotionView() {
                         onClick={() => void handleAcknowledgeMovement(movement)}
                         disabled={isAcknowledging}
                       >
-                        {isAcknowledging ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                        {isAcknowledging ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                         Acknowledge
                       </button>
                     ) : null}
@@ -5016,7 +5038,7 @@ export function EmployeePromotionView() {
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {detailLoading ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
                 Loading movement details…
               </div>
             ) : selectedMovement ? (
@@ -5072,7 +5094,7 @@ export function EmployeePromotionView() {
                       disabled={acknowledgingId === readMovementId(selectedMovement)}
                     >
                       {acknowledgingId === readMovementId(selectedMovement) ? (
-                        <Loader2 className="size-4 animate-spin" />
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
                       ) : (
                         <CheckCircle2 className="size-4" />
                       )}
@@ -5236,7 +5258,7 @@ export function EmployeePayrollView() {
             onClick={() => void loadPayslips()}
             disabled={mounted ? listLoading || !token : undefined}
           >
-            {mounted && listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -5335,7 +5357,7 @@ export function EmployeePayrollView() {
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {listLoading ? (
           <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+            <FluentLoadingIndicator className="size-4 animate-spin" />
             Loading your payslips...
           </div>
         ) : payslips.length === 0 ? (
@@ -5389,7 +5411,7 @@ export function EmployeePayrollView() {
                       Details
                     </Button>
                     <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
-                      {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
+                      {isDownloading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
                       Download
                     </Button>
                   </div>
@@ -5423,7 +5445,7 @@ export function EmployeePayrollView() {
 
               {detailLoading ? (
                 <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                   Loading payslip details...
                 </div>
               ) : selectedPayslip ? (
@@ -5515,7 +5537,7 @@ export function EmployeePayrollView() {
                     disabled={downloadingId === readPayslipId(selectedPayslip)}
                   >
                     {downloadingId === readPayslipId(selectedPayslip) ? (
-                      <Loader2 className="size-4 animate-spin" />
+                      <FluentLoadingIndicator className="size-4 animate-spin" />
                     ) : (
                       <DownloadIcon className="size-4" />
                     )}
@@ -6083,7 +6105,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   if (loadingProfile) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-10">
-        <LumaSpin />
+        <FluentLoadingIndicator size="large" />
         <p className="text-sm text-muted-foreground">Loading your profile...</p>
       </div>
     )
@@ -6244,7 +6266,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
         {loading && requests.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading leave requests…</p>
           </div>
         ) : null}
@@ -6482,7 +6504,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         </div>
         {loading ? (
           <div className="flex items-center gap-2 py-2">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading balances...</p>
           </div>
         ) : null}
@@ -6581,7 +6603,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               onClick={() => void loadData()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           }
@@ -6602,7 +6624,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
           {loading && sortedHolidays.length === 0 ? (
             <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading holidays...
             </div>
           ) : sortedHolidays.length === 0 ? (
@@ -6658,7 +6680,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Policies</h2>
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-4">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading policies...</p>
           </div>
         ) : null}

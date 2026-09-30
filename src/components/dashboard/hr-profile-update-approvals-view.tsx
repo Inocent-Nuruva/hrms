@@ -1,20 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import {
-  ArrowRightIcon,
-  CheckCircle2,
-  FilterIcon,
-  ImageIcon,
-  InfoIcon,
-  Loader2,
-  RefreshCw,
-  UserRoundIcon,
-  XCircle,
-  XIcon,
-} from "lucide-react"
-
+  ArrowRightIcon, CheckCircle2, FilterIcon, ImageIcon, InfoIcon, RefreshCw, UserRoundIcon, XCircle, XIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -1241,7 +1231,7 @@ export function HrProfileUpdateApprovalsView() {
           <div className="max-h-[min(70vh,36rem)] space-y-5 overflow-y-auto px-5 py-4">
             {detailLoading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
                 Loading request details…
               </div>
             ) : null}
@@ -1340,7 +1330,7 @@ export function HrProfileUpdateApprovalsView() {
                       disabled={actionLoading !== null}
                     >
                       {actionLoading === "approve" ? (
-                        <Loader2 className="size-4 animate-spin" />
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
                       ) : (
                         <CheckCircle2 className="size-4" />
                       )}
@@ -1353,7 +1343,7 @@ export function HrProfileUpdateApprovalsView() {
                       disabled={actionLoading !== null}
                     >
                       {actionLoading === "reject" ? (
-                        <Loader2 className="size-4 animate-spin" />
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
                       ) : (
                         <XCircle className="size-4" />
                       )}

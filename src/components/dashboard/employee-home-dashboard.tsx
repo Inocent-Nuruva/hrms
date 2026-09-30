@@ -1,45 +1,15 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { DateInput } from "@/components/ui/date-input"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
-  CalendarIcon,
-  CalendarClockIcon,
-  ClockIcon,
-  MailIcon,
-  PhoneIcon,
-  Sparkles,
-  Users,
-  MapPin,
-  User,
-  CreditCard,
-  Landmark,
-  Target,
-  BadgeCheck,
-  Building2,
-  GraduationCap,
-  Briefcase,
-  Award,
-  FileText,
-  CheckCircle,
-  UserCheck,
-  Globe2,
-  ShieldCheck,
-  ShieldAlert,
-  MailCheck,
-  MailWarning,
-  Loader2,
-  LogIn,
-  LogOut,
-  Network,
-  Wifi,
-} from "lucide-react"
+  CalendarIcon, CalendarClockIcon, ClockIcon, MailIcon, PhoneIcon, Sparkles, Users, MapPin, User, CreditCard, Landmark, Target, BadgeCheck, Building2, GraduationCap, Briefcase, Award, FileText, CheckCircle, UserCheck, Globe2, ShieldCheck, ShieldAlert, MailCheck, MailWarning, LogIn, LogOut, Network, Wifi } from "lucide-react";
 import { countries as countryCodes } from "country-flag-icons"
 
 import { CountryFlag } from "@/components/country-flag"
-import { LumaSpin } from "@/components/ui/luma-spin"
 import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 
 
@@ -2250,7 +2220,7 @@ function NetworkCheckButton() {
           <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
             {checking ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+                <FluentLoadingIndicator className="size-6 animate-spin text-primary" aria-hidden="true" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Checking your connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -2425,7 +2395,7 @@ function AttendancePunchActions({
           onClick={() => void submitPunch("in")}
         >
           {busyAction === "in" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
             <LogIn className="size-3.5" aria-hidden="true" />
           )}
@@ -2440,7 +2410,7 @@ function AttendancePunchActions({
           onClick={() => void submitPunch("out")}
         >
           {busyAction === "out" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
             <LogOut className="size-3.5" aria-hidden="true" />
           )}
@@ -3748,7 +3718,7 @@ export function EmployeeHomeDashboard() {
     return (
       <Card className="rounded-2xl border border-border bg-card">
         <CardContent className="flex flex-col items-center justify-center gap-4 py-10">
-          <LumaSpin />
+          <FluentLoadingIndicator size="large" />
           <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
         </CardContent>
       </Card>

@@ -1,15 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  ArrowRightIcon,
-  CircleAlertIcon,
-  CircleCheckIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  WandSparklesIcon,
-} from "lucide-react"
+  ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, RefreshCwIcon, WandSparklesIcon } from "lucide-react";
 import { Field } from "@fluentui/react-components"
 
 import {
@@ -246,7 +241,7 @@ export function AttendanceSetupWizard() {
                   onClick={() => void run()}
                 >
                   {busy ? (
-                    <Loader2Icon
+                    <FluentLoadingIndicator
                       data-icon="inline-start"
                       className="animate-spin"
                     />

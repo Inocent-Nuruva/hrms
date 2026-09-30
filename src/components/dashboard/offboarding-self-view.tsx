@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { CheckIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -174,7 +175,7 @@ export function OffboardingSelfView() {
               onClick={() => void load()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           </div>
@@ -242,7 +243,7 @@ export function OffboardingSelfView() {
             </>
           ) : loading ? (
             <div className={cn("flex items-center justify-center gap-2 border-y border-border bg-card px-4 py-10 text-sm text-muted-foreground sm:border-x", pageBleedClass)}>
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading your offboarding...
             </div>
           ) : (
@@ -322,7 +323,7 @@ function ItemList({
                     disabled={busy === `${prefix}-${id}`}
                     onClick={() => onComplete(row)}
                   >
-                    {busy === `${prefix}-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Complete"}
+                    {busy === `${prefix}-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Complete"}
                   </button>
                 ) : null}
               </li>

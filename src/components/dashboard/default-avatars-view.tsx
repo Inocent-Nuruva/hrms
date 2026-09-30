@@ -1,18 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Loader2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Star,
-  Trash2,
-  UserRound,
-} from "lucide-react"
+import { ArrowLeft, CheckCircle2, Pencil, Plus, RefreshCw, Star, Trash2, UserRound } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 
@@ -426,7 +417,7 @@ export function DefaultAvatarsView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => void loadRows()} disabled={loading}>
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Refresh
             </Button>
             {canManage ? (
@@ -485,7 +476,7 @@ export function DefaultAvatarsView() {
 
           {loading && rows.length === 0 ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading avatars…
             </div>
           ) : null}
@@ -571,7 +562,7 @@ export function DefaultAvatarsView() {
                             disabled={isBusy}
                           >
                             {isBusy ? (
-                              <Loader2 className="size-3.5 animate-spin" />
+                              <FluentLoadingIndicator className="size-3.5 animate-spin" />
                             ) : (
                               <CheckCircle2 className="size-3.5" />
                             )}
@@ -741,7 +732,7 @@ export function DefaultAvatarsView() {
               Cancel
             </Button>
             <Button type="button" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               {editingId == null ? "Create" : "Save"}
             </Button>
           </DialogFooter>
@@ -770,7 +761,7 @@ export function DefaultAvatarsView() {
               onClick={() => void handleDelete()}
               disabled={busyId != null}
             >
-              {busyId != null ? <Loader2 className="size-4 animate-spin" /> : null}
+              {busyId != null ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               Delete
             </Button>
           </AlertDialogFooter>

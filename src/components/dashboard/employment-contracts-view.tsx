@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { FileText, Loader2, Plus, RefreshCw, Upload } from "lucide-react"
+import { FileText, Plus, RefreshCw, Upload } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   attachEmploymentContract,
@@ -207,7 +208,7 @@ export function EmploymentContractsView() {
         <div className="sm:col-span-2 lg:col-span-3"><Field title="Job description"><Textarea required className={fieldClass} rows={3} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
         <div className="sm:col-span-2 lg:col-span-3"><Field title="Benefits"><Textarea required className={fieldClass} rows={2} value={form.benefits ?? ""} onChange={(event) => set("benefits", event.target.value)} /></Field></div>
       </div>
-      <Button type="submit" className="mt-4" disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : null} Issue version</Button>
+      <Button type="submit" className="mt-4" disabled={busy}>{busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null} Issue version</Button>
     </form> : null}
   </div>
 }

@@ -2034,18 +2034,30 @@ export default function HrAnalyticsDashboard({
       animate="show"
     >
       <motion.header
-        className="relative mx-1 mt-2 border-b border-border/80 bg-gradient-to-r from-primary/[0.07] via-background to-background px-1 py-4 sm:mx-2 md:py-5 lg:mx-3"
+        className="relative mx-1 mt-2 overflow-hidden border-x-0 border-b border-t-0 border-slate-200 bg-white px-3 py-4 text-slate-900 shadow-none sm:mx-2 sm:px-4 md:py-5 lg:mx-3 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
         variants={motionPreset.rise}
       >
-        <div
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-primary/70 via-primary/20 to-transparent"
-        />
-        <div className="relative flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden text-sky-500/70 dark:text-sky-300/60">
+          <span className="absolute left-[29%] top-5 text-xs text-blue-400/60 dark:text-blue-200/45">✧</span>
+          <span className="absolute left-[43%] bottom-4 text-sm">✦</span>
+          <span className="absolute right-[42%] top-3 text-[10px] text-blue-400/60 dark:text-blue-200/45">✧</span>
+          <span className="absolute right-[34%] top-10 text-xs text-blue-400/70 dark:text-blue-200/50">✧</span>
+          <span className="absolute right-[26%] bottom-4 text-[10px] text-sky-400/60 dark:text-sky-200/45">✧</span>
+          <span className="absolute right-[18%] top-4 text-lg">✦</span>
+          <span className="absolute right-[8%] bottom-3 text-sm">✦</span>
+        </div>
+        <div className="relative z-10 flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <Persona
               name={userName || "Company user"}
-              secondaryText="Available"
+              primaryText={{
+                children: userName || "Company user",
+                style: { color: "var(--foreground)", fontWeight: 600 },
+              }}
+              secondaryText={{
+                children: "Available",
+                style: { color: "var(--muted-foreground)" },
+              }}
               presence={{ status: "available" }}
               avatar={{
                 color: "brand",
@@ -2055,7 +2067,7 @@ export default function HrAnalyticsDashboard({
               }}
               size="extra-large"
               textAlignment="center"
-              className="min-h-14 min-w-[11.375rem] [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__secondaryText]:text-emerald-700 dark:[&_.fui-Persona__secondaryText]:text-emerald-400"
+              className="min-h-14 min-w-[11.375rem] [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__primaryText]:!text-foreground [&_.fui-Persona__secondaryText]:!text-muted-foreground"
             />
           </div>
           <div
@@ -2066,7 +2078,7 @@ export default function HrAnalyticsDashboard({
               visibleRoleNames.map((roleName) => (
                 <span
                   key={roleName}
-                  className="inline-flex h-5 items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2 text-[9px] font-semibold text-primary"
+                  className="inline-flex h-5 items-center rounded-full border border-white/70 bg-white/60 px-2 text-[9px] font-semibold text-slate-700 shadow-sm backdrop-blur-md dark:border-white/20 dark:bg-white/10 dark:text-white"
                 >
                   {roleName}
                 </span>
@@ -2079,21 +2091,21 @@ export default function HrAnalyticsDashboard({
             {upcomingHoliday && upcomingHolidayDate ? (
               <Link
                 href="/dashboard/attendance/holidays"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-primary/15 bg-background/80 px-2.5 text-[10px] text-foreground shadow-sm transition hover:border-primary/30 hover:bg-primary/[0.05]"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/70 bg-white/60 px-2.5 text-[10px] text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
               >
-                <CalendarIcon className="size-3.5 text-primary" aria-hidden="true" />
-                <span className="text-muted-foreground">Upcoming</span>
+                <CalendarIcon className="size-3.5 text-sky-300" aria-hidden="true" />
+                <span className="text-slate-500 dark:text-white/70">Upcoming</span>
                 <span className="max-w-40 truncate font-semibold">
                   {upcomingHolidayName || "Holiday"}
                 </span>
-                <span className="text-muted-foreground">{formatDateShort(upcomingHolidayDate)}</span>
+                <span className="text-slate-500 dark:text-white/70">{formatDateShort(upcomingHolidayDate)}</span>
               </Link>
             ) : null}
             <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
               <PopoverTrigger
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/20 bg-background/80 px-2.5 text-[10px] font-semibold text-foreground shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/70 bg-white/60 px-2.5 text-[10px] font-semibold text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
                 aria-label="Filter dashboard date range"
               >
                 <FilterIcon className="size-3" aria-hidden="true" />
@@ -2151,7 +2163,7 @@ export default function HrAnalyticsDashboard({
               type="button"
               onClick={() => void fetchAll()}
               disabled={loading}
-              className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/20 bg-background/80 text-primary shadow-sm transition hover:border-primary/35 hover:bg-primary/[0.06] disabled:opacity-60"
+              className="inline-flex size-8 items-center justify-center rounded-lg border border-white/70 bg-white/60 text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 disabled:opacity-60 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
               title="Refresh"
             >
               <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />

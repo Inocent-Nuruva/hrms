@@ -1,10 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
-import { FileText, Loader2, Plus, RefreshCw, Upload } from "lucide-react"
+import { FileText, Plus, RefreshCw, Upload } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   listEmployees,
@@ -272,7 +273,7 @@ export function RecruitmentPipelineView() {
             {mode === "offer" ? <><Field title="Monthly salary (TZS)"><Input required min="1" type="number" value={form.salary ?? ""} onChange={(event) => set("salary", event.target.value)} /></Field><Field title="Start date"><DateInput required value={form.start_date ?? ""} onChange={(event) => set("start_date", event.target.value)} /></Field></> : null}
             {mode === "convert" ? <div className="sm:col-span-2"><Field title="Onboarding workflow"><FluentSelect ariaLabel="Onboarding workflow" className="w-full" value={form.onboarding_workflow_id ?? ""} placeholder="Select" onChange={(next) => set("onboarding_workflow_id", next)} options={[{ value: "", label: "Select" }, ...workflows.map((row) => ({ value: String(idOf(row)), label: value(row, "name") }))]} /></Field></div> : null}
           </div>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : null} Save</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null} Save</Button></DialogFooter>
         </form>
       </DialogPopup>
     </Dialog>

@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
+import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -587,7 +588,7 @@ export function PerformanceSelfView({
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `decline-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Decline"}
+                  {busyId === `decline-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Decline"}
                 </button>
               </div>
             )
@@ -714,7 +715,7 @@ export function PerformanceSelfView({
                     .finally(() => setBusyId(""))
                 }}
               >
-                {busyId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Acknowledge"}
+                {busyId === id ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Acknowledge"}
               </button>
             )
           },
@@ -784,7 +785,7 @@ export function PerformanceSelfView({
                 <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Find performance work" className="h-9 w-56 rounded-lg border border-border bg-muted/30 pl-9 pr-3 text-xs outline-none focus:border-primary" />
               </label>
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} Refresh
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} Refresh
               </button>
             </div>
           </header>
@@ -892,7 +893,7 @@ export function PerformanceSelfView({
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>
@@ -1001,7 +1002,7 @@ export function PerformanceSelfView({
           {taskError ? <p className="mx-4 mb-3 text-sm text-rose-600 sm:mx-6">{taskError}</p> : null}
           <div className="flex justify-end border-t border-border px-4 py-4 sm:px-6">
             <button type="button" className={primaryButtonClass} onClick={() => void saveManagerTask()} disabled={taskSaving}>
-              {taskSaving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {taskSaving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               {taskAudience === "employee" ? "Assign task" : "Create my task"}
             </button>
           </div>
@@ -1176,7 +1177,7 @@ export function PerformanceSelfView({
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setActionOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSaveAction()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Submit"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Submit"}
             </button>
           </DialogFooter>
         </DialogPopup>

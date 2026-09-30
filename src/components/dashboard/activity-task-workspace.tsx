@@ -1,28 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  CalendarDaysIcon,
-  CheckCircle2Icon,
-  CircleDotIcon,
-  Clock3Icon,
-  ClipboardListIcon,
-  Columns3Icon,
-  FileTextIcon,
-  GripVerticalIcon,
-  HistoryIcon,
-  InboxIcon,
-  ListIcon,
-  Loader2Icon,
-  MessageSquareIcon,
-  MoreHorizontalIcon,
-  PlusIcon,
-  SendIcon,
-  SlidersHorizontalIcon,
-  SparklesIcon,
-  XIcon,
-} from "lucide-react"
+  CalendarDaysIcon, CheckCircle2Icon, CircleDotIcon, Clock3Icon, ClipboardListIcon, Columns3Icon, FileTextIcon, GripVerticalIcon, HistoryIcon, InboxIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PlusIcon, SendIcon, SlidersHorizontalIcon, SparklesIcon, XIcon } from "lucide-react";
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -1134,12 +1116,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {mode === "self" && tab === "today" ? (
             <button type="button" className={secondaryButtonClass} onClick={() => void closeOnScreenDay()} disabled={submitting || todayClosed}>
-              {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+              {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
               {todayClosed ? "Today closed" : "Close today"}
             </button>
           ) : null}
           <button type="button" className={secondaryButtonClass} onClick={() => void load()}>
-            <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
+            <FluentLoadingIndicator className={loading ? "size-4 animate-spin" : "hidden"} />
             <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
           </button>
         </div>
@@ -1589,7 +1571,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                               disabled={!editable || updatingTaskId === entryIdOf(task)}
                               onClick={(event) => void toggleRowComplete(task, event)}
                             >
-                              {updatingTaskId === entryIdOf(task) ? <Loader2Icon className="size-3 animate-spin" /> : <CheckCircle2Icon className="size-3" />}
+                              {updatingTaskId === entryIdOf(task) ? <FluentLoadingIndicator className="size-3 animate-spin" /> : <CheckCircle2Icon className="size-3" />}
                             </button>
                           </div>
                         </div>
@@ -1627,7 +1609,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         )}
         {loading ? (
           <div className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" /> Loading activities...
+            <FluentLoadingIndicator className="size-4 animate-spin" /> Loading activities...
           </div>
         ) : visibleRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
@@ -1687,7 +1669,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     disabled={!editable || updatingTaskId === entryIdOf(task)}
                     onClick={(event) => void toggleRowComplete(task, event)}
                   >
-                    {updatingTaskId === entryIdOf(task) ? <Loader2Icon className="size-3 animate-spin" /> : <CheckCircle2Icon className={status === "COMPLETED" ? "size-3" : "hidden"} />}
+                    {updatingTaskId === entryIdOf(task) ? <FluentLoadingIndicator className="size-3 animate-spin" /> : <CheckCircle2Icon className={status === "COMPLETED" ? "size-3" : "hidden"} />}
                   </button>
                   <button type="button" className="min-w-0 text-left" onClick={() => void openTask(task)}>
                     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1780,7 +1762,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
               <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setScheduleTarget(null)}>Cancel</button>
               <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveSchedule()} disabled={scheduleSaving}>
-                {scheduleSaving ? <Loader2Icon className="size-4 animate-spin" /> : <Clock3Icon className="size-4" />}
+                {scheduleSaving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <Clock3Icon className="size-4" />}
                 Add to timeline
               </button>
             </div>
@@ -1983,7 +1965,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
               <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setCreateOpen(false)}>Cancel</button>
               <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveTask()} disabled={saving}>
-                {saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                 {audience === "employee" ? (employeeIds.length > 1 ? `Assign to ${employeeIds.length} people` : "Assign task") : "Create task"}
               </button>
             </div>
@@ -2074,7 +2056,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 </button>
               ) : (
                 <button type="button" className={primaryButtonClass} onClick={() => void submitReport(previewReport)} disabled={submitting || issues.length > 0}>
-                  {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                  {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                   Close {formatDate(closeDate)}
                 </button>
               )}
@@ -2140,7 +2122,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   )}
                   {mode === "self" && canCloseReport(selected) ? (
                     <button type="button" className={`${primaryButtonClass} mt-4`} onClick={() => openReportPreview(selected)} disabled={submitting}>
-                      {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+                      {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
                       Close {formatDate(reportDateOf(selected))}
                     </button>
                   ) : null}
@@ -2251,7 +2233,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                                 <CheckCircle2Icon className={item.completed ? "size-4 text-emerald-600" : "size-4 text-slate-300"} />
                               )}
                               <span className={item.completed ? "text-slate-400 line-through" : "text-slate-800"}>{readString(item, ["title"], "Checklist item")}</span>
-                              {updatingChecklistId === itemKey ? <Loader2Icon className="ml-auto size-4 animate-spin text-sky-700" /> : null}
+                              {updatingChecklistId === itemKey ? <FluentLoadingIndicator className="ml-auto size-4 animate-spin text-sky-700" /> : null}
                             </label>
                           )
                         })}
@@ -2302,7 +2284,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <div className="mt-3 flex gap-2">
                       <input className={inputClass} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a comment..." />
                       <button type="button" className={primaryButtonClass} onClick={() => void addComment()} disabled={commenting || !comment.trim()}>
-                        {commenting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                        {commenting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                       </button>
                     </div>
                   </div>

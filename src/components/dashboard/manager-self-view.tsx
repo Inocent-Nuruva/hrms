@@ -1,9 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
-
+import { RefreshCwIcon } from "lucide-react";
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
@@ -180,7 +180,7 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             description="Your dashboard, direct reports, and open action items from /api/manager."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -202,7 +202,7 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             <p className="text-sm text-muted-foreground">One backend page at a time — filters are sent on the request.</p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>

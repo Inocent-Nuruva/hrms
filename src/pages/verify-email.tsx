@@ -1,9 +1,9 @@
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Head from "next/head"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { CheckCircle2Icon, Loader2Icon, MailCheckIcon } from "lucide-react"
-
+import { CheckCircle2Icon, MailCheckIcon } from "lucide-react";
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import { BorderBeam } from "@/components/ui/border-beam"
 import { Button } from "@/components/ui/button"
@@ -134,7 +134,7 @@ export default function VerifyEmailPage() {
                 <div className="space-y-4">
                   <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                     {status === "verifying" ? (
-                      <Loader2Icon className="size-5 animate-spin" />
+                      <FluentLoadingIndicator className="size-5 animate-spin" />
                     ) : (
                       <MailCheckIcon className="size-5" />
                     )}
@@ -155,7 +155,7 @@ export default function VerifyEmailPage() {
                     <CardContent className="space-y-3 text-sm">
                       {status === "verifying" ? (
                         <div className="flex items-center gap-2 text-muted-foreground">
-                          <Loader2Icon className="size-4 animate-spin" />
+                          <FluentLoadingIndicator className="size-4 animate-spin" />
                           Verifying your email address...
                         </div>
                       ) : null}
@@ -210,7 +210,7 @@ export default function VerifyEmailPage() {
                         ) : null}
 
                         <Button type="submit" className="w-full gap-2" disabled={resendBusy}>
-                          {resendBusy ? <Loader2Icon className="size-4 animate-spin" /> : <MailCheckIcon className="size-4" />}
+                          {resendBusy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <MailCheckIcon className="size-4" />}
                           {resendBusy ? "Sending..." : "Resend verification email"}
                         </Button>
                       </form>

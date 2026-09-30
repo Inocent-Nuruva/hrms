@@ -1,6 +1,7 @@
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from 'react';
 import { useRouter } from 'next/router';
-import { FileText, Loader2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { acceptPublicRecruitmentOffer, getPublicRecruitmentOffer, type PublicRecruitmentOffer } from '@/lib/admin-api';
 import { API_BASE_URL } from '@/utils/constants';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,7 @@ export default function RecruitmentOfferPage() {
       <p className="text-sm font-medium text-muted-foreground">Employment offer</p>
       <h1 className="mt-2 text-2xl font-semibold">{accepted ? 'Offer accepted' : offer?.job_title ?? 'Review your offer'}</h1>
     </header>
-    {loading ? <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading offer</div> : null}
+    {loading ? <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><FluentLoadingIndicator className="size-4 animate-spin" /> Loading offer</div> : null}
     {!loading && offer && !accepted ? <div className="space-y-6 py-6">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-5 text-sm">
         <div><dt className="text-muted-foreground">Candidate</dt><dd className="mt-1 font-medium">{offer.candidate_name}</dd></div>
