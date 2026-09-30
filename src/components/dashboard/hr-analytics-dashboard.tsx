@@ -562,6 +562,7 @@ interface HrAnalyticsDashboardProps {
   userName?: string | null
   profilePhotoUrl?: string | null
   showLeaveRequests?: boolean
+  showHrAnalytics?: boolean
 }
 
 function AnimatedMetricValue({ value }: { value: string | number }) {
@@ -1236,6 +1237,7 @@ export default function HrAnalyticsDashboard({
   userName,
   profilePhotoUrl,
   showLeaveRequests = false,
+  showHrAnalytics = false,
 }: HrAnalyticsDashboardProps) {
   const router = useRouter()
   const actor = useDashboardActor()
@@ -2234,7 +2236,7 @@ export default function HrAnalyticsDashboard({
         </motion.div>
       ) : null}
 
-      {hrAnalyticsGroups.length > 0 ? (
+      {showHrAnalytics && hrAnalyticsGroups.length > 0 ? (
         <motion.section className="mt-6" variants={motionPreset.item}>
           <div className="mb-3">
             <h2 className="text-base font-semibold tracking-tight text-foreground">HR analytics</h2>

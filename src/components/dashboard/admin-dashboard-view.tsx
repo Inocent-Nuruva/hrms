@@ -1489,6 +1489,7 @@ export default function AdminDashboardView({
                 userName={adminName}
                 profilePhotoUrl={adminAvatar}
                 showLeaveRequests={effectiveHomeDashboardKind === "hr"}
+                showHrAnalytics={effectiveHomeDashboardKind === "hr"}
               />
             ) : null}
             <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 pt-0 pb-3 sm:px-4 md:gap-4 md:px-4 md:pb-4">
