@@ -8,6 +8,7 @@ import {
   Card as FluentCard,
   CardFooter as FluentCardFooter,
   makeStyles,
+  Persona,
   Tab,
   TabList,
   Text as FluentText,
@@ -1914,12 +1915,14 @@ function SelfServiceSectionCard({
   barClassName?: string
 }) {
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card">
+    <section className="min-w-0 max-w-full border-b border-border/60 pb-4 last:border-b-0 last:pb-0">
       <div className="flex min-w-0">
-        <div className={cn("w-1 shrink-0", barClassName)} />
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 px-3 py-2.5">
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} aria-hidden="true" />
+              {title}
+            </h3>
             {subtitle ? (
               <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
             ) : null}
@@ -1934,8 +1937,8 @@ function SelfServiceSectionCard({
           </div>
         </div>
       </div>
-      <div className="min-w-0 divide-y divide-border/70 border-t border-border/70">{children}</div>
-    </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   )
 }
 
@@ -1953,19 +1956,28 @@ function ProfileDataItem({
   badge,
   fields,
   barClassName = "bg-primary",
+  persona,
 }: {
   title?: string
   badge?: React.ReactNode
   fields: Array<{ label: string; value: React.ReactNode }>
   barClassName?: string
+  persona?: { name: string; secondaryText?: string }
 }) {
   return (
-    <div className="flex">
-      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
-      <div className="min-w-0 flex-1 px-3 py-3">
-        {title || badge ? (
+    <div className="min-w-0 border-b border-border/40 py-3 last:border-b-0">
+      <div className="min-w-0 px-3">
+        {title || badge || persona ? (
           <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-            {title ? <p className="text-sm font-semibold text-foreground">{title}</p> : <span />}
+            {persona ? (
+              <Persona
+                name={persona.name}
+                secondaryText={persona.secondaryText}
+                avatar={{ initials: persona.name.slice(0, 2).toUpperCase(), color: "colorful" }}
+                size="small"
+                className="[&_.fui-Persona__primaryText]:font-medium [&_.fui-Persona__secondaryText]:text-muted-foreground"
+              />
+            ) : title ? <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className={cn("size-1.5 rounded-full", barClassName)} aria-hidden="true" />{title}</p> : <span />}
             {badge}
           </div>
         ) : null}
@@ -2167,12 +2179,11 @@ function AssignmentSection({
   barClassName?: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <section className="min-w-0 border-b border-border/60 pb-4 last:border-b-0 last:pb-0">
       <div className="flex">
-        <div className={cn("w-1 shrink-0", barClassName)} />
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : null}
+            {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} />}
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground">{title}</h3>
               {subtitle ? (
@@ -2187,8 +2198,8 @@ function AssignmentSection({
           ) : null}
         </div>
       </div>
-      <div className="border-t border-border/70">{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   )
 }
 
@@ -2204,11 +2215,10 @@ function AssignmentItemCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex border-b border-border/70 last:border-b-0">
-      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
-      <div className="min-w-0 flex-1 px-3 py-3">
+    <div className="min-w-0 border-b border-border/40 py-3 last:border-b-0">
+      <div className="min-w-0 px-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className={cn("size-1.5 rounded-full", barClassName)} aria-hidden="true" />{title}</p>
           {badge}
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
@@ -2246,6 +2256,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
   ]
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div
       className="space-y-4"
       variants={assignmentsStagger}
@@ -2255,7 +2266,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
       {/* Snapshot chips */}
       <motion.div
         variants={assignmentsItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {snapshotChips.map((chip, index, arr) => (
           <div
@@ -2531,6 +2542,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         </AssignmentSection>
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -2545,10 +2557,11 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
   const relatives = asRecordList(employee.relatives)
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {[
           { label: "Contacts", value: contacts.length },
@@ -2585,7 +2598,10 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
                       return (
                         <ProfileDataItem
                           key={`contact-${index}`}
-                          title={readString(record, ["contact_type"], "Contact")}
+                          persona={{
+                            name: readString(record, ["contact_type"], "Contact"),
+                            secondaryText: readString(record, ["email", "phone_number", "phone"], ""),
+                          }}
                           barClassName={isPrimary ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"}
                           badge={
                             isPrimary ? (
@@ -2682,6 +2698,7 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
         />
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -2709,10 +2726,11 @@ function ProfileRecordsTab({
   }).length
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {[
           {
@@ -3056,6 +3074,7 @@ function ProfileRecordsTab({
         </motion.div>
       ) : null}
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -3125,6 +3144,7 @@ function ProfileUpdatesTab({
   ]
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div
       className="w-full min-w-0 max-w-full space-y-4"
       variants={profileTabStagger}
@@ -3163,7 +3183,7 @@ function ProfileUpdatesTab({
 
       <motion.div
         variants={profileTabItem}
-        className="flex max-w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overscroll-x-contain rounded-lg border border-border"
+        className="flex max-w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overscroll-x-contain border-b border-border/60"
       >
         {[
           { label: "All", value: String(statusCounts.total), className: "text-primary" },
@@ -3201,7 +3221,7 @@ function ProfileUpdatesTab({
 
       {/* Quick update types */}
       <motion.div variants={profileTabItem} className="min-w-0 max-w-full">
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="overflow-hidden border-b border-border/60">
           <div className="flex min-w-0">
             <div className="w-1 shrink-0 bg-primary" />
             <div className="min-w-0 flex-1 px-3 py-2.5">
@@ -3211,7 +3231,7 @@ function ProfileUpdatesTab({
               </p>
             </div>
           </div>
-          <div className="grid min-w-0 gap-0 border-t border-border/70 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-0 border-y border-border/50 sm:grid-cols-2">
             {updateActions.map((action) => (
               <button
                 key={action.key}
@@ -3346,6 +3366,7 @@ function ProfileUpdatesTab({
         </SelfServiceSectionCard>
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -3534,35 +3555,32 @@ function ProfileSummaryTab({
         className={cn(
           heroPanelClass,
           pageBleedClass,
-          "!rounded-xl border border-border/70 !bg-card !py-4 !text-foreground shadow-sm sm:!px-5",
+          "!rounded-none border border-border/70 !bg-card !py-4 !text-foreground shadow-sm sm:!px-5",
         )}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1 overflow-hidden rounded-t-xl" aria-hidden>
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1 overflow-hidden" aria-hidden>
           <span className="w-1/4 bg-[#f25022]" />
           <span className="w-1/4 bg-[#7fba00]" />
           <span className="w-1/4 bg-[#00a4ef]" />
           <span className="w-1/4 bg-[#ffb900]" />
         </div>
         <div className="relative z-10 space-y-4 pt-1">
-          <div className="flex min-w-0 items-start gap-3">
-            <Avatar className="size-14 shrink-0 ring-2 ring-primary/15 md:size-16">
-              {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-              <AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">
-                {initials || "ME"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-                  {displayName}
-                </h1>
-                <span className="inline-flex items-center rounded-full border border-primary/15 bg-primary/5 px-2 py-0.5 text-[11px] font-medium capitalize text-primary">
-                  {employmentStatusLabel}
-                </span>
-              </div>
-              <div className="flex min-w-0 items-center gap-2">
-                <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">{positionLabel}</p>
-                <Button
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <Persona
+              name={displayName}
+              secondaryText={positionLabel}
+              avatar={{
+                image: profilePhotoUrl ? { src: profilePhotoUrl, alt: displayName } : undefined,
+                initials: initials || "ME",
+              }}
+              size="large"
+              className="min-w-0 [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__secondaryText]:text-muted-foreground"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center border border-primary/15 bg-primary/5 px-2 py-0.5 text-[11px] font-medium capitalize text-primary">
+                {employmentStatusLabel}
+              </span>
+              <Button
                   type="button"
                   size="sm"
                   variant="outline"
@@ -3570,10 +3588,9 @@ function ProfileSummaryTab({
                   onClick={() =>
                     openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
                   }
-                >
-                  Change photo
-                </Button>
-              </div>
+              >
+                Change photo
+              </Button>
             </div>
           </div>
 
@@ -3597,7 +3614,7 @@ function ProfileSummaryTab({
       </div>
 
       {/* Today's attendance detail row */}
-      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+      <div className="divide-y divide-border overflow-hidden border border-border">
         <div className="flex bg-background">
           <div className={cn("w-1 shrink-0", punchTone.bar)} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
@@ -3711,7 +3728,7 @@ function ProfileSummaryTab({
       <FluentCard
         appearance="outline"
         size="small"
-        className="w-full min-w-0 !gap-0 !rounded-xl !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5"
+        className="w-full min-w-0 !gap-0 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5"
       >
       <div className="grid min-w-0 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
         <ProfileSummarySection
