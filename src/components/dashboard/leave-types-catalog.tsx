@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { Switch } from "@/components/ui/switch"
-import { ListFilter, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { ListFilter, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
+import { SearchSparkle20Regular as Search } from "@fluentui/react-icons"
 
 import { TalentDoodle, TalentDoodleSprites } from "@/components/dashboard/talent-visuals"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"

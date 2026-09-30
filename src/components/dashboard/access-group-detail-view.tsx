@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, Loader2Icon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,

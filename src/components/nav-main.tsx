@@ -14,9 +14,7 @@ import {
   tokens,
 } from "@fluentui/react-components"
 import {
-  bundleIcon,
-  Home24Filled,
-  Home24Regular,
+  Home24Color,
   type FluentIcon,
 } from "@fluentui/react-icons"
 
@@ -38,13 +36,25 @@ type NavMainItem = NavMainNode & {
 }
 
 const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
-const Home = bundleIcon(Home24Filled, Home24Regular)
+const Home = Home24Color
 
 const useStyles = makeStyles({
   nav: {
     backgroundColor: "var(--sidebar)",
     color: tokens.colorNeutralForeground1,
     fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
+  },
+  iconBadge: {
+    display: "inline-flex",
+    width: "24px",
+    height: "24px",
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    "& svg": {
+      width: "20px",
+      height: "20px",
+    },
   },
   item: {
     minHeight: "32px",
@@ -304,7 +314,7 @@ export function NavMain({
     >
       <NavItem
         value="/dashboard"
-        icon={<Home />}
+        icon={<span className={styles.iconBadge} aria-hidden="true"><Home /></span>}
         className={styles.item}
       >
         <AttentionLabel
@@ -323,7 +333,7 @@ export function NavMain({
           return (
             <NavCategory key={value} value={value}>
               <NavCategoryItem
-                icon={Icon ? <Icon /> : undefined}
+                icon={Icon ? <span className={styles.iconBadge} aria-hidden="true"><Icon /></span> : undefined}
                 className={styles.item}
                 data-active-category={isActiveCategory ? "true" : undefined}
               >
@@ -351,7 +361,7 @@ export function NavMain({
           <NavItem
             key={`${item.title}-${item.url}`}
             value={item.url}
-            icon={Icon ? <Icon /> : undefined}
+            icon={Icon ? <span className={styles.iconBadge} aria-hidden="true"><Icon /></span> : undefined}
             disabled={item.disabled}
             className={styles.item}
           >

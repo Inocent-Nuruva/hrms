@@ -13,7 +13,7 @@ import {
   ToggleLeftIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/fluent-toast-store"
-import { SearchBox } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
@@ -2289,7 +2289,7 @@ export function NotificationsView() {
         toolbarActions={
           <>
             {tab !== "settings" && tab !== "platform-settings" ? (
-              <SearchBox
+              <FluentSearchBox
                 size="small"
                 className="!w-36 sm:!w-44"
                 placeholder="Search…"

@@ -3,7 +3,8 @@
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
+import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"

@@ -12,9 +12,9 @@ import {
   Loader2Icon,
   PlusIcon,
   RefreshCwIcon,
-  SearchIcon,
   SlidersHorizontalIcon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"

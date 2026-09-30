@@ -13,9 +13,9 @@ import {
   QrCodeIcon,
   RefreshCwIcon,
   ScanFaceIcon,
-  SearchIcon,
   Trash2Icon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,

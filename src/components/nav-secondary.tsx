@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { SearchBox } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
   Dialog,
   DialogHeader,
@@ -247,7 +247,7 @@ export function NavSecondary({
                         <DialogTitle>Search</DialogTitle>
                       </DialogHeader>
                       <div className="flex items-center gap-2 border-b border-slate-200 p-3 dark:border-border">
-                        <SearchBox
+                        <FluentSearchBox
                           ref={searchInputRef}
                           size="medium"
                           value={query}

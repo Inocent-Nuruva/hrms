@@ -8,10 +8,10 @@ import {
   Loader2Icon,
   PlusIcon,
   RefreshCwIcon,
-  SearchIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,

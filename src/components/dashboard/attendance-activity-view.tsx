@@ -7,12 +7,17 @@ import {
   Button,
   Field,
   Input,
-  SearchBox,
   Skeleton,
   SkeletonItem,
   Tab,
   TabList,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
+import {
+  ArrowReset20Regular,
+  ArrowSync20Regular,
+  Filter20Regular,
+} from "@fluentui/react-icons"
 import {
   AnimatePresence,
   motion,
@@ -22,10 +27,7 @@ import {
   AlarmClockCheckIcon,
   AlertTriangle,
   CalendarDays,
-  Filter,
   PlusIcon,
-  RefreshCwIcon,
-  RotateCcwIcon,
   TimerResetIcon,
 } from "lucide-react"
 
@@ -1376,22 +1378,37 @@ async function findEmployeesForDailySummarySearch(
   cachedEmployees: AdminRecord[],
 ): Promise<AdminRecord[]> {
   const localMatches = matchEmployeesByName(cachedEmployees, searchTerm)
-  if (localMatches.length > 0) {
-    return localMatches
+  const remoteMatches: AdminRecord[] = []
+  try {
+    const pageSize = 100
+    let page = 1
+    while (true) {
+      const result = await listEmployees(token, {
+        page,
+        limit: pageSize,
+        search: searchTerm,
+        sortBy: "first_name",
+        sortOrder: "ASC",
+      })
+      remoteMatches.push(...matchEmployeesByName(result.rows, searchTerm))
+      if (
+        result.rows.length < pageSize ||
+        (result.totalPages !== null && page >= result.totalPages)
+      ) {
+        break
+      }
+      page += 1
+    }
+  } catch {
+    // Keep local matches available when the directory search endpoint is unavailable.
   }
 
-  try {
-    const result = await listEmployees(token, {
-      page: 1,
-      limit: 100,
-      search: searchTerm,
-      sortBy: "first_name",
-      sortOrder: "ASC",
-    })
-    return matchEmployeesByName(result.rows, searchTerm)
-  } catch {
-    return []
+  const matchesById = new Map<number, AdminRecord>()
+  for (const employee of [...localMatches, ...remoteMatches]) {
+    const id = readDirectoryEmployeeId(employee)
+    if (id !== null) matchesById.set(id, employee)
   }
+  return [...matchesById.values()]
 }
 
 function filterDailySummaryDisplayRows(
@@ -3225,16 +3242,21 @@ export function AttendanceActivityView({ section }: { section: string }) {
         let resultTotalPages: number | null = null
 
         if (!resolvedEmployeeId && matchedEmployeeIds.length > 1) {
-          const pages = await Promise.all(
-            matchedEmployeeIds.slice(0, 20).map((employeeId) =>
-              listAttendanceDailySummariesPage(token, {
-                ...listParams,
-                page: 1,
-                employee_id: employeeId,
-              }),
-            ),
-          )
-          resultRows = pages.flatMap((page) => page.rows)
+          // Search can match more than twenty employees; fetch all matched IDs
+          // in small batches so valid matches are not silently omitted.
+          for (let index = 0; index < matchedEmployeeIds.length; index += 10) {
+            const batch = matchedEmployeeIds.slice(index, index + 10)
+            const pages = await Promise.all(
+              batch.map((employeeId) =>
+                listAttendanceDailySummariesPage(token, {
+                  ...listParams,
+                  page: 1,
+                  employee_id: employeeId,
+                }),
+              ),
+            )
+            resultRows.push(...pages.flatMap((page) => page.rows))
+          }
           resultTotal = resultRows.length
           resultTotalPages = 1
         } else {
@@ -3895,7 +3917,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         aria-label="Open filters"
         title="Filters"
       >
-        <Filter className="size-3 text-primary" />
+        <Filter20Regular className="size-3 text-primary" />
         {dailySummaryActiveFilterCount > 0 ? (
           <span className="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold text-primary-foreground">
             {dailySummaryActiveFilterCount}
@@ -3903,26 +3925,26 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(100vw-1rem,17.5rem)] p-2"
+        className="w-[min(22rem,calc(100vw-1rem))] p-3"
         align="end"
         sideOffset={6}
       >
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Filters
             </span>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="inline-flex h-5 items-center rounded px-1.5 text-[9px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 onClick={resetDailySummaryFiltersToToday}
               >
                 Reset
               </button>
               <button
                 type="button"
-                className="inline-flex h-5 items-center rounded bg-primary px-1.5 text-[9px] font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+                className="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
                 disabled={loading}
                 onClick={applyDailySummaryDraftFilters}
               >
@@ -3931,7 +3953,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
             <label className={dailySummaryFilterLabelClass}>
               <span>From</span>
               <DatePickerPresets
@@ -3940,7 +3962,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   setDailySummaryFilters((current) => ({ ...current, from_date: value }))
                 }
                 placeholder="From"
-                className="h-6 gap-0.5 border-slate-300 bg-white px-1.5 text-[10px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-2.5"
+                className="h-8 w-full min-w-0 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
               />
             </label>
             <label className={dailySummaryFilterLabelClass}>
@@ -3951,7 +3973,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   setDailySummaryFilters((current) => ({ ...current, to_date: value }))
                 }
                 placeholder="To"
-                className="h-6 gap-0.5 border-slate-300 bg-white px-1.5 text-[10px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-2.5"
+                className="h-8 w-full min-w-0 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
               />
             </label>
             <label className={dailySummaryFilterLabelClass}>
@@ -4081,11 +4103,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
           </div>
 
-          <div className="flex items-center gap-0.5 border-t border-border/70 pt-1.5">
-            <span className="mr-auto text-[9px] text-muted-foreground">Export</span>
+          <div className="flex items-center gap-1.5 border-t border-border/70 pt-2">
+            <span className="mr-auto text-[10px] font-medium text-muted-foreground">Export</span>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("xlsx")}
               disabled={attendanceExporting}
             >
@@ -4093,7 +4115,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("csv")}
               disabled={attendanceExporting}
             >
@@ -4101,7 +4123,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("pdf")}
               disabled={attendanceExporting}
             >
@@ -4123,7 +4145,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         aria-label="Filter processing exceptions"
         title="Filter processing exceptions"
       >
-        <Filter className="size-3.5 text-primary" />
+        <Filter20Regular className="size-3.5 text-primary" />
         {processingExceptionActiveFilterCount > 0 ? (
           <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold text-primary-foreground">
             {processingExceptionActiveFilterCount}
@@ -4274,7 +4296,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   const refreshButton = (
     <button
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       type="button"
       disabled={loading}
       aria-label="Refresh"
@@ -4284,7 +4306,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         void fetchSectionData(true)
       }}
     >
-      <RefreshCwIcon className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+      <ArrowSync20Regular className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
     </button>
   )
 
@@ -4326,11 +4348,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
               <>
                 <Popover>
                   <PopoverTrigger
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Filter by date"
                     title="Filter by date"
                   >
-                    <Filter className="size-3.5 text-primary" />
+                    <Filter20Regular className="size-3.5 text-primary" />
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-4" align="end">
                     <div className="space-y-3">
@@ -4364,7 +4386,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 </Popover>
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   title="Reset filters"
                   aria-label="Reset filters"
                   disabled={
@@ -4377,7 +4399,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     setHistoryStatusFilter(null)
                   }}
                 >
-                  <RotateCcwIcon className="size-3.5 text-primary" />
+                  <ArrowReset20Regular className="size-3.5 text-primary" />
                   <span className="hidden sm:inline">Reset</span>
                 </button>
               </>
@@ -5223,7 +5245,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
               toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
-                  <SearchBox
+                  <FluentSearchBox
                     size="small"
                     className="min-w-[10rem] max-w-[16rem] flex-1 sm:min-w-[12rem]"
                     value={recordSearch}
@@ -5231,10 +5253,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     placeholder="Search names…"
                     aria-label="Search daily summaries by employee name"
                   />
-                  <label className="inline-flex h-7 items-center gap-0.5 rounded-md border border-border bg-background px-1 text-[10px] text-muted-foreground">
-                    <span className="hidden sm:inline pl-0.5">Rows</span>
+                  <div className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-muted/40 px-2 text-[10px] font-medium text-muted-foreground">
+                    <span>Rows</span>
                     <FluentSelect
-                      ariaLabel="Number of records to display"
+                      ariaLabel="Rows per page"
                       size="small"
                       className="max-w-[3.25rem]"
                       value={String(dailySummaryPageSize)}
@@ -5252,7 +5274,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         label: String(size),
                       }))}
                     />
-                  </label>
+                  </div>
                   {dailySummaryFilterPopover}
                   {refreshButton}
                 </>

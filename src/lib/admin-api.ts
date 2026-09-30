@@ -19340,7 +19340,21 @@ export async function getHrAttendanceSetupStatus(token: string) {
       token,
     },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  const root = asRecord(payload);
+  const candidates = [asRecord(root?.data), asRecord(root?.result), root];
+
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      ("isComplete" in candidate ||
+        "activePolicy" in candidate ||
+        "missing" in candidate)
+    ) {
+      return candidate;
+    }
+  }
+
+  return normalizeSingle(payload) ?? root;
 }
 
 export async function runHrAttendanceSetupWizard(

@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Button, SearchBox } from "@fluentui/react-components"
-import { SearchRegular } from "@fluentui/react-icons"
+import { Button } from "@fluentui/react-components"
+import { SearchSparkle20Regular } from "@fluentui/react-icons"
 
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { cn } from "@/lib/utils"
 
 type SearchToggleFieldProps = {
@@ -59,7 +60,7 @@ export function SearchToggleField({
         <Button
           appearance={highlighted ? "primary" : "subtle"}
           size="small"
-          icon={<SearchRegular />}
+          icon={<SearchSparkle20Regular />}
           aria-label={`Open ${label.toLowerCase()}`}
           title={label}
           className="!size-8 !min-w-8"
@@ -76,7 +77,7 @@ export function SearchToggleField({
         className
       )}
     >
-      <SearchBox
+      <FluentSearchBox
         ref={inputRef}
         size="small"
         aria-label={label}

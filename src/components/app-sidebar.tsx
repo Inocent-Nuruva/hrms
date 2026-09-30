@@ -11,49 +11,27 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  Alert24Filled,
-  Alert24Regular,
-  ArrowSwap24Filled,
-  ArrowSwap24Regular,
-  ArrowTrendingLines24Filled,
-  ArrowTrendingLines24Regular,
-  Briefcase24Filled,
-  Briefcase24Regular,
-  Building24Filled,
-  Building24Regular,
-  BuildingMultiple24Filled,
-  BuildingMultiple24Regular,
-  bundleIcon,
-  CalendarLtr24Filled,
-  CalendarLtr24Regular,
-  Chat24Filled,
-  Chat24Regular,
-  ClipboardTaskListLtr24Filled,
-  ClipboardTaskListLtr24Regular,
-  Clock24Filled,
-  Clock24Regular,
-  DataBarVertical24Filled,
-  DataBarVertical24Regular,
-  DataTrending24Filled,
-  DataTrending24Regular,
-  Location24Filled,
-  Location24Regular,
-  Money24Filled,
-  Money24Regular,
-  Organization24Filled,
-  Organization24Regular,
-  Payment24Filled,
-  Payment24Regular,
-  PeopleTeam24Filled,
-  PeopleTeam24Regular,
-  PersonAdd24Filled,
-  PersonAdd24Regular,
-  ShieldKeyhole24Filled,
-  ShieldKeyhole24Regular,
-  TargetArrow24Filled,
-  TargetArrow24Regular,
-  Trophy24Filled,
-  Trophy24Regular,
+  Alert24Color,
+  ArrowSquare24Color,
+  ArrowTrendingLines24Color,
+  Briefcase24Color,
+  Building24Color,
+  BuildingMultiple24Color,
+  CalendarClock24Color,
+  Chat24Color,
+  ChartMultiple24Color,
+  ClipboardTask24Color,
+  Clock24Color,
+  CoinMultiple24Color,
+  DataBarVerticalAscending24Color,
+  DataTrending24Color,
+  LocationRipple24Color,
+  PeopleCommunity24Color,
+  PeopleTeam24Color,
+  PersonAdd24Color,
+  Receipt24Color,
+  ShieldCheckmark24Color,
+  Trophy24Color,
   type FluentIcon,
 } from "@fluentui/react-icons"
 import type { AdminResourceKey } from "@/lib/admin-api"
@@ -121,27 +99,27 @@ function sidebarWorkspacesFromSections(
   })
 }
 
-const AccessControlIcon = bundleIcon(ShieldKeyhole24Filled, ShieldKeyhole24Regular)
-const AttendanceIcon = bundleIcon(Clock24Filled, Clock24Regular)
-const BranchesIcon = bundleIcon(Building24Filled, Building24Regular)
-const CompaniesIcon = bundleIcon(BuildingMultiple24Filled, BuildingMultiple24Regular)
-const DepartmentsIcon = bundleIcon(Organization24Filled, Organization24Regular)
-const EmployeesIcon = bundleIcon(PeopleTeam24Filled, PeopleTeam24Regular)
-const PromotionIcon = bundleIcon(ArrowTrendingLines24Filled, ArrowTrendingLines24Regular)
-const LeaveIcon = bundleIcon(CalendarLtr24Filled, CalendarLtr24Regular)
-const PerformanceIcon = bundleIcon(TargetArrow24Filled, TargetArrow24Regular)
-const ProbationIcon = bundleIcon(Trophy24Filled, Trophy24Regular)
-const FieldIcon = bundleIcon(Location24Filled, Location24Regular)
-const FinanceIcon = bundleIcon(Money24Filled, Money24Regular)
-const ActivitiesIcon = bundleIcon(ClipboardTaskListLtr24Filled, ClipboardTaskListLtr24Regular)
-const MovementsIcon = bundleIcon(ArrowSwap24Filled, ArrowSwap24Regular)
-const PositionsIcon = bundleIcon(Briefcase24Filled, Briefcase24Regular)
-const InviteIcon = bundleIcon(PersonAdd24Filled, PersonAdd24Regular)
-const PayrollIcon = bundleIcon(Payment24Filled, Payment24Regular)
-const ReportsIcon = bundleIcon(DataTrending24Filled, DataTrending24Regular)
-const NotificationsIcon = bundleIcon(Alert24Filled, Alert24Regular)
-const SmsIcon = bundleIcon(Chat24Filled, Chat24Regular)
-const InsightsIcon = bundleIcon(DataBarVertical24Filled, DataBarVertical24Regular)
+const AccessControlIcon = ShieldCheckmark24Color
+const AttendanceIcon = Clock24Color
+const BranchesIcon = Building24Color
+const CompaniesIcon = BuildingMultiple24Color
+const DepartmentsIcon = PeopleCommunity24Color
+const EmployeesIcon = PeopleTeam24Color
+const PromotionIcon = ArrowTrendingLines24Color
+const LeaveIcon = CalendarClock24Color
+const PerformanceIcon = ChartMultiple24Color
+const ProbationIcon = Trophy24Color
+const FieldIcon = LocationRipple24Color
+const FinanceIcon = CoinMultiple24Color
+const ActivitiesIcon = ClipboardTask24Color
+const MovementsIcon = ArrowSquare24Color
+const PositionsIcon = Briefcase24Color
+const InviteIcon = PersonAdd24Color
+const PayrollIcon = Receipt24Color
+const ReportsIcon = DataTrending24Color
+const NotificationsIcon = Alert24Color
+const SmsIcon = Chat24Color
+const InsightsIcon = DataBarVerticalAscending24Color
 
 const adminData: SidebarData = {
   navMain: [

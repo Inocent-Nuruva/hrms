@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   calculatePayrollFinalSettlement,
   getEmployeeDashboard,
+  getHrAttendanceSetupStatus,
   getHrAttendanceSchedulePreview,
   getHrDashboard,
   getHrLaunchReadiness,
@@ -191,5 +192,21 @@ describe("insights, readiness, and payroll report API helpers", () => {
       "http://localhost:8888/api/payroll/reports/final-settlements/55/calculate",
       expect.objectContaining({ method: "POST" }),
     )
+  })
+
+  it("preserves the complete attendance setup status instead of extracting the active policy", async () => {
+    const setupStatus = {
+      companyId: 1,
+      isComplete: false,
+      activePolicy: { id: 3, name: "Head office attendance" },
+      missing: ["No default timetable is configured."],
+      warnings: [],
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ data: setupStatus })),
+    )
+
+    await expect(getHrAttendanceSetupStatus("token")).resolves.toEqual(setupStatus)
   })
 })

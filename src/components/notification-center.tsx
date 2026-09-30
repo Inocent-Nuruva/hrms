@@ -19,7 +19,8 @@ import {
   Eye20Regular as Eye,
   Send20Regular as Send,
 } from "@fluentui/react-icons"
-import { Card, Field, SearchBox } from "@fluentui/react-components"
+import { Card, Field } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { LoaderCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -645,7 +646,7 @@ export function NotificationCenter({
         <div className="flex w-full flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
-              <SearchBox
+              <FluentSearchBox
                 size="small"
                 value={searchInput}
                 onChange={(_event, data) => setSearchInput(data.value)}
