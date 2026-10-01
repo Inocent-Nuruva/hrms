@@ -1335,6 +1335,25 @@ function hasEmployeeProfileData(employee: AdminRecord | null) {
   )
 }
 
+function employeeBelongsToCurrentUser(
+  employee: AdminRecord | null,
+  currentUser: AdminRecord | null,
+  currentAdmin: AdminRecord | null,
+) {
+  if (!employee) return true
+
+  const employeeCompanyUser = asRecord(employee.company_user)
+  const linkedUser = asRecord(employeeCompanyUser?.user) ?? employeeCompanyUser
+  const employeeUserId =
+    readNumber(linkedUser, ["id", "user_id"]) ?? readNumber(employee, ["user_id"])
+  const currentUserId =
+    readNumber(currentUser, ["id", "user_id"]) ?? readNumber(currentAdmin, ["id", "user_id"])
+
+  // The employee endpoint may return a rich but unrelated record for admin
+  // accounts. Only reject it when both records expose comparable user IDs.
+  return employeeUserId === null || currentUserId === null || employeeUserId === currentUserId
+}
+
 function isMissingCoreEmployeeFields(employee: AdminRecord | null) {
   if (!employee) {
     return true
@@ -1500,6 +1519,9 @@ function useSelfEmployeeData() {
       setCurrentUser(mergedCurrentUser)
 
       let resolvedEmployee = await getCurrentEmployee(nextToken).catch(() => null)
+      if (!employeeBelongsToCurrentUser(resolvedEmployee, mergedCurrentUser, currentAdmin)) {
+        resolvedEmployee = null
+      }
       const employeeFromMe = resolvedEmployee
       const hasRichEmployeeData = hasEmployeeProfileData(resolvedEmployee)
 
@@ -1520,22 +1542,6 @@ function useSelfEmployeeData() {
           const detailedEmployee = await getEmployeeById(matchedEmployeeId, nextToken).catch(() => null)
           if (detailedEmployee) {
             resolvedEmployee = mergeEmployeeRecords(resolvedEmployee, detailedEmployee)
-          }
-        }
-
-        if (!hasEmployeeProfileData(resolvedEmployee)) {
-          const likelyEmployeeId = resolveEmployeeId(
-            mergedCurrentUser,
-            currentAdmin,
-            asRecord(mergedCurrentUser.user),
-            asRecord(tokenPayload?.user),
-            asRecord(Array.isArray(tokenPayload?.companies) ? tokenPayload?.companies[0] : null)
-          )
-          if (likelyEmployeeId !== null) {
-            const detailedEmployee = await getEmployeeById(likelyEmployeeId, nextToken).catch(() => null)
-            if (detailedEmployee) {
-              resolvedEmployee = mergeEmployeeRecords(resolvedEmployee, detailedEmployee)
-            }
           }
         }
 
@@ -1563,11 +1569,7 @@ function useSelfEmployeeData() {
       if (isMissingCoreEmployeeFields(resolvedEmployee)) {
         const likelyEmployeeId = resolveEmployeeId(
           resolvedEmployee,
-          mergedCurrentUser,
-          currentAdmin,
-          asRecord(mergedCurrentUser.user),
-          asRecord(tokenPayload?.user),
-          asRecord(Array.isArray(tokenPayload?.companies) ? tokenPayload?.companies[0] : null)
+          { employee_id: readNestedEmployeeId(mergedCurrentUser) },
         )
         if (likelyEmployeeId !== null) {
           const detailedEmployee = await getEmployeeById(likelyEmployeeId, nextToken).catch(() => null)
@@ -1578,6 +1580,9 @@ function useSelfEmployeeData() {
       }
 
       // Re-assert /employees/me as authoritative when present.
+      if (!employeeBelongsToCurrentUser(resolvedEmployee, mergedCurrentUser, currentAdmin)) {
+        resolvedEmployee = null
+      }
       resolvedEmployee = mergeEmployeeRecords(employeeFromMe, resolvedEmployee)
 
       resolvedEmployee = enrichEmployeeFromAssignments(resolvedEmployee)

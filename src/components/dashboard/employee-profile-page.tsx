@@ -5457,14 +5457,14 @@ export function EmployeeProfilePage({
       </AlertDialog>
 
       <AlertDialog open={identityDialogOpen} onOpenChange={setIdentityDialogOpen}>
-        <AlertDialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto p-5 sm:max-w-2xl">
+        <AlertDialogContent className="flex max-h-[90dvh] w-[calc(100%-2rem)] min-w-0 max-w-2xl flex-col overflow-x-hidden overflow-y-auto p-4 sm:p-5">
           <AlertDialogHeader className="gap-1">
             <AlertDialogTitle>Update Profile</AlertDialogTitle>
             <AlertDialogDescription>
               Update account details and keep branch, department, position, manager, grade, and cost center in sync.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-2.5 sm:grid-cols-2">
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">First Name</span>
               <input
@@ -5502,7 +5502,7 @@ export function EmployeeProfilePage({
                 placeholder="Enter email"
               />
             </label>
-            <div className="grid gap-2.5 sm:col-span-2 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-2.5 sm:col-span-2 sm:grid-cols-2">
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
                 <FluentSelect
@@ -5695,7 +5695,7 @@ export function EmployeeProfilePage({
             </label>
           </div>
           {identityError ? <p className="text-sm text-rose-600">{identityError}</p> : null}
-          <AlertDialogFooter>
+          <AlertDialogFooter className="mt-4 flex w-full min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4 [&>*]:max-w-full">
             <AlertDialogCancel disabled={identitySubmitting}>Cancel</AlertDialogCancel>
             <button
               type="button"
