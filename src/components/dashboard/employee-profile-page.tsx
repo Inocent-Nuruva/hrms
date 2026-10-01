@@ -29,6 +29,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
@@ -5456,21 +5464,25 @@ export function EmployeeProfilePage({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={identityDialogOpen} onOpenChange={setIdentityDialogOpen}>
-        <AlertDialogContent className="flex max-h-[90dvh] w-[calc(100%-2rem)] min-w-0 max-w-2xl flex-col overflow-x-hidden overflow-y-auto p-4 sm:p-5">
-          <AlertDialogHeader className="gap-1">
-            <AlertDialogTitle>Update Profile</AlertDialogTitle>
-            <AlertDialogDescription>
+      <Sheet open={identityDialogOpen} onOpenChange={setIdentityDialogOpen}>
+        <SheetContent
+          side="right"
+          className="flex h-dvh min-h-0 w-full min-w-0 max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-dvh data-[side=right]:w-full data-[side=right]:max-w-full data-[side=right]:border-l data-[side=right]:sm:max-w-2xl"
+        >
+          <SheetHeader className="shrink-0 gap-1 border-b border-border px-4 py-4 pr-14 sm:pl-6 sm:pr-14">
+            <SheetTitle>Update Profile</SheetTitle>
+            <SheetDescription>
               Update account details and keep branch, department, position, manager, grade, and cost center in sync.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid min-w-0 gap-2.5 sm:grid-cols-2">
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
             <label className="grid gap-1">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">First Name</span>
               <input
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
-                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter first name"
               />
             </label>
@@ -5479,7 +5491,7 @@ export function EmployeeProfilePage({
               <input
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
-                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter last name"
               />
             </label>
@@ -5488,7 +5500,7 @@ export function EmployeeProfilePage({
               <input
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter username"
               />
             </label>
@@ -5498,16 +5510,16 @@ export function EmployeeProfilePage({
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="h-9 rounded-md border border-slate-300 px-3 text-sm"
+                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Enter email"
               />
             </label>
-            <div className="grid min-w-0 gap-2.5 sm:col-span-2 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 [&>*]:min-w-0">
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
                 <FluentSelect
                   ariaLabel="Branch"
-                  className="min-w-0"
+                  className="w-full min-w-0"
                   value={branchId}
                   disabled={organizationOptionsLoading}
                   placeholder="No branch"
@@ -5533,7 +5545,7 @@ export function EmployeeProfilePage({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department</span>
                 <FluentSelect
                   ariaLabel="Department"
-                  className="min-w-0"
+                  className="w-full min-w-0"
                   value={departmentId}
                   disabled={organizationOptionsLoading}
                   placeholder="Select department"
@@ -5558,7 +5570,7 @@ export function EmployeeProfilePage({
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Position</span>
                 <FluentSelect
                   ariaLabel="Position"
-                  className="min-w-0"
+                  className="w-full min-w-0"
                   value={positionId}
                   disabled={!departmentId || organizationOptionsLoading}
                   placeholder={
@@ -5596,7 +5608,7 @@ export function EmployeeProfilePage({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager</span>
               <FluentSelect
                 ariaLabel="Manager"
-                className="min-w-0"
+                className="w-full min-w-0"
                 value={managerId}
                 disabled={!departmentId || organizationOptionsLoading}
                 placeholder="No manager"
@@ -5619,7 +5631,7 @@ export function EmployeeProfilePage({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade</span>
               <FluentSelect
                 ariaLabel="Grade"
-                className="min-w-0"
+                className="w-full min-w-0"
                 value={gradeId}
                 disabled={organizationOptionsLoading}
                 placeholder="No grade"
@@ -5637,7 +5649,7 @@ export function EmployeeProfilePage({
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cost Center</span>
               <FluentSelect
                 ariaLabel="Cost Center"
-                className="min-w-0"
+                className="w-full min-w-0"
                 value={costCenterId}
                 disabled={organizationOptionsLoading}
                 placeholder="No cost center"
@@ -5670,7 +5682,7 @@ export function EmployeeProfilePage({
                   value={profilePassword}
                   onChange={(event) => setProfilePassword(event.target.value)}
                   minLength={6}
-                  className="h-9 w-full rounded-md border border-slate-300 px-3 pr-10 text-sm"
+                  className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 pr-10 text-sm"
                   placeholder="Leave blank to keep current password"
                 />
                 <button
@@ -5683,24 +5695,32 @@ export function EmployeeProfilePage({
                 </button>
               </div>
             </label>
-            <label className="grid gap-1 sm:col-span-2">
+            <label className="grid min-w-0 gap-1 sm:col-span-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Assignment Reason (Optional)
               </span>
               <Textarea
                 value={assignmentReason}
                 onChange={(event) => setAssignmentReason(event.target.value)}
-                className="min-h-20 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-20 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </label>
+            </div>
+            {identityError ? <p role="alert" className="mt-3 text-sm text-rose-600">{identityError}</p> : null}
           </div>
-          {identityError ? <p className="text-sm text-rose-600">{identityError}</p> : null}
-          <AlertDialogFooter className="mt-4 flex w-full min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4 [&>*]:max-w-full">
-            <AlertDialogCancel disabled={identitySubmitting}>Cancel</AlertDialogCancel>
+          <SheetFooter className="mt-0 w-full shrink-0 flex-row justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6">
             <button
               type="button"
               disabled={identitySubmitting}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium disabled:opacity-50"
+              onClick={() => setIdentityDialogOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={identitySubmitting}
+              className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium !text-white disabled:opacity-50"
               onClick={async () => {
                 const token = readStoredToken()
                 const userId = resolveCompanyUserId(employee)
@@ -5802,9 +5822,9 @@ export function EmployeeProfilePage({
             >
               {identitySubmitting ? "Updating..." : "Update Profile"}
             </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
