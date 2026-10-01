@@ -38,6 +38,11 @@ import {
   availableRoleSuggestions, resolveSuggestionPermissions, type ResolvedRoleSuggestion, } from "@/components/dashboard/role-suggestions";
 import {
   CheckIcon, CopyIcon, EllipsisVerticalIcon, ImageIcon, KeyRoundIcon, PencilIcon, PlusIcon, ShieldAlertIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, UsersIcon, UserPlusIcon, UserMinusIcon } from "lucide-react";
+import {
+  Copy16Regular as FluentCopyIcon,
+  Delete16Regular as FluentDeleteIcon,
+  Edit16Regular as FluentEditIcon,
+} from "@fluentui/react-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePublishedCompanyModules } from "@/hooks/use-company-modules";
@@ -1571,16 +1576,16 @@ export function DataTable({
           >
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              className="inline-flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Open details"
               aria-label="Open details"
               onClick={() => openAccessControlRow(row.__source)}
             >
-              <PencilIcon className="size-3.5" />
+              <FluentEditIcon className="size-4" aria-hidden="true" />
             </button>
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              className="inline-flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Copy details"
               aria-label="Copy details"
               onClick={() => {
@@ -1590,17 +1595,17 @@ export function DataTable({
                   .catch(() => showErrorAlert("Clipboard access was denied."));
               }}
             >
-              <CopyIcon className="size-3.5" />
+              <FluentCopyIcon className="size-4" aria-hidden="true" />
             </button>
             {isEditableResource(activeResource) && canDeleteResource ? (
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-background text-rose-600 transition-colors hover:bg-rose-50"
+                className="inline-flex size-8 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="Delete"
                 aria-label="Delete"
                 onClick={() => void handleDelete(row.__id)}
               >
-                <Trash2Icon className="size-3.5" />
+                <FluentDeleteIcon className="size-4" aria-hidden="true" />
               </button>
             ) : null}
           </div>
@@ -3134,30 +3139,19 @@ export function DataTable({
                 }
                 toolbarActions={
                   <>
-                    <div className="relative">
-                      <Input
-                        value={accessControlSearch}
-                        onChange={(event) =>
-                          setAccessControlSearch(event.target.value)
-                        }
-                        placeholder={
-                          activeResource === "permissions"
-                            ? "Search permissions…"
-                            : "Search roles…"
-                        }
-                        className="h-8 w-36 pr-12 text-xs sm:w-52"
-                        autoComplete="off"
-                      />
-                      {accessControlSearch.trim() ? (
-                        <button
-                          type="button"
-                          className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded px-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                          onClick={() => setAccessControlSearch("")}
-                        >
-                          Clear
-                        </button>
-                      ) : null}
-                    </div>
+                    <Input
+                      value={accessControlSearch}
+                      onChange={(event) =>
+                        setAccessControlSearch(event.target.value)
+                      }
+                      placeholder={
+                        activeResource === "permissions"
+                          ? "Search permissions…"
+                          : "Search roles…"
+                      }
+                      className="h-8 w-36 text-xs sm:w-52"
+                      autoComplete="off"
+                    />
                     {accessControlCreateDrawer}
                   </>
                 }

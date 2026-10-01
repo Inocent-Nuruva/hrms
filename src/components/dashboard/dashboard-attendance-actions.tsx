@@ -2,10 +2,11 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { MapPin, Network, Wifi } from "lucide-react";
+import { MapPin, Wifi } from "lucide-react";
 import {
   ArrowEnter16Regular,
   ArrowExit16Regular,
+  Globe16Regular,
 } from "@fluentui/react-icons"
 
 import {
@@ -293,7 +294,7 @@ export function NetworkCheckButton({
         aria-label={iconOnly ? "Check network and location" : undefined}
         title={iconOnly ? "Network check" : undefined}
       >
-        <Network aria-hidden="true" />
+        <Globe16Regular className="size-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
         {iconOnly ? (
           <span
             className={cn(

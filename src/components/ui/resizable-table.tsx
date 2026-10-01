@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   ArrowDownload16Regular,
-  ArrowSort16Regular,
+  ArrowSort16Filled,
   ChevronDown16Regular,
   ColumnTriple20Regular,
   Filter16Regular,
@@ -1208,7 +1208,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                   aria-label="Sort"
                   title="Sort"
                 >
-                  <ArrowSort16Regular className="size-3.5 text-primary" />
+                  <ArrowSort16Filled className="size-3.5 text-primary" />
                   <span className="hidden sm:inline">Sort</span>
                   {sortField ? (
                     <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">

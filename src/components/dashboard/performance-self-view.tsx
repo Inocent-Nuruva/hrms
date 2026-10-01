@@ -4,8 +4,14 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react";
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
+import { CalendarDaysIcon, CheckCircle2Icon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react";
+import {
+  CheckmarkCircle20Regular as AchievementIcon,
+  ClipboardTask20Regular as AssignedWorkIcon,
+  Clock20Regular as ReviewsIcon,
+  Gauge20Regular as ScoreIcon,
+  SearchSparkle20Regular as SearchIcon,
+} from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -794,21 +800,20 @@ export function PerformanceSelfView({
               {error}
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-x-6 gap-y-4 border-y border-border/70 py-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Current score", value: score === null || score === undefined ? "—" : String(score), hint: "Latest published result", icon: GaugeIcon },
-              { label: "Assigned work", value: activityTasks.length, hint: `${assignments.length} review assignments`, icon: ListChecksIcon },
-              { label: "Reviews", value: reviews.length, hint: `${feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length} feedback pending`, icon: Clock3Icon },
-              { label: "Achievements", value: achievements.length, hint: `${developmentPlans.length} development · ${pips.length} improvement`, icon: CheckCircle2Icon },
+              { label: "Current score", value: score === null || score === undefined ? "—" : String(score), hint: "Latest published result", icon: ScoreIcon },
+              { label: "Assigned work", value: activityTasks.length, hint: `${assignments.length} review assignments`, icon: AssignedWorkIcon },
+              { label: "Reviews", value: reviews.length, hint: `${feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length} feedback pending`, icon: ReviewsIcon },
+              { label: "Achievements", value: achievements.length, hint: `${developmentPlans.length} development · ${pips.length} improvement`, icon: AchievementIcon },
             ].map((metric) => {
               const Icon = metric.icon
               return (
-                <article key={metric.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <span className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/15 bg-primary/[0.07] text-primary"><Icon className="size-4" /></span>
-                  <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{metric.label}</p>
+                <div key={metric.label} className="min-w-0">
+                  <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Icon className="size-4 shrink-0" aria-hidden="true" />{metric.label}</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
                   <p className="mt-1 truncate text-[10px] text-muted-foreground">{metric.hint}</p>
-                </article>
+                </div>
               )
             })}
           </div>

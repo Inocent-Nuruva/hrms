@@ -63,9 +63,14 @@ import {
   getPerformanceDashboard,
   getPerformanceCalibrationDepartments,
   getPerformanceFeedback360Summary,
+  getManagerPerformanceSummary,
   invitePerformanceFeedback360,
   listPerformanceFeedback360,
+  listBranches,
+  listDepartments,
+  listEmployeeGrades,
   listEmployees,
+  listPositions,
   listPerformanceAppeals,
   listPerformanceCompetencyTemplates,
   listPerformanceDevelopmentPlans,
@@ -130,16 +135,31 @@ type CreateMode =
   | "reopen"
   | "milestone"
 
-const SETUP_TABS: Array<{ id: SetupTab; label: string }> = [
-  { id: "years", label: "Years" },
-  { id: "periods", label: "Periods" },
-  { id: "kpis", label: "KPIs" },
-  { id: "templates", label: "Templates" },
-  { id: "rules", label: "Rules" },
-  { id: "competencies", label: "Competencies" },
-  { id: "scales", label: "Rating scales" },
-  { id: "scorecards", label: "Scorecards" },
-  { id: "workflows", label: "Workflows" },
+const SETUP_TAB_GROUPS: Array<{ label: string; tabs: Array<{ id: SetupTab; label: string }> }> = [
+  {
+    label: "Cycle",
+    tabs: [
+      { id: "years", label: "Years" },
+      { id: "periods", label: "Periods" },
+    ],
+  },
+  {
+    label: "KPI design",
+    tabs: [
+      { id: "kpis", label: "KPIs" },
+      { id: "templates", label: "Templates" },
+      { id: "rules", label: "Rules" },
+    ],
+  },
+  {
+    label: "Evaluation",
+    tabs: [
+      { id: "competencies", label: "Competencies" },
+      { id: "scales", label: "Rating scales" },
+      { id: "scorecards", label: "Scorecards" },
+      { id: "workflows", label: "Workflows" },
+    ],
+  },
 ]
 
 const PERFORMANCE_TIMELINE_STAGES = [
@@ -265,6 +285,11 @@ function currentKpiVersion(row: AdminRecord | null | undefined) {
   const versions = kpiVersions(row)
   const currentId = readNumber(row, ["currentVersionId", "current_version_id"])
   return versions.find((version) => readNumber(version, ["id"]) === currentId) ?? versions.at(-1) ?? null
+}
+
+function optionForId(rows: AdminRecord[], id: unknown) {
+  if (id === null || id === undefined || id === "") return null
+  return rows.find((row) => rowId(row) === String(id)) ?? null
 }
 
 function kpiVersionOptions(kpis: AdminRecord[]) {
@@ -492,6 +517,7 @@ export function PerformanceManagementView({
 
   const [setupTab, setSetupTab] = React.useState<SetupTab>("years")
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
+  const [managerSummary, setManagerSummary] = React.useState<AdminRecord | null>(null)
   const [years, setYears] = React.useState<AdminRecord[]>([])
   const [periods, setPeriods] = React.useState<AdminRecord[]>([])
   const [kpis, setKpis] = React.useState<AdminRecord[]>([])
@@ -508,6 +534,10 @@ export function PerformanceManagementView({
   const [appeals, setAppeals] = React.useState<AdminRecord[]>([])
   const [pips, setPips] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
+  const [branches, setBranches] = React.useState<AdminRecord[]>([])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [positions, setPositions] = React.useState<AdminRecord[]>([])
+  const [grades, setGrades] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState("")
@@ -538,7 +568,7 @@ export function PerformanceManagementView({
         promise.catch(() => fallback)
 
       if (activeTab === "overview") {
-        const [summary, yearRows, periodRows, planRows, developmentRows, pipRows, appealRows] = await Promise.all([
+        const [summary, yearRows, periodRows, planRows, developmentRows, pipRows, appealRows, teamSummary] = await Promise.all([
           optional(getPerformanceDashboard(token), null),
           optional(listPerformanceFinancialYears(token), [] as AdminRecord[]),
           optional(listPerformancePeriods(token), [] as AdminRecord[]),
@@ -546,6 +576,7 @@ export function PerformanceManagementView({
           optional(listPerformanceDevelopmentPlans(token), [] as AdminRecord[]),
           optional(listPerformanceImprovementPlans(token), [] as AdminRecord[]),
           optional(listPerformanceAppeals(token), [] as AdminRecord[]),
+          optional(getManagerPerformanceSummary(token), null),
         ])
         setDashboard(summary)
         setYears(yearRows)
@@ -554,6 +585,7 @@ export function PerformanceManagementView({
         setDevelopmentPlans(developmentRows)
         setPips(pipRows)
         setAppeals(appealRows)
+        setManagerSummary(teamSummary)
       } else if (activeTab === "setup") {
         if (setupTab === "years") {
           setYears(await listPerformanceFinancialYears(token))
@@ -567,9 +599,31 @@ export function PerformanceManagementView({
         } else if (setupTab === "kpis") {
           setKpis(await listPerformanceKpis(token))
         } else if (setupTab === "templates") {
-          setTemplates(await listPerformanceKpiTemplates(token))
+          const [templateRows, kpiRows] = await Promise.all([
+            listPerformanceKpiTemplates(token),
+            listPerformanceKpis(token),
+          ])
+          setTemplates(templateRows)
+          setKpis(kpiRows)
         } else if (setupTab === "rules") {
-          setRules(await listPerformanceKpiRules(token))
+          const [ruleRows, kpiRows, yearRows, branchPage, departmentPage, positionPage, gradeRows, employeePage] = await Promise.all([
+            listPerformanceKpiRules(token),
+            listPerformanceKpis(token),
+            listPerformanceFinancialYears(token),
+            listBranches(token, { limit: 100 }).catch(() => ({ rows: [] as AdminRecord[] })),
+            listDepartments(token, { limit: 100 }).catch(() => ({ rows: [] as AdminRecord[] })),
+            listPositions(token, { limit: 100 }).catch(() => ({ rows: [] as AdminRecord[] })),
+            listEmployeeGrades(token).catch(() => [] as AdminRecord[]),
+            listEmployees(token, { limit: 100 }).catch(() => ({ rows: [] as AdminRecord[] })),
+          ])
+          setRules(ruleRows)
+          setKpis(kpiRows)
+          setYears(yearRows)
+          setBranches(branchPage.rows)
+          setDepartments(departmentPage.rows)
+          setPositions(positionPage.rows)
+          setGrades(gradeRows)
+          setEmployees(employeePage.rows)
         } else if (setupTab === "competencies") {
           setCompetencies(await listPerformanceCompetencyTemplates(token))
         } else if (setupTab === "scales") {
@@ -653,6 +707,27 @@ export function PerformanceManagementView({
     developmentPlans.length
   const pendingFeedbackCount =
     readNumber(dashboard, ["pending_feedback_360", "pendingFeedback360"]) ?? 0
+
+  const managerTeamSize = readNumber(managerSummary, [
+    "team_size",
+    "teamSize",
+    "direct_reports",
+    "directReports",
+    "direct_report_count",
+    "directReportCount",
+  ])
+  const managerPendingReviews = readNumber(managerSummary, [
+    "pending_reviews",
+    "pendingReviews",
+    "open_reviews",
+    "openReviews",
+  ])
+  const managerAverageScore = readNumber(managerSummary, [
+    "average_score",
+    "averageScore",
+    "avg_score",
+    "avgScore",
+  ])
 
   const currentPeriod = periods[0] ?? null
   const overviewRecords = React.useMemo(() => {
@@ -870,9 +945,14 @@ export function PerformanceManagementView({
           name: form.name || undefined,
           priority: form.priority ? Number(form.priority) : undefined,
           financial_year_id: form.financial_year_id ? Number(form.financial_year_id) : undefined,
+          branch_id: form.branch_id ? Number(form.branch_id) : undefined,
           department_id: form.department_id ? Number(form.department_id) : undefined,
           position_id: form.position_id ? Number(form.position_id) : undefined,
+          grade_id: form.grade_id ? Number(form.grade_id) : undefined,
+          employment_type: form.employment_type || undefined,
+          employee_id: form.employee_id ? Number(form.employee_id) : undefined,
           review_cycle: form.review_cycle || undefined,
+          template_code: form.template_code || undefined,
           weight_override: form.weight_override ? Number(form.weight_override) : undefined,
           target_override: form.target_override ? Number(form.target_override) : undefined,
         })
@@ -1412,6 +1492,67 @@ export function PerformanceManagementView({
         },
       ]
     }
+    if (setupTab === "rules") {
+      return [
+        {
+          key: "rule",
+          label: "Applicability rule",
+          render: (row) => readString(row, ["name"], `Rule #${rowId(row)}`),
+        },
+        {
+          key: "kpiVersion",
+          label: "KPI version",
+          render: (row) => {
+            const versionId = readNumber(row, ["kpiDefinitionVersionId", "kpi_definition_version_id"])
+            const version = kpiVersionOptions(kpis).find((item) => Number(item.id) === versionId)
+            return version?.label ?? (versionId === null ? "—" : `Version #${versionId}`)
+          },
+        },
+        {
+          key: "scope",
+          label: "Applies to",
+          render: (row) => {
+            const dimensions = [
+              ["Year", years, readNumber(row, ["financialYearId", "financial_year_id"])],
+              ["Branch", branches, readNumber(row, ["branchId", "branch_id"])],
+              ["Department", departments, readNumber(row, ["departmentId", "department_id"])],
+              ["Position", positions, readNumber(row, ["positionId", "position_id"])],
+              ["Grade", grades, readNumber(row, ["gradeId", "grade_id"])],
+              ["Employee", employees, readNumber(row, ["employeeId", "employee_id"])],
+            ] as const
+            const scope = dimensions.flatMap(([label, source, id]) => {
+              if (id === null) return []
+              const match = optionForId(source, id)
+              return [`${label}: ${match ? optionLabel(match) : `#${id}`}`]
+            })
+            const employmentType = readString(row, ["employmentType", "employment_type"])
+            const cycle = readString(row, ["reviewCycle", "review_cycle"])
+            if (employmentType) scope.push(`Type: ${prettify(employmentType)}`)
+            if (cycle) scope.push(`Cycle: ${prettify(cycle)}`)
+            return scope.length ? scope.join(" · ") : "All employees"
+          },
+        },
+        {
+          key: "overrides",
+          label: "Overrides",
+          render: (row) => {
+            const weight = readString(row, ["weightOverride", "weight_override"])
+            const target = readString(row, ["targetOverride", "target_override"])
+            return [weight ? `Weight ${weight}` : "", target ? `Target ${target}` : ""].filter(Boolean).join(" · ") || "—"
+          },
+        },
+        {
+          key: "priority",
+          label: "Priority",
+          render: (row) => readString(row, ["priority"], "0"),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => <StatusChip value={readString(row, ["status"], "ACTIVE")} />,
+        },
+      ]
+    }
     if (setupTab === "years") {
       return [
         {
@@ -1631,7 +1772,7 @@ export function PerformanceManagementView({
         render: (row) => formatDate(row.updatedAt ?? row.updated_at),
       },
     ]
-  }, [activeTab, busyId, canActivatePeriod, canClosePeriod, setupTab])
+  }, [activeTab, branches, busyId, canActivatePeriod, canClosePeriod, departments, employees, grades, kpis, positions, setupTab, years])
 
   const createLabel =
     createMode === "year"
@@ -1741,6 +1882,27 @@ export function PerformanceManagementView({
               )
             })}
           </div>
+
+          {managerSummary && (managerTeamSize !== null || managerPendingReviews !== null || managerAverageScore !== null) ? (
+            <section className="space-y-2" aria-label="Manager performance summary">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Team snapshot</h2>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">Manager-level results from the team performance summary.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { label: "Team size", value: managerTeamSize ?? "—" },
+                  { label: "Pending manager reviews", value: managerPendingReviews ?? "—" },
+                  { label: "Average team score", value: managerAverageScore === null ? "—" : `${Math.round(managerAverageScore)}%` },
+                ].map((metric) => (
+                  <article key={metric.label} className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+                    <p className="text-xl font-semibold tabular-nums text-foreground">{metric.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{metric.label}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -1991,17 +2153,38 @@ export function PerformanceManagementView({
       )}
 
       {activeTab === "setup" ? (
-        <div className="flex flex-wrap gap-1.5">
-          {SETUP_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSetupTab(tab.id)}
-              className={cnTab(setupTab === tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto rounded-xl border border-border/70 bg-muted/40 p-2">
+          <div role="tablist" aria-label="Performance setup areas" className="flex min-w-max items-stretch gap-2">
+            {SETUP_TAB_GROUPS.map((group) => (
+              <div key={group.label} className="flex items-stretch gap-1 rounded-lg bg-background/70 p-1">
+                <span className="flex items-center px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {group.label}
+                </span>
+                {group.tabs.map((tab) => {
+                  const selected = setupTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      id={`performance-setup-tab-${tab.id}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setSetupTab(tab.id)}
+                      className={cn(
+                        "relative inline-flex h-9 items-center rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        selected
+                          ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      {selected ? <span aria-hidden="true" className="mr-2 size-1.5 rounded-full bg-primary" /> : null}
+                      {tab.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -2216,6 +2399,26 @@ export function PerformanceManagementView({
                   />
                 </Field>
                 <Field label="Priority"><input className={inputClass} value={form.priority ?? ""} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} /></Field>
+                <Field label="Branch">
+                  <FluentSelect ariaLabel="Branch" className="w-full" value={form.branch_id ?? ""} placeholder="Any branch" onChange={(value) => setForm((current) => ({ ...current, branch_id: value }))} options={[{ value: "", label: "Any branch" }, ...branches.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) }))]} />
+                </Field>
+                <Field label="Department">
+                  <FluentSelect ariaLabel="Department" className="w-full" value={form.department_id ?? ""} placeholder="Any department" onChange={(value) => setForm((current) => ({ ...current, department_id: value }))} options={[{ value: "", label: "Any department" }, ...departments.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) }))]} />
+                </Field>
+                <Field label="Position">
+                  <FluentSelect ariaLabel="Position" className="w-full" value={form.position_id ?? ""} placeholder="Any position" onChange={(value) => setForm((current) => ({ ...current, position_id: value }))} options={[{ value: "", label: "Any position" }, ...positions.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) }))]} />
+                </Field>
+                <Field label="Grade">
+                  <FluentSelect ariaLabel="Grade" className="w-full" value={form.grade_id ?? ""} placeholder="Any grade" onChange={(value) => setForm((current) => ({ ...current, grade_id: value }))} options={[{ value: "", label: "Any grade" }, ...grades.map((row) => ({ value: String(rowId(row)), label: optionLabel(row) }))]} />
+                </Field>
+                <Field label="Employee">
+                  <FluentSelect ariaLabel="Employee" className="w-full" value={form.employee_id ?? ""} placeholder="All employees" onChange={(value) => setForm((current) => ({ ...current, employee_id: value }))} options={[{ value: "", label: "All employees" }, ...employees.map((row) => ({ value: String(rowId(row)), label: employeeLabel(row) }))]} />
+                </Field>
+                <Field label="Employment type"><input className={inputClass} value={form.employment_type ?? ""} onChange={(event) => setForm((current) => ({ ...current, employment_type: event.target.value }))} placeholder="Any employment type" /></Field>
+                <Field label="Review cycle"><input className={inputClass} value={form.review_cycle ?? ""} onChange={(event) => setForm((current) => ({ ...current, review_cycle: event.target.value }))} placeholder="e.g. QUARTERLY" /></Field>
+                <Field label="Template code"><input className={inputClass} value={form.template_code ?? ""} onChange={(event) => setForm((current) => ({ ...current, template_code: event.target.value }))} /></Field>
+                <Field label="Weight override"><input type="number" step="0.01" className={inputClass} value={form.weight_override ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight_override: event.target.value }))} /></Field>
+                <Field label="Target override"><input type="number" step="any" className={inputClass} value={form.target_override ?? ""} onChange={(event) => setForm((current) => ({ ...current, target_override: event.target.value }))} /></Field>
               </>
             ) : null}
             {createMode === "competency" ? (
@@ -2726,10 +2929,4 @@ function WorkflowStepBuilder({
       </div>
     </div>
   )
-}
-
-function cnTab(active: boolean) {
-  return active
-    ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold !text-white"
-    : "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
 }

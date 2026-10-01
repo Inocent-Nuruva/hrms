@@ -4590,10 +4590,10 @@ export function EmployeeSelfServiceProfileView() {
                             Default avatars
                           </p>
                           {defaultAvatarsLoading ? (
-                            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
                               <FluentLoadingIndicator className="size-3.5 animate-spin" />
                               Loading avatars…
-                            </p>
+                            </div>
                           ) : defaultAvatars.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                               No default avatars available yet.

@@ -5,6 +5,7 @@ import {
   createPerformanceFinancialYear,
   createPerformanceImprovementPlan,
   createPerformanceKpi,
+  createPerformanceKpiRule,
   createPerformanceKpiVersion,
   generatePerformancePeriods,
   getManagerPerformanceSummary,
@@ -12,6 +13,8 @@ import {
   getPerformanceDashboard,
   listMyPerformanceReviews,
   listPerformanceFinancialYears,
+  listPerformanceKpiRules,
+  listPerformanceKpis,
   listPerformanceImprovementPlans,
   submitManagerPerformanceReview,
   submitMyPerformanceSelfReview,
@@ -237,5 +240,54 @@ describe("performance admin API helpers", () => {
     )
     expect(reviews).toEqual([expect.objectContaining({ id: 9 })])
     expect(pips).toEqual([expect.objectContaining({ id: 3 })])
+  })
+
+  it("loads KPI definitions and applicability rules and sends supported rule scope fields", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([{ id: 8, code: "SALES", name: "Sales" }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: 19, kpiDefinitionVersionId: 11, departmentId: 3 }]))
+      .mockResolvedValueOnce(jsonResponse({ id: 20, kpiDefinitionVersionId: 11 }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const kpis = await listPerformanceKpis("token")
+    const rules = await listPerformanceKpiRules("token")
+    await createPerformanceKpiRule("token", {
+      kpi_definition_version_id: 11,
+      branch_id: 2,
+      department_id: 3,
+      position_id: 4,
+      grade_id: 5,
+      employee_id: 6,
+      employment_type: "FULL_TIME",
+      financial_year_id: 7,
+      review_cycle: "QUARTERLY",
+      template_code: "SALES_QTR",
+      weight_override: 25,
+      target_override: 100,
+    })
+
+    expect(kpis).toEqual([{ id: 8, code: "SALES", name: "Sales" }])
+    expect(rules).toEqual([{ id: 19, kpiDefinitionVersionId: 11, departmentId: 3 }])
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8888/api/performance/kpis", expect.objectContaining({ method: "GET" }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8888/api/performance/kpi-rules", expect.objectContaining({ method: "GET" }))
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://localhost:8888/api/performance/kpi-rules",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({
+        kpi_definition_version_id: 11,
+        branch_id: 2,
+        department_id: 3,
+        position_id: 4,
+        grade_id: 5,
+        employee_id: 6,
+        employment_type: "FULL_TIME",
+        financial_year_id: 7,
+        review_cycle: "QUARTERLY",
+        template_code: "SALES_QTR",
+        weight_override: 25,
+        target_override: 100,
+      }) }),
+    )
   })
 })

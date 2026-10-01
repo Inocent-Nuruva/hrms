@@ -572,19 +572,19 @@ export function NotificationCenter({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                className="!size-8 !min-w-8 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40"
                 onClick={() => void loadNotifications({ showErrors: true, markVisibleSeen: open })}
                 disabled={loading}
                 title="Refresh"
                 aria-label="Refresh notifications"
               >
-                <RefreshCw className={cn("size-4", loading ? "animate-spin" : "")} />
+                <RefreshCw className={cn("size-5 text-blue-600 dark:text-blue-400", loading ? "animate-spin" : "")} />
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                className="!size-8 !min-w-8 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                 onClick={() => void handleMarkAllRead()}
                 disabled={markingAll || unreadCount === 0}
                 title="Mark all as read"
@@ -593,14 +593,14 @@ export function NotificationCenter({
                 {markingAll ? (
                   <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
-                  <CheckCheck className="size-4" />
+                  <CheckCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
                 )}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                className="!size-8 !min-w-8 rounded-md hover:bg-violet-50 dark:hover:bg-violet-950/40"
                 onClick={() => void handleArchiveAllNotifications()}
                 disabled={clearingAll || loading || items.length === 0 || includeArchived}
                 title={
@@ -613,14 +613,14 @@ export function NotificationCenter({
                 {clearingAll ? (
                   <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
-                  <Archive className="size-4" />
+                  <Archive className="size-5 text-violet-600 dark:text-violet-400" />
                 )}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className="!size-7 !min-w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                className="!size-8 !min-w-8 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950/40"
                 onClick={() => void handleSendTestNotification()}
                 disabled={sendingTest || clearingAll || !hasRecipientForTest}
                 title={
@@ -630,7 +630,7 @@ export function NotificationCenter({
                 }
                 aria-label="Send test notification"
               >
-                <Send className={cn("size-4", sendingTest ? "animate-pulse" : "")} />
+                <Send className={cn("size-5 text-amber-600 dark:text-amber-400", sendingTest ? "animate-pulse" : "")} />
               </Button>
             </div>
           </div>
@@ -642,7 +642,7 @@ export function NotificationCenter({
           </div>
         ) : null}
 
-        <div className="flex w-full flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
               <FluentSearchBox
@@ -678,7 +678,7 @@ export function NotificationCenter({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
             <Field label="Status" size="small">
               <Select
                 value={statusFilter}
@@ -766,7 +766,7 @@ export function NotificationCenter({
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={listAnimationKey}
-                className="grid gap-2"
+                className="grid gap-1.5"
                 variants={shouldAnimate ? notificationListVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
@@ -799,7 +799,7 @@ export function NotificationCenter({
                         appearance={unread ? "filled-alternative" : "outline"}
                         size="small"
                         className={cn(
-                          "relative !flex-row !items-center gap-2 !rounded-lg !px-2.5 !py-2 transition-colors",
+                          "relative !flex-row !items-center gap-2 !rounded-lg !px-2 !py-1.5 transition-colors",
                           unread ? "border-primary/25" : null,
                         )}
                       >
@@ -812,10 +812,10 @@ export function NotificationCenter({
                         className="min-w-0 flex-1 text-left"
                         onClick={() => void handleNotificationClick(row)}
                       >
-                        <div className="flex items-start gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           <div
                             className={cn(
-                              "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
                               unread
                                 ? "bg-primary/10 text-primary"
                                 : "bg-muted text-muted-foreground"
@@ -823,40 +823,38 @@ export function NotificationCenter({
                           >
                             <Bell className="h-3 w-3" />
                           </div>
-                          <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="flex items-center justify-between gap-2">
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5">
+                            <div className="flex min-w-0 items-center gap-1">
                               <p
                                 className={cn(
-                                  "truncate text-[13px] leading-tight tracking-tight text-primary",
+                                  "min-w-0 truncate text-xs leading-tight tracking-tight text-primary",
                                   unread ? "font-semibold" : "font-medium opacity-90"
                                 )}
                               >
                                 {title}
                               </p>
-                              <div className="flex shrink-0 items-center gap-1">
-                                {unread ? (
-                                  <span className="rounded-full bg-primary/10 px-1 py-px text-[9px] font-semibold leading-none text-primary">
-                                    New
-                                  </span>
-                                ) : null}
-                                {archived ? (
-                                  <span className="rounded-full bg-violet-50 px-1 py-px text-[9px] font-medium leading-none text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                                    Arch
-                                  </span>
-                                ) : null}
-                                {createdAt ? (
-                                  <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                                    {formatNotificationTime(createdAt)}
-                                  </span>
-                                ) : null}
-                              </div>
+                              {unread ? (
+                                <span className="shrink-0 rounded-full bg-primary/10 px-1 py-px text-[9px] font-semibold leading-none text-primary">
+                                  New
+                                </span>
+                              ) : null}
+                              {archived ? (
+                                <span className="shrink-0 rounded-full bg-violet-50 px-1 py-px text-[9px] font-medium leading-none text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                  Archived
+                                </span>
+                              ) : null}
                             </div>
+                            {createdAt ? (
+                              <span className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+                                {formatNotificationTime(createdAt)}
+                              </span>
+                            ) : <span />}
                             {message ? (
-                              <p className="line-clamp-1 text-[11px] leading-4 text-muted-foreground">
+                              <p className="col-span-2 line-clamp-1 text-[11px] leading-tight text-muted-foreground">
                                 {message}
                               </p>
                             ) : null}
-                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-none">
+                            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] leading-tight">
                               <span className={cn("font-medium", categoryTextClass(categoryLabel))}>
                                 {categoryLabel}
                               </span>
@@ -885,7 +883,7 @@ export function NotificationCenter({
 
                       {/* Always-visible inline actions — system primary color */}
                       <div
-                        className="flex shrink-0 items-center gap-0.5"
+                        className="flex shrink-0 items-center gap-0"
                         onClick={(event) => event.stopPropagation()}
                       >
                         {busy ? (
@@ -895,26 +893,26 @@ export function NotificationCenter({
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          className="h-7 w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                          className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                           disabled={busy}
                           title="Open"
                           aria-label={`Open ${title}`}
                           onClick={() => void handleNotificationClick(row)}
                         >
-                          <ArrowUpRight className="h-3.5 w-3.5" />
+                          <ArrowUpRight className="h-3 w-3" />
                         </Button>
                         {!archived && unread ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="h-7 w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark read"
                             aria-label={`Mark ${title} as read`}
                             onClick={() => void handleMarkRead(row)}
                           >
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-3 w-3" />
                           </Button>
                         ) : null}
                         {!archived && !seen ? (
@@ -922,13 +920,13 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="h-7 w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark seen"
                             aria-label={`Mark ${title} as seen`}
                             onClick={() => void handleMarkSeen(row)}
                           >
-                            <Eye className="h-3.5 w-3.5" />
+                            <Eye className="h-3 w-3" />
                           </Button>
                         ) : null}
                         {!archived ? (
@@ -936,13 +934,13 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="h-7 w-7 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Archive"
                             aria-label={`Archive ${title}`}
                             onClick={() => void handleArchive(row)}
                           >
-                            <Archive className="h-3.5 w-3.5" />
+                            <Archive className="h-3 w-3" />
                           </Button>
                         ) : null}
                       </div>

@@ -2,7 +2,11 @@
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { EyeIcon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  ArrowSync20Regular,
+  Eye20Regular,
+  ShieldCheckmark20Regular,
+} from "@fluentui/react-icons"
 import {
   Dialog,
   DialogDescription,
@@ -11,7 +15,9 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import { Input as FluentInput } from "@fluentui/react-components"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { Textarea } from "@/components/ui/textarea"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
@@ -20,10 +26,15 @@ import {
   getAccessCredentialById,
   getAccessCredentialDeviceActionRoutes,
   getAccessDeviceCommandLogById,
+  getCompanyById,
+  getCurrentCompanyUser,
   getHikvisionSyncLogById,
+  getMyCompany,
   listAccessAuditLogs,
   listAccessCredentials,
   listAccessDeviceCommandLogs,
+  listAttendanceDevices,
+  listBranches,
   listHikvisionSyncLogs,
   updateAccessCredentialStatus,
   type AdminRecord,
@@ -74,12 +85,12 @@ const SECTION_CONFIG: Record<AccessControlActivitySectionKey, SectionConfig> = {
   "device-command-logs": {
     title: "Device commands",
     description: "Commands sent to door devices, and whether they succeeded.",
-    preferredColumns: ["commandType", "status", "device_name", "created_at", "updated_at"],
+    preferredColumns: ["commandType", "status", "device_name", "company_name", "branch_name", "created_by", "created_at", "updated_at"],
   },
   "hikvision-sync-logs": {
     title: "Device sync",
     description: "When people, doors, and schedules were copied to or from devices.",
-    preferredColumns: ["syncType", "direction", "status", "device_name", "created_at", "updated_at"],
+    preferredColumns: ["syncType", "direction", "status", "device_name", "company_name", "created_at", "updated_at"],
   },
 }
 
@@ -130,6 +141,91 @@ function readStringFromRecord(row: AdminRecord, keys: string[]) {
     }
   }
   return null
+}
+
+async function withCompanyNames(rows: AdminRecord[], token: string) {
+  const currentCompany = await getMyCompany(token).catch(() => null)
+  const currentCompanyId = currentCompany
+    ? readNumberFromRecord(currentCompany, ["id", "company_id", "companyId"])
+    : null
+  const currentCompanyName = currentCompany
+    ? readStringFromRecord(currentCompany, ["company_name", "companyName", "name", "display_name"])
+    : null
+  const companyNames = new Map<string, string>()
+  if (currentCompanyId !== null && currentCompanyName) {
+    companyNames.set(String(currentCompanyId), currentCompanyName)
+  }
+
+  const companyIds = Array.from(new Set(rows
+    .map((row) => readNumberFromRecord(row, ["company_id", "companyId"]))
+    .filter((id): id is number => id !== null)))
+  await Promise.all(companyIds
+    .filter((id) => !companyNames.has(String(id)))
+    .map(async (id) => {
+      const company = await getCompanyById(token, id).catch(() => null)
+      const name = company
+        ? readStringFromRecord(company, ["company_name", "companyName", "name", "display_name"])
+        : null
+      if (name) companyNames.set(String(id), name)
+    }))
+
+  return rows.map((row) => {
+    const companyId = readNumberFromRecord(row, ["company_id", "companyId"])
+    const name = readStringFromRecord(row, ["company_name", "companyName", "company"]) ??
+      (companyId === null ? null : companyNames.get(String(companyId))) ??
+      currentCompanyName ??
+      "Unknown company"
+    const displayRow = { ...row }
+    delete displayRow.company_id
+    delete displayRow.companyId
+    displayRow.company_name = name
+    return displayRow
+  })
+}
+
+async function withCommandLogNames(rows: AdminRecord[], token: string) {
+  const branchIds = Array.from(new Set(rows
+    .map((row) => readNumberFromRecord(row, ["branch_id", "branchId"]))
+    .filter((id): id is number => id !== null)))
+  const creatorIds = Array.from(new Set(rows
+    .map((row) => readNumberFromRecord(row, ["created_by_company_user_id", "createdByCompanyUserId", "created_by_user_id", "createdByUserId"]))
+    .filter((id): id is number => id !== null)))
+
+  const [branchesResult, creatorEntries] = await Promise.all([
+    listBranches(token, { page: 1, limit: 100 }).catch(() => null),
+    Promise.all(creatorIds.map(async (id) => {
+      const user = await getCurrentCompanyUser(token, id).catch(() => null)
+      const name = user
+        ? readStringFromRecord(user, ["display_name", "displayName", "full_name", "fullName", "name", "user_name", "username"]) ??
+          [readStringFromRecord(user, ["first_name", "firstName"]), readStringFromRecord(user, ["last_name", "lastName"])].filter(Boolean).join(" ")
+        : ""
+      return [String(id), name] as const
+    })),
+  ])
+
+  const branchNames = new Map<string, string>()
+  for (const branch of branchesResult?.rows ?? []) {
+    const id = readNumberFromRecord(branch, ["id", "branch_id", "branchId"])
+    const name = readStringFromRecord(branch, ["branch_name", "branchName", "name", "display_name", "title"])
+    if (id !== null && name) branchNames.set(String(id), name)
+  }
+  const creatorNames = new Map(creatorEntries.filter(([, name]) => name))
+
+  return rows.map((row) => {
+    const branchId = readNumberFromRecord(row, ["branch_id", "branchId"])
+    const creatorId = readNumberFromRecord(row, ["created_by_company_user_id", "createdByCompanyUserId", "created_by_user_id", "createdByUserId"])
+    const branchName = readStringFromRecord(row, ["branch_name", "branchName"]) ??
+      (branchId === null ? null : branchNames.get(String(branchId))) ?? "Unknown branch"
+    const creatorName = readStringFromRecord(row, ["created_by", "createdBy", "created_by_user_name", "createdByUserName", "created_by_name"]) ??
+      (creatorId === null ? null : creatorNames.get(String(creatorId))) ?? "Unknown user"
+    const displayRow = { ...row }
+    for (const key of ["branch_id", "branchId", "created_by_company_user_id", "createdByCompanyUserId", "created_by_user_id", "createdByUserId"]) {
+      delete displayRow[key]
+    }
+    displayRow.branch_name = branchName
+    displayRow.created_by = creatorName
+    return displayRow
+  })
 }
 
 function resolveRowId(row: AdminRecord, fallbackIndex: number) {
@@ -503,7 +599,8 @@ export function AccessControlActivityView({
           status: statusFilter || undefined,
           commandType: typeFilter || undefined,
         })
-        setRows(result.rows)
+        const rowsWithNames = await withCommandLogNames(result.rows, token)
+        setRows(await withCompanyNames(rowsWithNames, token))
         return
       }
 
@@ -514,7 +611,24 @@ export function AccessControlActivityView({
         syncType: typeFilter || undefined,
         direction: directionFilter || undefined,
       })
-      setRows(result.rows)
+      const devices = await listAttendanceDevices(token).catch(() => null)
+      const deviceNames = new Map<string, string>()
+      devices?.rows.forEach((device) => {
+        const id = readNumberFromRecord(device, ["id", "device_id", "deviceId"])
+        const name = readStringFromRecord(device, ["device_name", "deviceName", "name", "title"])
+        if (id !== null && name) deviceNames.set(String(id), name)
+      })
+      const rowsWithDeviceNames = result.rows.map((row) => {
+        const deviceId = readNumberFromRecord(row, ["device_id", "deviceId"])
+        const deviceName = readStringFromRecord(row, ["device_name", "deviceName", "terminal_name"])
+          ?? (deviceId === null ? null : deviceNames.get(String(deviceId)))
+        const displayRow = { ...row }
+        delete displayRow.device_id
+        delete displayRow.deviceId
+        displayRow.device_name = deviceName ?? "-"
+        return displayRow
+      })
+      setRows(await withCompanyNames(rowsWithDeviceNames, token))
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) {
         setLoading(false)
@@ -569,7 +683,14 @@ export function AccessControlActivityView({
             : activeSection === "device-command-logs"
               ? await getAccessDeviceCommandLogById(token, id)
               : await getHikvisionSyncLogById(token, id)
-      setSelectedRecord(detail ? { ...row, ...detail } : row)
+      const mergedDetail = detail ? { ...row, ...detail } : row
+      const namedDetail = activeSection === "device-command-logs"
+        ? (await withCommandLogNames([mergedDetail], token))[0]
+        : mergedDetail
+      const displayDetail = activeSection === "device-command-logs"
+        ? (await withCompanyNames([namedDetail], token))[0]
+        : namedDetail
+      setSelectedRecord(displayDetail)
 
       if (activeSection === "access-credentials") {
         const routes = await getAccessCredentialDeviceActionRoutes(token, id)
@@ -654,14 +775,14 @@ export function AccessControlActivityView({
             defaultWidth: activeSection === "access-credentials" && canManageCredentials ? 95 : 55,
             sortable: false,
             render: (row: AdminRecord) => (
-              <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+        <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
                 <button
                   type="button"
                   className="admin-table-icon-button"
                   aria-label="View details"
                   onClick={() => void openDetail(row, filteredRows.indexOf(row))}
                 >
-                  <EyeIcon className="h-3.5 w-3.5" />
+                  <Eye20Regular className="size-4 text-blue-600 dark:text-blue-400" />
                 </button>
                 {activeSection === "access-credentials" && canManageCredentials ? (
                   <button
@@ -670,7 +791,7 @@ export function AccessControlActivityView({
                     aria-label="Manage credential status"
                     onClick={() => openActionDialog(row)}
                   >
-                    <ShieldCheckIcon className="h-3.5 w-3.5" />
+                    <ShieldCheckmark20Regular className="size-4 text-emerald-600 dark:text-emerald-400" />
                   </button>
                 ) : null}
               </div>
@@ -681,7 +802,7 @@ export function AccessControlActivityView({
         loading={loading}
         showExport={false}
         enableColumnVisibility
-        hiddenColumnKeys={["id"]}
+        hiddenColumnKeys={activeSection === "hikvision-sync-logs" ? ["id", "company_id", "companyId"] : ["id"]}
         storageKey={`access-control-${activeSection}`}
         toolbarStart={
           <div className="min-w-0 flex flex-col gap-0.5">
@@ -696,11 +817,12 @@ export function AccessControlActivityView({
         }
         toolbarActions={
           <>
-            <input
-              className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-44"
+            <FluentSearchBox
+              size="small"
+              className="h-8 w-32 sm:w-44"
               placeholder={`Search ${config.title.toLowerCase()}…`}
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(_event, data) => setSearch(data.value)}
             />
             {activeSection === "access-credentials" ? (
               <FluentSelect
@@ -720,23 +842,26 @@ export function AccessControlActivityView({
                 ]}
               />
             ) : activeSection === "device-command-logs" ? (
-              <input
-                className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
+              <FluentInput
+                size="small"
+                className="!h-8 w-32 sm:w-40"
                 placeholder="Command type…"
                 value={typeFilter}
                 onChange={(event) => setTypeFilter(event.target.value)}
               />
             ) : activeSection === "hikvision-sync-logs" ? (
               <>
-                <input
-                  className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
+                <FluentInput
+                  size="small"
+                  className="!h-8 w-32 sm:w-40"
                   placeholder="Sync type…"
                   value={typeFilter}
                   onChange={(event) => setTypeFilter(event.target.value)}
                 />
                 <FluentSelect
                   ariaLabel="Filter by sync direction"
-                  size="small"
+                  size="medium"
+                  className="w-28 sm:w-32"
                   value={directionFilter}
                   onChange={setDirectionFilter}
                   placeholder="All directions"
@@ -750,7 +875,8 @@ export function AccessControlActivityView({
             ) : null}
             <FluentSelect
               ariaLabel="Filter by status"
-              size="small"
+              size={activeSection === "hikvision-sync-logs" ? "medium" : "small"}
+              className={activeSection === "hikvision-sync-logs" ? "w-28 sm:w-32" : undefined}
               value={statusFilter}
               onChange={setStatusFilter}
               placeholder="All statuses"
@@ -782,12 +908,12 @@ export function AccessControlActivityView({
             <button
               type="button"
               onClick={() => void loadRows()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border p-2 text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               disabled={loading}
               aria-label="Refresh"
               title="Refresh"
             >
-              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              <ArrowSync20Regular className={`size-5 text-blue-600 dark:text-blue-400 ${loading ? "animate-spin" : ""}`} />
             </button>
           </>
         }

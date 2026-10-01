@@ -384,7 +384,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <Navigation20Regular data-icon="inline-start" />
+      <Navigation20Regular className="text-sky-600 dark:text-sky-400" data-icon="inline-start" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

@@ -3,13 +3,13 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-  BellIcon,
-  CheckCheckIcon,
-  ExpandIcon,
-  MinimizeIcon,
-  RefreshCwIcon,
-  Settings2Icon,
-} from "lucide-react"
+  AlertBadge16Regular,
+  ArrowSync16Regular,
+  CheckmarkCircle20Regular,
+  FullScreenMaximize16Regular,
+  FullScreenMinimize16Regular,
+  Settings16Regular,
+} from "@fluentui/react-icons"
 
 import { AccentColorPicker } from "@/components/accent-color-picker"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
@@ -64,7 +64,7 @@ function QuickSettingsMenu({
         aria-label="Open quick settings"
         title="Quick settings"
       >
-        <Settings2Icon className="size-4" />
+        <Settings16Regular className="size-4 text-violet-600 dark:text-violet-400" />
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-3">
         <div className="flex items-start justify-between gap-3">
@@ -96,7 +96,7 @@ function QuickSettingsMenu({
             title="Refresh page data"
             className={headerActionButtonClass}
           >
-            <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
+            <ArrowSync16Regular className={cn("size-4 text-blue-600 dark:text-blue-400", loading && "animate-spin")} />
           </Button>
         </div>
       </PopoverContent>
@@ -231,7 +231,11 @@ export function SiteHeader({
             aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            {fullscreen ? <MinimizeIcon className="size-4" /> : <ExpandIcon className="size-4" />}
+            {fullscreen ? (
+              <FullScreenMinimize16Regular className="size-4 text-sky-600 dark:text-sky-400" />
+            ) : (
+              <FullScreenMaximize16Regular className="size-4 text-sky-600 dark:text-sky-400" />
+            )}
           </Button>
 
           <QuickSettingsMenu onRefresh={onRefresh} loading={loading} />
@@ -253,7 +257,7 @@ export function SiteHeader({
                     />
                   }
                 >
-                  <BellIcon className="size-4" />
+                  <AlertBadge16Regular className="size-4 text-amber-600 dark:text-amber-400" />
                   <span className="sr-only">Notifications</span>
                 </DialogTrigger>
                 {unreadNotificationCount > 0 ? (
@@ -284,7 +288,7 @@ export function SiteHeader({
                     </div>
                     {unreadNotificationCount === 0 ? (
                       <span className="inline-flex items-center gap-1 pl-4 text-xs font-medium tracking-wide text-emerald-600 dark:text-emerald-400">
-                        <CheckCheckIcon className="size-3.5 shrink-0" aria-hidden />
+                        <CheckmarkCircle20Regular className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
                         All caught up
                       </span>
                     ) : null}

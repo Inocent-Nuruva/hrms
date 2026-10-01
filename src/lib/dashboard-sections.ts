@@ -196,13 +196,13 @@ export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "My performance",
     items: [
       { title: "Overview", url: "/dashboard/me/performance/overview" },
-      { title: "KPIs", url: "/dashboard/me/performance/kpis" },
-      { title: "Assignments", url: "/dashboard/me/performance/assignments" },
+      { title: "My KPIs", url: "/dashboard/me/performance/kpis" },
+      { title: "Review cycle", url: "/dashboard/me/performance/assignments" },
       { title: "Reviews", url: "/dashboard/me/performance/reviews" },
       { title: "Achievements", url: "/dashboard/me/performance/achievements" },
-      { title: "Improvement", url: "/dashboard/me/performance/improvement" },
-      { title: "Team", url: "/dashboard/me/performance/team" },
-      { title: "Team KPIs", url: "/dashboard/me/performance/manager-kpis" },
+      { title: "Improvement plans", url: "/dashboard/me/performance/improvement" },
+      { title: "Team performance", url: "/dashboard/me/performance/team" },
+      { title: "KPI approvals", url: "/dashboard/me/performance/manager-kpis" },
     ],
   },
 ]

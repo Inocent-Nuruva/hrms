@@ -1492,7 +1492,7 @@ export default function AdminDashboardView({
                 showHrAnalytics={effectiveHomeDashboardKind === "hr"}
               />
             ) : null}
-            <div className="flex min-w-0 max-w-full flex-col gap-3 px-3 pt-0 pb-3 sm:px-4 md:gap-4 md:px-4 md:pb-4">
+            <div className={`flex min-w-0 max-w-full flex-col px-3 pt-0 pb-3 sm:px-4 md:px-4 md:pb-4 ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}>
               {navigationReady && showAccessControlTabs ? (
                 <DashboardSectionTabs groups={accessControlTabGroups} />
               ) : null}

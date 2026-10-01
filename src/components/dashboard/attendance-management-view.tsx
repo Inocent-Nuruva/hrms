@@ -13,6 +13,7 @@ import {
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react"
+import { Add16Regular, ArrowSync16Regular, Delete16Regular, Edit16Regular, Filter16Regular } from "@fluentui/react-icons"
 import {
   Button,
   Field,
@@ -2024,6 +2025,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [editingId, setEditingId] = React.useState("")
   const [editingLoading, setEditingLoading] = React.useState(false)
   const [deletingId, setDeletingId] = React.useState("")
+  const [deletingName, setDeletingName] = React.useState("")
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState("")
   const [activatingId, setActivatingId] = React.useState("")
   const [validateOpen, setValidateOpen] = React.useState(false)
   const [validateRow, setValidateRow] = React.useState<AdminRecord | null>(null)
@@ -2060,6 +2063,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setEditingId("")
     setEditingLoading(false)
     setDeletingId("")
+    setDeletingName("")
+    setDeleteConfirmation("")
     setActivatingId("")
     setValidateOpen(false)
     setValidateRow(null)
@@ -2555,8 +2560,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
       setFormError("Authentication required. Please log in again.")
       return
     }
-    if (!deletingId.trim()) {
-      setFormError("Provide record id to delete.")
+    if (!deletingId.trim() || deleteConfirmation.trim().toLocaleLowerCase() !== deletingName.trim().toLocaleLowerCase()) {
+      setFormError("Type the displayed record name to confirm deletion.")
       return
     }
     try {
@@ -2566,6 +2571,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
       setFormError(null)
       setDeleteOpen(false)
       setDeletingId("")
+      setDeletingName("")
+      setDeleteConfirmation("")
       await fetchRows()
     } catch (errorObject) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Delete failed.")
@@ -2769,6 +2776,16 @@ export function AttendanceManagementView({ section }: { section: string }) {
     }
 
     setDeletingId(String(rowId))
+    const deviceIdentity = activeSection === "devices" ? buildAttendanceDeviceIdentity(row) : null
+    const genericName = readStringFromRecord(row, [
+      "name", "display_name", "displayName", "full_name", "fullName", "employee_name", "employeeName",
+      "department_name", "departmentName", "branch_name", "branchName", "policy_name", "policyName",
+      "checkpoint_name", "checkpointName", "holiday_name", "holidayName", "code", "device_code", "deviceCode",
+    ])
+    setDeletingName(
+      deviceIdentity?.name ?? deviceIdentity?.code ?? deviceIdentity?.serial ?? deviceIdentity?.model ?? genericName ?? `${activeSection.replaceAll("-", " ")} record`
+    )
+    setDeleteConfirmation("")
     setDeleteOpen(true)
     setFormError(null)
   }
@@ -2966,7 +2983,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
           aria-label="Filter devices"
           title="Filters"
         >
-          <FilterIcon className="h-3.5 w-3.5 text-primary" />
+          <Filter16Regular className="size-4 text-blue-600 dark:text-blue-400" />
           <span className="hidden sm:inline">Filters</span>
           {activeDeviceFilterCount > 0 || deviceSearch.trim() ? (
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
@@ -2979,9 +2996,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
             <DropdownMenuLabel className="px-0 py-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Filters
             </DropdownMenuLabel>
-            <input
-              type="text"
-              className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            <Input
+              size="small"
+              className="!h-8 w-full"
               value={deviceSearch}
               onChange={(event) => setDeviceSearch(event.target.value)}
               placeholder="Search code, serial, model…"
@@ -3303,15 +3320,30 @@ export function AttendanceManagementView({ section }: { section: string }) {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
-          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialog open={deleteOpen} onOpenChange={(open) => {
+            setDeleteOpen(open)
+            if (!open) {
+              setDeleteConfirmation("")
+              setDeletingName("")
+            }
+          }}>
             <AlertDialogContent className="max-w-md">
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete {activeSection.replaceAll("-", " ")}</AlertDialogTitle>
-                <AlertDialogDescription>This will remove the selected record.</AlertDialogDescription>
+                <AlertDialogDescription>This will permanently remove the selected record. Type its name to confirm.</AlertDialogDescription>
               </AlertDialogHeader>
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                Record ID: {deletingId || "-"}
+              <div className="grid gap-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+                  Name: {deletingName || "-"}
+                </div>
+                <Input
+                  size="small"
+                  aria-label={`Type ${deletingName} to confirm deletion`}
+                  placeholder={`Type ${deletingName} to confirm`}
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                />
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setFormError(null)}>Cancel</AlertDialogCancel>
@@ -3319,7 +3351,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   type="button"
                   appearance="primary"
                   onClick={() => void onDelete()}
-                  disabled={!supportsEditDelete}
+                  disabled={!supportsEditDelete || deleteConfirmation.trim().toLocaleLowerCase() !== deletingName.trim().toLocaleLowerCase()}
                   className="min-w-24 !bg-red-600 !text-white hover:!bg-red-700 disabled:opacity-50"
                 >
                   Delete
@@ -3577,7 +3609,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   ) : null}
                   <Button
                     appearance="secondary"
-                    icon={<PencilIcon className="h-3.5 w-3.5" />}
+                    icon={<Edit16Regular className="size-4 text-blue-600 dark:text-blue-400" />}
                     onClick={() => {
                       setDetailsOpen(false)
                       openEditDialog(selectedRow)
@@ -3588,7 +3620,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   <Button
                     appearance="primary"
                     className="!bg-red-600 !text-white hover:!bg-red-700"
-                    icon={<Trash2Icon className="h-3.5 w-3.5" />}
+                    icon={<Delete16Regular className="size-4 text-red-600 dark:text-red-400" />}
                     onClick={() => {
                       setDetailsOpen(false)
                       openDeleteDialog(selectedRow)
@@ -3721,8 +3753,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   </button>
                 </>
               ) : null}
-              <button className="admin-table-icon-button" aria-label="Edit" onClick={() => openEditDialog(row)}><PencilIcon className="h-3.5 w-3.5" /></button>
-              <button className="admin-table-icon-button" data-variant="danger" aria-label="Delete" onClick={() => openDeleteDialog(row)}><Trash2Icon className="h-3.5 w-3.5" /></button>
+              <button className="admin-table-icon-button" aria-label="Edit" onClick={() => openEditDialog(row)}><Edit16Regular className="size-4 text-blue-600 dark:text-blue-400" /></button>
+              <button className="admin-table-icon-button" data-variant="danger" aria-label="Delete" onClick={() => openDeleteDialog(row)}><Delete16Regular className="size-4 text-red-600 dark:text-red-400" /></button>
             </div>
           ) }] : []),
         ]}
@@ -3734,28 +3766,32 @@ export function AttendanceManagementView({ section }: { section: string }) {
         toolbarActions={
           <>
             {supportsCreate ? (
-              <button
+              <Button
                 type="button"
-                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+                appearance="primary"
+                size="small"
+                className="!h-8 !min-h-8"
+                icon={<Add16Regular />}
                 onClick={() => setCreateOpen(true)}
                 aria-label={`Create ${activeSection.replaceAll("-", " ")}`}
                 title="Create"
               >
-                <PlusIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Create</span>
-              </button>
+                Create
+              </Button>
             ) : null}
             {deviceFiltersControl}
-            <button
+            <Button
               type="button"
+              appearance="outline"
+              size="small"
+              className="!h-8 !min-h-8 !px-[14px]"
               onClick={() => void fetchRows()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               disabled={loading}
               aria-label="Refresh"
               title="Refresh"
+              icon={<ArrowSync16Regular className={`size-4 text-blue-600 ${loading ? "animate-spin" : ""}`} />}
             >
-              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-            </button>
+            </Button>
           </>
         }
         enableColumnVisibility={activeSection === "devices"}

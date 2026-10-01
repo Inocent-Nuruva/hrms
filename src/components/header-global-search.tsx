@@ -141,8 +141,9 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
         />
       </Field>
       {!query ? (
-        <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted/60 px-1 py-px text-[9px] font-semibold leading-none text-muted-foreground sm:inline-flex">
-          Ctrl /
+        <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-blue-200 bg-blue-50 px-1 py-px text-[9px] font-semibold leading-none text-blue-700 sm:inline-flex dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
+          <span>Ctrl</span>
+          <span className="text-violet-600 dark:text-violet-400">/</span>
         </kbd>
       ) : null}
 

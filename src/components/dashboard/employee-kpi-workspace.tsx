@@ -4,6 +4,7 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
+import Link from "next/link";
 import {
   CheckIcon, PlusIcon, RefreshCwIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store";
@@ -54,6 +55,8 @@ import {
 } from "@/lib/employee-kpi-periods";
 import { forgetForbiddenRoute } from "@/lib/forbidden-routes";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
 
 async function loadSelfServiceList(
   loader: () => Promise<AdminRecord[]>,
@@ -82,6 +85,12 @@ function progressOf(row: AdminRecord) {
 }
 
 export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
+  const actor = useDashboardActor();
+  const canManagePerformance = canAccessDashboardRoute(
+    "/dashboard/performance/setup",
+    actor.permissionLabels,
+    actor.accessMode,
+  );
   const [rows, setRows] = React.useState<AdminRecord[]>([]);
   const [periods, setPeriods] = React.useState<AdminRecord[]>([]);
   const [periodId, setPeriodId] = React.useState("");
@@ -174,6 +183,9 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     (canProposeEmployeeKpis(selectedPeriod) ? selectedPeriod : null) ??
     firstWritableEmployeeKpiPeriod(periods);
   const canCreateKpi = Boolean(writablePeriod);
+  const unavailableReason = periods.length === 0
+    ? "No performance period is linked to your KPI workspace yet. Performance management must open a cycle and assign your performance plan before you can propose KPIs."
+    : "None of your assigned performance periods is accepting KPI proposals right now.";
 
   function showCreate() {
     const nextPeriodId =
@@ -522,9 +534,11 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
                 className="w-full"
                 value={periodId}
                 onChange={setPeriodId}
-                placeholder="All periods"
+                placeholder={periods.length ? "All periods" : "No periods assigned"}
                 options={[
-                  { value: "", label: "All periods" },
+                  ...(periods.length
+                    ? [{ value: "", label: "All periods" }]
+                    : [{ value: "", label: "No periods assigned" }]),
                   ...periods.map((period) => ({
                     value: rowId(period),
                     label: `${optionLabel(period)} · ${readString(period, ["status"])}`,
@@ -533,9 +547,11 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               />
               <button
                 type="button"
-                className={primaryButtonClass}
+                className={`${primaryButtonClass} disabled:opacity-75`}
                 onClick={showCreate}
-                disabled={!canCreateKpi}
+                disabled={!canCreateKpi || loading}
+                title={!canCreateKpi ? unavailableReason : undefined}
+                aria-describedby={!canCreateKpi && !loading ? "kpi-create-unavailable" : undefined}
               >
                 <PlusIcon className="size-4" /> New KPI
               </button>
@@ -564,6 +580,17 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           </button>
         </div>
       </div>
+
+      {mode === "self" && !loading && !error && !canCreateKpi ? (
+        <div id="kpi-create-unavailable" className="flex flex-col gap-2 border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>{unavailableReason}</p>
+          {canManagePerformance ? (
+            <Link href="/dashboard/performance/setup" className={secondaryButtonClass}>
+              Open performance setup
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

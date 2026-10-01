@@ -68,6 +68,11 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
   const [dateTo, setDateTo] = React.useState("")
 
   const load = React.useCallback(async () => {
+    // Do not make manager API calls until the current access context is ready.
+    // A fast 403 during actor hydration can otherwise be treated as a route
+    // denial using an empty permission list and redirect the user to Profile.
+    if (!actor.ready) return
+
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -134,11 +139,12 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
       setError(first.reason instanceof Error ? first.reason.message : "Could not load manager data.")
     }
     setLoading(false)
-  }, [actionStatus, activeTab, dateFrom, dateTo, directOnly, leaveIfForbidden])
+  }, [actionStatus, activeTab, actor.ready, dateFrom, dateTo, directOnly, leaveIfForbidden])
 
   React.useEffect(() => {
+    if (!actor.ready) return
     void load()
-  }, [load])
+  }, [actor.ready, load])
 
   const rows =
     activeTab === "attendance" ? attendance : activeTab === "actions" ? actions : members

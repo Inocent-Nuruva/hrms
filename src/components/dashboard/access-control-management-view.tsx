@@ -3,7 +3,16 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { DoorOpenIcon, DownloadIcon, EyeIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import {
+  ArrowDownload16Regular,
+  ArrowSync16Regular,
+  Delete16Regular,
+  DoorArrowRight16Regular,
+  Edit16Regular,
+  Eye16Regular,
+  Add16Regular,
+} from "@fluentui/react-icons"
+import { Button as FluentButton, Input as FluentInput } from "@fluentui/react-components"
 import {
   Dialog,
   DialogDescription,
@@ -848,6 +857,8 @@ export function AccessControlManagementView({
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => buildInitialState(fields))
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
+  const [deletingName, setDeletingName] = React.useState("")
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState("")
   const [createOpen, setCreateOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
@@ -871,6 +882,8 @@ export function AccessControlManagementView({
     setEditValues(buildInitialState(fields))
     setEditingId("")
     setDeletingId("")
+    setDeletingName("")
+    setDeleteConfirmation("")
     setError(null)
     setFormError(null)
     setMessage(null)
@@ -1246,6 +1259,8 @@ export function AccessControlManagementView({
       setMessage("Deleted successfully.")
       setDeleteOpen(false)
       setDeletingId("")
+      setDeletingName("")
+      setDeleteConfirmation("")
       setFormError(null)
       await fetchRows()
     } catch (errorObject) {
@@ -1402,6 +1417,15 @@ export function AccessControlManagementView({
 
   const openDeleteDialog = (row: AdminRecord, fallbackIndex: number) => {
     setDeletingId(String(resolveRowId(row, fallbackIndex)))
+    const nameKeys: Record<AccessControlSectionKey, string[]> = {
+      doors: ["door_name", "doorName", "name"],
+      templates: ["template_name", "templateName", "name"],
+      organizations: ["org_name", "orgName", "name", "display_name"],
+      groups: ["group_name", "groupName", "name"],
+      "week-plans": ["name", "plan_name", "planName", "hikvision_plan_no", "hikvisionPlanNo"],
+    }
+    setDeletingName(readStringFromRecord(row, nameKeys[activeSection]) ?? `${title} record`)
+    setDeleteConfirmation("")
     setDeleteOpen(true)
     setFormError(null)
   }
@@ -1462,7 +1486,7 @@ export function AccessControlManagementView({
                           aria-label="View details"
                           title="View details"
                         >
-                          <EyeIcon className="h-3.5 w-3.5" />
+                          <Eye16Regular className="size-4 text-blue-600 dark:text-blue-400" />
                         </Link>
                       ) : null}
                       {activeSection === "doors" && canUpdate ? (
@@ -1473,7 +1497,7 @@ export function AccessControlManagementView({
                           title="Live door control"
                           onClick={() => openDoorControl(row, rows.indexOf(row))}
                         >
-                          <DoorOpenIcon className="h-3.5 w-3.5" />
+                          <DoorArrowRight16Regular className="size-4 text-emerald-600 dark:text-emerald-400" />
                         </button>
                       ) : null}
                       {(activeSection === "templates" || activeSection === "week-plans") && canUpdate ? (
@@ -1489,7 +1513,7 @@ export function AccessControlManagementView({
                           onClick={() => openSyncToDevice(row, rows.indexOf(row))}
                           disabled={syncing}
                         >
-                          <UploadIcon className="h-3.5 w-3.5" />
+                          <ArrowDownload16Regular className="size-4 text-blue-600 dark:text-blue-400" />
                         </button>
                       ) : null}
                       {canUpdate ? (
@@ -1499,7 +1523,7 @@ export function AccessControlManagementView({
                           aria-label="Edit"
                           onClick={() => openEditDialog(row, rows.indexOf(row))}
                         >
-                          <PencilIcon className="h-3.5 w-3.5" />
+                          <Edit16Regular className="size-4 text-blue-600 dark:text-blue-400" />
                         </button>
                       ) : null}
                       {canDelete ? (
@@ -1510,7 +1534,7 @@ export function AccessControlManagementView({
                           aria-label="Delete"
                           onClick={() => openDeleteDialog(row, rows.indexOf(row))}
                         >
-                          <Trash2Icon className="h-3.5 w-3.5" />
+                          <Delete16Regular className="size-4 text-red-600 dark:text-red-400" />
                         </button>
                       ) : null}
                     </div>
@@ -1539,8 +1563,9 @@ export function AccessControlManagementView({
           <>
             {activeSection === "templates" || activeSection === "week-plans" ? (
               <>
-                <input
-                  className="h-8 w-32 rounded-lg border border-border bg-background px-2 text-xs sm:w-40"
+                <FluentInput
+                  size="small"
+                  className="!h-8 w-32 sm:w-40"
                   placeholder={activeSection === "week-plans" ? "Search week plans…" : "Search templates…"}
                   value={templateSearch}
                   onChange={(event) => setTemplateSearch(event.target.value)}
@@ -1593,26 +1618,30 @@ export function AccessControlManagementView({
                     }),
                   ]}
                 />
-                <button
+                <FluentButton
                   type="button"
-                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium transition hover:bg-muted disabled:opacity-60"
+                  className="!h-[30px] !min-h-[30px] !w-[107px] !min-w-[107px]"
+                  appearance="outline"
+                  size="small"
+                  icon={syncing ? undefined : <ArrowDownload16Regular className="size-4 text-blue-600" />}
                   onClick={() => void onSyncResourcesFromDevice()}
                   disabled={syncing || !syncFromDeviceId}
                   title={activeSection === "week-plans" ? "Pull week plans from device" : "Pull templates from device"}
                 >
                   {syncing ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <DownloadIcon className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">From device</span>
-                </button>
+                  ) : null}
+                  From device
+                </FluentButton>
               </>
             ) : null}
             {canCreate ? (
-              <button
+              <FluentButton
                 type="button"
-                className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95"
+                className="!h-8 !min-h-8"
+                appearance="primary"
+                size="small"
+                icon={<Add16Regular />}
                 onClick={() => {
                   setFormError(null)
                   setCreateValues(
@@ -1623,20 +1652,21 @@ export function AccessControlManagementView({
                 aria-label={`Create ${title}`}
                 title="Create"
               >
-                <PlusIcon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Create</span>
-              </button>
+                Create
+              </FluentButton>
             ) : null}
-            <button
+            <FluentButton
               type="button"
               onClick={() => void fetchRows()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              className="!h-8 !min-h-8 !px-[14px]"
+              appearance="outline"
+              size="small"
               disabled={loading}
               aria-label="Refresh"
               title="Refresh"
+              icon={<ArrowSync16Regular className={`size-4 text-blue-600 ${loading ? "animate-spin" : ""}`} />}
             >
-              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-            </button>
+            </FluentButton>
           </>
         }
       />
@@ -1751,15 +1781,30 @@ export function AccessControlManagementView({
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Dialog open={deleteOpen} onOpenChange={(open) => {
+        setDeleteOpen(open)
+        if (!open) {
+          setDeleteConfirmation("")
+          setDeletingName("")
+        }
+      }}>
         <DialogPopup className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Delete {title}</DialogTitle>
-            <DialogDescription>This will remove the selected record.</DialogDescription>
+            <DialogDescription>This will permanently remove the selected record. Type its name to confirm.</DialogDescription>
           </DialogHeader>
           {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            Record ID: {deletingId || "-"}
+          <div className="grid gap-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+              Name: {deletingName || "-"}
+            </div>
+            <FluentInput
+              size="small"
+              aria-label={`Type ${deletingName} to confirm deletion`}
+              placeholder={`Type ${deletingName} to confirm`}
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+            />
           </div>
           <DialogFooter>
             <button
@@ -1768,6 +1813,7 @@ export function AccessControlManagementView({
               onClick={() => {
                 setDeleteOpen(false)
                 setFormError(null)
+                setDeleteConfirmation("")
               }}
             >
               Cancel
@@ -1776,6 +1822,7 @@ export function AccessControlManagementView({
               type="button"
               onClick={() => void onDelete()}
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700"
+              disabled={deleteConfirmation.trim().toLocaleLowerCase() !== deletingName.trim().toLocaleLowerCase()}
             >
               Delete
             </button>
@@ -1833,7 +1880,7 @@ export function AccessControlManagementView({
               disabled={Boolean(doorBusy)}
               onClick={() => void onDoorCommand("sync")}
             >
-              {doorBusy === "sync" ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {doorBusy === "sync" ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <ArrowDownload16Regular className="size-4 text-blue-600" />}
               {doorBusy === "sync" ? "Syncing…" : "Sync to device"}
             </button>
             <button
@@ -1915,7 +1962,7 @@ export function AccessControlManagementView({
               disabled={syncing || !syncToDeviceId}
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm !text-white transition hover:brightness-95 disabled:opacity-60"
             >
-              {syncing ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <UploadIcon className="h-3.5 w-3.5" />}
+              {syncing ? <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" /> : <ArrowDownload16Regular className="size-4" />}
               {syncing ? "Syncing…" : "Sync to device"}
             </button>
           </DialogFooter>
