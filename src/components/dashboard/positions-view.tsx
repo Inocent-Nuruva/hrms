@@ -154,6 +154,18 @@ function readDepartmentIds(row: AdminRecord) {
   return Array.from(ids)
 }
 
+function readDepartmentBranchId(row: AdminRecord) {
+  const branch = row.branch && typeof row.branch === "object" ? (row.branch as AdminRecord) : null
+  const nestedBranch = row.primary_branch && typeof row.primary_branch === "object"
+    ? (row.primary_branch as AdminRecord)
+    : null
+  return (
+    readNumber(row, ["branch_id", "branchId", "primary_branch_id", "primaryBranchId"]) ??
+    readNumber(branch ?? {}, ["id", "branch_id", "branchId"]) ??
+    readNumber(nestedBranch ?? {}, ["id", "branch_id", "branchId"])
+  )
+}
+
 function emptyForm(): PositionForm {
   return {
     name: "",
@@ -217,8 +229,8 @@ export function PositionsView() {
   const availableDepartments = React.useMemo(
     () =>
       departments.filter((department) => {
-        const branchId = readNumber(department, ["branch_id", "branchId"])
-        return !form.branch_id || branchId === null || String(branchId) === form.branch_id
+        const branchId = readDepartmentBranchId(department)
+        return !form.branch_id || (branchId !== null && String(branchId) === form.branch_id)
       }),
     [departments, form.branch_id]
   )
@@ -346,6 +358,20 @@ export function PositionsView() {
       return
     }
 
+    const selectedDepartmentIds = form.department_ids.map(Number)
+    const availableDepartmentIdSet = new Set(availableDepartmentIds.map(Number))
+    if (selectedDepartmentIds.length > 0 && !form.branch_id) {
+      setError("Select a branch before assigning this position to departments.")
+      return
+    }
+    if (
+      form.branch_id &&
+      selectedDepartmentIds.some((departmentId) => !availableDepartmentIdSet.has(departmentId))
+    ) {
+      setError("One or more selected departments do not belong to the selected branch. Re-select the departments and try again.")
+      return
+    }
+
     editLoadSequence.current += 1
     const nextCode = form.code.trim()
     const payload: AdminRecord = {
@@ -354,7 +380,7 @@ export function PositionsView() {
       description: form.description.trim(),
       status: form.status || "active",
       branch_id: form.branch_id.trim() ? Number(form.branch_id) : 0,
-      department_ids: form.department_ids.map(Number),
+      department_ids: selectedDepartmentIds.filter((departmentId) => Number.isFinite(departmentId)),
       reports_to_position_id: form.reports_to_position_id.trim() ? Number(form.reports_to_position_id) : 0,
       level: Math.min(100, Math.max(1, Number(form.level || "1"))),
       is_manager: form.is_manager === "true",
@@ -580,6 +606,7 @@ export function PositionsView() {
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
             <div className="grid gap-3 md:grid-cols-2">
+              {error ? <p role="alert" className="text-sm text-rose-600 md:col-span-2">{error}</p> : null}
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</span>
                 <input className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
@@ -594,7 +621,10 @@ export function PositionsView() {
                   ariaLabel="Branch"
                   placeholder="Select branch"
                   value={form.branch_id}
-                  onChange={(value) => setForm((prev) => ({ ...prev, branch_id: value, department_ids: [] }))}
+                  onChange={(value) => {
+                    setError(null)
+                    setForm((prev) => ({ ...prev, branch_id: value, department_ids: [] }))
+                  }}
                   options={[
                     { value: "", label: "Select branch" },
                     ...branches.flatMap((branch) => {
@@ -614,7 +644,8 @@ export function PositionsView() {
                       type="checkbox"
                       checked={allAvailableDepartmentsSelected}
                       disabled={availableDepartmentIds.length === 0}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setError(null)
                         setForm((previous) => {
                           const availableIds = new Set(availableDepartmentIds)
                           return {
@@ -624,12 +655,18 @@ export function PositionsView() {
                               : previous.department_ids.filter((id) => !availableIds.has(id)),
                           }
                         })
-                      }
+                      }}
                     />
                     <span>Select all available departments</span>
                   </label>
                   <div className="grid gap-1 sm:grid-cols-2">
-                    {availableDepartments.map((department) => {
+                    {availableDepartments.length === 0 ? (
+                      <p className="px-2 py-3 text-xs text-slate-500 sm:col-span-2">
+                        {form.branch_id
+                          ? "No departments are associated with this branch. Verify department branch assignments in Departments."
+                          : "Select a branch to view its departments."}
+                      </p>
+                    ) : availableDepartments.map((department) => {
                         const id = readNumber(department, ["id"])
                         if (id === null) return null
                         const value = String(id)
@@ -639,14 +676,15 @@ export function PositionsView() {
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                setError(null)
                                 setForm((previous) => ({
                                   ...previous,
                                   department_ids: event.target.checked
                                     ? Array.from(new Set([...previous.department_ids, value]))
                                     : previous.department_ids.filter((entry) => entry !== value),
                                 }))
-                              }
+                              }}
                             />
                             <span>{readString(department, ["name", "code"])}</span>
                           </label>
