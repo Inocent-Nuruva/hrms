@@ -8,6 +8,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import {
+  Button as FluentButton,
   Field,
   Table as FluentTable,
   TableBody as FluentTableBody,
@@ -19,6 +20,7 @@ import {
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
+  Add16Regular,
   ClipboardTaskListLtr20Regular,
   Delete16Regular,
   Edit16Regular,
@@ -2270,24 +2272,54 @@ export function OnboardingView() {
   const assignableUsers = React.useMemo(() => {
     const departmentId = Number(workflowForm.assigned_department_id)
     const selectedId = Number(workflowForm.assigned_user_id)
-    const catalog = users.map(flattenAssigneeRecord)
+    const idsFrom = (record: AdminRecord | null, keys: string[]) =>
+      record
+        ? keys.map((key) => readNumber(record, [key])).filter((id): id is number => id !== null)
+        : []
+    const catalog = users.map((user) => {
+      const flattened = flattenAssigneeRecord(user)
+      const userCompany = toRecord(user.company_user) ?? toRecord(user.companyUser)
+      const userProfile = toRecord(user.user) ?? toRecord(userCompany?.user)
+      const userIds = new Set(
+        [
+          ...idsFrom(flattened, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(userProfile, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(userCompany, ["id", "user_id", "company_user_id"]),
+        ],
+      )
+      const userEmail = readString(userProfile ?? user, ["email"], "").trim().toLowerCase()
+      const linkedEmployees = employees.filter((employee) => {
+        const companyUser = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
+        const linkedUser = toRecord(companyUser?.user) ?? toRecord(employee.user)
+        const employeeIds = [
+          ...idsFrom(employee, ["user_id", "company_user_id"]),
+          ...idsFrom(companyUser, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(linkedUser, ["id", "user_id", "company_user_id"]),
+        ]
+        const email = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
+        return employeeIds.some((id) => userIds.has(id)) || Boolean(userEmail && email === userEmail)
+      })
+      const departmentIds = new Set(collectDepartmentIds(flattened))
+      linkedEmployees.forEach((employee) => {
+        collectDepartmentIds(employee).forEach((id) => departmentIds.add(id))
+      })
+      return { ...flattened, department_ids: Array.from(departmentIds) }
+    })
     const filtered = filterAssigneesForStep(catalog, {
       selectedId: Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
     })
-    const hasDepartmentData = filtered.some((row) => collectDepartmentIds(row).size > 0)
     const departmentUsers =
       Number.isFinite(departmentId) && departmentId > 0
         ? filtered.filter((row) => collectDepartmentIds(row).has(departmentId))
         : []
-    const usable = hasDepartmentData ? departmentUsers : filtered
     const seen = new Set<number>()
-    return usable.filter((row) => {
+    return departmentUsers.filter((row) => {
       const id = preferredAssigneeId(row)
       if (id === null || seen.has(id)) return false
       seen.add(id)
       return true
     })
-  }, [users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
+  }, [employees, users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
 
   const selectedStepAssigneeId = React.useMemo(() => {
     const value = Number(workflowForm.assigned_user_id)
@@ -6928,7 +6960,7 @@ export function OnboardingView() {
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
                   <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
-                    <SelectTrigger className="h-11 w-full">
+                      <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
                           ? resolveWorkflowLabel(Number(replacementWorkflowId))
@@ -7166,7 +7198,7 @@ export function OnboardingView() {
                   <Field label="Workflow name" size="small" className="gap-1">
                     <Input
                       size="medium"
-                      className="bg-background"
+                      className="rounded-md !border !border-input bg-background focus-within:!border-primary focus-within:ring-2 focus-within:ring-primary/20"
                       value={workflowForm.name}
                       onChange={(_event, data) =>
                         setWorkflowForm((prev) => ({
@@ -7187,7 +7219,7 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full bg-background" aria-label="Workflow status">
+                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Workflow status">
                         <SelectValue placeholder="Status">
                           <span>{toTitleCaseWords(workflowForm.status || "active")}</span>
                         </SelectValue>
@@ -7212,7 +7244,7 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full bg-background" aria-label="Default workflow">
+                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Default workflow">
                         <SelectValue placeholder="Default workflow">
                           <span>
                             {workflowForm.is_default === "true" ? "Default" : "Not default"}
@@ -7232,7 +7264,7 @@ export function OnboardingView() {
                   <Field label="Description" size="small" className="gap-1">
                     <Input
                       size="medium"
-                      className="bg-background"
+                      className="rounded-md !border !border-input bg-background focus-within:!border-primary focus-within:ring-2 focus-within:ring-primary/20"
                       value={workflowForm.description}
                       onChange={(_event, data) =>
                         setWorkflowForm((prev) => ({
@@ -7244,15 +7276,16 @@ export function OnboardingView() {
                     />
                   </Field>
                   <div className="md:col-span-2 flex flex-wrap gap-2">
-                    <Button
+                    <FluentButton
                       type="button"
+                      appearance="primary"
+                      size="small"
+                      icon={<Add16Regular />}
                       onClick={openCreateStepDialog}
                       disabled={saving}
-                      className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                     >
-                      <Plus className="h-4 w-4" />
                       Add Step
-                    </Button>
+                    </FluentButton>
                   </div>
                 </div>
 
@@ -7412,7 +7445,7 @@ export function OnboardingView() {
                       }))
                     }
                     placeholder="e.g. Prepare employee workstation"
-                    className="h-11"
+                    className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                 </label>
                 {workflowForm.step_type !== "sign_off" ? (
@@ -7502,7 +7535,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Step type">
                         {toTitleCaseWords(workflowForm.step_type || "task")}
                       </SelectValue>
@@ -7513,7 +7546,7 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Step type is limited to the values accepted by the onboarding workflow API.
+                    Choose whether this step creates tasks or records an approval.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7526,7 +7559,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Required">{resolveYesNoLabel(workflowForm.is_required)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -7535,7 +7568,7 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Mark this as required if onboarding cannot proceed without this step.
+                    Choose Yes if onboarding cannot continue until this step is complete.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7550,10 +7583,10 @@ export function OnboardingView() {
                       }))
                     }
                     placeholder="Due days"
-                    className="h-11"
+                    className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Number of days expected to complete this step. Minimum is 1 day.
+                    Set how many days the assignee has to complete this step (at least 1).
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7567,7 +7600,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select department">
                         {workflowForm.assigned_department_id
                           ? resolveOptionLabel(
@@ -7597,7 +7630,7 @@ export function OnboardingView() {
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Choose the department responsible for this step.</p>
+                  <p className="text-xs text-muted-foreground">Choose the department responsible for completing this step.</p>
                 </div>
                 <div className="grid gap-1">
                   <Select
@@ -7611,7 +7644,7 @@ export function OnboardingView() {
                     disabled={!workflowForm.assigned_department_id}
                   >
                     <SelectTrigger
-                      className="h-11 w-full"
+                      className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                       aria-invalid={selectedStepAssigneeMissingPermission || undefined}
                     >
                       <SelectValue placeholder="Specific person (optional)">
@@ -7643,9 +7676,8 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Leave this blank to assign every active person in the selected department. When the workflow runs,
-                    they receive the task through each enabled notification channel and can track it under My Requests →
-                    To do.
+                    Choose a person from the selected department, or leave this as Whole department to assign the step
+                    to its active members. Assignees can track their tasks under My Requests → To do.
                   </p>
                   {selectedStepAssigneeMissingPermission ? (
                     <Alert variant="destructive" className="mt-2">
@@ -7741,7 +7773,7 @@ export function OnboardingView() {
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
                   <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
                           ? resolveWorkflowLabel(Number(replacementWorkflowId))
@@ -7797,7 +7829,7 @@ export function OnboardingView() {
                   New approver
                   <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
                     <SelectTrigger
-                      className="h-11 w-full"
+                      className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                       aria-invalid={replacementApproverMissingPermission || undefined}
                     >
                       <SelectValue placeholder="Select approver">
