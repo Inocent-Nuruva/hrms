@@ -2,7 +2,8 @@
 
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { Button, Checkbox, Field, Input, Link, Spinner } from "@fluentui/react-components";
-import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
+import { Eye20Regular, EyeOff20Regular } from "@fluentui/react-icons";
+import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { markDashboardFromLogin } from "@/lib/dashboard-login-flag";
@@ -443,7 +444,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
                   appearance="transparent"
                   size="small"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  icon={showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                  icon={showPassword ? <EyeOff20Regular /> : <Eye20Regular />}
                   onClick={() => setShowPassword((current) => !current)}
                 />
               }

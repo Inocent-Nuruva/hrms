@@ -296,7 +296,15 @@ const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed"]
 const CONTACT_TYPE_OPTIONS = ["personal", "work"]
 const ADDRESS_TYPE_OPTIONS = ["home", "work", "other"]
 const RELATIONSHIP_OPTIONS = ["parent", "spouse", "sibling", "child", "guardian", "other"]
-const IDENTIFICATION_TYPE_OPTIONS = ["national_id", "passport", "driving_license", "voter_id", "other"]
+const IDENTIFICATION_TYPE_OPTIONS = [
+  "national_id",
+  "passport",
+  "tax_id",
+  "social_security",
+  "driver_license",
+  "work_permit",
+  "other",
+]
 const MOBILE_MONEY_PROVIDER_OPTIONS = ["none", "M-Pesa", "Airtel Money", "Tigo Pesa", "Halopesa"]
 const DEFAULT_MOBILE_MONEY_PROVIDER = MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
 const EMPTY_CONTACT: ContactFormState = {
@@ -5090,7 +5098,12 @@ export function EmployeeRegisterForm() {
                 <SelectContent>
                   {IDENTIFICATION_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option}
+                      {option === "driver_license"
+                        ? "Driver's license"
+                        : option
+                            .split("_")
+                            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                            .join(" ")}
                     </SelectItem>
                   ))}
                 </SelectContent>

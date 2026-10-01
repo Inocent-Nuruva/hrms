@@ -318,6 +318,39 @@ function employeeSectionHasItems(employee: Record<string, unknown> | null | unde
   })
 }
 
+function findHttpsDocumentUrl(value: unknown, depth = 0): string | null {
+  if (depth > 5) return null
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const url = findHttpsDocumentUrl(entry, depth + 1)
+      if (url) return url
+    }
+    return null
+  }
+  const record = asRecord(value)
+  if (!record) return null
+  const directUrl = readString(record, [
+    "file_url",
+    "fileUrl",
+    "document_url",
+    "documentUrl",
+    "academic_certificate_document_url",
+    "url",
+  ])
+  if (directUrl) {
+    try {
+      if (new URL(directUrl).protocol === "https:") return directUrl
+    } catch {
+      // Continue looking through nested upload response data.
+    }
+  }
+  for (const key of ["data", "result", "document", "file", "item", "uploaded_document", "uploadedDocument"]) {
+    const url = findHttpsDocumentUrl(record[key], depth + 1)
+    if (url) return url
+  }
+  return null
+}
+
 function mergeEmployeeSectionRecords(
   base: Record<string, unknown>,
   extra: Record<string, unknown> | null,
@@ -497,7 +530,7 @@ interface OnboardingFormField {
   name: string
   label: string
   placeholder?: string
-  type?: "text" | "email" | "tel" | "date" | "select" | "file"
+  type?: "text" | "email" | "tel" | "url" | "date" | "select" | "file"
   required?: boolean
   options?: string[]
   defaultValue?: string
@@ -555,7 +588,7 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "is_primary", label: "Primary Relative?", type: "select", options: ["true", "false"], defaultValue: "false" },
   ],
   identifications: [
-    { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "drivers_license", "other"], defaultValue: "national_id", required: true },
+    { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "tax_id", "social_security", "driver_license", "work_permit", "other"], defaultValue: "national_id", required: true },
     { name: "identification_number", label: "ID Number", placeholder: "ID-123456789", required: true },
     { name: "issued_country", label: "Issued Country", placeholder: "United States" },
     { name: "expiry_date", label: "Expiry Date (optional)", type: "date" },
@@ -568,12 +601,15 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "is_primary", label: "Primary Salary Account?", type: "select", options: ["true", "false"], defaultValue: "true" },
   ],
   academic_qualifications: [
+    { name: "country_of_residence", label: "Country of Residence", placeholder: "Tanzania", required: true },
     { name: "institution_name", label: "Institution / School", placeholder: "University of Example", required: true },
     { name: "degree_or_certificate", label: "Degree / Certificate", placeholder: "Bachelor of Science", required: true },
     { name: "field_of_study", label: "Field of Study", placeholder: "Computer Science" },
     { name: "education_level", label: "Level", type: "select", options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "Other"], defaultValue: "Bachelor's Degree" },
     { name: "start_date", label: "Start Date", type: "date" },
     { name: "end_date", label: "End Date / Graduation", type: "date" },
+    { name: "academic_certificate_document_url", label: "Verification Link (HTTPS)", type: "url", placeholder: "https://…" },
+    { name: "academic_certificate_file", label: "Academic Certificate Attachment", type: "file" },
   ],
   professional_qualifications: [
     { name: "programme_name", label: "Program / Certification Name", placeholder: "AWS Solutions Architect", required: true },
@@ -3782,6 +3818,17 @@ export function EmployeeHomeDashboard() {
         .map((f) => f.label)
     : []
 
+  const academicCertificateUrl = formValues.academic_certificate_document_url?.trim() ?? ""
+  const hasValidAcademicCertificateProof = (() => {
+    if (fillingItemKey !== "academic_qualifications") return true
+    if (!academicCertificateUrl) return Boolean(documentUploadFile)
+    try {
+      return new URL(academicCertificateUrl).protocol === "https:"
+    } catch {
+      return false
+    }
+  })()
+
   const handleCloseOnboardingDialog = () => {
     const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
     sessionStorage.setItem(dismissedKey, "true")
@@ -3854,6 +3901,22 @@ export function EmployeeHomeDashboard() {
     const apiSection = getApiSectionForKey(fillingItemKey)
     const payload = buildPayload(fillingItemKey, formValues)
 
+    if (fillingItemKey === "academic_qualifications" && academicCertificateUrl) {
+      try {
+        if (new URL(academicCertificateUrl).protocol !== "https:") {
+          setFormError("Enter a secure HTTPS verification link, or attach the certificate file.")
+          return
+        }
+      } catch {
+        setFormError("Enter a valid HTTPS verification link, or attach the certificate file.")
+        return
+      }
+    }
+    if (fillingItemKey === "academic_qualifications" && !academicCertificateUrl && !documentUploadFile) {
+      setFormError("Add an HTTPS verification link or attach your academic certificate.")
+      return
+    }
+
     // For departments or empty schema we just optimistically complete
     const isNoApi = !apiSection || getFormSchema(fillingItemKey).length === 0
 
@@ -3869,6 +3932,25 @@ export function EmployeeHomeDashboard() {
           }
           payload.file = await fileToBase64UploadDto(documentUploadFile)
           await createEmployeeDocument(accessToken, empId, payload)
+        } else if (fillingItemKey === "academic_qualifications") {
+          let certificateUrl = academicCertificateUrl
+          if (documentUploadFile) {
+            const uploadResult = await createEmployeeDocument(accessToken, empId, {
+              title: `Academic certificate - ${String(formValues.degree_or_certificate || "Qualification")}`,
+              type: "certificate",
+              onboarding_section: "education",
+              classification: "CONFIDENTIAL",
+              notes: "Uploaded with academic qualification profile completion.",
+              file: await fileToBase64UploadDto(documentUploadFile),
+            })
+            if (!certificateUrl) certificateUrl = findHttpsDocumentUrl(uploadResult) ?? ""
+          }
+          if (!certificateUrl) {
+            setFormError("The file was uploaded, but the server did not return its secure link. Add a verification URL and save again.")
+            return
+          }
+          payload.academic_certificate_document_url = certificateUrl
+          await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
         } else {
           await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
         }
@@ -4006,16 +4088,16 @@ export function EmployeeHomeDashboard() {
                 </span>
               </div>
 
-              <div className="mt-4 rounded-xl bg-primary px-4 py-3 text-primary-foreground shadow-sm sm:px-5">
-                <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+              <div className="mt-4 rounded-xl border border-border/80 bg-muted/40 px-4 py-3 sm:px-5">
+                <div className="mb-2 flex items-center justify-between gap-3 text-xs text-foreground">
                   <span className="font-semibold">Profile progress</span>
-                  <span className="font-semibold tabular-nums">
+                  <span className="font-semibold tabular-nums text-muted-foreground">
                     {completedProfileItemCount} of {ownedProfileItemCount} complete · {profileCompletionPercent}%
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-background">
                   <div
-                    className="h-full rounded-full bg-white transition-[width] duration-500"
+                    className="h-full rounded-full bg-primary transition-[width] duration-500"
                     style={{ width: `${profileCompletionPercent}%` }}
                   />
                 </div>
@@ -4034,25 +4116,28 @@ export function EmployeeHomeDashboard() {
                   </p>
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
-                <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
-                        {currentFillingItem.icon}
+                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                  <div className="grid lg:grid-cols-[minmax(0,1fr)_15rem]">
+                    <div className="min-w-0 p-4 sm:p-6">
+                      <div className="mb-5 flex items-start justify-between gap-3 border-b border-border pb-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                            {currentFillingItem.icon}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Profile details</p>
+                            <div className="text-base font-semibold tracking-tight text-foreground">{currentFillingItem.label}</div>
+                            <div className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{currentFillingItem.description}</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={cancelFilling}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        >
+                          <span aria-hidden="true">←</span><span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
+                        </button>
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-base font-semibold text-foreground">{currentFillingItem.label}</div>
-                        <div className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{currentFillingItem.description}</div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={cancelFilling}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    >
-                      ← <span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
-                    </button>
-                  </div>
 
                   {formError && (
                     <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
@@ -4162,7 +4247,7 @@ export function EmployeeHomeDashboard() {
                                         ? "No"
                                         : opt === opt.toUpperCase()
                                           ? opt
-                                          : opt.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+                                          : opt.replace(/_/g, " ").replace(/(^|\s)([a-z])/g, (_match, space: string, character: string) => `${space}${character.toUpperCase()}`),
                                 }))}
                               />
                             ) : field.type === "file" ? (
@@ -4181,7 +4266,11 @@ export function EmployeeHomeDashboard() {
                                   required={!!field.required}
                                 />
                                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                  {documentUploadFile ? `Selected: ${documentUploadFile.name}` : "Choose the attachment to upload with this document."}
+                                  {documentUploadFile
+                                    ? `Selected: ${documentUploadFile.name}`
+                                    : fillingItemKey === "academic_qualifications"
+                                      ? "Attach the certificate PDF or image. You may also add a verification link."
+                                      : "Choose the attachment to upload with this document."}
                                 </p>
                               </div>
                             ) : field.type === "date" ? (
@@ -4202,6 +4291,9 @@ export function EmployeeHomeDashboard() {
                                 required={!!field.required}
                               />
                             )}
+                            {field.name === "academic_certificate_document_url" ? (
+                              <p className="mt-1 text-xs text-muted-foreground">Optional when attaching the certificate. Verification links must use https://.</p>
+                            ) : null}
                           </div>
                         )
                       })}
@@ -4241,27 +4333,50 @@ export function EmployeeHomeDashboard() {
                   ) : null}
 
                   {missingRequiredFields.length > 0 && (
-                    <div className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                    <div className="mb-3 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                       Please fill required fields: {missingRequiredFields.join(", ")}
                     </div>
                   )}
+                  {!hasValidAcademicCertificateProof ? (
+                    <p className="mb-3 text-xs font-medium text-destructive">Add a valid HTTPS verification link or attach the certificate file.</p>
+                  ) : null}
 
-                  <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
                     <Button
                       onClick={handleSaveFilling}
-                      disabled={isSaving || missingRequiredFields.length > 0}
-                      className="flex-1 h-9 rounded-lg text-sm"
+                      disabled={isSaving || missingRequiredFields.length > 0 || !hasValidAcademicCertificateProof}
+                      className="h-10 flex-1 rounded-lg text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
                     </Button>
-                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-9 rounded-lg text-sm sm:w-auto">
+                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-10 rounded-lg text-sm sm:w-auto">
                       Cancel
                     </Button>
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-slate-500 dark:text-slate-500">
+                  <p className="mt-3 text-center text-[11px] text-muted-foreground">
                     Data is stored securely for HR, payroll and compliance.
                   </p>
+                    </div>
+                    <aside className="border-t border-border bg-muted/30 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Before you save</p>
+                      {fillingItemKey === "academic_qualifications" ? (
+                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
+                          <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="font-semibold text-foreground">Provide verification</p>
+                            <p className="mt-1">Paste a secure HTTPS link, attach the certificate file, or provide both.</p>
+                          </div>
+                          <p>Only add accurate information. HR may use these details for employment records and verification.</p>
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
+                          <p>Complete the required fields marked with an asterisk.</p>
+                          <p>Your changes are saved to your employee profile and can be reviewed by HR.</p>
+                        </div>
+                      )}
+                    </aside>
+                  </div>
                 </div>
               ) : (
                 <div>
