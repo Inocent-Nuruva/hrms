@@ -610,8 +610,9 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "education_level", label: "Level", type: "select", options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "Other"], defaultValue: "Bachelor's Degree" },
     { name: "start_date", label: "Start Date", type: "date" },
     { name: "end_date", label: "End Date / Graduation", type: "date" },
-    { name: "academic_certificate_document_url", label: "Verification Link (HTTPS)", type: "url", placeholder: "https://…" },
-    { name: "academic_certificate_file", label: "Academic Certificate Attachment", type: "file" },
+    { name: "academic_certificate_document_url", label: "Verification Link (HTTPS, optional)", type: "url", placeholder: "https://…" },
+    // Mandatory, enforced by hasValidAcademicCertificateProof (file inputs aren't tracked in formValues).
+    { name: "academic_certificate_file", label: "Academic Certificate Attachment *", type: "file" },
   ],
   professional_qualifications: [
     { name: "programme_name", label: "Program / Certification Name", placeholder: "AWS Solutions Architect", required: true },
@@ -3823,7 +3824,8 @@ export function EmployeeHomeDashboard() {
   const academicCertificateUrl = formValues.academic_certificate_document_url?.trim() ?? ""
   const hasValidAcademicCertificateProof = (() => {
     if (fillingItemKey !== "academic_qualifications") return true
-    if (!academicCertificateUrl) return Boolean(documentUploadFile)
+    if (!documentUploadFile) return false
+    if (!academicCertificateUrl) return true
     try {
       return new URL(academicCertificateUrl).protocol === "https:"
     } catch {
@@ -3906,16 +3908,16 @@ export function EmployeeHomeDashboard() {
     if (fillingItemKey === "academic_qualifications" && academicCertificateUrl) {
       try {
         if (new URL(academicCertificateUrl).protocol !== "https:") {
-          setFormError("Enter a secure HTTPS verification link, or attach the certificate file.")
+          setFormError("The verification link must use https://, or leave it empty.")
           return
         }
       } catch {
-        setFormError("Enter a valid HTTPS verification link, or attach the certificate file.")
+        setFormError("Enter a valid HTTPS verification link, or leave it empty.")
         return
       }
     }
-    if (fillingItemKey === "academic_qualifications" && !academicCertificateUrl && !documentUploadFile) {
-      setFormError("Add an HTTPS verification link or attach your academic certificate.")
+    if (fillingItemKey === "academic_qualifications" && !documentUploadFile) {
+      setFormError("Attach your academic certificate file.")
       return
     }
 
@@ -3945,9 +3947,8 @@ export function EmployeeHomeDashboard() {
           payload.file = await fileToBase64UploadDto(documentUploadFile)
           await saveDocument(payload)
         } else if (fillingItemKey === "academic_qualifications") {
-          let certificateUrl = academicCertificateUrl
           if (documentUploadFile) {
-            const uploadResult = await saveDocument({
+            await saveDocument({
               title: `Academic certificate - ${String(formValues.degree_or_certificate || "Qualification")}`,
               type: "certificate",
               onboarding_section: "education",
@@ -3955,13 +3956,12 @@ export function EmployeeHomeDashboard() {
               notes: "Uploaded with academic qualification profile completion.",
               file: await fileToBase64UploadDto(documentUploadFile),
             })
-            if (!certificateUrl) certificateUrl = findHttpsDocumentUrl(uploadResult) ?? ""
           }
-          if (!certificateUrl) {
-            setFormError("The file was uploaded, but the server did not return its secure link. Add a verification URL and save again.")
-            return
+          if (academicCertificateUrl) {
+            payload.academic_certificate_document_url = academicCertificateUrl
+          } else {
+            delete payload.academic_certificate_document_url
           }
-          payload.academic_certificate_document_url = certificateUrl
           await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         } else {
           await saveSectionItem(apiSection as EmployeeProfileSection, payload)
@@ -4282,7 +4282,7 @@ export function EmployeeHomeDashboard() {
                                   {documentUploadFile
                                     ? `Selected: ${documentUploadFile.name}`
                                     : fillingItemKey === "academic_qualifications"
-                                      ? "Attach the certificate PDF or image. You may also add a verification link."
+                                      ? "Required: attach the certificate PDF or image."
                                       : "Choose the attachment to upload with this document."}
                                 </p>
                               </div>
@@ -4305,7 +4305,7 @@ export function EmployeeHomeDashboard() {
                               />
                             )}
                             {field.name === "academic_certificate_document_url" ? (
-                              <p className="mt-1 text-xs text-muted-foreground">Optional when attaching the certificate. Verification links must use https://.</p>
+                              <p className="mt-1 text-xs text-muted-foreground">Optional. If provided, the link must use https://.</p>
                             ) : null}
                           </div>
                         )
@@ -4351,7 +4351,7 @@ export function EmployeeHomeDashboard() {
                     </div>
                   )}
                   {!hasValidAcademicCertificateProof ? (
-                    <p className="mb-3 text-xs font-medium text-destructive">Add a valid HTTPS verification link or attach the certificate file.</p>
+                    <p className="mb-3 text-xs font-medium text-destructive">{documentUploadFile ? "The verification link must be a valid HTTPS URL, or leave it empty." : "Attach the certificate file to continue."}</p>
                   ) : null}
 
                   <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
@@ -4377,8 +4377,8 @@ export function EmployeeHomeDashboard() {
                         <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
                           <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
                           <div className="rounded-lg border border-border bg-background p-3">
-                            <p className="font-semibold text-foreground">Provide verification</p>
-                            <p className="mt-1">Paste a secure HTTPS link, attach the certificate file, or provide both.</p>
+                            <p className="font-semibold text-foreground">Attach your certificate</p>
+                            <p className="mt-1">The certificate file is required. A secure HTTPS verification link is optional.</p>
                           </div>
                           <p>Only add accurate information. HR may use these details for employment records and verification.</p>
                         </div>
