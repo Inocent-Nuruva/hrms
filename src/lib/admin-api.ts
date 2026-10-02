@@ -14820,6 +14820,28 @@ export async function createEmployeeSectionItem(
   });
 }
 
+/** Self-onboarding: adds a section item to the caller's own employee profile. */
+export async function createMyEmployeeSectionItem(
+  token: string,
+  section: EmployeeProfileSection,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employees/me/${section}`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Self-onboarding: attaches a document to the caller's own employee profile. */
+export async function createMyEmployeeDocument(token: string, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/employees/me/documents`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function deleteEmployeeSectionItem(
   token: string,
   employeeId: string | number,
