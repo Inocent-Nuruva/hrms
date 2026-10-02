@@ -42,6 +42,8 @@ import {
   listLeaveTypes,
   createEmployeeSectionItem,
   createEmployeeDocument,
+  createMyEmployeeSectionItem,
+  createMyEmployeeDocument,
   fileToBase64UploadDto,
   patchEmployeeStatus,
   createAttendanceMobilePunchCheckIn,
@@ -3920,6 +3922,16 @@ export function EmployeeHomeDashboard() {
     // For departments or empty schema we just optimistically complete
     const isNoApi = !apiSection || getFormSchema(fillingItemKey).length === 0
 
+    // Onboarding employees save through the self-scoped /employees/me/* routes,
+    // which resolve the employee from the token and need no HR permissions.
+    const isSelfOnboarding = !isAdmin && dashboardData.employee.employment_status === "onboarding"
+    const saveDocument = (data: AdminRecord) =>
+      isSelfOnboarding ? createMyEmployeeDocument(accessToken, data) : createEmployeeDocument(accessToken, empId, data)
+    const saveSectionItem = (section: EmployeeProfileSection, data: AdminRecord) =>
+      isSelfOnboarding
+        ? createMyEmployeeSectionItem(accessToken, section, data)
+        : createEmployeeSectionItem(accessToken, empId, section, data)
+
     setIsSaving(true)
     setFormError(null)
 
@@ -3931,11 +3943,11 @@ export function EmployeeHomeDashboard() {
             return
           }
           payload.file = await fileToBase64UploadDto(documentUploadFile)
-          await createEmployeeDocument(accessToken, empId, payload)
+          await saveDocument(payload)
         } else if (fillingItemKey === "academic_qualifications") {
           let certificateUrl = academicCertificateUrl
           if (documentUploadFile) {
-            const uploadResult = await createEmployeeDocument(accessToken, empId, {
+            const uploadResult = await saveDocument({
               title: `Academic certificate - ${String(formValues.degree_or_certificate || "Qualification")}`,
               type: "certificate",
               onboarding_section: "education",
@@ -3950,9 +3962,9 @@ export function EmployeeHomeDashboard() {
             return
           }
           payload.academic_certificate_document_url = certificateUrl
-          await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
+          await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         } else {
-          await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
+          await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         }
       }
 
@@ -4003,9 +4015,10 @@ export function EmployeeHomeDashboard() {
         }).catch(() => {})
       }
 
-      // If this was the last pending, optionally activate + close
+      // If this was the last pending, close. Only HR may activate the employee;
+      // a self-onboarding employee stays "onboarding" until HR reviews.
       if (remainingAfter <= 0) {
-        if (dashboardData.employee.employment_status === "onboarding") {
+        if (!isSelfOnboarding && dashboardData.employee.employment_status === "onboarding") {
           try {
             await patchEmployeeStatus(accessToken, empId, {
               employment_status: "active",
