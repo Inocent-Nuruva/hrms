@@ -5655,11 +5655,22 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const availableLeaveTypes = React.useMemo(() => {
     const options = new Map<string, { id: string; label: string }>()
+    // leaveTypes is already filtered to the employee's eligible types (gender), so
+    // other sources may only relabel those, never add restricted types back.
+    const eligibleIds = new Set(
+      leaveTypes
+        .map((row) => readNumberish(row.id ?? row.leave_type_id))
+        .filter((id): id is number => id !== null)
+        .map(String),
+    )
 
     const addOption = (idValue: unknown, labelValue: unknown) => {
       const id = readNumberish(idValue)
       const label = typeof labelValue === "string" ? labelValue.trim() : ""
       if (id === null || !label) {
+        return
+      }
+      if (eligibleIds.size > 0 && !eligibleIds.has(String(id))) {
         return
       }
       options.set(String(id), { id: String(id), label })
