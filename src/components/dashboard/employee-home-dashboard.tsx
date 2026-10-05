@@ -281,7 +281,8 @@ type LeaveBalanceSummary = {
   allocated?: string
 }
 
-const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode }> = [
+// `optional` sections can be skipped: they are listed but never block completion.
+const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode; optional?: boolean }> = [
   { key: "contacts", label: "Contacts", description: "Add phone, email and primary contact info", icon: <Users className="h-5 w-5" /> },
   { key: "addresses", label: "Addresses", description: "Your home and work addresses", icon: <MapPin className="h-5 w-5" /> },
   { key: "relatives", label: "Relatives", description: "Emergency contacts and family members", icon: <User className="h-5 w-5" /> },
@@ -289,8 +290,8 @@ const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description
   { key: "bank_accounts", label: "Bank Accounts", description: "Salary and payment account details", icon: <Landmark className="h-5 w-5" /> },
   { key: "departments", label: "Departments", description: "Your assigned department information", icon: <Building2 className="h-5 w-5" /> },
   { key: "academic_qualifications", label: "Academic Qualifications", description: "Degrees, diplomas and education records", icon: <GraduationCap className="h-5 w-5" /> },
-  { key: "professional_qualifications", label: "Professional Qualifications", description: "Certifications and professional licenses", icon: <Award className="h-5 w-5" /> },
-  { key: "experience_details", label: "Experience Details", description: "Previous jobs and work history", icon: <Briefcase className="h-5 w-5" /> },
+  { key: "professional_qualifications", label: "Professional Qualifications", description: "Certifications and professional licenses", icon: <Award className="h-5 w-5" />, optional: true },
+  { key: "experience_details", label: "Experience Details", description: "Previous jobs and work history", icon: <Briefcase className="h-5 w-5" />, optional: true },
   { key: "documents", label: "Documents", description: "Supporting files and attachments", icon: <FileText className="h-5 w-5" /> },
 ]
 
@@ -310,6 +311,22 @@ const PROFILE_SECTION_ALIASES: Record<string, string[]> = {
 const EMPLOYEE_OWNED_PROFILE_KEYS = new Set(
   REQUIRED_ONBOARDING_ITEMS.map((item) => item.key).filter((key) => key !== "departments"),
 )
+
+// Sections whose certificate file is mandatory and verification link optional.
+const CERTIFICATE_SECTIONS: Record<string, { urlField: string; documentSection: string; titlePrefix: string; titleField: string }> = {
+  academic_qualifications: {
+    urlField: "academic_certificate_document_url",
+    documentSection: "education",
+    titlePrefix: "Academic certificate",
+    titleField: "degree_or_certificate",
+  },
+  professional_qualifications: {
+    urlField: "professional_certificate_document_url",
+    documentSection: "professional",
+    titlePrefix: "Professional certificate",
+    titleField: "programme_name",
+  },
+}
 
 function employeeSectionHasItems(employee: Record<string, unknown> | null | undefined, key: string) {
   if (!employee) return false
@@ -611,19 +628,24 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "start_date", label: "Start Date", type: "date" },
     { name: "end_date", label: "End Date / Graduation", type: "date" },
     { name: "academic_certificate_document_url", label: "Verification Link (HTTPS, optional)", type: "url", placeholder: "https://…" },
-    // Mandatory, enforced by hasValidAcademicCertificateProof (file inputs aren't tracked in formValues).
+    // Mandatory, enforced by hasValidCertificateProof (file inputs aren't tracked in formValues).
     { name: "academic_certificate_file", label: "Academic Certificate Attachment *", type: "file" },
   ],
   professional_qualifications: [
+    { name: "country_of_residence", label: "Country of Residence", placeholder: "Tanzania", required: true },
+    { name: "institution_name", label: "Institution / Training Provider", placeholder: "Example Institute", required: true },
     { name: "programme_name", label: "Program / Certification Name", placeholder: "AWS Solutions Architect", required: true },
     { name: "issuing_organization", label: "Issuing Organization", placeholder: "Amazon Web Services", required: true },
-    { name: "issue_date", label: "Issue Date", type: "date" },
+    { name: "issue_date", label: "Issue Date", type: "date", required: true },
     { name: "expiry_date", label: "Expiry Date (if any)", type: "date" },
+    { name: "professional_certificate_document_url", label: "Verification Link (HTTPS, optional)", type: "url", placeholder: "https://…" },
+    // Mandatory, enforced by hasValidCertificateProof (file inputs aren't tracked in formValues).
+    { name: "professional_certificate_file", label: "Certificate Attachment *", type: "file" },
   ],
   experience_details: [
     { name: "company_name", label: "Company Name", placeholder: "Acme Corp", required: true },
     { name: "job_title", label: "Job Title / Role", placeholder: "Software Engineer", required: true },
-    { name: "responsibilities_description", label: "Key Responsibilities", placeholder: "Built and maintained..." },
+    { name: "responsibilities_description", label: "Key Responsibilities", placeholder: "Built and maintained...", required: true },
     { name: "start_date", label: "Start Date", type: "date", required: true },
     { name: "end_date", label: "End Date (leave blank if current)", type: "date" },
   ],
@@ -674,6 +696,8 @@ function buildPayload(key: string, values: Record<string, string>): AdminRecord 
   if (key === "addresses" && !payload.address_type) payload.address_type = "home"
   if (key === "identifications" && !payload.identification_type) payload.identification_type = "national_id"
   if (key === "bank_accounts" && payload.is_primary === undefined) payload.is_primary = true
+  // A blank end date means the employee still works there.
+  if (key === "experience_details") payload.currently_working = !payload.end_date
   if (key === "documents" && typeof payload.onboarding_section === "string") {
     payload.metadata = { onboarding_section: payload.onboarding_section }
     delete payload.onboarding_section
@@ -3549,6 +3573,7 @@ export function EmployeeHomeDashboard() {
           const hasPendingProfileItems = REQUIRED_ONBOARDING_ITEMS.some(
             (item) =>
               EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key) &&
+              !item.optional &&
               !employeeSectionHasItems(mergedEmployee, item.key),
           )
           if (hasPendingProfileItems && !sessionStorage.getItem(dismissedKey)) {
@@ -3789,13 +3814,16 @@ export function EmployeeHomeDashboard() {
     return null
   }
 
-  const pendingItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
+  const unfilledItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
     if (!EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key)) return false
     const emp = dashboardData.employee as Record<string, unknown>
     return !employeeSectionHasItems(emp, item.key) && !completedOnboardingItems.includes(item.key)
   })
+  // Only required sections block completion; optional ones can be skipped.
+  const pendingItems = unfilledItems.filter((item) => !item.optional)
+  const optionalUnfilledItems = unfilledItems.filter((item) => item.optional)
   const ownedProfileItemCount = REQUIRED_ONBOARDING_ITEMS.filter((item) =>
-    EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key),
+    EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key) && !item.optional,
   ).length
   const completedProfileItemCount = Math.max(
     0,
@@ -3821,13 +3849,14 @@ export function EmployeeHomeDashboard() {
         .map((f) => f.label)
     : []
 
-  const academicCertificateUrl = formValues.academic_certificate_document_url?.trim() ?? ""
-  const hasValidAcademicCertificateProof = (() => {
-    if (fillingItemKey !== "academic_qualifications") return true
+  const certificateSection = fillingItemKey ? CERTIFICATE_SECTIONS[fillingItemKey] ?? null : null
+  const certificateUrl = certificateSection ? formValues[certificateSection.urlField]?.trim() ?? "" : ""
+  const hasValidCertificateProof = (() => {
+    if (!certificateSection) return true
     if (!documentUploadFile) return false
-    if (!academicCertificateUrl) return true
+    if (!certificateUrl) return true
     try {
-      return new URL(academicCertificateUrl).protocol === "https:"
+      return new URL(certificateUrl).protocol === "https:"
     } catch {
       return false
     }
@@ -3905,9 +3934,9 @@ export function EmployeeHomeDashboard() {
     const apiSection = getApiSectionForKey(fillingItemKey)
     const payload = buildPayload(fillingItemKey, formValues)
 
-    if (fillingItemKey === "academic_qualifications" && academicCertificateUrl) {
+    if (certificateSection && certificateUrl) {
       try {
-        if (new URL(academicCertificateUrl).protocol !== "https:") {
+        if (new URL(certificateUrl).protocol !== "https:") {
           setFormError("The verification link must use https://, or leave it empty.")
           return
         }
@@ -3916,8 +3945,8 @@ export function EmployeeHomeDashboard() {
         return
       }
     }
-    if (fillingItemKey === "academic_qualifications" && !documentUploadFile) {
-      setFormError("Attach your academic certificate file.")
+    if (certificateSection && !documentUploadFile) {
+      setFormError("Attach your certificate file.")
       return
     }
 
@@ -3946,21 +3975,21 @@ export function EmployeeHomeDashboard() {
           }
           payload.file = await fileToBase64UploadDto(documentUploadFile)
           await saveDocument(payload)
-        } else if (fillingItemKey === "academic_qualifications") {
+        } else if (certificateSection) {
           if (documentUploadFile) {
             await saveDocument({
-              title: `Academic certificate - ${String(formValues.degree_or_certificate || "Qualification")}`,
+              title: `${certificateSection.titlePrefix} - ${String(formValues[certificateSection.titleField] || "Qualification")}`,
               type: "certificate",
-              onboarding_section: "education",
+              onboarding_section: certificateSection.documentSection,
               classification: "CONFIDENTIAL",
-              notes: "Uploaded with academic qualification profile completion.",
+              notes: `Uploaded with ${currentFillingItem?.label.toLowerCase() ?? "qualification"} profile completion.`,
               file: await fileToBase64UploadDto(documentUploadFile),
             })
           }
-          if (academicCertificateUrl) {
-            payload.academic_certificate_document_url = academicCertificateUrl
+          if (certificateUrl) {
+            payload[certificateSection.urlField] = certificateUrl
           } else {
-            delete payload.academic_certificate_document_url
+            delete payload[certificateSection.urlField]
           }
           await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         } else {
@@ -4127,6 +4156,25 @@ export function EmployeeHomeDashboard() {
                       ? "Your account will be activated shortly."
                       : "Thanks for keeping your records up to date."}
                   </p>
+                  {optionalUnfilledItems.length > 0 ? (
+                    <div className="mx-auto mt-5 max-w-md text-left">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">You can also add these optional details:</p>
+                      <div className="grid gap-2">
+                        {optionalUnfilledItems.map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => startFilling(item.key)}
+                            className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/30 hover:bg-muted/50"
+                          >
+                            <span className="text-primary">{item.icon}</span>
+                            <span className="flex-1 font-medium text-foreground">{item.label}</span>
+                            <span className="text-muted-foreground">→</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
                 <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -4281,7 +4329,7 @@ export function EmployeeHomeDashboard() {
                                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                   {documentUploadFile
                                     ? `Selected: ${documentUploadFile.name}`
-                                    : fillingItemKey === "academic_qualifications"
+                                    : certificateSection
                                       ? "Required: attach the certificate PDF or image."
                                       : "Choose the attachment to upload with this document."}
                                 </p>
@@ -4304,7 +4352,7 @@ export function EmployeeHomeDashboard() {
                                 required={!!field.required}
                               />
                             )}
-                            {field.name === "academic_certificate_document_url" ? (
+                            {field.name === "academic_certificate_document_url" || field.name === "professional_certificate_document_url" ? (
                               <p className="mt-1 text-xs text-muted-foreground">Optional. If provided, the link must use https://.</p>
                             ) : null}
                           </div>
@@ -4350,14 +4398,14 @@ export function EmployeeHomeDashboard() {
                       Please fill required fields: {missingRequiredFields.join(", ")}
                     </div>
                   )}
-                  {!hasValidAcademicCertificateProof ? (
+                  {!hasValidCertificateProof ? (
                     <p className="mb-3 text-xs font-medium text-destructive">{documentUploadFile ? "The verification link must be a valid HTTPS URL, or leave it empty." : "Attach the certificate file to continue."}</p>
                   ) : null}
 
                   <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
                     <Button
                       onClick={handleSaveFilling}
-                      disabled={isSaving || missingRequiredFields.length > 0 || !hasValidAcademicCertificateProof}
+                      disabled={isSaving || missingRequiredFields.length > 0 || !hasValidCertificateProof}
                       className="h-10 flex-1 rounded-lg text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
@@ -4373,7 +4421,7 @@ export function EmployeeHomeDashboard() {
                     </div>
                     <aside className="border-t border-border bg-muted/30 p-4 sm:p-5 lg:border-l lg:border-t-0">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Before you save</p>
-                      {fillingItemKey === "academic_qualifications" ? (
+                      {certificateSection ? (
                         <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
                           <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
                           <div className="rounded-lg border border-border bg-background p-3">
@@ -4404,7 +4452,7 @@ export function EmployeeHomeDashboard() {
                   </div>
                   <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                   {REQUIRED_ONBOARDING_ITEMS.map((item, itemIndex) => {
-                    const isPending = pendingItems.some(p => p.key === item.key)
+                    const isPending = unfilledItems.some(p => p.key === item.key)
                     if (!isPending) return null
                     return (
                       <button
@@ -4420,7 +4468,14 @@ export function EmployeeHomeDashboard() {
                             {item.icon}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold tracking-tight text-foreground">{item.label}</div>
+                          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                            {item.label}
+                            {item.optional ? (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Optional
+                              </span>
+                            ) : null}
+                          </div>
                           <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
                         </div>
                         <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
