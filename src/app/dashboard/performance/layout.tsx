@@ -1,5 +1,5 @@
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { performanceSectionTabGroups } from "@/lib/dashboard-sections"
+import { performanceManagementTabGroups } from "@/lib/dashboard-sections"
 
 export default function PerformanceLayout({
   children,
@@ -8,7 +8,7 @@ export default function PerformanceLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={performanceSectionTabGroups} />
+      <DashboardSectionTabs groups={performanceManagementTabGroups} />
       <div className="min-w-0">{children}</div>
     </div>
   )

@@ -6,7 +6,7 @@
 
 export const API_BASE_URL =
   // Change this to match your backend (same as web NEXT_PUBLIC_API_BASE_URL or default)
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'http://192.168.1.30:9999';
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'http://192.168.2.22:8888';
 
 export const APP_NAME = 'HRMS';
 export const APP_SUBTITLE = 'Employee Portal';
@@ -23,13 +23,19 @@ export const STORAGE_KEYS = {
 export const QUERY_STALE_TIME = 1000 * 60 * 2; // 2 minutes
 export const QUERY_CACHE_TIME = 1000 * 60 * 10; // 10 minutes
 
+let selectedAppAccent = '#0078D4';
+
+export function setAppAccentColor(color: string) {
+  selectedAppAccent = color;
+}
+
 // Shared mobile palette aligned with the web self-service portal.
 export const COLORS = {
   // Brand
-  primary: '#303194',
-  primaryDark: '#24256f',
+  get primary() { return selectedAppAccent; },
+  primaryDark: '#005A9E',
   onPrimary: '#ffffff',
-  accent: '#303194',
+  get accent() { return selectedAppAccent; },
   onAccent: '#ffffff',
 
   // Light
@@ -41,7 +47,7 @@ export const COLORS = {
   outline: '#e4e4e7',
 
   // Dark
-  backgroundDark: '#1A1C1F',
+  backgroundDark: '#181818',
   surfaceDark: '#18181b',
   surfaceVariantDark: '#27272a',
   onSurfaceDark: '#fafafa',
@@ -52,7 +58,7 @@ export const COLORS = {
   success: '#059669',
   error: '#b91c1c',
   warning: '#b45309',
-  info: '#303194',
+  get info() { return selectedAppAccent; },
 } as const;
 
 export type ColorKey = keyof typeof COLORS;

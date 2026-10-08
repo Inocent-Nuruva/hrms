@@ -12713,6 +12713,30 @@ export async function getMyProfile(token: string) {
   return normalizeSingle(payload);
 }
 
+export type DashboardCardStyle = {
+  palette: "ocean" | "forest" | "plum" | "coral" | "midnight" | "berry" | "neutral" | "white"
+  artwork: "none" | "orbit" | "waves" | "confetti" | "arches" | "sprigs"
+}
+
+export async function getMyDashboardCardStyle(token: string) {
+  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  })
+}
+
+export async function updateMyDashboardCardStyle(
+  token: string,
+  style: DashboardCardStyle,
+) {
+  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
+    method: "PATCH",
+    token,
+    body: style,
+  })
+}
+
 const PROFILE_PHOTO_URL_KEYS = [
   "profile_photo_url",
   "photo_url",
@@ -16671,6 +16695,18 @@ export async function closePerformancePeriod(
   });
 }
 
+export async function reopenPerformancePeriod(
+  token: string,
+  periodId: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/reopen`, {
+    method: "POST",
+    token,
+    body: { reason },
+  });
+}
+
 export async function createPerformancePeriodAssignments(
   token: string,
   periodId: string | number,
@@ -16767,6 +16803,10 @@ export async function createPerformanceKpiTemplate(
     token,
     body: data,
   });
+}
+
+export async function applyPerformanceKpiTemplate(token: string, periodId: string, templateId: string, conflictPolicy: 'MERGE' | 'SKIP' | 'REPLACE') {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/apply-kpi-template`, { method: 'POST', token, body: { template_id: Number(templateId), conflict_policy: conflictPolicy } });
 }
 
 export async function listPerformanceKpiRules(token: string) {
@@ -17227,6 +17267,28 @@ export async function listMyEmployeeKpis(
   return normalizeList(payload);
 }
 
+export async function listKpiCycleReviews(token: string, mode: 'self' | 'manager', periodId?: string) {
+  const payload = await adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpi-reviews${periodId ? `?period_id=${encodeURIComponent(periodId)}` : ''}`, { token });
+  return normalizeList(payload);
+}
+
+export async function listMyKpiCycleScores(token: string) {
+  const payload = await adminRequest<unknown>('/api/performance/me/kpi-scores', { token });
+  return normalizeList(payload);
+}
+
+export async function submitKpiCycleRating(token: string, mode: 'self' | 'manager', kpiId: string, kind: 'MID' | 'FINAL', rating: number, comment: string) {
+  return adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpis/${kpiId}/reviews/${kind}/${mode === 'self' ? 'self' : 'manager'}`, { method: 'POST', token, body: { rating, comment } });
+}
+
+export async function respondToKpiMidReview(token: string, kpiId: string, decision: 'ACKNOWLEDGE' | 'DISPUTE', comment: string) {
+  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}/reviews/mid/respond`, { method: 'POST', token, body: { decision, comment } });
+}
+
+export async function finalizeKpiCycleReview(token: string, kpiId: string, comment: string) {
+  return adminRequest<unknown>(`/api/performance/manager/kpis/${kpiId}/reviews/final/finalize`, { method: 'POST', token, body: { comment } });
+}
+
 export async function createMyEmployeeKpi(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/performance/me/kpis", {
     method: "POST",
@@ -17288,6 +17350,25 @@ export async function listManagerEmployeeKpis(
     {
       token,
     },
+  );
+  return normalizeList(payload);
+}
+
+export async function createManagerEmployeeKpi(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/manager/kpis", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listManagerKpiAssignees(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/manager/kpi-assignees",
+    { token },
   );
   return normalizeList(payload);
 }

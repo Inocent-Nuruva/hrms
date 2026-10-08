@@ -90,12 +90,21 @@ const ACCESS_CONTROL_TAB_ICONS = {
   "/dashboard/performance/plans": [Target20Regular, ""],
   "/dashboard/performance/reviews": [DocumentText20Regular, ""],
   "/dashboard/performance/improvement": [ArrowTrendingLines20Regular, ""],
+  "/dashboard/performance/reports": [ChartMultiple20Regular, ""],
+  "/dashboard/me/activities/today": [ClipboardTask20Regular, ""],
+  "/dashboard/activities/team": [PeopleTeam20Regular, ""],
+  "/dashboard/activities/overview": [ChartMultiple20Regular, ""],
+  "/dashboard/activities/reports": [DocumentText20Regular, ""],
+  "/dashboard/activities/reviews": [PersonFeedback20Regular, ""],
+  "/dashboard/activities/exceptions": [ShieldKeyhole20Regular, ""],
+  "/dashboard/activities/setup": [Gauge20Regular, ""],
 } as const
 
 type Tabs2Props = {
   groups: DashboardSectionTabGroup[]
   currentPath: string
   className?: string
+  showGroupNavigation?: boolean
 }
 
 function isActivePath(currentPath: string, url: string) {
@@ -125,7 +134,7 @@ const useStyles = makeStyles({
   },
 })
 
-export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
+export function Tabs2({ groups, currentPath, className, showGroupNavigation = false }: Tabs2Props) {
   const router = useRouter()
   const styles = useStyles()
   const attentionUrls = useNotificationAttentionRoutes()
@@ -150,6 +159,14 @@ export function Tabs2({ groups, currentPath, className }: Tabs2Props) {
       )}
     >
       <div className="tab-rail-scroll min-w-0 flex-1">
+        {showGroupNavigation && groups.length > 1 ? <nav aria-label="Performance and activity areas" className="flex min-w-max items-center gap-1 border-b border-border/70 py-1">
+          {groups.map((group) => {
+            const first = group.items[0]
+            if (!first) return null
+            const active = group === activeGroup
+            return <button key={group.title ?? first.url} type="button" aria-current={active ? "page" : undefined} onClick={() => router.push(first.url)} className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{group.title ?? first.title}</button>
+          })}
+        </nav> : null}
         <TabList
           aria-label="Section pages"
           size="small"

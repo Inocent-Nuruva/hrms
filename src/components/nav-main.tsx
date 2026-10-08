@@ -14,6 +14,7 @@ import {
   tokens,
 } from "@fluentui/react-components"
 import {
+  Home24Regular,
   Home24Color,
   type FluentIcon,
 } from "@fluentui/react-icons"
@@ -29,6 +30,7 @@ type NavMainNode = {
   resource?: AdminResourceKey
   items?: NavMainNode[]
   disabled?: boolean
+  activeIcon?: FluentIcon
 }
 
 type NavMainItem = NavMainNode & {
@@ -36,7 +38,8 @@ type NavMainItem = NavMainNode & {
 }
 
 const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
-const Home = Home24Color
+const Home = Home24Regular
+const ActiveHome = Home24Color
 
 const useStyles = makeStyles({
   nav: {
@@ -314,7 +317,7 @@ export function NavMain({
     >
       <NavItem
         value="/dashboard"
-        icon={<span className={styles.iconBadge} aria-hidden="true"><Home /></span>}
+        icon={<span className={styles.iconBadge} aria-hidden="true">{normalizedPath(currentPath) === "/dashboard" ? <ActiveHome /> : <Home />}</span>}
         className={styles.item}
       >
         <AttentionLabel
@@ -325,11 +328,12 @@ export function NavMain({
       </NavItem>
 
       {items.map((item) => {
-        const Icon = item.icon
+        const isActive = nodeContainsCurrentPath(item, currentPath)
+        const Icon = isActive ? item.activeIcon ?? item.icon : item.icon
 
         if (item.items?.length) {
           const value = categoryValue(item)
-          const isActiveCategory = nodeContainsCurrentPath(item, currentPath)
+          const isActiveCategory = isActive
           return (
             <NavCategory key={value} value={value}>
               <NavCategoryItem

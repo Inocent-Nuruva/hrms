@@ -202,6 +202,7 @@ export function PositionsView() {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [departmentsLoaded, setDepartmentsLoaded] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -305,12 +306,33 @@ export function PositionsView() {
       .then(([branchResult, departmentResult]) => {
         setBranches(branchResult.rows)
         setDepartments(departmentResult.rows)
+        setDepartmentsLoaded(true)
       })
       .catch(() => {
         setBranches([])
         setDepartments([])
+        setDepartmentsLoaded(true)
       })
   }, [])
+
+  React.useEffect(() => {
+    if (!openForm || !form.branch_id || !departmentsLoaded || departments.length === 0) return
+    const availableIds = new Set(availableDepartmentIds)
+    const invalidIds = form.department_ids.filter((id) => !availableIds.has(id))
+    if (invalidIds.length === 0) return
+
+    const invalidNames = invalidIds.map((id) => {
+      const department = departments.find((row) => String(readNumber(row, ["id"]) ?? "") === id)
+      return department ? readString(department, ["name", "code"]) : `Department #${id}`
+    })
+    setForm((current) => ({
+      ...current,
+      department_ids: current.department_ids.filter((id) => availableIds.has(id)),
+    }))
+    setError(
+      `${invalidNames.join(", ")} ${invalidNames.length === 1 ? "was" : "were"} removed because ${invalidNames.length === 1 ? "it does" : "they do"} not belong to the selected branch.`,
+    )
+  }, [availableDepartmentIds, departments, departmentsLoaded, form.branch_id, form.department_ids, openForm])
 
   function fillFormFromRow(row: AdminRecord) {
     const code = readString(row, ["code"])
@@ -368,7 +390,15 @@ export function PositionsView() {
       form.branch_id &&
       selectedDepartmentIds.some((departmentId) => !availableDepartmentIdSet.has(departmentId))
     ) {
-      setError("One or more selected departments do not belong to the selected branch. Re-select the departments and try again.")
+      const invalidNames = selectedDepartmentIds
+        .filter((departmentId) => !availableDepartmentIdSet.has(departmentId))
+        .map((departmentId) => {
+          const department = departments.find((row) => readNumber(row, ["id"]) === departmentId)
+          return department ? readString(department, ["name", "code"]) : `Department #${departmentId}`
+        })
+      setError(
+        `${invalidNames.join(", ")} ${invalidNames.length === 1 ? "does" : "do"} not belong to the selected branch. Remove ${invalidNames.length === 1 ? "this department" : "these departments"} or choose their branch.`,
+      )
       return
     }
 
@@ -643,7 +673,7 @@ export function PositionsView() {
                     <input
                       type="checkbox"
                       checked={allAvailableDepartmentsSelected}
-                      disabled={availableDepartmentIds.length === 0}
+                      disabled={!form.branch_id || availableDepartmentIds.length === 0}
                       onChange={(event) => {
                         setError(null)
                         setForm((previous) => {
@@ -666,16 +696,26 @@ export function PositionsView() {
                           ? "No departments are associated with this branch. Verify department branch assignments in Departments."
                           : "Select a branch to view its departments."}
                       </p>
-                    ) : availableDepartments.map((department) => {
+                    ) : departments.map((department) => {
                         const id = readNumber(department, ["id"])
                         if (id === null) return null
                         const value = String(id)
-                        const checked = form.department_ids.includes(value)
+                        const isAvailable = availableDepartmentIds.includes(value)
+                        const checked = isAvailable && form.department_ids.includes(value)
+                        const departmentBranchId = readDepartmentBranchId(department)
+                        const departmentBranch = departmentBranchId === null
+                          ? "Branch not assigned"
+                          : labelById(branches, departmentBranchId)
                         return (
-                          <label key={id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50">
+                          <label
+                            key={id}
+                            className={`flex min-w-0 items-center gap-2 rounded px-2 py-1.5 text-sm ${isAvailable ? "hover:bg-slate-50" : "cursor-not-allowed bg-slate-50 text-slate-400"}`}
+                            title={isAvailable ? undefined : `${readString(department, ["name", "code"])} belongs to ${departmentBranch}, not the selected branch.`}
+                          >
                             <input
                               type="checkbox"
                               checked={checked}
+                              disabled={!form.branch_id || !isAvailable}
                               onChange={(event) => {
                                 setError(null)
                                 setForm((previous) => ({
@@ -686,7 +726,8 @@ export function PositionsView() {
                                 }))
                               }}
                             />
-                            <span>{readString(department, ["name", "code"])}</span>
+                            <span className="min-w-0 flex-1 truncate">{readString(department, ["name", "code"])}</span>
+                            <span className="shrink-0 text-[10px] text-slate-400">{departmentBranch}</span>
                           </label>
                         )
                       })}

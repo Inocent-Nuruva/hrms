@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, type ViewStyle, Platform } from 'react-native';
+import { View, StyleSheet, type ViewStyle, Platform } from 'react-native';
 import { PaperProvider, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,11 +14,17 @@ import {
   useFonts,
 } from '@expo-google-fonts/comfortaa';
 
-import { COLORS } from '../lib/config';
+import { COLORS, setAppAccentColor } from '../lib/config';
 import { AuthProvider, useAuth } from '../hooks/useAuth';
 import { NotificationsProvider } from '../hooks/useNotifications';
 import { ThemePreferenceProvider, useThemePreference } from '../hooks/useThemePreference';
 import { ToastProvider } from '../hooks/useToast';
+import { FluentThemeProvider } from '../components/providers/fluent-theme-provider';
+import { FluentActivityIndicator } from '../components/ui/fluent-activity-indicator';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../lib/api';
+import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteAccent, profilePaletteContainer, profilePaletteForeground } from '../lib/profile-card-background';
+import { AppAccentProvider } from '../hooks/useAppAccent';
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -41,7 +47,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | undefined) {
+function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | undefined, accent: string = COLORS.primary) {
   const isDark = colorScheme === 'dark';
   const base = isDark ? MD3DarkTheme : MD3LightTheme;
 
@@ -49,12 +55,12 @@ function createAppTheme(colorScheme: 'light' | 'dark' | null | 'unspecified' | u
     ...base,
     colors: {
       ...base.colors,
-      primary: COLORS.primary,
-      onPrimary: COLORS.onPrimary,
-      primaryContainer: isDark ? '#1f2a5e' : '#e0e5f5',
-      onPrimaryContainer: isDark ? '#e0e5f5' : '#1f2a5e',
-      secondary: COLORS.accent,
-      onSecondary: COLORS.onAccent,
+      primary: accent,
+      onPrimary: profilePaletteForeground(accent),
+      primaryContainer: profilePaletteContainer(accent, isDark),
+      onPrimaryContainer: isDark ? '#F4F4F5' : '#111111',
+      secondary: accent,
+      onSecondary: profilePaletteForeground(accent),
       surface: isDark ? COLORS.surfaceDark : COLORS.surface,
       surfaceVariant: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant,
       onSurface: isDark ? COLORS.onSurfaceDark : COLORS.onSurface,
@@ -85,9 +91,11 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) {
     return (
-      <View style={styles.fontLoader}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <FluentThemeProvider isDark={false}>
+        <View style={styles.fontLoader}>
+          <FluentActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </FluentThemeProvider>
     );
   }
 
@@ -104,19 +112,33 @@ export default function RootLayout() {
 
 function ThemedApp() {
   const { colorScheme } = useThemePreference();
-  const appTheme = createAppTheme(colorScheme);
-
   return (
-    <PaperProvider theme={appTheme}>
-      <AuthProvider>
-        <ToastProvider>
-          <NotificationsProvider>
-            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-            <RootNavigator backgroundColor={appTheme.colors.background} />
-          </NotificationsProvider>
-        </ToastProvider>
-      </AuthProvider>
-    </PaperProvider>
+    <AuthProvider>
+      <PaletteThemedApp colorScheme={colorScheme} />
+    </AuthProvider>
+  );
+}
+
+function PaletteThemedApp({ colorScheme }: { colorScheme: 'light' | 'dark' | null | 'unspecified' | undefined }) {
+  const auth = useAuth();
+  const styleQuery = useQuery({ queryKey: ['dashboardCardStyle'], queryFn: () => api.getMyDashboardCardStyle(), enabled: auth.isAuthenticated });
+  const style = normalizeProfileCardStyle(styleQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
+  const accent = profilePaletteAccent(style.palette, colorScheme === 'dark');
+  setAppAccentColor(accent);
+  const appTheme = createAppTheme(colorScheme, accent);
+  return (
+    <AppAccentProvider accent={accent}>
+      <PaperProvider theme={appTheme}>
+        <FluentThemeProvider isDark={colorScheme === 'dark'}>
+          <ToastProvider>
+            <NotificationsProvider>
+              <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+              <RootNavigator backgroundColor={appTheme.colors.background} />
+            </NotificationsProvider>
+          </ToastProvider>
+        </FluentThemeProvider>
+      </PaperProvider>
+    </AppAccentProvider>
   );
 }
 
@@ -135,14 +157,13 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
         <Stack.Screen name="payroll" />
         <Stack.Screen name="field" />
         <Stack.Screen name="finance" />
-        <Stack.Screen name="performance" />
         <Stack.Screen name="documents" />
         <Stack.Screen name="activities" />
       </Stack>
 
       {auth.isLoading && (
         <View style={[StyleSheet.absoluteFill, styles.loadingOverlay, { backgroundColor }]}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <FluentActivityIndicator size="large" color={COLORS.primary} />
         </View>
       )}
     </>

@@ -15,12 +15,12 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native';
-import { Portal, useTheme } from 'react-native-paper';
+import { Portal } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 
 import { useThemePreference } from './useThemePreference';
-import { COLORS } from '../lib/config';
+import { useAppAccent } from './useAppAccent';
 import { Text } from '../components/ui/text';
 
 export type ToastType = 'error' | 'success' | 'info';
@@ -192,28 +192,28 @@ function ToastRenderer({
   opacity: Animated.Value;
 }) {
   const insets = useSafeAreaInsets();
-  const paperTheme = useTheme();
   const { isDark } = useThemePreference();
+  const appAccent = useAppAccent();
 
   const type = toast.type ?? 'info';
 
-  // System-like colors using the app theme + COLORS
+  // Use the shared app accent for success and informational toast markers.
   let backgroundColor: string;
   let textColor: string;
   let accentColor: string;
 
   if (type === 'error') {
-    backgroundColor = isDark ? '#2c1f1f' : '#fef2f2';
-    textColor = isDark ? '#fca5a5' : '#991b1b';
-    accentColor = COLORS.error;
+    backgroundColor = isDark ? '#292929' : '#F3F2F1';
+    textColor = isDark ? '#F3F2F1' : '#242424';
+    accentColor = isDark ? '#FF99A4' : '#C50F1F';
   } else if (type === 'success') {
-    backgroundColor = isDark ? '#1f2a22' : '#ecfdf5';
-    textColor = isDark ? '#86efac' : '#166534';
-    accentColor = COLORS.success ?? '#15803d';
+    backgroundColor = isDark ? '#292929' : '#F3F2F1';
+    textColor = isDark ? '#F3F2F1' : '#242424';
+    accentColor = appAccent;
   } else {
-    backgroundColor = isDark ? paperTheme.colors.surface : '#f8fafc';
-    textColor = isDark ? paperTheme.colors.onSurface : '#1e2937';
-    accentColor = paperTheme.colors.primary;
+    backgroundColor = isDark ? '#292929' : '#F3F2F1';
+    textColor = isDark ? '#F3F2F1' : '#242424';
+    accentColor = appAccent;
   }
 
   const handleActionPress = () => {
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    borderRadius: 14,
+    borderRadius: 4,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',

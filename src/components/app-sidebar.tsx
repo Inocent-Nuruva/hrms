@@ -11,26 +11,45 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
+  Alert24Regular,
   Alert24Color,
+  ArrowMove24Regular,
   ArrowSquare24Color,
+  ArrowTrendingLines24Regular,
   ArrowTrendingLines24Color,
+  Briefcase24Regular,
   Briefcase24Color,
+  Building24Regular,
   Building24Color,
+  BuildingMultiple24Regular,
   BuildingMultiple24Color,
+  CalendarClock24Regular,
   CalendarClock24Color,
+  Chat24Regular,
   Chat24Color,
+  ChartMultiple24Regular,
   ChartMultiple24Color,
-  ClipboardTask24Color,
+  Clock24Regular,
   Clock24Color,
+  CoinMultiple24Regular,
   CoinMultiple24Color,
+  DataBarVerticalAscending24Regular,
   DataBarVerticalAscending24Color,
+  DataTrending24Regular,
   DataTrending24Color,
+  LocationRipple24Regular,
   LocationRipple24Color,
+  PeopleCommunity24Regular,
   PeopleCommunity24Color,
+  PeopleTeam24Regular,
   PeopleTeam24Color,
+  PersonAdd24Regular,
   PersonAdd24Color,
+  Receipt24Regular,
   Receipt24Color,
+  ShieldCheckmark24Regular,
   ShieldCheckmark24Color,
+  Trophy24Regular,
   Trophy24Color,
   type FluentIcon,
 } from "@fluentui/react-icons"
@@ -47,7 +66,6 @@ import { notificationAttentionIdsForRoute } from "@/lib/notification-attention"
 import { useNotifications } from "@/lib/notifications-store"
 import {
   accessControlSectionTabGroups,
-  activitySectionTabGroups,
   attendanceWorkspaceSectionTabGroups,
   employeeSectionTabGroups,
   fieldSectionTabGroups,
@@ -56,7 +74,7 @@ import {
   leaveManagementSectionTabGroups,
   movementSectionTabGroups,
   operationsReportSectionTabGroups,
-  performanceSectionTabGroups,
+  performanceActivitySectionTabGroups,
   probationSectionTabGroups,
   smsSectionTabGroups,
   structureSectionTabGroups,
@@ -79,6 +97,7 @@ type SidebarNavItem = {
   matchUrls?: string[]
   items?: SidebarNavItem[]
   icon?: FluentIcon
+  activeIcon?: FluentIcon
 }
 type SidebarData = {
   navMain: SidebarNavItem[]
@@ -99,27 +118,46 @@ function sidebarWorkspacesFromSections(
   })
 }
 
-const AccessControlIcon = ShieldCheckmark24Color
-const AttendanceIcon = Clock24Color
-const BranchesIcon = Building24Color
-const CompaniesIcon = BuildingMultiple24Color
-const DepartmentsIcon = PeopleCommunity24Color
-const EmployeesIcon = PeopleTeam24Color
-const PromotionIcon = ArrowTrendingLines24Color
-const LeaveIcon = CalendarClock24Color
-const PerformanceIcon = ChartMultiple24Color
-const ProbationIcon = Trophy24Color
-const FieldIcon = LocationRipple24Color
-const FinanceIcon = CoinMultiple24Color
-const ActivitiesIcon = ClipboardTask24Color
-const MovementsIcon = ArrowSquare24Color
-const PositionsIcon = Briefcase24Color
-const InviteIcon = PersonAdd24Color
-const PayrollIcon = Receipt24Color
-const ReportsIcon = DataTrending24Color
-const NotificationsIcon = Alert24Color
-const SmsIcon = Chat24Color
-const InsightsIcon = DataBarVerticalAscending24Color
+const AccessControlIcon = ShieldCheckmark24Regular
+const ActiveAccessControlIcon = ShieldCheckmark24Color
+const AttendanceIcon = Clock24Regular
+const ActiveAttendanceIcon = Clock24Color
+const BranchesIcon = Building24Regular
+const ActiveBranchesIcon = Building24Color
+const CompaniesIcon = BuildingMultiple24Regular
+const ActiveCompaniesIcon = BuildingMultiple24Color
+const DepartmentsIcon = PeopleCommunity24Regular
+const ActiveDepartmentsIcon = PeopleCommunity24Color
+const EmployeesIcon = PeopleTeam24Regular
+const ActiveEmployeesIcon = PeopleTeam24Color
+const PromotionIcon = ArrowTrendingLines24Regular
+const ActivePromotionIcon = ArrowTrendingLines24Color
+const LeaveIcon = CalendarClock24Regular
+const ActiveLeaveIcon = CalendarClock24Color
+const PerformanceIcon = ChartMultiple24Regular
+const ActivePerformanceIcon = ChartMultiple24Color
+const ProbationIcon = Trophy24Regular
+const ActiveProbationIcon = Trophy24Color
+const FieldIcon = LocationRipple24Regular
+const ActiveFieldIcon = LocationRipple24Color
+const FinanceIcon = CoinMultiple24Regular
+const ActiveFinanceIcon = CoinMultiple24Color
+const MovementsIcon = ArrowMove24Regular
+const ActiveMovementsIcon = ArrowSquare24Color
+const PositionsIcon = Briefcase24Regular
+const ActivePositionsIcon = Briefcase24Color
+const InviteIcon = PersonAdd24Regular
+const ActiveInviteIcon = PersonAdd24Color
+const PayrollIcon = Receipt24Regular
+const ActivePayrollIcon = Receipt24Color
+const ReportsIcon = DataTrending24Regular
+const ActiveReportsIcon = DataTrending24Color
+const NotificationsIcon = Alert24Regular
+const ActiveNotificationsIcon = Alert24Color
+const SmsIcon = Chat24Regular
+const ActiveSmsIcon = Chat24Color
+const InsightsIcon = DataBarVerticalAscending24Regular
+const ActiveInsightsIcon = DataBarVerticalAscending24Color
 
 const adminData: SidebarData = {
   navMain: [
@@ -144,6 +182,7 @@ const adminData: SidebarData = {
         "/dashboard/permissions",
       ],
       icon: AccessControlIcon,
+      activeIcon: ActiveAccessControlIcon,
       items: sidebarWorkspacesFromSections(accessControlSectionTabGroups),
     },
     {
@@ -157,22 +196,26 @@ const adminData: SidebarData = {
         "/dashboard/attendance/corrections",
       ],
       icon: AttendanceIcon,
+      activeIcon: ActiveAttendanceIcon,
       items: sidebarWorkspacesFromSections(attendanceWorkspaceSectionTabGroups),
     },
     {
       title: "Branches",
       url: "/dashboard/branches",
       icon: BranchesIcon,
+      activeIcon: ActiveBranchesIcon,
     },
     {
       title: "Companies",
       url: "/dashboard/companies",
       icon: CompaniesIcon,
+      activeIcon: ActiveCompaniesIcon,
     },
     {
       title: "Departments",
       url: "/dashboard/departments",
       icon: DepartmentsIcon,
+      activeIcon: ActiveDepartmentsIcon,
     },
     {
       title: "Employees",
@@ -203,12 +246,14 @@ const adminData: SidebarData = {
         "/dashboard/me/team/actions",
       ],
       icon: EmployeesIcon,
+      activeIcon: ActiveEmployeesIcon,
       items: sidebarWorkspacesFromSections(employeeSectionTabGroups),
     },
     {
       title: "Promotion",
       url: "/dashboard/me/promotion",
       icon: PromotionIcon,
+      activeIcon: ActivePromotionIcon,
     },
     {
       title: "Leave Management",
@@ -231,31 +276,23 @@ const adminData: SidebarData = {
         "/dashboard/me/leave/policies",
       ],
       icon: LeaveIcon,
+      activeIcon: ActiveLeaveIcon,
       items: sidebarWorkspacesFromSections(leaveManagementSectionTabGroups),
     },
     {
-      title: "Performance",
+      title: "Performance & Activities",
       url: "/dashboard/performance",
       matchUrls: [
         "/dashboard/performance",
-        "/dashboard/performance/overview",
-        "/dashboard/performance/setup",
-        "/dashboard/performance/plans",
-        "/dashboard/performance/reviews",
-        "/dashboard/performance/improvement",
         "/dashboard/me/performance",
-        "/dashboard/me/performance/overview",
-        "/dashboard/me/performance/kpis",
-        "/dashboard/me/performance/assignments",
         "/dashboard/me/performance/assign-tasks",
-        "/dashboard/me/performance/reviews",
-        "/dashboard/me/performance/achievements",
-        "/dashboard/me/performance/improvement",
-        "/dashboard/me/performance/team",
-        "/dashboard/me/performance/manager-kpis",
+        "/dashboard/activities",
+        "/dashboard/me/activities",
+        ...performanceActivitySectionTabGroups.flatMap((group) => group.items.map((item) => item.url)),
       ],
       icon: PerformanceIcon,
-      items: sidebarWorkspacesFromSections(performanceSectionTabGroups),
+      activeIcon: ActivePerformanceIcon,
+      items: sidebarWorkspacesFromSections(performanceActivitySectionTabGroups),
     },
     {
       title: "Probation",
@@ -269,6 +306,7 @@ const adminData: SidebarData = {
         "/dashboard/me/probation",
       ],
       icon: ProbationIcon,
+      activeIcon: ActiveProbationIcon,
       items: sidebarWorkspacesFromSections(probationSectionTabGroups),
     },
     {
@@ -287,6 +325,7 @@ const adminData: SidebarData = {
         "/dashboard/me/field/follow-ups",
       ],
       icon: FieldIcon,
+      activeIcon: ActiveFieldIcon,
       items: sidebarWorkspacesFromSections(fieldSectionTabGroups),
     },
     {
@@ -304,25 +343,8 @@ const adminData: SidebarData = {
         "/dashboard/me/payroll",
       ],
       icon: FinanceIcon,
+      activeIcon: ActiveFinanceIcon,
       items: sidebarWorkspacesFromSections(financeSectionTabGroups),
-    },
-    {
-      title: "Activities",
-      url: "/dashboard/activities",
-      matchUrls: [
-        "/dashboard/activities",
-        "/dashboard/activities/overview",
-        "/dashboard/activities/reports",
-        "/dashboard/activities/team",
-        "/dashboard/activities/reviews",
-        "/dashboard/activities/exceptions",
-        "/dashboard/activities/setup",
-        "/dashboard/me/activities",
-        "/dashboard/me/activities/today",
-        "/dashboard/me/activities/reports",
-      ],
-      icon: ActivitiesIcon,
-      items: sidebarWorkspacesFromSections(activitySectionTabGroups),
     },
     {
       title: "Movements",
@@ -335,12 +357,14 @@ const adminData: SidebarData = {
         "/dashboard/me/movements",
       ],
       icon: MovementsIcon,
+      activeIcon: ActiveMovementsIcon,
       items: sidebarWorkspacesFromSections(movementSectionTabGroups),
     },
     {
       title: "Positions",
       url: "/dashboard/positions",
       icon: PositionsIcon,
+      activeIcon: ActivePositionsIcon,
     },
     {
       title: "Structure",
@@ -352,17 +376,20 @@ const adminData: SidebarData = {
         "/dashboard/structure/numbering",
       ],
       icon: DepartmentsIcon,
+      activeIcon: ActiveDepartmentsIcon,
       items: sidebarWorkspacesFromSections(structureSectionTabGroups),
     },
     {
       title: "Invite & register",
       url: "/dashboard/operations/recruitment",
       icon: InviteIcon,
+      activeIcon: ActiveInviteIcon,
     },
     {
       title: "Payroll",
       url: "/dashboard/operations/payroll",
       icon: PayrollIcon,
+      activeIcon: ActivePayrollIcon,
     },
     {
       title: "Reports & Analytics",
@@ -373,12 +400,14 @@ const adminData: SidebarData = {
         "/dashboard/smtp",
       ],
       icon: ReportsIcon,
+      activeIcon: ActiveReportsIcon,
       items: sidebarWorkspacesFromSections(operationsReportSectionTabGroups),
     },
     {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
       icon: NotificationsIcon,
+      activeIcon: ActiveNotificationsIcon,
     },
     {
       title: "SMS",
@@ -391,6 +420,7 @@ const adminData: SidebarData = {
         "/dashboard/sms/platform",
       ],
       icon: SmsIcon,
+      activeIcon: ActiveSmsIcon,
       items: sidebarWorkspacesFromSections(smsSectionTabGroups),
     },
     {
@@ -405,6 +435,7 @@ const adminData: SidebarData = {
         "/dashboard/insights/readiness",
       ],
       icon: InsightsIcon,
+      activeIcon: ActiveInsightsIcon,
       items: sidebarWorkspacesFromSections(insightsSectionTabGroups),
     },
   ],
@@ -416,12 +447,14 @@ const platformData: SidebarData = {
       title: "Companies",
       url: "/dashboard/companies",
       icon: CompaniesIcon,
+      activeIcon: ActiveCompaniesIcon,
     },
     {
       title: "Access Governance",
       url: "/dashboard/roles",
       matchUrls: ["/dashboard/roles", "/dashboard/permissions"],
       icon: AccessControlIcon,
+      activeIcon: ActiveAccessControlIcon,
       items: [
         { title: "Roles", url: "/dashboard/roles" },
         { title: "Permissions", url: "/dashboard/permissions" },
@@ -431,11 +464,13 @@ const platformData: SidebarData = {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
       icon: NotificationsIcon,
+      activeIcon: ActiveNotificationsIcon,
     },
     {
       title: "SMS Platform",
       url: "/dashboard/sms/platform",
       icon: SmsIcon,
+      activeIcon: ActiveSmsIcon,
     },
   ],
 }

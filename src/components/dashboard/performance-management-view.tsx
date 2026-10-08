@@ -4,9 +4,16 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
+import { useRouter } from "next/navigation"
+import { Badge, Button as FluentButton, Input, ProgressBar, Tab, TabList } from "@fluentui/react-components"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import {
-  CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, PlusIcon, RefreshCwIcon, SlidersHorizontalIcon } from "lucide-react";
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
+  CalendarLtr20Regular as CalendarIcon,
+  CheckmarkCircle20Regular as CompletedIcon,
+  Clock20Regular as PendingIcon,
+  Gauge20Regular as ScoreIcon,
+  SearchSparkle20Regular as SearchIcon,
+} from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
@@ -49,6 +56,7 @@ import {
   createPerformanceKpi,
   createPerformanceKpiRule,
   createPerformanceKpiTemplate,
+  applyPerformanceKpiTemplate,
   createPerformanceKpiVersion,
   createPerformancePeriod,
   createPerformancePeriodAssignments,
@@ -78,6 +86,7 @@ import {
   listPerformanceImprovementPlans,
   listPerformanceKpiRules,
   listPerformanceKpiTemplates,
+  listRolesCatalog,
   listPerformanceKpis,
   listPerformancePeriods,
   listPerformancePlans,
@@ -87,6 +96,7 @@ import {
   listPerformanceWorkflows,
   moderatePerformanceReview,
   reopenPerformanceReview,
+  reopenPerformancePeriod,
   reviewPerformanceImprovementMilestone,
   syncPerformanceSystemKpis,
   deletePerformanceKpi,
@@ -162,15 +172,6 @@ const SETUP_TAB_GROUPS: Array<{ label: string; tabs: Array<{ id: SetupTab; label
   },
 ]
 
-const PERFORMANCE_TIMELINE_STAGES = [
-  { label: "Draft", statuses: ["DRAFT"] },
-  { label: "Open", statuses: ["OPEN", "ACTIVE"] },
-  { label: "Employee review", statuses: ["ACHIEVEMENT_ENTRY", "SELF_REVIEW"] },
-  { label: "Manager review", statuses: ["MANAGER_REVIEW"] },
-  { label: "HR review", statuses: ["HR_REVIEW", "MODERATION"] },
-  { label: "Approved", statuses: ["APPROVED", "CLOSED", "COMPLETED"] },
-] as const
-
 const AGGREGATION_METHODS = [
   "SIMPLE_MONTHLY_AVERAGE",
   "WEIGHTED_MONTHLY_AVERAGE",
@@ -211,7 +212,7 @@ const DATA_SOURCES = [
 ] as const
 
 const FREQUENCIES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
-const PERIOD_TYPES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL"] as const
+const PERIOD_TYPES = ["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ANNUAL", "CUSTOM"] as const
 const SCORECARD_COMPONENT_TYPES = [
   "KPI",
   "ACTIVITIES",
@@ -460,6 +461,7 @@ export function PerformanceManagementView({
 }: {
   activeTab: PerformanceHrTab
 }) {
+  const router = useRouter()
   const actor = useDashboardActor()
   const performancePath =
     activeTab === "overview"
@@ -496,6 +498,10 @@ export function PerformanceManagementView({
     permissions: ["performance_periods:close", "performance:update", "manage_performance"],
     mode: "any",
   })
+  const canReopenPeriod = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_periods:reopen"],
+    mode: "any",
+  })
   const canModerateReviews = canPerformPermission(actor.permissionLabels, {
     permissions: [
       "performance:update",
@@ -522,6 +528,11 @@ export function PerformanceManagementView({
   const [periods, setPeriods] = React.useState<AdminRecord[]>([])
   const [kpis, setKpis] = React.useState<AdminRecord[]>([])
   const [templates, setTemplates] = React.useState<AdminRecord[]>([])
+  const [templateRoles, setTemplateRoles] = React.useState<AdminRecord[]>([])
+  const [additionalTemplateItems, setAdditionalTemplateItems] = React.useState<Array<{ versionId: string; weight: string; target: string }>>([])
+  const [applyTemplateId, setApplyTemplateId] = React.useState("")
+  const [applyPeriodId, setApplyPeriodId] = React.useState("")
+  const [applyPolicy, setApplyPolicy] = React.useState<"MERGE" | "SKIP" | "REPLACE">("MERGE")
   const [rules, setRules] = React.useState<AdminRecord[]>([])
   const [competencies, setCompetencies] = React.useState<AdminRecord[]>([])
   const [scales, setScales] = React.useState<AdminRecord[]>([])
@@ -550,6 +561,7 @@ export function PerformanceManagementView({
   const [formError, setFormError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [busyId, setBusyId] = React.useState("")
+  const [periodActionResults, setPeriodActionResults] = React.useState<Record<string, { assignments?: number; synced?: number }>>({})
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [scorecardComponents, setScorecardComponents] = React.useState<ScorecardComponentDraft[]>(DEFAULT_SCORECARD_COMPONENTS)
   const [workflowSteps, setWorkflowSteps] = React.useState<WorkflowStepDraft[]>(DEFAULT_WORKFLOW_STEPS)
@@ -599,12 +611,16 @@ export function PerformanceManagementView({
         } else if (setupTab === "kpis") {
           setKpis(await listPerformanceKpis(token))
         } else if (setupTab === "templates") {
-          const [templateRows, kpiRows] = await Promise.all([
+          const [templateRows, kpiRows, periodRows, rolePage] = await Promise.all([
             listPerformanceKpiTemplates(token),
             listPerformanceKpis(token),
+            listPerformancePeriods(token),
+            listRolesCatalog(token),
           ])
           setTemplates(templateRows)
           setKpis(kpiRows)
+          setPeriods(periodRows)
+          setTemplateRoles(rolePage.rows)
         } else if (setupTab === "rules") {
           const [ruleRows, kpiRows, yearRows, branchPage, departmentPage, positionPage, gradeRows, employeePage] = await Promise.all([
             listPerformanceKpiRules(token),
@@ -729,7 +745,9 @@ export function PerformanceManagementView({
     "avgScore",
   ])
 
-  const currentPeriod = periods[0] ?? null
+  const activePeriods = periods.filter((period) => ["OPEN", "ACTIVE", "GOAL_SETTING", "IN_PROGRESS", "MID_REVIEW", "FINAL_REVIEW", "REOPENED"].includes(readString(period, ["status"], "DRAFT").toUpperCase()))
+  const pendingPlans = plans.filter((plan) => ["DRAFT", "PENDING", "PENDING_APPROVAL", "RETURNED"].includes(readString(plan, ["status"], "DRAFT").toUpperCase())).length
+  const openAppeals = appeals.filter((appeal) => !["CLOSED", "RESOLVED", "REJECTED"].includes(readString(appeal, ["status"], "OPEN").toUpperCase())).length
   const overviewRecords = React.useMemo(() => {
     const tagged: AdminRecord[] = [
       ...periods.map((row) => ({ ...row, dashboard_kind: "Review period" })),
@@ -743,6 +761,13 @@ export function PerformanceManagementView({
       const status = readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()
       if (overviewStatus !== "ALL" && status !== overviewStatus) return false
       return !needle || JSON.stringify(row).toLowerCase().includes(needle)
+    }).sort((left, right) => {
+      const timestamp = (row: AdminRecord) => {
+        const value = row.updatedAt ?? row.updated_at ?? row.createdAt ?? row.created_at
+        const parsed = value ? new Date(String(value)).getTime() : 0
+        return Number.isFinite(parsed) ? parsed : 0
+      }
+      return timestamp(right) - timestamp(left)
     })
   }, [appeals, developmentPlans, overviewSearch, overviewStatus, periods, pips, plans])
   const overviewStatuses = React.useMemo(
@@ -807,10 +832,11 @@ export function PerformanceManagementView({
   ])
 
   function openCreate(mode: CreateMode, seed: Record<string, string> = {}) {
+    if (mode === "template") setAdditionalTemplateItems([])
     setCreateMode(mode)
     setForm(
       mode === "period"
-        ? { period_type: "MONTHLY", sequence_number: "1", ...seed }
+        ? { period_type: "MONTHLY", sequence_number: "1", max_weightage: "100", score_cap: "120", cooling_period_days: "0", allow_parallel: "true", ...seed }
         : mode === "scorecard"
           ? { is_default: "true", ...seed }
         : mode === "workflow"
@@ -842,6 +868,58 @@ export function PerformanceManagementView({
     }
   }
 
+  async function generatePeriodsForYear(yearId: string) {
+    const token = readStoredToken()
+    if (!token) return
+    setBusyId(`gen-${yearId}`)
+    try {
+      const before = await listPerformancePeriods(token)
+      await generatePerformancePeriods(token, yearId)
+      const after = await listPerformancePeriods(token)
+      const previousIds = new Set(before.map((period) => rowId(period)))
+      const created = after.filter((period) => !previousIds.has(rowId(period))).length
+      setPeriods(after)
+      setSearch("")
+      setSetupTab("periods")
+      toast[created > 0 ? "success" : "info"](created > 0
+        ? `${created} periods generated. They are listed under Periods.`
+        : "No new periods were needed. Existing periods are listed under Periods.")
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not generate periods.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
+  async function runPeriodAction(periodId: string, action: "assign" | "sync") {
+    const token = readStoredToken()
+    if (!token) return
+    setBusyId(`${action}-${periodId}`)
+    try {
+      const result = action === "assign"
+        ? await createPerformancePeriodAssignments(token, periodId)
+        : await syncPerformanceSystemKpis(token, periodId)
+      const count = asRecordArray(result).length
+      setPeriodActionResults((current) => ({
+        ...current,
+        [periodId]: { ...current[periodId], [action === "assign" ? "assignments" : "synced"]: count },
+      }))
+      if (count === 0) {
+        toast.info(action === "assign"
+          ? "No review assignments found. Create active performance plans for this year, then assign them to this period."
+          : "No system KPI values were synced. Assign active plans with attendance, leave, activity, or field visit KPIs first.")
+      } else {
+        toast.success(action === "assign"
+          ? `${count} review assignments are available for this period.`
+          : `${count} system KPI values synced for this period.`)
+      }
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Action failed.")
+    } finally {
+      setBusyId("")
+    }
+  }
+
   async function onCreate() {
     const token = readStoredToken()
     if (!token) {
@@ -866,6 +944,9 @@ export function PerformanceManagementView({
         if (!form.financial_year_id || !form.name || !form.period_type || !form.sequence_number || !form.start_date || !form.end_date) {
           throw new Error("Year, name, type, sequence, start date, and end date are required.")
         }
+        if (!form.goal_setting_deadline || !form.mid_cycle_review_date || !form.final_review_deadline) {
+          throw new Error("Goal-setting, mid-cycle, and final-review dates are required.")
+        }
         await createPerformancePeriod(token, {
           financial_year_id: Number(form.financial_year_id),
           name: form.name,
@@ -874,6 +955,13 @@ export function PerformanceManagementView({
           sequence_number: Number(form.sequence_number),
           start_date: form.start_date,
           end_date: form.end_date,
+          goal_setting_deadline: form.goal_setting_deadline,
+          mid_cycle_review_date: form.mid_cycle_review_date,
+          final_review_deadline: form.final_review_deadline,
+          allow_parallel: form.allow_parallel !== "false",
+          max_weightage: Number(form.max_weightage || 100),
+          score_cap: Number(form.score_cap || 120),
+          cooling_period_days: Number(form.cooling_period_days || 0),
         })
       } else if (createMode === "kpi" || createMode === "kpi-edit" || createMode === "kpi-version") {
         if (!form.code || !form.name || !form.description || !form.measurement_unit) {
@@ -920,21 +1008,19 @@ export function PerformanceManagementView({
         if (!form.code || !form.name || !form.kpi_definition_version_id || !form.weight) {
           throw new Error("Code, name, KPI version, and weight are required.")
         }
+        const items = [
+          { kpi_definition_version_id: Number(form.kpi_definition_version_id), weight: Number(form.weight), target_value: form.target_value ? Number(form.target_value) : undefined, manual_entry_allowed: form.manual_entry_allowed === "true", evidence_required: form.evidence_required === "true", notes: form.notes || undefined },
+          ...additionalTemplateItems.map((item) => ({ kpi_definition_version_id: Number(item.versionId), weight: Number(item.weight), target_value: item.target ? Number(item.target) : undefined })),
+        ]
+        if (items.some((item) => !item.kpi_definition_version_id || !item.weight) || Math.abs(items.reduce((sum, item) => sum + item.weight, 0) - 100) > 0.001) throw new Error("Every template KPI needs a version and weight; weights must total 100.")
+        if (!(form.applicable_role_ids || "").trim()) throw new Error("Choose at least one applicable role.")
         await createPerformanceKpiTemplate(token, {
           code: form.code,
           name: form.name,
           description: form.description || undefined,
           review_cycle: form.review_cycle || undefined,
-          items: [
-            {
-              kpi_definition_version_id: Number(form.kpi_definition_version_id),
-              weight: Number(form.weight),
-              target_value: form.target_value ? Number(form.target_value) : undefined,
-              manual_entry_allowed: form.manual_entry_allowed === "true",
-              evidence_required: form.evidence_required === "true",
-              notes: form.notes || undefined,
-            },
-          ],
+          applicable_role_ids: (form.applicable_role_ids || "").split(",").filter(Boolean).map(Number),
+          items,
         })
       } else if (createMode === "rule") {
         if (!form.kpi_definition_version_id) {
@@ -1277,7 +1363,7 @@ export function PerformanceManagementView({
         {
           key: "status",
           label: "Status",
-          render: (row) => <StatusChip value={readString(row, ["status"], "DRAFT")} />,
+          render: (row) => <StatusChip value={readString(row, ["kpiPhase", "kpi_phase", "status"], "DRAFT")} />,
         },
         {
           key: "effective",
@@ -1356,33 +1442,7 @@ export function PerformanceManagementView({
             const id = rowId(row)
             const status = readString(row, ["status"], "DRAFT")
             return (
-              <div className="flex flex-wrap gap-1">
-                {canActivatePeriod && status === "DRAFT" ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={busyId === `activate-${id}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void runAction(`activate-${id}`, (token) => activatePerformancePeriod(token, id), "Performance period activated.")
-                    }}
-                  >
-                    {busyId === `activate-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Activate"}
-                  </button>
-                ) : null}
-                {canClosePeriod && !["DRAFT", "LOCKED", "CANCELLED"].includes(status) ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
-                    disabled={busyId === `close-period-${id}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void runAction(`close-period-${id}`, (token) => closePerformancePeriod(token, id), "Performance period closed.")
-                    }}
-                  >
-                    {busyId === `close-period-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Close"}
-                  </button>
-                ) : null}
+              <div className="flex flex-wrap items-center gap-1">
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -1587,17 +1647,18 @@ export function PerformanceManagementView({
             const id = rowId(row)
             return (
               <div className="flex flex-wrap gap-1">
-                <button
+                <FluentButton
                   type="button"
-                  className={actionButtonClass}
+                  appearance="subtle"
+                  size="small"
                   disabled={busyId === `gen-${id}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    void runAction(`gen-${id}`, (token) => generatePerformancePeriods(token, id), "Periods generated.")
+                    void generatePeriodsForYear(id)
                   }}
                 >
                   {busyId === `gen-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Generate periods"}
-                </button>
+                </FluentButton>
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -1634,7 +1695,7 @@ export function PerformanceManagementView({
         {
           key: "status",
           label: "Status",
-          render: (row) => <StatusChip value={readString(row, ["status"], "DRAFT")} />,
+          render: (row) => <StatusChip value={readString(row, ["kpiPhase", "kpi_phase", "status"], "DRAFT")} />,
         },
         {
           key: "dates",
@@ -1651,30 +1712,56 @@ export function PerformanceManagementView({
           label: "Actions",
           render: (row) => {
             const id = rowId(row)
+            const status = readString(row, ["status"], "DRAFT")
+            const phase = readString(row, ["kpiPhase", "kpi_phase"])
             return (
               <div className="flex flex-wrap gap-1">
-                <button
+                {canActivatePeriod && status === "DRAFT" ? (
+                  <button type="button" className={actionButtonClass} disabled={busyId === `activate-${id}`} onClick={(event) => {
+                    event.stopPropagation()
+                    void runAction(`activate-${id}`, (token) => activatePerformancePeriod(token, id), "Performance period activated.")
+                  }}>Activate</button>
+                ) : null}
+                {canClosePeriod && !["DRAFT", "LOCKED", "CANCELLED"].includes(status) ? (
+                  <button type="button" className={actionButtonClass} disabled={busyId === `close-period-${id}`} onClick={(event) => {
+                    event.stopPropagation()
+                    void runAction(`close-period-${id}`, (token) => closePerformancePeriod(token, id), "Performance period locked.")
+                  }}>Lock</button>
+                ) : null}
+                {canReopenPeriod && status === "LOCKED" && ["LOCKED", "CLOSED"].includes(phase) ? (
+                  <button type="button" className={actionButtonClass} disabled={busyId === `reopen-period-${id}`} onClick={(event) => {
+                    event.stopPropagation()
+                    const reason = window.prompt("Reason for reopening this KPI cycle")?.trim()
+                    if (!reason) return
+                    void runAction(`reopen-period-${id}`, (token) => reopenPerformancePeriod(token, id, reason), "KPI cycle reopened.")
+                  }}>Reopen</button>
+                ) : null}
+                <FluentButton
                   type="button"
-                  className={actionButtonClass}
+                  appearance="subtle"
+                  size="small"
                   disabled={busyId === `assign-${id}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    void runAction(`assign-${id}`, (token) => createPerformancePeriodAssignments(token, id), "Assignments created.")
+                    void runPeriodAction(id, "assign")
                   }}
                 >
-                  {busyId === `assign-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Assign"}
-                </button>
-                <button
+                  {busyId === `assign-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : periodActionResults[id]?.assignments ? `Assignments (${periodActionResults[id].assignments})` : "Assign plans"}
+                </FluentButton>
+                <FluentButton
                   type="button"
-                  className={actionButtonClass}
+                  appearance="subtle"
+                  size="small"
                   disabled={busyId === `sync-${id}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    void runAction(`sync-${id}`, (token) => syncPerformanceSystemKpis(token, id), "System KPIs synced.")
+                    void runPeriodAction(id, "sync")
                   }}
                 >
-                  {busyId === `sync-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Sync KPIs"}
-                </button>
+                  {busyId === `sync-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : periodActionResults[id]?.synced ? `Synced (${periodActionResults[id].synced})` : "Sync system KPIs"}
+                </FluentButton>
+                {periodActionResults[id]?.assignments === 0 ? <span className="w-full text-xs text-amber-700 dark:text-amber-300">No active plans assigned for this period.</span> : null}
+                {periodActionResults[id]?.synced === 0 ? <span className="w-full text-xs text-amber-700 dark:text-amber-300">No eligible system KPI values to sync.</span> : null}
               </div>
             )
           },
@@ -1832,203 +1919,143 @@ export function PerformanceManagementView({
     <section className="space-y-4">
       {activeTab === "overview" ? (
         <>
-          <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Performance</p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">Overview</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Monitor review cycles, employee plans, and performance work in one place.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="relative hidden sm:block">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
+          <div className="flex flex-col gap-4 space-y-5 px-1 pb-2 pt-2">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <Badge appearance="tint" color="brand" size="small">Performance workspace</Badge>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Overview</h1>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">A snapshot of cycles, plans, reviews, and follow-up work.</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Input
+                  aria-label="Search performance work"
+                  contentBefore={<SearchIcon className="size-4" />}
                   value={overviewSearch}
-                  onChange={(event) => setOverviewSearch(event.target.value)}
-                  placeholder="Find performance work"
-                  className="h-9 w-56 rounded-lg border border-border bg-muted/30 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-primary"
+                  onChange={(_event, data) => setOverviewSearch(data.value)}
+                  placeholder="Search work"
+                  size="small"
+                  className="min-w-0 flex-1 sm:w-56 sm:flex-none"
                 />
-              </label>
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-                Refresh
-              </button>
+                <FluentButton appearance="secondary" size="small" disabled={loading} onClick={() => void load()} icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}>
+                  Refresh
+                </FluentButton>
+              </div>
             </div>
-          </header>
-          {error ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
-              {error}
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: "Average score", value: averageScore === null ? "—" : `${Math.round(averageScore)}%`, hint: "Across published reviews", icon: GaugeIcon },
-              { label: "Open reviews", value: openReviews, hint: "Waiting on a cycle step", icon: Clock3Icon },
-              { label: "Completed", value: completionRate === null ? "—" : `${Math.round(completionRate)}%`, hint: "Published versus assigned", icon: CheckCircle2Icon },
-              { label: "Improvement plans", value: pipCount, hint: `${developmentPlanCount} development · ${pendingFeedbackCount} feedback`, icon: ListChecksIcon },
-            ].map((metric) => {
-              const Icon = metric.icon
-              return (
-                <article key={metric.label} className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/15 bg-primary/[0.07] text-primary">
-                      <Icon className="size-4" />
-                    </span>
-                    <span className="size-1.5 rounded-full bg-primary" />
+            {error ? <p role="alert" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p> : null}
+            <div className="grid gap-0 border-y border-border sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Active cycles", value: activePeriods.length, detail: `${periods.length} total periods`, icon: CalendarIcon },
+                { label: "Open reviews", value: openReviews, detail: "Waiting for a review step", icon: PendingIcon },
+                { label: "Completion", value: completionRate === null ? "Pending" : `${Math.round(completionRate)}%`, detail: "Reviews completed", icon: CompletedIcon },
+                { label: "Average score", value: averageScore === null ? "Pending" : `${Math.round(averageScore)}%`, detail: "Across scored reviews", icon: ScoreIcon },
+              ].map((metric) => {
+                const Icon = metric.icon
+                return <div key={metric.label} className="flex min-w-0 items-center justify-between gap-3 border-b border-border px-3 py-3 last:border-b-0 sm:px-5 xl:border-b-0 xl:border-r xl:last:border-r-0">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2"><Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate text-sm font-semibold text-foreground">{metric.label}</span></p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{metric.detail}</p>
                   </div>
-                  <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{metric.label}</p>
-                  <p className="mt-1 truncate text-[10px] text-muted-foreground">{metric.hint}</p>
-                </article>
-              )
-            })}
+                  <p className={cn("performance-overview-metric-value shrink-0 text-right font-extrabold tracking-[-0.06em] tabular-nums text-primary", metric.value === "Pending" ? "performance-overview-metric-value-pending" : String(metric.value).length > 2 ? "performance-overview-metric-value-long" : "")}>{metric.value}</p>
+                </div>
+              })}
+            </div>
           </div>
 
-          {managerSummary && (managerTeamSize !== null || managerPendingReviews !== null || managerAverageScore !== null) ? (
-            <section className="space-y-2" aria-label="Manager performance summary">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Team snapshot</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Manager-level results from the team performance summary.</p>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
+            <section className="min-w-0 border-t border-border pt-2">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Cycle snapshot</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Review windows and their current phase.</p>
+                </div>
+                <FluentButton appearance="subtle" size="small" onClick={() => router.push("/dashboard/performance/setup")}>View periods</FluentButton>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  { label: "Team size", value: managerTeamSize ?? "—" },
-                  { label: "Pending manager reviews", value: managerPendingReviews ?? "—" },
-                  { label: "Average team score", value: managerAverageScore === null ? "—" : `${Math.round(managerAverageScore)}%` },
-                ].map((metric) => (
-                  <article key={metric.label} className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-                    <p className="text-xl font-semibold tabular-nums text-foreground">{metric.value}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{metric.label}</p>
-                  </article>
-                ))}
+              <div className="divide-y divide-border px-4">
+                {periods.slice(0, 4).map((period) => {
+                  const status = readString(period, ["kpiPhase", "kpi_phase", "status"], "DRAFT").toUpperCase()
+                  return <button key={rowId(period)} type="button" className="w-full py-3 text-left transition-colors hover:bg-muted/30" onClick={() => { setDetailRecord(period); setDetailOpen(true) }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 truncate text-sm font-semibold text-foreground">{optionLabel(period)}</p>
+                      <StatusChip value={status} />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{formatDate(period.startDate ?? period.start_date)} – {formatDate(period.endDate ?? period.end_date)}</p>
+                  </button>
+                })}
+                {!loading && periods.length === 0 ? <p className="col-span-full px-2 py-8 text-center text-sm text-muted-foreground">No periods yet. Create a year and generate periods in Setup.</p> : null}
               </div>
             </section>
-          ) : null}
 
-          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Performance timeline</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {currentPeriod ? `Current cycle · ${optionLabel(currentPeriod)}` : "Review periods across the company cycle"}
-                </p>
+            <section className="min-w-0 border-t border-border pt-2">
+              <div className="border-b border-border px-4 py-4">
+                <h2 className="text-base font-semibold text-foreground">Needs attention</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">Open items across this performance workspace.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button type="button" className={secondaryButtonClass} onClick={() => setOverviewStatus("ALL")}>
-                  <SlidersHorizontalIcon className="size-4" /> Clear filter
-                </button>
-                {canCreatePerformance ? (
-                  <button type="button" className={primaryButtonClass} onClick={() => window.location.assign("/dashboard/performance/plans")}>
-                    <PlusIcon className="size-4" /> New plan
-                  </button>
-                ) : null}
+              <div className="divide-y divide-border px-4">
+                {[
+                  { label: "Plans to prepare", count: pendingPlans, url: "/dashboard/performance/plans" },
+                  { label: "Reviews awaiting action", count: openReviews, url: "/dashboard/performance/reviews" },
+                  { label: "Open appeals", count: openAppeals, url: "/dashboard/performance/reviews" },
+                  { label: "Improvement plans", count: pipCount, url: "/dashboard/performance/improvement" },
+                  { label: "Development plans", count: developmentPlanCount, url: "/dashboard/performance/development" },
+                ].map((item) => <button key={item.label} type="button" onClick={() => router.push(item.url)} className="flex w-full items-center justify-between gap-3 py-3 text-left hover:text-primary">
+                  <span className="text-sm text-foreground">{item.label}</span>
+                  <Badge appearance="tint" color={Number(item.count) > 0 ? "warning" : "subtle"}>{item.count}</Badge>
+                </button>)}
               </div>
-            </div>
-            <div className="overflow-x-auto p-3">
-              <div className="min-w-[900px] overflow-hidden rounded-lg border border-border">
-                <div className="grid grid-cols-[180px_repeat(6,minmax(110px,1fr))] bg-muted/35 text-[10px] font-medium text-muted-foreground">
-                  <div className="px-3 py-2.5">Review period</div>
-                  {PERFORMANCE_TIMELINE_STAGES.map((stage) => (
-                    <div key={stage.label} className="border-l border-border px-2 py-2.5 text-center">{stage.label}</div>
-                  ))}
+            </section>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,1fr)]">
+            <section className="min-w-0 border-t border-border pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Recent performance work</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Periods, plans, development, improvement, and appeals.</p>
                 </div>
-                {(periods.length > 0 ? periods.slice(0, 7) : [currentPeriod].filter(Boolean) as AdminRecord[]).map((period) => {
-                  const status = readString(period, ["status"], "DRAFT").toUpperCase()
-                  return (
-                    <button
-                      type="button"
-                      key={rowId(period) || optionLabel(period)}
-                      onClick={() => { setDetailRecord(period); setDetailOpen(true) }}
-                      className="grid w-full grid-cols-[180px_repeat(6,minmax(110px,1fr))] border-t border-border text-left transition first:border-t-0 hover:bg-primary/[0.03]"
-                    >
-                      <div className="min-w-0 px-3 py-3">
-                        <p className="truncate text-xs font-semibold text-foreground">{optionLabel(period)}</p>
-                        <p className="mt-0.5 truncate text-[9px] text-muted-foreground">{formatDate(period.startDate ?? period.start_date)} – {formatDate(period.endDate ?? period.end_date)}</p>
-                      </div>
-                      {PERFORMANCE_TIMELINE_STAGES.map((stage) => {
-                        const active = stage.statuses.includes(status as never)
-                        return (
-                          <div key={stage.label} className="flex items-center justify-center border-l border-border px-2 py-2">
-                            {active ? (
-                              <span className="inline-flex w-full items-center justify-center rounded-md border border-primary/25 bg-primary/10 px-2 py-2 text-[10px] font-semibold text-primary">
-                                {prettify(status)}
-                              </span>
-                            ) : (
-                              <span className="h-px w-full bg-border" />
-                            )}
-                          </div>
-                        )
-                      })}
-                    </button>
-                  )
+                <FluentSelect ariaLabel="Filter work by status" size="small" value={overviewStatus} onChange={setOverviewStatus} options={[{ value: "ALL", label: "All statuses" }, ...overviewStatuses.map((status) => ({ value: status, label: prettify(status) }))]} />
+              </div>
+              <div className="divide-y divide-border px-4">
+                {overviewRecords.slice(0, 6).map((row, index) => {
+                  const status = readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()
+                  const progress = readNumber(row, ["progress", "progress_percentage", "completion_rate", "completionRate"])
+                  return <button key={`${readString(row, ["dashboard_kind"])}-${rowId(row) || index}`} type="button" onClick={() => { setDetailRecord(row); setDetailOpen(true) }} className="flex w-full min-w-0 items-center gap-3 py-3 text-left hover:bg-muted/20">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{optionLabel(row)}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{readString(row, ["dashboard_kind"])} · {formatDate(row["dueDate"] ?? row["due_date"] ?? row["endDate"] ?? row["end_date"])}</p>
+                      {progress !== null ? <ProgressBar value={Math.min(1, Math.max(0, progress / 100))} thickness="medium" className="mt-2 max-w-48" /> : null}
+                    </div>
+                    <StatusChip value={status} />
+                  </button>
                 })}
-                {!loading && periods.length === 0 ? (
-                  <div className="flex min-h-28 items-center justify-center border-t border-border px-4 text-xs text-muted-foreground">No performance periods are available yet.</div>
-                ) : null}
+                {!loading && overviewRecords.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">No work matches this search or status.</p> : null}
               </div>
-            </div>
-          </section>
+              {overviewRecords.length > 6 ? <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">Showing 6 of {overviewRecords.length} items. Open the relevant section for the full list.</p> : null}
+            </section>
 
-          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Performance work list</h2>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">Periods, plans, development work, improvement plans, and appeals.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="relative sm:hidden">
-                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none focus:border-primary" />
-                </label>
-                <FluentSelect
-                  ariaLabel="Status"
-                  size="small"
-                  value={overviewStatus}
-                  onChange={(value) => setOverviewStatus(value)}
-                  options={[
-                    { value: "ALL", label: "All statuses" },
-                    ...overviewStatuses.map((status) => ({ value: status, label: prettify(status) })),
-                  ]}
-                />
-              </div>
+            <div className="space-y-6">
+              <section className="border-t border-border px-4 pt-4">
+                <h2 className="text-base font-semibold text-foreground">Team snapshot</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">Manager view of reporting and review progress.</p>
+                {managerSummary && (managerTeamSize !== null || managerPendingReviews !== null || managerAverageScore !== null) ? <div className="mt-4 grid grid-cols-3 gap-2 border-y border-border py-3">
+                  {[
+                    { label: "People", value: managerTeamSize ?? 0 },
+                    { label: "Pending", value: managerPendingReviews ?? 0 },
+                    { label: "Avg. score", value: managerAverageScore === null ? "Pending" : `${Math.round(managerAverageScore)}%` },
+                  ].map((metric) => <div key={metric.label} className="p-2 text-center"><p className="text-lg font-semibold tabular-nums text-foreground">{metric.value}</p><p className="text-[11px] text-muted-foreground">{metric.label}</p></div>)}
+                </div> : <p className="mt-4 text-sm text-muted-foreground">Team summary is unavailable for this account.</p>}
+                <FluentButton appearance="subtle" size="small" className="mt-3 self-start" onClick={() => router.push("/dashboard/me/performance/team")}>View team</FluentButton>
+              </section>
+              <section className="border-t border-border px-4 pt-4">
+                <h2 className="text-base font-semibold text-foreground">Next steps</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">Continue the performance workflow.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {canCreatePerformance ? <FluentButton appearance="primary" size="small" onClick={() => router.push("/dashboard/performance/setup")}>Set up cycle</FluentButton> : null}
+                  <FluentButton appearance="secondary" size="small" onClick={() => router.push("/dashboard/performance/plans")}>Open plans</FluentButton>
+                  <FluentButton appearance="secondary" size="small" onClick={() => router.push("/dashboard/performance/reports")}>Reports</FluentButton>
+                </div>
+              </section>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left">
-                <thead className="bg-muted/30 text-[10px] text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2.5 font-medium">Name</th>
-                    <th className="px-3 py-2.5 font-medium">Type</th>
-                    <th className="px-3 py-2.5 font-medium">Due date</th>
-                    <th className="px-3 py-2.5 font-medium">Progress</th>
-                    <th className="px-4 py-2.5 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {overviewRecords.slice(0, 12).map((row, index) => {
-                    const status = readString(row, ["status", "review_status", "reviewStatus"], "DRAFT").toUpperCase()
-                    const progressValue = readNumber(row, ["progress", "progress_percentage", "completion_rate", "completionRate"])
-                      ?? (["APPROVED", "COMPLETED", "CLOSED"].includes(status) ? 100 : 0)
-                    return (
-                      <tr key={`${readString(row, ["dashboard_kind"])}-${rowId(row) || index}`} className="cursor-pointer text-xs transition hover:bg-primary/[0.03]" onClick={() => { setDetailRecord(row); setDetailOpen(true) }}>
-                        <td className="px-4 py-3 font-medium text-foreground">{optionLabel(row)}</td>
-                        <td className="px-3 py-3 text-muted-foreground">{readString(row, ["dashboard_kind"], "Performance item")}</td>
-                        <td className="px-3 py-3 text-muted-foreground"><span className="inline-flex items-center gap-1"><CalendarDaysIcon className="size-3" />{formatDate(row["dueDate"] ?? row["due_date"] ?? row["endDate"] ?? row["end_date"])}</span></td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, progressValue))}%` }} /></div>
-                            <span className="text-[10px] tabular-nums text-muted-foreground">{Math.round(progressValue)}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3"><StatusChip value={status} /></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              {!loading && overviewRecords.length === 0 ? (
-                <div className="flex min-h-36 items-center justify-center px-4 text-center text-xs text-muted-foreground">No performance work matches the current search and filter.</div>
-              ) : null}
-            </div>
-          </section>
+          </div>
         </>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2153,44 +2180,32 @@ export function PerformanceManagementView({
       )}
 
       {activeTab === "setup" ? (
-        <div className="overflow-x-auto rounded-xl border border-border/70 bg-muted/40 p-2">
-          <div role="tablist" aria-label="Performance setup areas" className="flex min-w-max items-stretch gap-2">
+        <div className="grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
             {SETUP_TAB_GROUPS.map((group) => (
-              <div key={group.label} className="flex items-stretch gap-1 rounded-lg bg-background/70 p-1">
-                <span className="flex items-center px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div key={group.label} className="min-w-0 rounded-lg border border-border/60 bg-background p-2">
+                <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {group.label}
-                </span>
-                {group.tabs.map((tab) => {
-                  const selected = setupTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      id={`performance-setup-tab-${tab.id}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => setSetupTab(tab.id)}
-                      className={cn(
-                        "relative inline-flex h-9 items-center rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        selected
-                          ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      {selected ? <span aria-hidden="true" className="mr-2 size-1.5 rounded-full bg-primary" /> : null}
-                      {tab.label}
-                    </button>
-                  )
-                })}
+                </p>
+                <TabList size="small" selectedValue={group.tabs.some((tab) => tab.id === setupTab) ? setupTab : undefined} onTabSelect={(_event, data) => setSetupTab(data.value as SetupTab)} className="flex max-w-full flex-wrap gap-1">
+                  {group.tabs.map((tab) => <Tab key={tab.id} value={tab.id}>{tab.label}</Tab>)}
+                </TabList>
               </div>
             ))}
-          </div>
         </div>
       ) : null}
 
       {activeTab !== "overview" ? (
         <div className="space-y-3">
+          {activeTab === "setup" && setupTab === "templates" ? <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
+            <FluentSelect ariaLabel="KPI template" value={applyTemplateId} onChange={setApplyTemplateId} options={[{ value: "", label: "Choose template" }, ...templates.map((row) => ({ value: rowId(row), label: optionLabel(row) }))]} />
+            <FluentSelect ariaLabel="KPI cycle" value={applyPeriodId} onChange={setApplyPeriodId} options={[{ value: "", label: "Choose open cycle" }, ...periods.filter((row) => ["GOAL_SETTING", "REOPENED"].includes(readString(row, ["kpiPhase", "kpi_phase"]))).map((row) => ({ value: rowId(row), label: optionLabel(row) }))]} />
+            <FluentSelect ariaLabel="Existing KPI policy" value={applyPolicy} onChange={(value) => setApplyPolicy(value as "MERGE" | "SKIP" | "REPLACE")} options={[{ value: "MERGE", label: "Merge" }, { value: "SKIP", label: "Skip existing" }, { value: "REPLACE", label: "Replace existing" }]} />
+            <button type="button" className={primaryButtonClass} disabled={!applyTemplateId || !applyPeriodId || busyId === "apply-template"} onClick={() => void runAction("apply-template", (token) => applyPerformanceKpiTemplate(token, applyPeriodId, applyTemplateId, applyPolicy), "Template assigned to matching roles.")}>Apply template</button>
+          </div> : null}
           <SearchToggleField value={search} onChange={setSearch} placeholder="Search records" />
+          {activeTab === "setup" && setupTab === "periods" ? (
+            <p className="text-xs text-muted-foreground">Assign plans creates review assignments from active performance plans. Sync system KPIs updates values from attendance, leave, activities, and field visits for those assignments.</p>
+          ) : null}
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
               {error}
@@ -2280,6 +2295,13 @@ export function PerformanceManagementView({
                 <Field label="Sequence"><input type="number" min="1" className={inputClass} value={form.sequence_number ?? ""} onChange={(event) => setForm((current) => ({ ...current, sequence_number: event.target.value }))} /></Field>
                 <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
                 <Field label="End date"><DateInput className={inputClass} value={form.end_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, end_date: event.target.value }))} /></Field>
+                <Field label="Goal-setting deadline"><DateInput className={inputClass} value={form.goal_setting_deadline ?? ""} onChange={(event) => setForm((current) => ({ ...current, goal_setting_deadline: event.target.value }))} /></Field>
+                <Field label="Mid-cycle review date"><DateInput className={inputClass} value={form.mid_cycle_review_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, mid_cycle_review_date: event.target.value }))} /></Field>
+                <Field label="Final review deadline"><DateInput className={inputClass} value={form.final_review_deadline ?? ""} onChange={(event) => setForm((current) => ({ ...current, final_review_deadline: event.target.value }))} /></Field>
+                <Field label="Maximum weight (%)"><input type="number" min="1" max="100" className={inputClass} value={form.max_weightage ?? "100"} onChange={(event) => setForm((current) => ({ ...current, max_weightage: event.target.value }))} /></Field>
+                <Field label="Score cap (%)"><input type="number" min="1" className={inputClass} value={form.score_cap ?? "120"} onChange={(event) => setForm((current) => ({ ...current, score_cap: event.target.value }))} /></Field>
+                <Field label="Cooling period (days)"><input type="number" min="0" className={inputClass} value={form.cooling_period_days ?? "0"} onChange={(event) => setForm((current) => ({ ...current, cooling_period_days: event.target.value }))} /></Field>
+                <Field label="Parallel cycles"><FluentSelect ariaLabel="Parallel cycles" className="w-full" value={form.allow_parallel ?? "true"} onChange={(value) => setForm((current) => ({ ...current, allow_parallel: value }))} options={[{ value: "true", label: "Allowed" }, { value: "false", label: "Disabled" }]} /></Field>
               </>
             ) : null}
             {createMode === "kpi" || createMode === "kpi-edit" || createMode === "kpi-version" ? (
@@ -2378,8 +2400,11 @@ export function PerformanceManagementView({
               <>
                 <Field label="Code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
+                <Field label="Applicable roles"><div className="grid max-h-36 gap-1 overflow-auto border border-border p-2">{templateRoles.map((role) => { const id = rowId(role); const selected = (form.applicable_role_ids || "").split(",").includes(id); return <label key={id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected} onChange={() => setForm((current) => { const ids = (current.applicable_role_ids || "").split(",").filter(Boolean); return { ...current, applicable_role_ids: (selected ? ids.filter((value) => value !== id) : [...ids, id]).join(",") }; })} />{optionLabel(role)}</label> })}</div></Field>
                 <Field label="Weight"><input className={inputClass} value={form.weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight: event.target.value }))} /></Field>
                 <Field label="Target"><input className={inputClass} value={form.target_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, target_value: event.target.value }))} /></Field>
+                {additionalTemplateItems.map((item, index) => <div key={index} className="grid gap-2 border border-border p-3 sm:col-span-2 sm:grid-cols-3"><FluentSelect ariaLabel={`Additional KPI ${index + 1}`} value={item.versionId} onChange={(value) => setAdditionalTemplateItems((current) => current.map((entry, position) => position === index ? { ...entry, versionId: value } : entry))} options={[{ value: "", label: "Choose KPI version" }, ...kpiVersionOptions(kpis).map((option) => ({ value: String(option.id), label: option.label }))]} /><input className={inputClass} type="number" placeholder="Weight" value={item.weight} onChange={(event) => setAdditionalTemplateItems((current) => current.map((entry, position) => position === index ? { ...entry, weight: event.target.value } : entry))} /><input className={inputClass} type="number" placeholder="Target" value={item.target} onChange={(event) => setAdditionalTemplateItems((current) => current.map((entry, position) => position === index ? { ...entry, target: event.target.value } : entry))} /><button type="button" className={secondaryButtonClass} onClick={() => setAdditionalTemplateItems((current) => current.filter((_, position) => position !== index))}>Remove</button></div>)}
+                <button type="button" className={secondaryButtonClass} onClick={() => setAdditionalTemplateItems((current) => [...current, { versionId: "", weight: "", target: "" }])}>Add another KPI</button>
               </>
             ) : null}
             {createMode === "rule" ? (

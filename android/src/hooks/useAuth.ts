@@ -19,6 +19,7 @@ type AuthEmployee = AnyRecord & {
 
 interface AuthState {
   isLoading: boolean;
+  isSubmitting: boolean;
   isAuthenticated: boolean;
   hasStoredSession: boolean;
   user: AuthUser | null;
@@ -36,6 +37,7 @@ interface AuthState {
 function useProvideAuth() {
   const [state, setState] = useState<AuthState>({
     isLoading: true,
+    isSubmitting: false,
     isAuthenticated: false,
     hasStoredSession: false,
     user: null,
@@ -57,6 +59,7 @@ function useProvideAuth() {
       tempToken: null,
       error: null,
       isLoading: false,
+      isSubmitting: false,
     }));
   }, []);
 
@@ -64,8 +67,8 @@ function useProvideAuth() {
     setState((s) => ({ ...s, error: null }));
   }, []);
 
-  const loadSession = useCallback(async ({ skipBiometricLock = false }: { skipBiometricLock?: boolean } = {}) => {
-    setState((s) => ({ ...s, isLoading: true }));
+  const loadSession = useCallback(async ({ skipBiometricLock = false, quiet = false }: { skipBiometricLock?: boolean; quiet?: boolean } = {}) => {
+    if (!quiet) setState((s) => ({ ...s, isLoading: true }));
     const [tokens, biometricStatus] = await Promise.all([
       loadTokensFromStorage(),
       getBiometricStatus(),
@@ -74,6 +77,7 @@ function useProvideAuth() {
       setState((s) => ({
         ...s,
         isLoading: false,
+        isSubmitting: quiet ? s.isSubmitting : false,
         isAuthenticated: false,
         hasStoredSession: biometricStatus.enabled,
         user: null,
@@ -115,8 +119,9 @@ function useProvideAuth() {
 
       const biometricLocked = biometricStatus.enabled && !skipBiometricLock;
 
-      setState({
+      setState((s) => ({
         isLoading: false,
+        isSubmitting: quiet ? s.isSubmitting : false,
         isAuthenticated: !biometricLocked,
         hasStoredSession: true,
         user: finalUser,
@@ -129,12 +134,13 @@ function useProvideAuth() {
         biometricLocked,
         biometricSupported: biometricStatus.supported,
         biometricTypeLabel: biometricStatus.label,
-      });
+      }));
     } catch {
       // Invalid token probably
       await clearTokens();
-      setState({
+      setState((s) => ({
         isLoading: false,
+        isSubmitting: quiet ? s.isSubmitting : false,
         isAuthenticated: false,
         hasStoredSession: biometricStatus.enabled,
         user: null,
@@ -147,7 +153,7 @@ function useProvideAuth() {
         biometricLocked: false,
         biometricSupported: biometricStatus.supported,
         biometricTypeLabel: biometricStatus.label,
-      });
+      }));
     }
   }, []);
 
@@ -156,7 +162,7 @@ function useProvideAuth() {
   }, [loadSession]);
 
   const login = useCallback(async (email: string, password: string) => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s) => ({ ...s, isSubmitting: true, error: null }));
     try {
       const res: AnyRecord = await api.login(email.trim(), password) as AnyRecord;
 
@@ -175,7 +181,6 @@ function useProvideAuth() {
       if (requiresOtp && tempToken) {
         setState((s) => ({
           ...s,
-          isLoading: false,
           requiresOtp: true,
           tempToken: tempToken as string,
           error: null,
@@ -187,7 +192,6 @@ function useProvideAuth() {
         // 2FA required but temp token may be implicit or the client will ask for code in the next step
         setState((s) => ({
           ...s,
-          isLoading: false,
           requiresOtp: true,
           tempToken: tempToken as string | null,
           error: null,
@@ -203,24 +207,25 @@ function useProvideAuth() {
 
       setState((s) => ({
         ...s,
-        isLoading: false,
         hasStoredSession: !!tokens,
         requiresOtp: false,
         tempToken: null,
       }));
 
-      await loadSession({ skipBiometricLock: true });
+      await loadSession({ skipBiometricLock: true, quiet: true });
       return { requiresOtp: false };
     } catch (e: unknown) {
       const msg = (e as Error)?.message || 'Login failed. Check your credentials.';
-      setState((s) => ({ ...s, isLoading: false, error: msg }));
+      setState((s) => ({ ...s, error: msg }));
       throw e;
+    } finally {
+      setState((s) => ({ ...s, isSubmitting: false }));
     }
   }, [loadSession]);
 
   const verifyOtp = useCallback(async (code: string) => {
     if (!state.tempToken) throw new Error('No OTP session. Please login again.');
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s) => ({ ...s, isSubmitting: true, error: null }));
 
     try {
       // Per spec: /api/auth/2fa/complete-login expects the temporary token + the code (TOTP or backup)
@@ -228,12 +233,14 @@ function useProvideAuth() {
       const tokens = extractTokens(res);
       if (tokens) await saveTokens(tokens);
 
-      setState((s) => ({ ...s, requiresOtp: false, tempToken: null, isLoading: false }));
-      await loadSession({ skipBiometricLock: true });
+      setState((s) => ({ ...s, requiresOtp: false, tempToken: null }));
+      await loadSession({ skipBiometricLock: true, quiet: true });
     } catch (e: unknown) {
       const msg = (e as Error)?.message || 'Invalid code. Please try again.';
-      setState((s) => ({ ...s, isLoading: false, error: msg }));
+      setState((s) => ({ ...s, error: msg }));
       throw e;
+    } finally {
+      setState((s) => ({ ...s, isSubmitting: false }));
     }
   }, [state.tempToken, loadSession]);
 
@@ -246,6 +253,7 @@ function useProvideAuth() {
     }
     setState({
       isLoading: false,
+      isSubmitting: false,
       isAuthenticated: false,
       hasStoredSession: biometricStatus.enabled,
       user: null,
@@ -323,7 +331,7 @@ function useProvideAuth() {
       return false;
     }
 
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s) => ({ ...s, isSubmitting: true, error: null }));
 
     try {
       const confirmed = await promptBiometricAuth(
@@ -332,12 +340,10 @@ function useProvideAuth() {
       );
 
       if (confirmed) {
-        await loadSession({ skipBiometricLock: true });
-        // loadSession sets isLoading:false and isAuthenticated:true + user data
+        await loadSession({ skipBiometricLock: true, quiet: true });
       } else {
         setState((s) => ({
           ...s,
-          isLoading: false,
           isAuthenticated: false,
           biometricLocked: true,
         }));
@@ -346,8 +352,10 @@ function useProvideAuth() {
       return confirmed;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Fingerprint authentication failed.';
-      setState((s) => ({ ...s, isLoading: false, error: message }));
+      setState((s) => ({ ...s, error: message }));
       throw e;
+    } finally {
+      setState((s) => ({ ...s, isSubmitting: false }));
     }
   }, [state.biometricEnabled, state.biometricTypeLabel, loadSession]);
 

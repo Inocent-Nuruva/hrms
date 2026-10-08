@@ -232,6 +232,58 @@ body[data-app-text-scale="compact"]
   line-height: 16px !important;
 }
 
+.performance-overview-metric-value {
+  font-size: 1.5rem !important;
+  line-height: 0.9 !important;
+}
+
+.performance-overview-metric-value-long {
+  font-size: 1.25rem !important;
+}
+
+.performance-overview-metric-value-pending {
+  font-size: 1rem !important;
+}
+
+body[data-app-text-scale="compact"] .performance-overview-metric-value {
+  font-size: 1.5rem !important;
+  line-height: 0.9 !important;
+}
+
+body[data-app-text-scale="compact"] .performance-overview-metric-value-long {
+  font-size: 1.25rem !important;
+}
+
+body[data-app-text-scale="compact"] .performance-overview-metric-value-pending {
+  font-size: 1rem !important;
+}
+
+@media (max-width: 640px) {
+  .performance-overview-metric-value {
+    font-size: 1.25rem !important;
+  }
+
+  .performance-overview-metric-value-long {
+    font-size: 1.125rem !important;
+  }
+
+  .performance-overview-metric-value-pending {
+    font-size: 0.875rem !important;
+  }
+
+  body[data-app-text-scale="compact"] .performance-overview-metric-value {
+    font-size: 1.25rem !important;
+  }
+
+  body[data-app-text-scale="compact"] .performance-overview-metric-value-long {
+    font-size: 1.125rem !important;
+  }
+
+  body[data-app-text-scale="compact"] .performance-overview-metric-value-pending {
+    font-size: 0.875rem !important;
+  }
+}
+
 input::placeholder {
   color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
 }
