@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Animated,
   Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,22 +14,36 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   FileText,
+  Info,
   Landmark,
   Plus,
+  ShieldCheck,
   X,
 } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ButtonV1 as FluentButtonV1 } from '@fluentui-react-native/button';
+import {
+  CalendarClockColor,
+  ClipboardTaskColor,
+  CoinMultipleColor,
+  CalendarMonthRegular,
+  AddStarburstColor,
+  RadioButtonFilled,
+  RadioButtonRegular,
+  ShieldCheckmarkColor,
+} from '@fluentui/react-native-icons';
 
 import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
+import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteAccent } from '../lib/profile-card-background';
 import {
   buildLeaveWorkflowSummary,
   formatLeaveWorkflowStatus,
   leaveWorkflowStatusTone,
 } from '../lib/leave-workflow';
 import { Button } from '../components/ui/button';
-import { SegmentedControl } from '../components/ui/segmented-control';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { StatusPill } from '../components/ui/status-pill';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -37,40 +51,62 @@ import { ScreenTransition } from '../components/ui/screen-transition';
 import { TouchableScale } from '../components/ui/touchable-scale';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { useAppAccent } from '../hooks/useAppAccent';
 import { useToast } from '../hooks/useToast';
 import { Text } from '../components/ui/text';
+import { FluentButton } from '../components/ui/fluent-button';
+import { FluentInput } from '../components/ui/fluent-input';
+import { FluentText } from '../components/ui/fluent-text';
 
 type MobileRecord = Record<string, unknown>;
 type LeaveTab = 'requests' | 'balances' | 'holidays' | 'policies';
 type DateFieldKey = 'start_date' | 'end_date';
+type HolidayFilter = 'all' | 'upcoming' | 'past';
 type MobileApi = typeof api & {
   listLeavePolicies?: (params?: Record<string, unknown>) => Promise<unknown>;
 };
 
-const LEAVE_TABS: Array<{ key: LeaveTab; label: string }> = [
-  { key: 'requests', label: 'Requests' },
-  { key: 'balances', label: 'Balances' },
-  { key: 'holidays', label: 'Holidays' },
-  { key: 'policies', label: 'Policies' },
-];
+const LEAVE_TABS = [
+  { key: 'balances', label: 'Balances', icon: Landmark },
+  { key: 'requests', label: 'Requests', icon: ClipboardList },
+  { key: 'holidays', label: 'Holidays', icon: CalendarDays },
+  { key: 'policies', label: 'Policies', icon: ShieldCheck },
+] as const satisfies ReadonlyArray<{ key: LeaveTab; label: string; icon: typeof FileText }>;
 
 interface Props {
   auth: UseAuthReturn;
   requestId?: string;
+  initialTab?: string;
 }
 
-export function LeaveScreen({ auth, requestId }: Props) {
+export function LeaveScreen({ auth, requestId, initialTab }: Props) {
   const { isDark } = useThemePreference();
+  const accent = useAppAccent();
+  const [policyInfoOpen, setPolicyInfoOpen] = useState(false);
+  const paletteQuery = useQuery({ queryKey: ['dashboardCardStyle'], queryFn: () => api.getMyDashboardCardStyle(), enabled: auth.isAuthenticated });
+  const accentColor = profilePaletteAccent(normalizeProfileCardStyle(paletteQuery.data ?? DEFAULT_PROFILE_CARD_STYLE).palette, isDark);
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<LeaveTab>('requests');
+  const [activeTab, setActiveTab] = useState<LeaveTab>(() =>
+    LEAVE_TABS.some((tab) => tab.key === initialTab) ? (initialTab as LeaveTab) : 'balances',
+  );
   const [selectedRequestId, setSelectedRequestId] = useState('');
   const [requestDetailVisible, setRequestDetailVisible] = useState(false);
   const [showApplyForm, setShowApplyForm] = useState(false);
   const [selectingDateField, setSelectingDateField] = useState<DateFieldKey | null>(null);
-  const [selectingLeaveType, setSelectingLeaveType] = useState(false);
+  const [leaveTypeMenuOpen, setLeaveTypeMenuOpen] = useState(false);
+  const [holidayFilter, setHolidayFilter] = useState<HolidayFilter>('all');
+  const [holidayFilterOpen, setHolidayFilterOpen] = useState(false);
+  const [selectedHoliday, setSelectedHoliday] = useState<MobileRecord | null>(null);
+  const [selectedPolicy, setSelectedPolicy] = useState<MobileRecord | null>(null);
+  const [leaveTabsWidth, setLeaveTabsWidth] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(startOfMonth(new Date()));
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
   const openedHighlightedRequestRef = React.useRef('');
+  const tabIndicatorIndex = React.useRef(new Animated.Value(0)).current;
+  const tabContentTranslateX = React.useRef(new Animated.Value(0)).current;
+  const previousTabIndex = React.useRef(0);
+  const hasAnimatedTabChange = React.useRef(false);
+  const tabPanelWidth = React.useRef(360);
 
   const toast = useToast();
 
@@ -84,16 +120,19 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
   const balancesQuery = useQuery({
     queryKey: ['mobileLeaveBalances'],
-    queryFn: async () => normalizeList(await api.listMyLeaveBalances({ limit: 20 })),
+    queryFn: async () => normalizeLeaveBalanceRows(await api.listMyLeaveBalances({ limit: 20 })),
     enabled: auth.isAuthenticated,
   });
 
   const totalRemainingDays = React.useMemo(() => {
-    return (balancesQuery.data || []).reduce((acc: number, bal) => {
-      const rec = asRecord(bal);
-      const val = readNumberOrString(rec, ['remaining', 'balance']) || 0;
-      return acc + (typeof val === 'number' ? val : Number(val) || 0);
-    }, 0);
+    const values = (balancesQuery.data || []).map((bal) => readAvailableLeaveDays(asRecord(bal))).filter((value): value is number => value !== null);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+  }, [balancesQuery.data]);
+  const totalUsedDays = React.useMemo(() => {
+    const values = (balancesQuery.data || []).map((row) =>
+      readDaysMetric(asRecord(row), ['used_days', 'usedDays', 'taken_days', 'takenDays', 'consumed_days'])
+    ).filter((value): value is number => value !== null);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
   }, [balancesQuery.data]);
   const requestsQuery = useQuery({
     queryKey: ['mobileLeaveRequests'],
@@ -169,10 +208,42 @@ export function LeaveScreen({ auth, requestId }: Props) {
     () => (requestsQuery.data || []).map((item) => asRecord(item)).filter((item): item is MobileRecord => Boolean(item)),
     [requestsQuery.data]
   );
+  const holidayRows = useMemo(
+    () => (holidaysQuery.data || [])
+      .map((item) => asRecord(item))
+      .filter((item): item is MobileRecord => Boolean(item))
+      .sort((a, b) => holidayTimestamp(a) - holidayTimestamp(b)),
+    [holidaysQuery.data]
+  );
+  const policyRows = useMemo(
+    () => (policiesQuery.data || []).map((item) => asRecord(item)).filter((item): item is MobileRecord => Boolean(item)),
+    [policiesQuery.data]
+  );
+  const todayStart = startOfDay(new Date()).getTime();
+  const nextHolidayRow = holidayRows.find((item) => holidayTimestamp(item) >= todayStart) ?? null;
+  const visibleHolidayRows = holidayRows.filter((item) => {
+    if (holidayFilter === 'all') return true;
+    const timestamp = holidayTimestamp(item);
+    return holidayFilter === 'upcoming' ? timestamp >= todayStart : timestamp < todayStart;
+  });
   const selectedLeaveType = leaveTypes.find((item) => String(item.id ?? '') === form.leave_type_id);
   const selectedLeaveTypeLabel =
     readString(selectedLeaveType, ['name', 'display_name']) || 'Select leave type';
+  const selectedLeaveBalance = findBalanceForType(balancesQuery.data || [], form.leave_type_id, selectedLeaveType);
+  const availableLeaveDays = readAvailableLeaveDays(asRecord(selectedLeaveBalance));
+  const requestedLeaveDays = countInclusiveLeaveDays(form.start_date, form.end_date);
+  const leaveBalanceError = getLeaveBalanceError(availableLeaveDays, requestedLeaveDays);
+  const balanceUnavailableError = form.leave_type_id && !balancesQuery.isLoading && availableLeaveDays === null
+    ? 'A balance could not be found for this leave type, so the request cannot be checked. Refresh balances or contact HR.'
+    : null;
+  const dateRangeError = form.start_date && form.end_date && requestedLeaveDays === null
+    ? 'End date must be the same as or later than start date.'
+    : null;
+  const requestValidationError = dateRangeError || balanceUnavailableError || leaveBalanceError;
+  const availableDaysForType = (typeId: string, type?: MobileRecord) =>
+    readAvailableLeaveDays(asRecord(findBalanceForType(balancesQuery.data || [], typeId, type)));
   const highlightedRequestId = requestId ? String(requestId) : '';
+  const activeTabIndex = Math.max(0, LEAVE_TABS.findIndex((tab) => tab.key === activeTab));
   const selectedRequestFromList = useMemo(
     () =>
       leaveRequests.find((item) => {
@@ -214,9 +285,41 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
   const activeHasItems = Array.isArray(activeQuery.data) && activeQuery.data.length > 0;
 
+  React.useEffect(() => {
+    const indicatorAnimation = Animated.spring(tabIndicatorIndex, {
+      toValue: activeTabIndex,
+      stiffness: 260,
+      damping: 28,
+      mass: 0.8,
+      useNativeDriver: true,
+    });
+    indicatorAnimation.start();
+    if (hasAnimatedTabChange.current) {
+      const direction = activeTabIndex > previousTabIndex.current ? 1 : -1;
+      tabContentTranslateX.setValue(direction * tabPanelWidth.current);
+      Animated.spring(tabContentTranslateX, {
+        toValue: 0,
+        stiffness: 240,
+        damping: 26,
+        mass: 0.85,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      hasAnimatedTabChange.current = true;
+    }
+    previousTabIndex.current = activeTabIndex;
+    return () => {
+      indicatorAnimation.stop();
+    };
+  }, [activeTabIndex, tabContentTranslateX, tabIndicatorIndex]);
+
   const submitRequest = () => {
     if (!form.leave_type_id || !form.start_date || !form.end_date) {
       toast.error('Select a leave type and provide both dates.');
+      return;
+    }
+    if (requestValidationError) {
+      toast.error(requestValidationError);
       return;
     }
     submitMutation.mutate({
@@ -256,35 +359,70 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
-      <MobileTopBar auth={auth} title="Leave" variant="centered" menuPresentation="dropdown" />
+      <MobileTopBar auth={auth} title="Leave" variant="centered" />
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[accent]} />}
       >
-        <ScreenTransition>
+        <ScreenTransition style={styles.leaveScreenTransition}>
 
-          <View style={{ marginBottom: 12 }}>
-            <Button
-              onPress={() => setShowApplyForm((current) => !current)}
-              variant="default"
-              leftIcon={<Plus size={16} color="#ffffff" />}
-              style={{ marginBottom: 8 }}
-            >
-              New leave request
-            </Button>
-            <Text style={[styles.heroTitleSmall, { color: mutedColor }]}>
-              Plan, request, and review your time off
-            </Text>
+          <View
+            accessibilityRole="tablist"
+            onLayout={(event) => setLeaveTabsWidth(event.nativeEvent.layout.width)}
+            style={[
+              styles.leaveTabs,
+              { borderBottomColor: outlineColor },
+            ]}
+          >
+            {LEAVE_TABS.map((item) => {
+              const selected = activeTab === item.key;
+              const TabIcon = item.icon;
+              return (
+                <Pressable
+                  key={item.key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  onPress={() => setActiveTab(item.key)}
+                  style={styles.leaveTab}
+                >
+                  <View style={styles.leaveTabContent}>
+                    <TabIcon size={15} color={selected ? accentColor : mutedColor} strokeWidth={2} />
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.leaveTabLabel,
+                        { color: selected ? accentColor : mutedColor },
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+            {leaveTabsWidth > 0 ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.leaveTabIndicator,
+                  {
+                    width: leaveTabsWidth / LEAVE_TABS.length,
+                    backgroundColor: accentColor,
+                    transform: [{ translateX: Animated.multiply(tabIndicatorIndex, leaveTabsWidth / LEAVE_TABS.length) }],
+                  },
+                ]}
+              />
+            ) : null}
           </View>
 
-          <SegmentedControl
-            value={activeTab}
-            onChange={(next) => setActiveTab(next as LeaveTab)}
-            options={LEAVE_TABS.map((item) => ({ key: item.key, label: item.label }))}
-          />
-
-          <View>
+          <Animated.View
+            onLayout={(event) => { tabPanelWidth.current = event.nativeEvent.layout.width; }}
+            style={[
+              styles.leaveTabPanel,
+              { transform: [{ translateX: tabContentTranslateX }] },
+            ]}
+          >
             {activeQuery.isFetching && !activeHasItems ? (
               <View style={styles.loadingState}>
                 <LoadingIndicator type="dot-circle" size="md" />
@@ -293,153 +431,462 @@ export function LeaveScreen({ auth, requestId }: Props) {
 
           {activeTab === 'requests' ? (
             <>
-              <SectionHeader title="My requests" icon={<FileText size={18} color={mutedColor} />} textColor={textColor} />
               {leaveRequests.length ? (
-                leaveRequests.map((item, index: number) => {
-                  const leaveType = asRecord(item?.leave_type);
-                  const rowRequestId = readRequestId(item);
-                  const isHighlighted = highlightedRequestId === rowRequestId;
-                  return (
-                    <TouchableScale
-                      key={rowRequestId || index}
-                      onPress={() => openRequestDetails(item, rowRequestId)}
-                      style={[
-                        styles.listRow,
-                        {
-                          borderColor: isHighlighted ? COLORS.primary : 'transparent',
-                          borderWidth: isHighlighted ? 1.5 : 0,
-                        },
-                        isHighlighted ? { paddingHorizontal: 14 } : null,
-                        index !== 0 && !isHighlighted ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null,
-                      ]}
-                      pressedScale={0.985}
-                    >
-                      <View style={{ flex: 1, paddingRight: 12 }}>
-                        <Text style={[styles.primaryText, { color: textColor }]}>
-                          {readString(leaveType, ['name']) || readString(item, ['leave_type_name']) || 'Leave request'}
-                        </Text>
-                        <Text style={[styles.secondaryText, { color: mutedColor }]}>
-                          {formatDate(readString(item, ['start_date']))} - {formatDate(readString(item, ['end_date']))}
-                        </Text>
-                      </View>
-                      <StatusPill label={readString(item, ['status']) || 'pending'} tone={statusTone(readString(item, ['status']))} />
-                    </TouchableScale>
-                  );
-                })
-              ) : (
-                <Text style={[styles.emptyText, { color: mutedColor }]}>No leave requests yet.</Text>
-              )}
+                <>
+                  <SectionHeader title="My requests" textColor={textColor} />
+                  {leaveRequests.map((item, index: number) => {
+                    const leaveType = asRecord(item?.leave_type);
+                    const rowRequestId = readRequestId(item);
+                    const isHighlighted = highlightedRequestId === rowRequestId;
+                    return (
+                      <TouchableScale
+                        key={rowRequestId || index}
+                        onPress={() => openRequestDetails(item, rowRequestId)}
+                        style={[
+                          styles.listRow,
+                          {
+                            borderColor: isHighlighted ? accent : 'transparent',
+                            borderWidth: isHighlighted ? 1.5 : 0,
+                          },
+                          isHighlighted ? { paddingHorizontal: 14 } : null,
+                          index !== 0 && !isHighlighted ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null,
+                        ]}
+                        pressedScale={0.985}
+                      >
+                        <View style={{ flex: 1, paddingRight: 12 }}>
+                          <Text style={[styles.primaryText, { color: textColor }]}>
+                            {readString(leaveType, ['name']) || readString(item, ['leave_type_name']) || 'Leave request'}
+                          </Text>
+                          <Text style={[styles.secondaryText, { color: mutedColor }]}>
+                            {formatDate(readString(item, ['start_date']))} - {formatDate(readString(item, ['end_date']))}
+                          </Text>
+                        </View>
+                        <StatusPill label={readString(item, ['status']) || 'pending'} tone={statusTone(readString(item, ['status']))} />
+                      </TouchableScale>
+                    );
+                  })}
+                </>
+              ) : !requestsQuery.isFetching ? (
+                <LeaveEmptyState
+                  isDark={isDark}
+                  textColor={textColor}
+                  mutedColor={mutedColor}
+                  subtleBlock={subtleBlock}
+                  icon={<ClipboardTaskColor width={32} height={32} title="Leave requests" />}
+                  title="No leave requests yet"
+                  description="Your leave requests and their approval progress will appear here."
+                  actionLabel="Create a leave request"
+                  onAction={() => setShowApplyForm(true)}
+                />
+              ) : null}
             </>
           ) : null}
 
           {activeTab === 'balances' ? (
             <>
-              <SectionHeader title="Leave balances" icon={<Landmark size={18} color={mutedColor} />} textColor={textColor} />
               {balancesQuery.data?.length ? (
                 <>
-                  <View style={[styles.balanceRow, { marginBottom: 4 }]}>
-                    <Text style={[styles.primaryText, { color: COLORS.primary }]}>Total Remaining</Text>
-                    <StatusPill label={`${totalRemainingDays} days`} tone="success" />
+                  <View style={styles.balancePageHeading}>
+                    <View>
+                      <FluentText style={[styles.balanceEyebrow, { color: accent }]}>TIME OFF OVERVIEW</FluentText>
+                      <FluentText style={[styles.balancePageTitle, { color: textColor }]}>Your balances</FluentText>
+                    </View>
                   </View>
+
+                  <View style={[styles.balanceOverviewCard, { backgroundColor: isDark ? '#142E43' : '#EAF4FC', borderColor: isDark ? '#244A68' : '#C8E0F3' }]}>
+                    <View style={styles.balanceOverviewTop}>
+                      <View style={{ flex: 1 }}>
+                        <FluentText style={[styles.balanceOverviewLabel, { color: isDark ? '#C8DFF1' : '#39566D' }]}>AVAILABLE TO TAKE</FluentText>
+                        <View style={styles.balanceTotalLine}>
+                          <FluentText style={[styles.balanceTotalNumber, { color: textColor }]}>{totalRemainingDays === null ? '—' : formatBalanceDays(totalRemainingDays)}</FluentText>
+                          <FluentText style={[styles.balanceTotalUnit, { color: mutedColor }]}>days</FluentText>
+                        </View>
+                      </View>
+                      <View style={[styles.balanceOverviewGlyph, { backgroundColor: isDark ? '#1E496B' : '#D5EAF9' }]}>
+                        <CoinMultipleColor width={28} height={28} title="Available leave balance" />
+                      </View>
+                    </View>
+                    <View style={[styles.balanceOverviewDivider, { backgroundColor: isDark ? '#31516A' : '#C7DDED' }]} />
+                    <View style={styles.balanceOverviewStats}>
+                      <View style={styles.balanceOverviewStat}>
+                        <FluentText style={[styles.balanceStatValue, { color: textColor }]}>{balancesQuery.data.length}</FluentText>
+                        <FluentText style={[styles.balanceStatLabel, { color: mutedColor }]}>leave types</FluentText>
+                      </View>
+                      <View style={[styles.balanceStatSeparator, { backgroundColor: isDark ? '#31516A' : '#C7DDED' }]} />
+                      <View style={styles.balanceOverviewStat}>
+                        <FluentText style={[styles.balanceStatValue, { color: textColor }]}>{totalUsedDays === null ? '—' : formatBalanceDays(totalUsedDays)}</FluentText>
+                        <FluentText style={[styles.balanceStatLabel, { color: mutedColor }]}>days used</FluentText>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.balanceListHeader}>
+                    <FluentText style={[styles.balanceListTitle, { color: textColor }]}>By leave type</FluentText>
+                    <FluentText style={[styles.balanceListCaption, { color: mutedColor }]}>Available days</FluentText>
+                  </View>
+
                   {balancesQuery.data.map((balance, index: number) => {
                     const item = asRecord(balance);
-                    const leaveType = asRecord(item?.leave_type);
+                    const leaveType = asRecord(item?.leave_type) || asRecord(item?.leaveType) || asRecord(item?.type);
+                    const name = readString(leaveType, ['name', 'display_name']) || readString(item, ['leave_type_name', 'name']) || 'Leave';
+                    const available = readAvailableLeaveDays(item);
+                    const used = readDaysMetric(item, ['used_days', 'usedDays', 'taken_days', 'takenDays', 'consumed_days']);
+                    const entitlement = readDaysMetric(item, ['allocated_days', 'allocatedDays', 'entitled_days', 'entitledDays', 'total_days', 'totalDays', 'annual_entitlement']);
+                    const progress = entitlement !== null && entitlement > 0 && used !== null
+                      ? Math.max(0, Math.min(100, (used / entitlement) * 100))
+                      : null;
                     return (
-                      <View key={index} style={[styles.balanceRow, index !== 0 ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null]}>
-                        <Text style={[styles.primaryText, { color: textColor }]}>
-                          {readString(leaveType, ['name']) || readString(item, ['name']) || 'Leave'}
-                        </Text>
-                        <StatusPill label={`${readNumberOrString(item, ['remaining', 'balance']) || '—'} days`} tone="info" />
+                      <View key={readRecordId(item, ['id', 'leave_type_id', 'leaveTypeId']) || `${name}-${index}`} style={[styles.balanceCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+                        <View style={styles.balanceCardTop}>
+                          <View style={[styles.balanceTypeIcon, { backgroundColor: isDark ? '#202F3D' : '#F0F6FA' }]}>
+                            <CoinMultipleColor width={21} height={21} title={name} />
+                          </View>
+                          <View style={styles.balanceTypeCopy}>
+                            <FluentText numberOfLines={1} style={[styles.balanceTypeName, { color: textColor }]}>{name}</FluentText>
+                            <FluentText style={[styles.balanceTypeMeta, { color: mutedColor }]}>
+                              {readString(item, ['fiscal_year', 'fiscalYear', 'year']) || 'Current balance'}
+                            </FluentText>
+                          </View>
+                          <View style={styles.balanceAvailableBlock}>
+                            <FluentText style={[styles.balanceAvailableValue, { color: available !== null && available <= 0 ? COLORS.error : accent }]}>
+                              {available === null ? '—' : formatBalanceDays(available)}
+                            </FluentText>
+                            <FluentText style={[styles.balanceAvailableLabel, { color: mutedColor }]}>days left</FluentText>
+                          </View>
+                        </View>
+                        {progress !== null ? (
+                          <View style={styles.balanceProgressSection}>
+                            <View style={[styles.balanceProgressTrack, { backgroundColor: isDark ? '#2B3540' : '#E8EDF2' }]}>
+                              <View style={[styles.balanceProgressFill, { width: `${progress}%`, backgroundColor: accent }]} />
+                            </View>
+                            <View style={styles.balanceProgressLabels}>
+                              <FluentText style={[styles.balanceProgressText, { color: mutedColor }]}>{formatBalanceDays(used ?? 0)} used</FluentText>
+                              <FluentText style={[styles.balanceProgressText, { color: mutedColor }]}>{formatBalanceDays(entitlement ?? 0)} days total</FluentText>
+                            </View>
+                          </View>
+                        ) : null}
                       </View>
                     );
                   })}
                 </>
-              ) : (
-                <Text style={[styles.emptyText, { color: mutedColor }]}>No leave balances found.</Text>
-              )}
+              ) : !balancesQuery.isFetching ? (
+                <LeaveEmptyState
+                  isDark={isDark}
+                  textColor={textColor}
+                  mutedColor={mutedColor}
+                  subtleBlock={subtleBlock}
+                  icon={<CoinMultipleColor width={32} height={32} title="Leave balance" />}
+                  title="No balances to show"
+                  description="Your available leave days will appear here once a balance is assigned."
+                />
+              ) : null}
             </>
           ) : null}
 
           {activeTab === 'holidays' ? (
             <>
-              <SectionHeader title="Holidays" icon={<CalendarDays size={18} color={mutedColor} />} textColor={textColor} />
-              {holidaysQuery.data?.length ? (
-                holidaysQuery.data.map((holiday, index: number) => {
-                  const item = asRecord(holiday);
-                  return (
-                    <View key={index} style={[styles.listRow, index !== 0 ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null]}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.primaryText, { color: textColor, fontWeight: '700' }]}>
-                          {readString(item, ['name', 'holiday_name']) || 'Holiday'}
-                        </Text>
-                        <Text style={[styles.secondaryText, { color: mutedColor }]}>
-                          {formatDate(readString(item, ['date', 'holiday_date']))}
-                        </Text>
-                      </View>
+              {holidayRows.length ? (
+                <>
+                  <View style={styles.holidayPageHeading}>
+                    <View style={{ flex: 1 }}>
+                      <FluentText style={[styles.balanceEyebrow, { color: accent }]}>HOLIDAY CALENDAR</FluentText>
+                      <FluentText style={[styles.balancePageTitle, { color: textColor }]}>Upcoming holidays</FluentText>
                     </View>
-                  );
-                })
-              ) : (
-                <Text style={[styles.emptyText, { color: mutedColor }]}>No holidays listed.</Text>
-              )}
+                  </View>
+
+                  {holidayFilter !== 'past' && nextHolidayRow ? (() => {
+                    const nextHoliday = nextHolidayRow;
+                    const nextName = readString(nextHoliday, ['name', 'holiday_name']) || 'Holiday';
+                    const nextDate = readString(nextHoliday, ['date', 'holiday_date', 'holidayDate']);
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${nextName}, ${formatDate(nextDate)}`}
+                        onPress={() => setSelectedHoliday(nextHoliday)}
+                        style={({ pressed }) => [styles.holidayFeatureCard, { backgroundColor: isDark ? '#142E43' : '#EAF4FC', borderColor: isDark ? '#244A68' : '#C8E0F3', opacity: pressed ? 0.8 : 1 }]}
+                      >
+                        <View style={[styles.holidayFeatureIcon, { backgroundColor: isDark ? '#1E496B' : '#D5EAF9' }]}>
+                          <CalendarClockColor width={30} height={30} title="Next holiday" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <FluentText style={[styles.balanceOverviewLabel, { color: isDark ? '#C8DFF1' : '#39566D' }]}>NEXT ON THE CALENDAR</FluentText>
+                          <FluentText numberOfLines={1} style={[styles.holidayFeatureName, { color: textColor }]}>{nextName}</FluentText>
+                          <FluentText style={[styles.holidayFeatureDate, { color: mutedColor }]}>{formatDate(nextDate)}</FluentText>
+                        </View>
+                      </Pressable>
+                    );
+                  })() : null}
+
+                  <View style={[styles.holidayFilterAnchor, holidayFilterOpen ? styles.holidayFilterAnchorOpen : null]}>
+                    <View style={styles.holidayListHeading}>
+                      <View style={styles.holidayListTitleRow}>
+                        <FluentText style={[styles.balanceListTitle, { color: textColor }]}>
+                          {holidayFilter === 'past' ? 'Past holidays' : holidayFilter === 'upcoming' ? 'Upcoming holidays' : 'All holidays'}
+                        </FluentText>
+                        <View style={[styles.holidayCountPill, { backgroundColor: subtleBlock }]}>
+                          <FluentText style={[styles.holidayCountText, { color: mutedColor }]}>{visibleHolidayRows.length}</FluentText>
+                        </View>
+                      </View>
+                      <FluentButtonV1
+                        appearance="outline"
+                        onClick={() => setHolidayFilterOpen((open) => !open)}
+                        accessibilityRole="combobox"
+                        accessibilityState={{ expanded: holidayFilterOpen }}
+                        style={[styles.holidayFilterButton, { borderColor: outlineColor, backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface }]}
+                      >
+                        <FluentText style={[styles.holidayFilterLabel, { color: textColor }]}>
+                          {holidayFilter === 'all' ? 'All holidays' : holidayFilter === 'upcoming' ? 'Upcoming' : 'Past'}
+                        </FluentText>
+                        <ChevronDown size={15} color={mutedColor} />
+                      </FluentButtonV1>
+                    </View>
+                    {holidayFilterOpen ? (
+                      <View style={[styles.holidayFilterMenu, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+                        {([
+                          ['all', 'All holidays'],
+                          ['upcoming', 'Upcoming'],
+                          ['past', 'Past'],
+                        ] as const).map(([value, label]) => (
+                          <Pressable
+                            key={value}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: holidayFilter === value }}
+                            onPress={() => {
+                              setHolidayFilter(value);
+                              setHolidayFilterOpen(false);
+                            }}
+                            style={({ pressed }) => [styles.holidayFilterOption, { backgroundColor: pressed ? subtleBlock : 'transparent' }]}
+                          >
+                            <FluentText style={{ color: textColor }}>{label}</FluentText>
+                            {holidayFilter === value ? <RadioButtonFilled primaryFill={accent} width={18} height={18} /> : null}
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {visibleHolidayRows.length ? visibleHolidayRows.map((item, index) => {
+                    const name = readString(item, ['name', 'holiday_name']) || 'Holiday';
+                    const dateValue = readString(item, ['date', 'holiday_date', 'holidayDate']);
+                    const date = parseIsoDate(dateValue.slice(0, 10));
+                    const isNextUp = item === nextHolidayRow && holidayFilter !== 'past';
+                    return (
+                      <Pressable
+                        key={readRecordId(item, ['id']) || `${dateValue}-${index}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${name}, ${formatDate(dateValue)}`}
+                        onPress={() => setSelectedHoliday(item)}
+                        style={({ pressed }) => [
+                          styles.holidayCard,
+                          {
+                            backgroundColor: isNextUp ? (isDark ? '#142E43' : '#F1F8FD') : isDark ? COLORS.surfaceDark : COLORS.surface,
+                            borderColor: isNextUp ? (isDark ? '#3974A0' : '#9CC9E8') : outlineColor,
+                            opacity: pressed ? 0.78 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.holidayDateTile, { backgroundColor: isNextUp ? (isDark ? '#1E496B' : '#DCEFFC') : isDark ? '#202F3D' : '#F0F6FA' }]}>
+                          <FluentText style={[styles.holidayMonth, { color: accent }]}>{date ? date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase() : '—'}</FluentText>
+                          <FluentText style={[styles.holidayDay, { color: textColor }]}>{date ? String(date.getDate()).padStart(2, '0') : '—'}</FluentText>
+                        </View>
+                        <View style={styles.holidayCardCopy}>
+                          <View style={styles.holidayCardTitleLine}>
+                            <FluentText numberOfLines={1} style={[styles.balanceTypeName, { color: textColor, flex: 1 }]}>{name}</FluentText>
+                            {isNextUp ? (
+                              <View style={[styles.holidayNextBadge, { backgroundColor: isDark ? '#1E496B' : '#DCEFFC' }]}>
+                                <FluentText style={[styles.holidayNextBadgeText, { color: accent }]}>NEXT UP</FluentText>
+                              </View>
+                            ) : null}
+                          </View>
+                          <FluentText style={[styles.holidayCardDate, { color: mutedColor }]}>
+                            {date ? date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : formatDate(dateValue)}
+                          </FluentText>
+                        </View>
+                        <CalendarMonthRegular primaryFill={mutedColor} width={19} height={19} />
+                      </Pressable>
+                    );
+                  }) : (
+                    <FluentText style={[styles.holidayNoResults, { color: mutedColor }]}>No holidays match this filter.</FluentText>
+                  )}
+                </>
+              ) : !holidaysQuery.isFetching ? (
+                <LeaveEmptyState
+                  isDark={isDark}
+                  textColor={textColor}
+                  mutedColor={mutedColor}
+                  subtleBlock={subtleBlock}
+                  icon={<CalendarClockColor width={32} height={32} title="Holiday calendar" />}
+                  title="No upcoming holidays"
+                  description="Public holidays for your organization will appear here when they are available."
+                />
+              ) : null}
             </>
           ) : null}
 
           {activeTab === 'policies' ? (
             <>
-              <SectionHeader title="Policies" icon={<FileText size={18} color={mutedColor} />} textColor={textColor} />
-              {policiesQuery.data?.length ? (
-                policiesQuery.data.map((policy, index: number) => {
-                  const item = asRecord(policy);
-                  return (
-                    <View key={index} style={[styles.listRow, index !== 0 ? [styles.withTopBorder, { borderTopColor: outlineColor }] : null]}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.primaryText, { color: textColor }]}>
-                          {readString(item, ['name', 'policy_name']) || 'Policy'}
-                        </Text>
-                        <Text style={[styles.secondaryText, { color: mutedColor }]}>
-                          {readString(item, ['status']) || 'Active'}
-                        </Text>
-                      </View>
+              {policyRows.length ? (
+                <>
+                  <View style={[styles.policyPageHeading, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                    <View style={{ flex: 1 }}>
+                      <FluentText style={[styles.balanceEyebrow, { color: accentColor }]}>POLICY CENTER</FluentText>
+                      <FluentText style={[styles.balancePageTitle, { color: textColor }]}>Leave policies</FluentText>
                     </View>
-                  );
-                })
-              ) : (
-                <Text style={[styles.emptyText, { color: mutedColor }]}>No policies available.</Text>
-              )}
+                    <Pressable accessibilityRole="button" accessibilityLabel="About leave policies" onPress={() => setPolicyInfoOpen((open) => !open)} style={styles.policyInfoButton}>
+                      <Info size={19} color={accentColor} />
+                    </Pressable>
+                  </View>
+                  {policyInfoOpen ? <View style={[styles.policyInfoPanel, { backgroundColor: isDark ? COLORS.surfaceDark : '#F4F8FB', borderColor: outlineColor }]}><FluentText style={{ color: mutedColor, fontSize: 12, lineHeight: 18 }}>Review the rules and allowances for each leave type.</FluentText></View> : null}
+
+                  {policyRows.map((item, index) => {
+                    const name = readString(item, ['name', 'policy_name', 'leave_type_name']) || 'Leave policy';
+                    const description = readString(item, ['description', 'summary', 'details']);
+                    const rawStatus = readString(item, ['status', 'state']) || 'Active';
+                    const normalizedStatus = rawStatus.toLowerCase();
+                    const maxDays = readDaysMetric(item, ['max_days_per_year', 'maxDaysPerYear', 'annual_allowance', 'annualAllowance']);
+                    const carryForward = readBooleanMetric(item, ['is_carry_forward_allowed', 'isCarryForwardAllowed', 'carry_forward_allowed']);
+                    const carryDays = readDaysMetric(item, ['max_carry_forward_days', 'maxCarryForwardDays']);
+                    const isPaid = readBooleanMetric(item, ['is_paid', 'isPaid', 'paid']);
+                    const attachmentRequired = readBooleanMetric(item, ['requires_attachment', 'requiresAttachment']);
+                    const facts = [
+                      ...(isPaid !== null ? [{ label: 'PAY', value: isPaid ? 'Paid leave' : 'Unpaid leave' }] : []),
+                      ...(maxDays !== null ? [{ label: 'YEARLY LIMIT', value: maxDays > 0 ? `${formatBalanceDays(maxDays)} days` : 'No limit' }] : []),
+                      ...(carryForward !== null ? [{ label: 'CARRY FORWARD', value: carryForward ? `Allowed${carryDays && carryDays > 0 ? ` · up to ${formatBalanceDays(carryDays)} days` : ''}` : 'Not allowed' }] : []),
+                      ...(attachmentRequired !== null ? [{ label: 'DOCUMENTS', value: attachmentRequired ? 'Attachment required' : 'No attachment required' }] : []),
+                    ];
+                    return (
+                      <Pressable key={readRecordId(item, ['id']) || `${name}-${index}`} accessibilityRole="button" accessibilityLabel={`View ${name} policy details`} onPress={() => setSelectedPolicy(item)} style={[styles.policyCard, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+                        <View style={styles.policyCardHeader}>
+                          <View style={[styles.policyCardIcon, { backgroundColor: isDark ? '#202F3D' : '#F0F6FA' }]}>
+                            <ShieldCheckmarkColor width={23} height={23} title={name} />
+                          </View>
+                          <View style={styles.policyCardTitleBlock}>
+                            <FluentText numberOfLines={2} style={[styles.policyCardTitle, { color: textColor }]}>{name}</FluentText>
+                          </View>
+                          <FluentText style={{ color: normalizedStatus.includes('active') || normalizedStatus.includes('published') ? '#16834A' : mutedColor, fontSize: 12, fontWeight: '600' }}>{rawStatus}</FluentText>
+                        </View>
+                        {description ? (
+                          <FluentText style={[styles.policyDescription, { color: mutedColor }]}>{description}</FluentText>
+                        ) : null}
+                        {facts.length ? (
+                          <View style={[styles.policyFacts, { borderTopColor: outlineColor }]}>
+                            {facts.map((fact) => (
+                              <View key={fact.label} style={styles.policyFact}>
+                                <FluentText style={[styles.policyFactLabel, { color: mutedColor }]}>{fact.label}</FluentText>
+                                <FluentText style={[styles.policyFactValue, { color: textColor }]}>{fact.value}</FluentText>
+                              </View>
+                            ))}
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </>
+              ) : !policiesQuery.isFetching ? (
+                <LeaveEmptyState
+                  isDark={isDark}
+                  textColor={textColor}
+                  mutedColor={mutedColor}
+                  subtleBlock={subtleBlock}
+                  icon={<ShieldCheckmarkColor width={32} height={32} title="Leave policies" />}
+                  title="No leave policies available"
+                  description="Your organization’s leave rules and guidance will appear here."
+                />
+              ) : null}
             </>
           ) : null}
-          </View>
+          </Animated.View>
         </ScreenTransition>
       </ScrollView>
 
-      <Modal visible={showApplyForm} animationType="slide" transparent onRequestClose={() => setShowApplyForm(false)}>
+      <Modal visible={showApplyForm} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setShowApplyForm(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
-          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, padding: 20, borderRadius: 16, maxHeight: '85%' }}>
+          <View
+            accessibilityViewIsModal
+            style={[
+              styles.fluentDialog,
+              { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor },
+            ]}
+          >
             <View style={styles.modalHeader}>
-              <Text style={[styles.sectionTitle, { color: textColor }]}>New leave request</Text>
+              <FluentText style={[styles.sectionTitle, { color: textColor }]}>New leave request</FluentText>
               <TouchableScale onPress={() => setShowApplyForm(false)} style={[styles.closeButton, { backgroundColor: subtleBlock }]} pressedScale={0.95}>
                 <X size={16} color={textColor} />
               </TouchableScale>
             </View>
 
             <Text style={[styles.fieldLabel, { color: mutedColor }]}>Leave type</Text>
-            <TouchableScale
+            <FluentButtonV1
+              appearance="outline"
+              block
+              onClick={() => setLeaveTypeMenuOpen((open) => !open)}
+              accessibilityRole="combobox"
+              accessibilityState={{ expanded: leaveTypeMenuOpen }}
               style={[
-                styles.selectField,
-                {
-                  backgroundColor: isDark ? COLORS.surfaceVariantDark : '#fafafa',
-                  borderColor: outlineColor,
-                },
+                styles.fluentDropdownTrigger,
+                { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surface, borderColor: outlineColor },
               ]}
-              onPress={() => setSelectingLeaveType(true)}
-              pressedScale={0.98}
             >
-              <Text style={[styles.selectFieldText, { color: form.leave_type_id ? textColor : mutedColor }]}>
-                {selectedLeaveTypeLabel}
+              <View style={styles.fluentDropdownTriggerContent}>
+                <FluentText style={{ color: form.leave_type_id ? textColor : mutedColor }}>
+                  {selectedLeaveTypeLabel}
+                </FluentText>
+                <ChevronDown size={18} color={mutedColor} />
+              </View>
+            </FluentButtonV1>
+            {leaveTypeMenuOpen ? (
+              <View
+                style={[
+                  styles.fluentDropdownOptions,
+                  { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surface, borderColor: outlineColor },
+                ]}
+              >
+                <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={styles.fluentDropdownOptionsScroll}>
+                  {leaveTypes.map((item) => {
+                    const id = String(item.id ?? '');
+                    const balanceDays = availableDaysForType(id, item);
+                    const label = readString(item, ['name', 'display_name']) || `Type ${id}`;
+                    const balanceLabel = balanceDays === null
+                      ? 'Available balance not found'
+                      : `Available: ${balanceDays.toFixed(2)} day(s)`;
+                    const selected = form.leave_type_id === id;
+                    const RadioIcon = selected ? RadioButtonFilled : RadioButtonRegular;
+                    return (
+                      <Pressable
+                        key={id}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected }}
+                        onPress={() => {
+                          setForm((current) => ({ ...current, leave_type_id: id }));
+                          setLeaveTypeMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [styles.fluentDropdownOption, { backgroundColor: pressed ? subtleBlock : 'transparent' }]}
+                      >
+                        <RadioIcon primaryFill={selected ? accent : mutedColor} width={20} height={20} />
+                        <View style={styles.fluentDropdownOptionCopy}>
+                          <FluentText style={{ color: textColor }}>{label}</FluentText>
+                          <FluentText style={[styles.fluentDropdownBalance, { color: mutedColor }]}>{balanceLabel}</FluentText>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+            {form.leave_type_id ? (
+              <Text
+                style={[
+                  styles.balanceHint,
+                  { color: requestValidationError ? COLORS.error : mutedColor },
+                ]}
+              >
+                {availableLeaveDays !== null
+                  ? `Available balance: ${availableLeaveDays.toFixed(2)} day(s)${readString(asRecord(selectedLeaveBalance), ['fiscal_year']) ? ` for ${readString(asRecord(selectedLeaveBalance), ['fiscal_year'])}` : ''}`
+                  : balancesQuery.isLoading
+                    ? 'Loading available balance…'
+                    : 'Available balance could not be found for this leave type.'}
               </Text>
-              <ChevronDown size={18} color={mutedColor} />
-            </TouchableScale>
+            ) : null}
 
             <Text style={[styles.inputLabel, { color: textColor }]}>Start date</Text>
             <DateFieldButton
@@ -462,52 +909,42 @@ export function LeaveScreen({ auth, requestId }: Props) {
               isDark={isDark}
               outlineColor={outlineColor}
             />
+            {requestedLeaveDays !== null ? (
+              <Text style={[styles.balanceHint, { color: mutedColor }]}>
+                Requested duration: {requestedLeaveDays.toFixed(2)} day(s)
+              </Text>
+            ) : null}
+            {requestValidationError ? (
+              <Text style={[styles.balanceHint, { color: COLORS.error }]}>
+                {requestValidationError}
+              </Text>
+            ) : null}
 
-            <Text style={[styles.inputLabel, { color: textColor }]}>Reason</Text>
-            <NativeTextArea
+            <FluentInput
+              label="Reason"
+              hint="Optional supporting note"
+              placeholder="Enter details about your leave request"
               value={form.reason}
-              onChange={(value) => setForm((current) => ({ ...current, reason: value }))}
-              textColor={textColor}
-              mutedColor={mutedColor}
-              isDark={isDark}
-              outlineColor={outlineColor}
+              onChangeText={(value) => setForm((current) => ({ ...current, reason: value }))}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              style={styles.fluentMultilineInput}
             />
 
             <View style={styles.formActions}>
-              <Button variant="ghost" onPress={() => setShowApplyForm(false)} style={styles.flexButton}>
+              <FluentButton appearance="outline" onPress={() => setShowApplyForm(false)} style={styles.flexButton}>
                 Cancel
-              </Button>
-              <Button onPress={submitRequest} loading={submitMutation.isPending} style={styles.flexButton}>
+              </FluentButton>
+              <FluentButton
+                onPress={submitRequest}
+                loading={submitMutation.isPending}
+                disabled={Boolean(requestValidationError) || balancesQuery.isLoading}
+                style={styles.flexButton}
+              >
                 Submit request
-              </Button>
+              </FluentButton>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={selectingLeaveType} transparent animationType="fade" onRequestClose={() => setSelectingLeaveType(false)}>
-        <View style={[styles.pickerOverlay, { backgroundColor: overlayColor }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectingLeaveType(false)} />
-          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderRadius: 14, overflow: 'hidden', marginHorizontal: 20, marginTop: 'auto', marginBottom: 'auto' }}>
-            {leaveTypes.map((item) => {
-              const id = String(item.id ?? '');
-              const selected = form.leave_type_id === id;
-              return (
-                <TouchableScale
-                  key={id}
-                  style={[styles.dropdownOption, selected ? { backgroundColor: isDark ? COLORS.surfaceVariantDark : '#e0e5f5' } : null]}
-                  onPress={() => {
-                    setForm((current) => ({ ...current, leave_type_id: id }));
-                    setSelectingLeaveType(false);
-                  }}
-                  pressedScale={0.99}
-                >
-                  <Text style={[styles.dropdownOptionText, { color: textColor }]}>
-                    {readString(item, ['name', 'display_name']) || `Type ${id}`}
-                  </Text>
-                </TouchableScale>
-              );
-            })}
           </View>
         </View>
       </Modal>
@@ -515,22 +952,22 @@ export function LeaveScreen({ auth, requestId }: Props) {
       <Modal visible={Boolean(selectingDateField)} transparent animationType="fade" onRequestClose={() => setSelectingDateField(null)}>
         <View style={[styles.pickerOverlay, { backgroundColor: overlayColor }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectingDateField(null)} />
-          <View style={{ backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderRadius: 20, padding: 16, marginHorizontal: 20, marginTop: 'auto', marginBottom: 'auto' }}>
+          <View style={[styles.fluentCalendarSurface, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
             <View style={styles.calendarHeader}>
-              <TouchableScale style={[styles.calendarNav, { backgroundColor: subtleBlock }]} onPress={() => setCalendarMonth((current) => shiftMonth(current, -1))} pressedScale={0.94}>
+              <FluentButtonV1 appearance="subtle" accessibilityLabel="Previous month" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))} style={styles.calendarNav}>
                 <ChevronLeft size={18} color={textColor} />
-              </TouchableScale>
-              <Text style={[styles.calendarTitle, { color: textColor }]}>
+              </FluentButtonV1>
+              <FluentText style={[styles.calendarTitle, { color: textColor }]}>
                 {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-              </Text>
-              <TouchableScale style={[styles.calendarNav, { backgroundColor: subtleBlock }]} onPress={() => setCalendarMonth((current) => shiftMonth(current, 1))} pressedScale={0.94}>
+              </FluentText>
+              <FluentButtonV1 appearance="subtle" accessibilityLabel="Next month" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))} style={styles.calendarNav}>
                 <ChevronRight size={18} color={textColor} />
-              </TouchableScale>
+              </FluentButtonV1>
             </View>
 
             <View style={styles.weekRow}>
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
-                <Text key={`${day}-${index}`} style={[styles.weekLabel, { color: mutedColor }]}>{day}</Text>
+                <FluentText key={`${day}-${index}`} style={[styles.weekLabel, { color: mutedColor }]}>{day}</FluentText>
               ))}
             </View>
 
@@ -539,35 +976,164 @@ export function LeaveScreen({ auth, requestId }: Props) {
                 const iso = toIsoDate(day.date);
                 const selected = selectingDateField ? form[selectingDateField] === iso : false;
                 return (
-                  <TouchableScale
-                    key={iso}
-                    style={[
-                      styles.dayCell,
-                      !day.inMonth ? styles.dayCellMuted : null,
-                      selected ? { backgroundColor: COLORS.primary } : null,
-                    ]}
-                    onPress={() => {
-                      if (!selectingDateField) return;
-                      setForm((current) => ({ ...current, [selectingDateField]: iso }));
-                      setSelectingDateField(null);
-                    }}
-                    pressedScale={0.92}
-                  >
-                    <Text
-                      style={[
-                        styles.dayLabel,
-                        { color: selected ? '#ffffff' : day.inMonth ? textColor : mutedColor },
-                      ]}
+                  <View key={iso} style={styles.calendarDaySlot}>
+                    <FluentButtonV1
+                      appearance={selected ? 'primary' : 'subtle'}
+                      accessibilityLabel={day.date.toLocaleDateString()}
+                      accessibilityState={{ selected }}
+                      disabled={!day.inMonth}
+                      onClick={() => {
+                        if (!selectingDateField) return;
+                        setForm((current) => ({ ...current, [selectingDateField]: iso }));
+                        setSelectingDateField(null);
+                      }}
+                      style={[styles.dayCell, !day.inMonth ? styles.dayCellMuted : null, selected ? { backgroundColor: accent } : null]}
                     >
-                      {day.date.getDate()}
-                    </Text>
-                  </TouchableScale>
+                      <FluentText
+                        style={{ color: selected ? '#FFFFFF' : day.inMonth ? textColor : mutedColor }}
+                      >
+                        {String(day.date.getDate())}
+                      </FluentText>
+                    </FluentButtonV1>
+                  </View>
                 );
               })}
             </View>
           </View>
         </View>
       </Modal>
+
+      {selectedHoliday ? (() => {
+        const holidayName = readString(selectedHoliday, ['name', 'holiday_name']) || 'Holiday';
+        const holidayDateValue = readString(selectedHoliday, ['date', 'holiday_date', 'holidayDate']);
+        const holidayDate = parseIsoDate(holidayDateValue.slice(0, 10));
+        const holidayDateLabel = holidayDate
+          ? holidayDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+          : formatDate(holidayDateValue);
+        const daysUntilHoliday = holidayDate
+          ? Math.ceil((startOfDay(holidayDate).getTime() - startOfDay(new Date()).getTime()) / 86_400_000)
+          : null;
+        const holidayCountdown = daysUntilHoliday === null
+          ? 'Date unavailable'
+          : daysUntilHoliday === 0
+            ? 'Today'
+            : daysUntilHoliday > 0
+              ? `${daysUntilHoliday} ${daysUntilHoliday === 1 ? 'day' : 'days'} left`
+              : `${Math.abs(daysUntilHoliday)} ${Math.abs(daysUntilHoliday) === 1 ? 'day' : 'days'} ago`;
+        const holidayCategory = readString(selectedHoliday, ['holiday_type', 'holidayType', 'category', 'type']);
+        const holidayLocation = readString(selectedHoliday, ['country', 'location', 'region', 'jurisdiction']);
+        const holidayDescription = readString(selectedHoliday, ['description', 'summary', 'details', 'notes']);
+        return (
+          <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedHoliday(null)}>
+            <View style={[styles.holidaySheetOverlay, { backgroundColor: overlayColor }]}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedHoliday(null)} accessibilityLabel="Close holiday details" />
+              <View style={[styles.holidaySheet, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+                <View style={styles.holidaySheetHandle} />
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={styles.holidaySheetHeader}>
+                    <AddStarburstColor width={32} height={32} title="Holiday" />
+                    <View style={styles.holidaySheetHeadingCopy}>
+                      <FluentText style={[styles.balanceEyebrow, { color: accent }]}>HOLIDAY DETAILS</FluentText>
+                      <FluentText numberOfLines={2} style={[styles.holidaySheetTitle, { color: textColor }]}>{holidayName}</FluentText>
+                    </View>
+                    <FluentButtonV1 appearance="subtle" accessibilityLabel="Close" onClick={() => setSelectedHoliday(null)} style={styles.holidaySheetClose}>
+                      <X size={18} color={mutedColor} />
+                    </FluentButtonV1>
+                  </View>
+
+                  <View style={[styles.holidaySheetDateRow, { borderBottomColor: outlineColor }]}>
+                    <CalendarMonthRegular primaryFill={accent} width={22} height={22} />
+                    <View style={{ flex: 1 }}>
+                      <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>DATE</FluentText>
+                      <FluentText style={[styles.holidaySheetDateText, { color: textColor }]}>{holidayDateLabel}</FluentText>
+                    </View>
+                    <FluentText style={[styles.holidayCountdown, { color: daysUntilHoliday !== null && daysUntilHoliday < 0 ? mutedColor : accent }]}>
+                      {holidayCountdown}
+                    </FluentText>
+                  </View>
+
+                  {(holidayCategory || holidayLocation) ? (
+                    <View style={styles.holidaySheetFacts}>
+                      {holidayCategory ? (
+                        <View style={styles.holidaySheetFact}>
+                          <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>TYPE</FluentText>
+                          <FluentText style={[styles.holidaySheetFactValue, { color: textColor }]}>{holidayCategory}</FluentText>
+                        </View>
+                      ) : null}
+                      {holidayLocation ? (
+                        <View style={styles.holidaySheetFact}>
+                          <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>LOCATION</FluentText>
+                          <FluentText style={[styles.holidaySheetFactValue, { color: textColor }]}>{holidayLocation}</FluentText>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  <View style={[styles.holidaySheetSummary, { borderTopColor: outlineColor }]}>
+                    <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>SUMMARY</FluentText>
+                    <FluentText style={[styles.holidaySheetSummaryText, { color: textColor }]}>
+                      {holidayDescription || 'No additional details were provided for this holiday.'}
+                    </FluentText>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        );
+      })() : null}
+
+      {selectedPolicy ? (() => {
+        const name = readString(selectedPolicy, ['name', 'policy_name', 'leave_type_name']) || 'Leave policy';
+        const description = readString(selectedPolicy, ['description', 'summary', 'details']);
+        const rawStatus = readString(selectedPolicy, ['status', 'state']) || 'Active';
+        const normalizedStatus = rawStatus.toLowerCase();
+        const maxDays = readDaysMetric(selectedPolicy, ['max_days_per_year', 'maxDaysPerYear', 'annual_allowance', 'annualAllowance']);
+        const carryForward = readBooleanMetric(selectedPolicy, ['is_carry_forward_allowed', 'isCarryForwardAllowed', 'carry_forward_allowed']);
+        const carryDays = readDaysMetric(selectedPolicy, ['max_carry_forward_days', 'maxCarryForwardDays']);
+        const isPaid = readBooleanMetric(selectedPolicy, ['is_paid', 'isPaid', 'paid']);
+        const attachmentRequired = readBooleanMetric(selectedPolicy, ['requires_attachment', 'requiresAttachment']);
+        const facts = [
+          ...(isPaid !== null ? [{ label: 'PAY', value: isPaid ? 'Paid leave' : 'Unpaid leave' }] : []),
+          ...(maxDays !== null ? [{ label: 'YEARLY LIMIT', value: maxDays > 0 ? `${formatBalanceDays(maxDays)} days` : 'No limit' }] : []),
+          ...(carryForward !== null ? [{ label: 'CARRY FORWARD', value: carryForward ? `Allowed${carryDays && carryDays > 0 ? ` · up to ${formatBalanceDays(carryDays)} days` : ''}` : 'Not allowed' }] : []),
+          ...(attachmentRequired !== null ? [{ label: 'DOCUMENTS', value: attachmentRequired ? 'Attachment required' : 'No attachment required' }] : []),
+        ];
+        return (
+          <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedPolicy(null)}>
+            <View style={[styles.holidaySheetOverlay, { backgroundColor: overlayColor }]}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedPolicy(null)} accessibilityLabel="Close policy details" />
+              <View style={[styles.holidaySheet, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface, borderColor: outlineColor }]}>
+                <View style={styles.holidaySheetHandle} />
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={styles.holidaySheetHeader}>
+                    <ShieldCheckmarkColor width={32} height={32} title="Leave policy" />
+                    <View style={styles.holidaySheetHeadingCopy}>
+                      <FluentText style={[styles.balanceEyebrow, { color: accentColor }]}>LEAVE POLICY</FluentText>
+                      <FluentText numberOfLines={2} style={[styles.holidaySheetTitle, { color: textColor }]}>{name}</FluentText>
+                    </View>
+                    <FluentButtonV1 appearance="subtle" accessibilityLabel="Close" onClick={() => setSelectedPolicy(null)} style={styles.holidaySheetClose}>
+                      <X size={18} color={mutedColor} />
+                    </FluentButtonV1>
+                  </View>
+                  <View style={[styles.policyDetailStatus, { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant }]}>
+                    <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>STATUS</FluentText>
+                    <FluentText style={{ color: normalizedStatus.includes('active') || normalizedStatus.includes('published') ? '#16834A' : mutedColor, fontSize: 13, fontWeight: '700', marginTop: 4 }}>{rawStatus}</FluentText>
+                  </View>
+                  {facts.length ? (
+                    <View style={[styles.policyDetailFacts, { borderBottomColor: outlineColor }]}>
+                      {facts.map((fact) => <View key={fact.label} style={styles.policyDetailFact}><FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>{fact.label}</FluentText><FluentText style={[styles.policyFactValue, { color: textColor, marginTop: 5 }]}>{fact.value}</FluentText></View>)}
+                    </View>
+                  ) : null}
+                  <View style={[styles.holidaySheetSummary, { borderTopColor: outlineColor }]}>
+                    <FluentText style={[styles.holidaySheetDetailLabel, { color: mutedColor }]}>POLICY DETAILS</FluentText>
+                    <FluentText style={[styles.holidaySheetSummaryText, { color: textColor }]}>{description || 'No additional policy details were provided.'}</FluentText>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        );
+      })() : null}
 
       <Modal visible={requestDetailVisible} animationType="slide" transparent onRequestClose={() => setRequestDetailVisible(false)}>
         <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
@@ -755,13 +1321,13 @@ function SectionHeader({
   textColor,
 }: {
   title: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   textColor: string;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: textColor }]}>{title}</Text>
-      {icon}
+      {icon ?? null}
     </View>
   );
 }
@@ -784,57 +1350,28 @@ function DateFieldButton({
   outlineColor: string;
 }) {
   return (
-    <TouchableScale
-      style={[
-        styles.dateField,
-        {
-          backgroundColor: isDark ? COLORS.surfaceVariantDark : '#fafafa',
-          borderColor: outlineColor,
-        },
-      ]}
+    <Pressable
       onPress={onPress}
-      pressedScale={0.98}
+      accessibilityRole="button"
+      accessibilityLabel={value || placeholder}
     >
-      <Text style={[styles.dateFieldText, { color: value ? textColor : mutedColor }]}>
-        {value || placeholder}
-      </Text>
-      <CalendarDays size={18} color={mutedColor} />
-    </TouchableScale>
-  );
-}
-
-function NativeTextArea({
-  value,
-  onChange,
-  textColor,
-  mutedColor,
-  isDark,
-  outlineColor,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  textColor: string;
-  mutedColor: string;
-  isDark: boolean;
-  outlineColor: string;
-}) {
-  return (
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      placeholder="Optional supporting note"
-      placeholderTextColor={mutedColor}
-      multiline
-      textAlignVertical="top"
-      style={[
-        styles.hiddenTextAreaInput,
-        {
-          backgroundColor: isDark ? COLORS.surfaceVariantDark : '#fafafa',
-          borderColor: outlineColor,
-          color: textColor,
-        },
-      ]}
-    />
+      <FluentInput
+        value={value}
+        placeholder={placeholder}
+        editable={false}
+        showSoftInputOnFocus={false}
+        pointerEvents="none"
+        trailing={<CalendarMonthRegular primaryFill={mutedColor} width={20} height={20} />}
+        style={[
+          styles.fluentDateInput,
+          {
+            backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surface,
+            color: value ? textColor : mutedColor,
+            borderColor: outlineColor,
+          },
+        ]}
+      />
+    </Pressable>
   );
 }
 
@@ -901,6 +1438,119 @@ function readNumberOrString(value: unknown, keys: string[]) {
   return '';
 }
 
+function readRecordId(value: unknown, keys: string[]) {
+  const record = asRecord(value);
+  if (!record) return '';
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return '';
+}
+
+async function normalizeLeaveBalanceRows(payload: unknown) {
+  const records = await normalizeList(payload);
+  return records.flatMap((record) => {
+    if (!Array.isArray(record.leave_balances)) return [record];
+    return record.leave_balances
+      .map((balance) => asRecord(balance))
+      .filter((balance): balance is MobileRecord => Boolean(balance));
+  });
+}
+
+function findBalanceForType(balances: MobileRecord[], leaveTypeId: string, leaveType?: MobileRecord) {
+  if (!leaveTypeId) return null;
+  const expectedName = readString(leaveType, ['name', 'display_name']).trim().toLocaleLowerCase();
+  return balances.find((row) => {
+    const nestedType = asRecord(row.leave_type) || asRecord(row.leaveType) ||
+      asRecord(row.type) || asRecord(row.leave);
+    const balanceTypeId = readRecordId(row, ['leave_type_id', 'leaveTypeId', 'type_id', 'typeId']) ||
+      readRecordId(nestedType, ['id', 'leave_type_id', 'leaveTypeId']);
+    if (balanceTypeId) return balanceTypeId === leaveTypeId;
+    if (!expectedName) return false;
+    const balanceTypeName = (
+      readString(nestedType, ['name', 'display_name']) ||
+      readString(row, ['leave_type_name', 'leaveTypeName', 'type_name', 'typeName', 'leave_type', 'type'])
+    ).trim().toLocaleLowerCase();
+    return balanceTypeName === expectedName;
+  }) ?? null;
+}
+
+function readAvailableLeaveDays(row: MobileRecord | null) {
+  if (!row) return null;
+  const keys = [
+    'available_days', 'availableDays', 'available_balance', 'availableBalance',
+    'days_available', 'daysAvailable', 'remaining_days', 'remainingDays',
+    'remaining', 'balance', 'balance_days', 'balanceDays', 'current_balance', 'currentBalance',
+  ];
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function readDaysMetric(row: MobileRecord | null, keys: string[]) {
+  if (!row) return null;
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function readBooleanMetric(row: MobileRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number' && (value === 0 || value === 1)) return value === 1;
+    if (typeof value === 'string' && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'required', 'paid', 'allowed'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'optional', 'unpaid', 'not allowed'].includes(normalized)) return false;
+    }
+  }
+  return null;
+}
+
+function formatBalanceDays(value: number) {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
+}
+
+function countInclusiveLeaveDays(startDate: string, endDate: string) {
+  if (!startDate || !endDate) return null;
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+function getLeaveBalanceError(availableDays: number | null, requestedDays: number | null) {
+  if (availableDays === null) return null;
+  if (availableDays < 0) {
+    return `This leave type is already overdrawn (${availableDays.toFixed(2)} day(s) available). New requests are blocked until HR adjusts the balance or the leave policy allows negative balances.`;
+  }
+  if (requestedDays !== null && requestedDays > availableDays) {
+    return `This request exceeds the available balance for the selected leave type (${availableDays.toFixed(2)} day(s) left).`;
+  }
+  return null;
+}
+
+function holidayTimestamp(row: MobileRecord) {
+  const value = readString(row, ['date', 'holiday_date', 'holidayDate']).slice(0, 10);
+  const date = parseIsoDate(value);
+  return date ? date.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
 function formatDate(value?: string) {
   if (!value) return '—';
   try {
@@ -954,6 +1604,10 @@ function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 function shiftMonth(date: Date, delta: number) {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1);
 }
@@ -973,16 +1627,155 @@ function buildCalendarDays(month: Date) {
   });
 }
 
+function LeaveEmptyState({
+  isDark,
+  textColor,
+  mutedColor,
+  subtleBlock,
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  isDark: boolean;
+  textColor: string;
+  mutedColor: string;
+  subtleBlock: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  const accent = useAppAccent();
+  return (
+    <View
+      style={[
+        styles.leaveEmptyState,
+        {
+          backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface,
+        },
+      ]}
+    >
+      <View style={[styles.leaveEmptyIconTile, { backgroundColor: subtleBlock }]}>
+        <View style={[styles.leaveEmptyIconHalo, { backgroundColor: isDark ? '#263D51' : '#DCEEFF' }]} />
+        {icon}
+      </View>
+      <Text style={[styles.leaveEmptyTitle, { color: textColor }]}>{title}</Text>
+      <Text style={[styles.leaveEmptyDescription, { color: mutedColor }]}>{description}</Text>
+      {actionLabel && onAction ? (
+        <Button
+          onPress={onAction}
+          variant="outline"
+          leftIcon={<Plus size={16} color={accent} />}
+          style={styles.leaveEmptyAction}
+          textStyle={{ color: accent, fontSize: 13 }}
+        >
+          {actionLabel}
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   content: {
+    flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 36,
     gap: 8,
   },
-  heroTitleSmall: {
-    fontSize: 13,
-    marginTop: 4,
+  leaveScreenTransition: {
+    flex: 1,
+  },
+  leaveTabPanel: {
+    flexGrow: 1,
+    overflow: 'hidden',
+  },
+  leaveTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  leaveTab: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  leaveTabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingBottom: 10,
+  },
+  leaveTabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  balanceHint: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  leaveTabIndicator: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    height: 2,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  leaveEmptyState: {
+    flex: 1,
+    minHeight: 244,
+    marginTop: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  leaveEmptyIconTile: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  leaveEmptyIconHalo: {
+    position: 'absolute',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    opacity: 0.75,
+  },
+  leaveEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  leaveEmptyDescription: {
+    maxWidth: 290,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  leaveEmptyAction: {
+    alignSelf: 'center',
+    minHeight: 40,
+    marginTop: 16,
+    paddingHorizontal: 14,
+    borderRadius: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1060,7 +1853,23 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 18,
+  },
+  fluentDialog: {
+    position: 'relative',
+    zIndex: 1,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '88%',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 14,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1076,11 +1885,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fieldLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   inputLabel: {
     fontSize: 14,
@@ -1088,43 +1895,63 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 6,
   },
-  selectField: {
+  fluentDropdownTrigger: {
     minHeight: 48,
-    borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  fluentDropdownTriggerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    width: '100%',
   },
-  selectFieldText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  dateField: {
-    minHeight: 48,
-    borderRadius: 14,
+  fluentDropdownOptions: {
+    position: 'absolute',
+    top: 132,
+    left: 20,
+    right: 20,
+    maxHeight: 240,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 4,
+    overflow: 'hidden',
+    zIndex: 100,
+    elevation: 100,
+  },
+  fluentDropdownOptionsScroll: {
+    maxHeight: 238,
+  },
+  fluentDropdownOption: {
+    minHeight: 58,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+    gap: 12,
   },
-  dateFieldText: {
-    fontSize: 15,
+  fluentDropdownOptionCopy: {
+    flex: 1,
+    gap: 2,
   },
-  hiddenTextAreaInput: {
-    minHeight: 110,
-    borderRadius: 14,
+  fluentDropdownBalance: {
+    fontSize: 12,
+  },
+  fluentDateInput: {
+    minHeight: 48,
+    borderRadius: 4,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontFamily: 'Comfortaa_400Regular',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingRight: 48,
+    fontSize: 14,
+  },
+  fluentMultilineInput: {
+    minHeight: 96,
+    borderRadius: 4,
+    paddingTop: 12,
+    textAlignVertical: 'top',
   },
   formActions: {
     flexDirection: 'row',
@@ -1139,13 +1966,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 18,
   },
-  dropdownOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-  },
-  dropdownOptionText: {
-    fontSize: 15,
-    fontWeight: '600',
+  fluentCalendarSurface: {
+    width: '100%',
+    maxWidth: 340,
+    alignSelf: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -1154,11 +1986,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   calendarNav: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    minWidth: 36,
+    height: 36,
+    paddingHorizontal: 0,
   },
   calendarTitle: {
     fontSize: 17,
@@ -1169,7 +2000,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   weekLabel: {
-    flex: 1,
+    width: '14.2857%',
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '700',
@@ -1177,14 +2008,23 @@ const styles = StyleSheet.create({
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    width: '100%',
+  },
+  calendarDaySlot: {
+    width: '14.2857%',
+    aspectRatio: 1,
+    padding: 2,
   },
   dayCell: {
-    width: '13.4%',
-    aspectRatio: 1,
-    borderRadius: 12,
+    width: '100%',
+    height: '100%',
+    minWidth: 0,
+    minHeight: 0,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   dayCellMuted: {
     opacity: 0.45,
@@ -1211,7 +2051,6 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: COLORS.primary,
   },
   workflowStep: {
     flexDirection: 'row',
@@ -1229,12 +2068,463 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  balanceRow: {
-    paddingVertical: 14,
+  balancePageHeading: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  balanceEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+  },
+  balancePageTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    marginTop: 3,
+  },
+  balanceOverviewCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 22,
+  },
+  balanceOverviewTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  balanceOverviewLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+  },
+  balanceTotalLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
+    marginTop: 4,
+  },
+  balanceTotalNumber: {
+    fontSize: 38,
+    lineHeight: 44,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  balanceTotalUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  balanceOverviewGlyph: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  balanceOverviewDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: 14,
+    marginBottom: 12,
+  },
+  balanceOverviewStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  balanceOverviewStat: {
+    flex: 1,
+  },
+  balanceStatSeparator: {
+    width: StyleSheet.hairlineWidth,
+    height: 30,
+    marginHorizontal: 16,
+  },
+  balanceStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  balanceStatLabel: {
+    marginTop: 2,
+    fontSize: 11,
+  },
+  balanceListHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  balanceListTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  balanceListCaption: {
+    fontSize: 11,
+  },
+  balanceCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  balanceCardTop: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  balanceTypeIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  balanceTypeCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  balanceTypeName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  balanceTypeMeta: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+  balanceAvailableBlock: {
+    alignItems: 'flex-end',
+  },
+  balanceAvailableValue: {
+    fontSize: 21,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  balanceAvailableLabel: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  balanceProgressSection: {
+    marginTop: 14,
+  },
+  balanceProgressTrack: {
+    height: 5,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  balanceProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  balanceProgressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  balanceProgressText: {
+    fontSize: 10,
+  },
+  holidayPageHeading: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  holidayFeatureCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 22,
+  },
+  holidayFeatureIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holidayFeatureName: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  holidayFeatureDate: {
+    fontSize: 12,
+    marginTop: 3,
+  },
+  holidayListHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  holidayFilterAnchor: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  holidayFilterAnchorOpen: {
+    zIndex: 30,
+    elevation: 30,
+  },
+  holidayListTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  holidayFilterButton: {
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  holidayFilterLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  holidayFilterMenu: {
+    position: 'absolute',
+    top: 40,
+    right: 0,
+    minWidth: 152,
+    borderRadius: 6,
+    borderWidth: 1,
+    overflow: 'hidden',
+    zIndex: 31,
+    elevation: 12,
+  },
+  holidayFilterOption: {
+    minHeight: 42,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  holidayNoResults: {
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  holidayCountPill: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 7,
+  },
+  holidayCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  holidayCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  holidayDateTile: {
+    width: 52,
+    height: 58,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holidayMonth: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  holidayDay: {
+    fontSize: 21,
+    lineHeight: 25,
+    fontWeight: '700',
+  },
+  holidayCardCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  holidayCardTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  holidayNextBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  holidayNextBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  holidayCardDate: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  holidaySheetOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  holidaySheet: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 28,
+    elevation: 18,
+  },
+  holidaySheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#A19F9D',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  holidaySheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 18,
+  },
+  holidaySheetHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  holidaySheetClose: {
+    width: 36,
+    minWidth: 36,
+    height: 36,
+    paddingHorizontal: 0,
+  },
+  holidaySheetTitle: {
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  holidaySheetDateRow: {
+    minHeight: 64,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  holidaySheetDetailLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.7,
+  },
+  holidaySheetDateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  holidayCountdown: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+    maxWidth: 82,
+  },
+  holidaySheetFacts: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  holidaySheetFact: {
+    flex: 1,
+    minWidth: 0,
+  },
+  holidaySheetFactValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 5,
+  },
+  holidaySheetSummary: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    marginTop: 2,
+  },
+  holidaySheetSummaryText: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 7,
+  },
+  policyPageHeading: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  policyInfoButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  policyInfoPanel: { borderWidth: 1, borderRadius: 10, padding: 11, marginBottom: 12 },
+  policyDetailStatus: { borderRadius: 10, padding: 12, marginBottom: 14 },
+  policyDetailFacts: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingBottom: 15, borderBottomWidth: StyleSheet.hairlineWidth },
+  policyDetailFact: { flexBasis: '44%', flexGrow: 1, minWidth: 120 },
+  policyCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+  },
+  policyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  policyCardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  policyCardTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  policyCardTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  policyDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+  policyFacts: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 12,
+    paddingTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 12,
+  },
+  policyFact: {
+    width: '50%',
+    paddingRight: 8,
+  },
+  policyFactLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  policyFactValue: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
+    marginTop: 4,
   },
   withTopBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,

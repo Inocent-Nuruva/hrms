@@ -40,6 +40,9 @@ import {
   listMyAttendancePunches,
   listMyLeaveBalances,
   listLeaveTypes,
+  getMyDashboardCardStyle,
+  updateMyDashboardCardStyle,
+  type DashboardCardStyle,
   createEmployeeSectionItem,
   createEmployeeDocument,
   createMyEmployeeSectionItem,
@@ -265,6 +268,7 @@ type EmployeeDashboardData = {
 
 type EmployeeDashboardViewProps = {
   dashboardData: EmployeeDashboardData
+  token: string
   attendanceToday?: AdminRecord | null
   attendancePunchesToday?: AdminRecord[]
   leaveBalances?: AdminRecord[]
@@ -2061,48 +2065,109 @@ function DashboardSection({
   )
 }
 
-// Reusable doodle components (same as profile summary)
-function DoodleSprites() {
-  return (
-    <svg width="0" height="0" className="hidden" aria-hidden="true">
-      <symbol id="doodle-circles" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
-          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
-          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
-          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
-        </g>
-      </symbol>
-      <symbol id="doodle-curves" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeWidth="4" opacity="0.25">
-          <path d="M 50 50 Q 150 20 250 80 Q 100 150 200 250" />
-          <path d="M 30 100 Q 120 70 220 140 Q 80 200 180 280" />
-        </g>
-      </symbol>
-      <symbol id="doodle-grass" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" opacity="0.2">
-          <path d="M 20 300 Q 40 200 30 100" />
-          <path d="M 60 300 Q 80 180 70 80" />
-          <path d="M 100 300 Q 120 220 110 120" />
-          <path d="M 150 300 Q 170 190 160 90" />
-          <path d="M 200 300 Q 220 210 210 110" />
-          <path d="M 250 300 Q 270 200 260 100" />
-          <path d="M 290 300 Q 310 220 300 120" />
-        </g>
-      </symbol>
-    </svg>
-  )
+const dashboardCardPalettes = [
+  { id: "ocean", label: "Ocean", color: "#0877B9" },
+  { id: "forest", label: "Forest", color: "#08785C" },
+  { id: "plum", label: "Plum", color: "#6845A8" },
+  { id: "coral", label: "Coral", color: "#B84F3E" },
+  { id: "midnight", label: "Midnight", color: "#334155" },
+  { id: "berry", label: "Berry", color: "#A33F69" },
+  { id: "neutral", label: "Neutral", color: "#64748B" },
+  { id: "white", label: "Dynamic", color: "#FFFFFF" },
+] as const
+
+const dashboardCardArtworks = [
+  { id: "none", label: "None" },
+  { id: "orbit", label: "Orbit" },
+  { id: "waves", label: "Waves" },
+  { id: "confetti", label: "Confetti" },
+  { id: "arches", label: "Arches" },
+  { id: "sprigs", label: "Sprigs" },
+] as const
+
+type DashboardCardArtworkId = (typeof dashboardCardArtworks)[number]["id"]
+type DashboardCardLook = DashboardCardStyle
+
+const defaultDashboardCardLook: DashboardCardLook = {
+  palette: "ocean",
+  artwork: "waves",
 }
 
-function Doodle({ name = "doodle-circles" }: { name?: string }) {
-  const doodleType = name.replace('doodle-', '');
+function normalizeDashboardCardLook(value: unknown): DashboardCardLook | null {
+  if (!value || typeof value !== "object") return null
+  const parsed = value as Partial<DashboardCardLook>
+  const palette = dashboardCardPalettes.find((item) => item.id === parsed.palette)
+  const artwork = dashboardCardArtworks.find((item) => item.id === parsed.artwork)
+  return palette && artwork ? { palette: palette.id, artwork: artwork.id } : null
+}
+
+function CardDoodleArtwork({
+  pattern,
+  className,
+}: {
+  pattern: DashboardCardArtworkId
+  className?: string
+}) {
+  if (pattern === "none") return null
   return (
-    <svg 
-      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+    <svg
+      viewBox="0 0 420 220"
+      preserveAspectRatio="xMidYMid slice"
+      className={cn("pointer-events-none", className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
       aria-hidden="true"
     >
-      <use href={`#${name}`} />
+      {pattern === "orbit" ? (
+        <g>
+          <circle cx="320" cy="110" r="66" />
+          <circle cx="320" cy="110" r="43" />
+          <circle cx="320" cy="110" r="19" />
+          <path d="M235 160c46-72 105-112 178-118M248 56c51 25 95 68 130 130" />
+          <circle cx="250" cy="57" r="5" fill="currentColor" />
+          <circle cx="402" cy="42" r="5" fill="currentColor" />
+          <circle cx="250" cy="57" r="3" fill="#38BDF8" stroke="none" />
+          <circle cx="402" cy="42" r="3" fill="#FBBF24" stroke="none" />
+        </g>
+      ) : null}
+      {pattern === "waves" ? (
+        <g>
+          <path d="M205 58c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M180 91c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M205 124c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M180 157c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+        </g>
+      ) : null}
+      {pattern === "confetti" ? (
+        <g>
+          <circle cx="268" cy="56" r="7" /><circle cx="337" cy="42" r="4" />
+          <circle cx="389" cy="89" r="8" /><circle cx="300" cy="120" r="5" />
+          <circle cx="365" cy="157" r="6" /><circle cx="245" cy="171" r="4" />
+          <path d="m322 78 14-15m43 55 14 14m-99 7-12 17m-19-91 9 9m81 73 9-11" />
+          <path d="m280 96 7-7m88-57 8 10m-33 150 7-7" />
+          <circle cx="268" cy="56" r="3" fill="#F9A8D4" stroke="none" />
+          <circle cx="389" cy="89" r="3" fill="#FCD34D" stroke="none" />
+          <circle cx="365" cy="157" r="3" fill="#7DD3FC" stroke="none" />
+        </g>
+      ) : null}
+      {pattern === "arches" ? (
+        <g>
+          <path d="M230 190V116a45 45 0 0 1 90 0v74" />
+          <path d="M265 190v-58a28 28 0 0 1 56 0v58" />
+          <path d="M320 190V98a57 57 0 0 1 114 0v92" />
+          <path d="M354 190v-71a23 23 0 0 1 46 0v71" />
+        </g>
+      ) : null}
+      {pattern === "sprigs" ? (
+        <g>
+          <path d="M300 205c12-47 36-84 73-119m-49 49c-22-2-37-14-43-35 21-2 38 9 43 35Zm22-24c-2-23 8-41 29-51 4 21-6 40-29 51Zm-10 34c-20-6-32-22-33-44 21 3 34 17 33 44Zm32-37c2-22 15-37 37-42 0 22-13 38-37 42Z" />
+          <path d="M220 206c9-33 25-59 50-80m-35 32c-16-2-26-11-30-26 15-1 26 8 30 26Zm16-17c0-16 7-28 22-35 2 15-5 27-22 35Z" />
+        </g>
+      ) : null}
     </svg>
-  );
+  )
 }
 
 type BrowserNetworkInformation = {
@@ -2487,6 +2552,7 @@ function AttendancePunchActions({
 
 export function EmployeeDashboardView({
   dashboardData,
+  token,
   attendanceToday,
   attendancePunchesToday,
   leaveBalances,
@@ -2499,6 +2565,39 @@ export function EmployeeDashboardView({
   const actor = useDashboardActor()
   const dashboardIdentity = useDashboardIdentity()
   useForbiddenPrefixes()
+  const [dashboardCardLook, setDashboardCardLook] = React.useState<DashboardCardLook>(defaultDashboardCardLook)
+  const [dashboardCardLookSaveState, setDashboardCardLookSaveState] = React.useState<"idle" | "saving" | "error">("idle")
+  const dashboardCardLookKey = dashboardData?.user?.id
+    ? `hrms.dashboard.card-look.v1:${dashboardData.user.id}`
+    : null
+
+  React.useEffect(() => {
+    if (!dashboardCardLookKey || !token) return
+    let active = true
+    setDashboardCardLookSaveState("idle")
+    void getMyDashboardCardStyle(token)
+      .then((style) => {
+        if (active) setDashboardCardLook(normalizeDashboardCardLook(style) ?? defaultDashboardCardLook)
+      })
+      .catch(() => {
+        if (active) setDashboardCardLook(defaultDashboardCardLook)
+      })
+    return () => {
+      active = false
+    }
+  }, [dashboardCardLookKey, token])
+
+  const saveDashboardCardLook = React.useCallback(async (next: DashboardCardLook) => {
+    setDashboardCardLook(next)
+    setDashboardCardLookSaveState("saving")
+    try {
+      const saved = await updateMyDashboardCardStyle(token, next)
+      setDashboardCardLook(normalizeDashboardCardLook(saved) ?? next)
+      setDashboardCardLookSaveState("idle")
+    } catch {
+      setDashboardCardLookSaveState("error")
+    }
+  }, [token])
 
   if (!isEmployeeDashboardData(dashboardData)) {
     return (
@@ -2515,6 +2614,13 @@ export function EmployeeDashboardView({
     )
   }
 
+  const activeDashboardCardPalette =
+    dashboardCardPalettes.find((palette) => palette.id === dashboardCardLook.palette) ??
+    dashboardCardPalettes[0]
+  const isDynamicDashboardCard = dashboardCardLook.palette === "white"
+  const dashboardCardBackground = isDynamicDashboardCard
+    ? "var(--background)"
+    : activeDashboardCardPalette.color
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
   const preferredName =
     dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
@@ -2792,8 +2898,6 @@ export function EmployeeDashboardView({
       initial="hidden"
       animate="show"
     >
-      <DoodleSprites />
-
       {/* Greeting + day snapshot on the right */}
       <motion.div
         variants={dashboardItem}
@@ -2869,36 +2973,118 @@ export function EmployeeDashboardView({
       {/* Hero — primary card with labeled identity */}
       <motion.div
         variants={dashboardItem}
-        className={cn(heroPanelClass, pageBleedClass)}
-        style={{ backgroundColor: "var(--primary)" }}
+        className={cn(heroPanelClass, pageBleedClass, "overflow-visible")}
+        style={{ backgroundColor: dashboardCardBackground }}
       >
+        <CardDoodleArtwork
+          pattern={dashboardCardLook.artwork}
+          className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/15" : "text-white/20")}
+        />
         <div className="relative z-10 space-y-4">
+          <div className="flex justify-end">
+            <details className="group relative z-50">
+              <summary className={cn("inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted focus-visible:ring-ring" : "border-white/30 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/70")}>
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                Card artwork
+              </summary>
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(21rem,calc(100vw-2rem))] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+                <div>
+                  <p className="text-xs font-semibold">Doodle structure</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Choose a pattern for your card.</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {dashboardCardArtworks.map((artwork) => {
+                      const selected = dashboardCardLook.artwork === artwork.id
+                      return (
+                        <button
+                          key={artwork.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, artwork: artwork.id })}
+                          className={cn(
+                            "overflow-hidden rounded-lg border text-left text-[10px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            selected ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/50",
+                          )}
+                        >
+                          <span
+                            className="relative block h-10 overflow-hidden"
+                            style={{ backgroundColor: dashboardCardBackground }}
+                          >
+                            <CardDoodleArtwork pattern={artwork.id} className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/50" : "text-white/70")} />
+                          </span>
+                          <span className="block px-1.5 py-1">{artwork.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="text-xs font-semibold">Color</p>
+                  <div className="mt-2 grid grid-cols-6 gap-2">
+                    {dashboardCardPalettes.map((palette) => {
+                      const selected = dashboardCardLook.palette === palette.id
+                      return (
+                        <button
+                          key={palette.id}
+                          type="button"
+                          aria-label={`${palette.label} card color`}
+                          aria-pressed={selected}
+                          title={palette.label}
+                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, palette: palette.id })}
+                          className={cn(
+                            "relative size-8 rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            selected ? "border-foreground ring-2 ring-primary/30" : "border-border hover:scale-110",
+                          )}
+                          style={palette.id === "white"
+                            ? { backgroundImage: "linear-gradient(135deg, #fff 0 50%, #111 50% 100%)" }
+                            : { backgroundColor: palette.color }}
+                        >
+                          {palette.id === "white" ? (
+                            <span aria-hidden="true" className="pointer-events-none absolute inset-[5px] flex overflow-hidden rounded-full">
+                              <span className="flex flex-1 items-center justify-center bg-white"><span className="size-1.5 rounded-full bg-black" /></span>
+                              <span className="flex flex-1 items-center justify-center bg-black"><span className="size-1.5 rounded-full bg-white" /></span>
+                            </span>
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground" aria-live="polite">
+                    {dashboardCardLookSaveState === "saving"
+                      ? "Syncing to mobile…"
+                      : dashboardCardLookSaveState === "error"
+                        ? "Could not sync. Check your connection and try again."
+                        : `${activeDashboardCardPalette.label} · shared across web and mobile`}
+                  </p>
+                </div>
+              </div>
+            </details>
+          </div>
           <div className="flex min-w-0 items-start gap-3">
             <motion.div
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.12 }}
             >
-              <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
+              <Avatar className={cn("size-14 shrink-0 ring-2 md:size-16", isDynamicDashboardCard ? "ring-border" : "ring-white/30")}>
                 {employeeProfilePhotoUrl ? (
                   <AvatarImage src={employeeProfilePhotoUrl} alt={fullName} />
                 ) : null}
-                <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
+                <AvatarFallback className={cn("text-lg font-semibold", isDynamicDashboardCard ? "bg-muted text-foreground" : "bg-white/20 text-white")}>
                   {initialsFor(fullName)}
                 </AvatarFallback>
               </Avatar>
             </motion.div>
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                <h2 className={cn("text-xl font-semibold tracking-tight md:text-2xl", isDynamicDashboardCard ? "text-foreground" : "text-white")}>
                   {fullName}
                 </h2>
-                <span className="text-[11px] font-semibold capitalize text-white/85">
+                <span className={cn("text-[11px] font-semibold capitalize", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/85")}>
                   {employmentStatus}
                 </span>
               </div>
               {dashboardIdentity.rolesLabel ? (
-                <p className="text-[10px] font-semibold uppercase leading-4 tracking-[0.15em] text-white/75">
+                <p className={cn("text-[10px] font-semibold uppercase leading-4 tracking-[0.15em]", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/75")}>
                   {dashboardIdentity.rolesLabel}
                 </p>
               ) : null}
@@ -2906,7 +3092,7 @@ export function EmployeeDashboardView({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className={cn("h-7 px-2.5 text-xs", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted hover:text-foreground" : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white")}
                 >
                   View full profile
                 </Button>
@@ -2929,10 +3115,10 @@ export function EmployeeDashboardView({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + index * 0.05, duration: 0.3 }}
               >
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
+                <p className={cn("text-[9px] font-semibold uppercase tracking-wide", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/70")}>
                   {field.label}
                 </p>
-                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
+                <p className={cn("truncate text-xs font-semibold", isDynamicDashboardCard ? "text-foreground" : "text-white")}>{field.value}</p>
               </motion.div>
             ))}
           </div>
@@ -4095,6 +4281,7 @@ export function EmployeeHomeDashboard() {
 
       <EmployeeDashboardView
         dashboardData={dashboardData}
+        token={accessToken}
         attendanceToday={attendanceToday}
         attendancePunchesToday={attendancePunchesToday}
         leaveBalances={leaveBalances}

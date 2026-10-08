@@ -14,11 +14,13 @@ import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 type DashboardSectionTabsProps = {
   groups: DashboardSectionTabGroup[]
   className?: string
+  showGroupNavigation?: boolean
 }
 
 export function DashboardSectionTabs({
   groups,
   className,
+  showGroupNavigation = false,
 }: DashboardSectionTabsProps) {
   const pathname = usePathname()
   const currentPath = pathname ?? ""
@@ -94,6 +96,7 @@ export function DashboardSectionTabs({
     <Tabs2
       groups={tabGroups}
       currentPath={currentPath}
+      showGroupNavigation={showGroupNavigation}
       className={cn(stickyClassName, className)}
     />
   )

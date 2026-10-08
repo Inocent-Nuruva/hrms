@@ -1,340 +1,346 @@
 import React from 'react';
+import * as Location from 'expo-location';
 import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin } from 'lucide-react-native';
+import { Clock3, Globe2, MapPin, Navigation, Radio, ShieldCheck, Wifi } from 'lucide-react-native';
 
-import { readMobilePunchContext } from '../lib/api';
+import { api, normalizeList, readMobilePunchContext } from '../lib/api';
 import { COLORS } from '../lib/config';
+import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteAccent } from '../lib/profile-card-background';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 import { Text } from '../components/ui/text';
+import { Card } from '../components/ui/card';
+import { FluentButton } from '../components/ui/fluent-button';
 
 interface Props {
   auth: UseAuthReturn;
 }
 
+type RecordValue = Record<string, unknown>;
+
 export function MyLocationScreen({ auth }: Props) {
   const { isDark } = useThemePreference();
+  const paletteQuery = useQuery({ queryKey: ['dashboardCardStyle'], queryFn: () => api.getMyDashboardCardStyle(), enabled: auth.isAuthenticated });
+  const selectedStyle = normalizeProfileCardStyle(paletteQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
+  const accent = profilePaletteAccent(selectedStyle.palette, isDark);
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const lineColor = isDark ? COLORS.outlineDark : COLORS.outline;
+  const cardColor = isDark ? COLORS.surfaceDark : COLORS.surface;
+  const [locationLive, setLocationLive] = React.useState(false);
+  const [permissionMessage, setPermissionMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    void Location.getForegroundPermissionsAsync().then((permission) => {
+      if (active && permission.granted) setLocationLive(true);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const locationQuery = useQuery({
-    queryKey: ['mobileMyLocation'],
-    queryFn: async () => readCurrentLocationLabel(),
-    staleTime: 1000 * 60 * 5,
+    queryKey: ['mobileWorkLocationContext'],
+    queryFn: readCurrentLocation,
+    staleTime: 1000 * 60,
+    enabled: locationLive,
+    refetchInterval: locationLive ? 30_000 : false,
+  });
+  const todayQuery = useQuery({
+    queryKey: ['mobileWorkLocationAttendanceToday'],
+    queryFn: () => api.getMyAttendanceToday(),
+    staleTime: 1000 * 60,
+  });
+  const todayKey = dateKey(new Date());
+  const historyFrom = dateKey(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+  const historyQuery = useQuery({
+    queryKey: ['mobileWorkLocationAttendanceHistory', historyFrom, todayKey],
+    queryFn: async () => normalizeList(await api.listMyAttendanceHistory({ from_date: historyFrom, to_date: todayKey, limit: 7 })),
+    staleTime: 1000 * 60,
+  });
+  const punchesQuery = useQuery({
+    queryKey: ['mobileWorkLocationRecentPunches'],
+    queryFn: async () => normalizeList(await api.listMyPunches({ limit: 10, sortOrder: 'DESC' })),
+    staleTime: 1000 * 60,
   });
 
-  const punchContextQuery = useQuery({
-    queryKey: ['mobileMyPunchContext'],
-    queryFn: async () => readPunchContextDetails(),
-    staleTime: 1000 * 60 * 5,
-  });
-
+  const refreshing = locationQuery.isFetching || todayQuery.isFetching || historyQuery.isFetching || punchesQuery.isFetching;
   const onRefresh = React.useCallback(async () => {
-    await Promise.all([
-      locationQuery.refetch(),
-      punchContextQuery.refetch(),
-    ]);
-  }, [locationQuery, punchContextQuery]);
+    await Promise.all([locationLive ? locationQuery.refetch() : Promise.resolve(), todayQuery.refetch(), historyQuery.refetch(), punchesQuery.refetch()]);
+  }, [historyQuery, locationLive, locationQuery, punchesQuery, todayQuery]);
+
+  const toggleLocation = React.useCallback(async () => {
+    if (locationLive) {
+      setLocationLive(false);
+      setPermissionMessage(null);
+      return;
+    }
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) {
+      setPermissionMessage('Location access is off. You can turn it on here, or allow access when you check in.');
+      return;
+    }
+    setPermissionMessage(null);
+    setLocationLive(true);
+  }, [locationLive]);
+
+  const currentLocation = locationQuery.data;
+  const today = asRecord(todayQuery.data);
+  const recentPunch = punchesQuery.data?.map(asRecord).find((item) => item !== null) || null;
+  const employee = asRecord(auth.employee);
+  const assignedLocation = readString(employee, ['work_location_name', 'location_name', 'branch_name']) ||
+    readNestedString(employee, ['work_location', 'branch'], ['name', 'location_name']);
+  const checkIn = readString(today, ['checkInAt', 'check_in_at', 'firstCheckInAt', 'first_check_in_at']);
+  const checkOut = readString(today, ['checkOutAt', 'check_out_at', 'lastCheckOutAt', 'last_check_out_at']);
+  const lastPunchLocation = readString(recentPunch, ['location_name', 'locationName', 'address', 'location', 'place_name']);
+  const lastPunchTime = readString(recentPunch, ['punched_at', 'punch_time', 'created_at', 'createdAt', 'timestamp']);
+  const attendedDays = (historyQuery.data || []).filter((item) => {
+    const record = asRecord(item);
+    const status = readString(record, ['attendanceStatus', 'attendance_status', 'status']).toLowerCase();
+    return Boolean(readString(record, ['checkInAt', 'check_in_at', 'firstCheckInAt', 'first_check_in_at'])) ||
+      ['present', 'late', 'checked-in', 'checked_in', 'complete', 'completed'].includes(status);
+  }).length;
+
+  const openMap = React.useCallback(async () => {
+    const latitude = currentLocation?.latitude;
+    const longitude = currentLocation?.longitude;
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
+    await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+  }, [currentLocation]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
+    <SafeAreaView style={[styles.screen, { backgroundColor }]} edges={[]}>
       <MobileTopBar auth={auth} variant="compact" />
       <ScrollView
-        style={{ flex: 1, backgroundColor }}
+        style={{ backgroundColor }}
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={locationQuery.isFetching || punchContextQuery.isFetching}
-            onRefresh={onRefresh}
-            colors={[COLORS.primary]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[accent]} />}
       >
         <ScreenTransition>
-          <View style={{ marginHorizontal: 16, marginTop: 12 }}>
-            <Text style={[styles.sectionTitle, { color: textColor }]}>My Location</Text>
-
-            <View style={styles.mapShell}>
-              <View style={styles.mapBackdrop}>
-                <View style={styles.mapRoadHorizontal} />
-                <View style={styles.mapRoadVertical} />
-                <View style={styles.mapMarkerRing}>
-                  <View style={styles.mapMarkerCore}>
-                    <Text style={styles.mapMarkerText}>
-                      {readInitials(auth.user?.fullName || `${auth.employee?.first_name || ''} ${auth.employee?.last_name || ''}`)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.mapPinAccent} />
-                <View style={styles.mapPinAccentTwo} />
-                {/* Google Maps style overlay */}
-                <View style={styles.mapOverlayLabel}>
-                  <Text style={styles.mapOverlayText} numberOfLines={1}>
-                    {locationQuery.data || 'Current Location'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.contextItemFlat}>
-              <MapPin size={16} color={mutedColor} />
-              <View style={styles.contextItemContent}>
-                <Text style={[styles.contextLabelFlat, { color: mutedColor }]}>Location</Text>
-                <Text style={[styles.contextValueFlat, { color: textColor }]} numberOfLines={1}>
-                  {locationQuery.data || 'Current location unavailable'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ height: 1, backgroundColor: lineColor, marginVertical: 4 }} />
-
-            <View style={styles.contextItemFlat}>
-              <View style={styles.contextItemContent}>
-                <Text style={[styles.contextLabelFlat, { color: mutedColor }]}>Wi-Fi SSID</Text>
-                <Text style={[styles.contextValueFlat, { color: textColor }]} numberOfLines={1}>
-                  {punchContextQuery.data?.wifiSsid || 'Unavailable'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ height: 1, backgroundColor: lineColor, marginVertical: 4 }} />
-
-            <View style={styles.contextItemFlat}>
-              <View style={styles.contextItemContent}>
-                <Text style={[styles.contextLabelFlat, { color: mutedColor }]}>BSSID</Text>
-                <Text style={[styles.contextValueFlat, { color: textColor }]} numberOfLines={1}>
-                  {punchContextQuery.data?.wifiBssid || 'Unavailable'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ height: 1, backgroundColor: lineColor, marginVertical: 4 }} />
-
-            <View style={styles.contextItemFlat}>
-              <View style={styles.contextItemContent}>
-                <Text style={[styles.contextLabelFlat, { color: mutedColor }]}>Latitude</Text>
-                <Text style={[styles.contextValueFlat, { color: textColor }]}>
-                  {punchContextQuery.data?.latitude || '--'}
-                </Text>
-              </View>
-            </View>
-            <View style={{ height: 1, backgroundColor: lineColor, marginVertical: 4 }} />
-
-            <View style={styles.contextItemFlat}>
-              <View style={styles.contextItemContent}>
-                <Text style={[styles.contextLabelFlat, { color: mutedColor }]}>Longitude</Text>
-                <Text style={[styles.contextValueFlat, { color: textColor }]}>
-                  {punchContextQuery.data?.longitude || '--'}
-                </Text>
-              </View>
-            </View>
+          <View style={styles.pageHeader}>
+            <Text style={[styles.eyebrow, { color: accent }]}>WORKPLACE</Text>
+            <Text style={[styles.pageTitle, { color: textColor }]}>Work location</Text>
+            <Text style={[styles.pageDescription, { color: mutedColor }]}>Your live device location and attendance location details.</Text>
           </View>
+
+          <Card variant="elevated" style={[styles.locationCard, { backgroundColor: cardColor, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+            <View style={styles.locationCardHeader}>
+              <View style={[styles.locationIcon, { backgroundColor: isDark ? '#173A56' : '#EAF4FC' }]}>
+                <MapPin size={20} color={accent} />
+              </View>
+              <View style={styles.locationHeading}>
+                <Text style={[styles.cardEyebrow, { color: mutedColor }]}>CURRENT LOCATION</Text>
+                <Text style={[styles.locationName, { color: textColor }]} numberOfLines={2}>
+                  {currentLocation?.address || (locationQuery.isLoading ? 'Finding your location…' : 'Location unavailable')}
+                </Text>
+              </View>
+              <View style={[styles.liveBadge, { backgroundColor: locationLive ? (locationQuery.isError ? (isDark ? '#44292B' : '#FDECEC') : (isDark ? '#173F36' : '#E8F7F1')) : (isDark ? '#303841' : '#F1F3F4') }]}>
+                <View style={[styles.liveDot, { backgroundColor: locationLive && !locationQuery.isError ? '#107C10' : '#8A8886' }]} />
+                <Text style={[styles.liveText, { color: locationLive && !locationQuery.isError ? '#107C10' : mutedColor }]}>
+                  {locationLive ? locationQuery.isFetching ? 'Updating' : locationQuery.isError ? 'Unavailable' : 'Live' : 'Off'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.locationControlRow}>
+              <Text style={[styles.locationControlHint, { color: mutedColor }]}>
+                {locationLive ? 'Live location refreshes while this is on.' : 'Check-in will ask for location access if needed.'}
+              </Text>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: locationLive }}
+                accessibilityLabel="Live location"
+                onPress={() => void toggleLocation()}
+                style={[styles.locationToggle, { backgroundColor: locationLive ? accent : (isDark ? '#3B4652' : '#E4E9EE') }]}
+              >
+                <View style={[styles.locationToggleKnob, locationLive && styles.locationToggleKnobOn]} />
+              </Pressable>
+            </View>
+
+            {permissionMessage ? <Text style={[styles.errorText, { color: isDark ? '#FFB4AB' : '#B42318' }]}>{permissionMessage}</Text> : null}
+            {locationLive && locationQuery.isError ? (
+              <Text style={[styles.errorText, { color: isDark ? '#FFB4AB' : '#B42318' }]}>
+                {locationQuery.error instanceof Error ? locationQuery.error.message : 'Allow location access to see your current position.'}
+              </Text>
+            ) : null}
+
+            <View style={[styles.coordinatesPanel, { backgroundColor: isDark ? '#1B222A' : '#F5F9FC' }]}>
+              <View style={styles.coordinateItem}>
+                <Text style={[styles.coordinateLabel, { color: mutedColor }]}>LATITUDE</Text>
+              <Text style={[styles.coordinateValue, { color: textColor }]}>{formatCoordinate(currentLocation?.latitude)}</Text>
+              </View>
+              <View style={[styles.coordinateDivider, { backgroundColor: isDark ? '#46515D' : '#DCE7F0' }]} />
+              <View style={styles.coordinateItem}>
+                <Text style={[styles.coordinateLabel, { color: mutedColor }]}>LONGITUDE</Text>
+              <Text style={[styles.coordinateValue, { color: textColor }]}>{formatCoordinate(currentLocation?.longitude)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.locationMeta}>
+              <View style={styles.metaItem}>
+                <Radio size={15} color={mutedColor} />
+                <Text style={[styles.metaText, { color: mutedColor }]}>
+                  {currentLocation?.accuracyMeters ? `±${Math.round(currentLocation.accuracyMeters)} m accuracy` : 'Accuracy unavailable'}
+                </Text>
+              </View>
+              <View style={styles.metaItem}>
+                <Globe2 size={15} color={mutedColor} />
+                <Text style={[styles.metaText, { color: mutedColor }]}>{currentLocation?.networkType || 'Network unavailable'}</Text>
+              </View>
+            </View>
+
+            <FluentButton appearance="primary" centered onPress={() => void openMap()} disabled={!currentLocation || !locationLive} style={[styles.mapButton, { backgroundColor: accent, borderColor: accent }]}>
+              Open in Maps
+            </FluentButton>
+          </Card>
+
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: textColor }]}>Workplace details</Text>
+            <ShieldCheck size={18} color={accent} />
+          </View>
+          <Card variant="elevated" style={[styles.detailsCard, { backgroundColor: cardColor, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+            <DetailRow icon={<MapPin size={17} color={accent} />} label="Assigned workplace" value={assignedLocation || 'No workplace assigned'} textColor={textColor} mutedColor={mutedColor} />
+            <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+            <DetailRow icon={<Wifi size={17} color={accent} />} label="Connected Wi-Fi" value={currentLocation?.wifiSsid || 'Not available on this device'} textColor={textColor} mutedColor={mutedColor} />
+            <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+            <DetailRow icon={<Radio size={17} color={accent} />} label="Wi-Fi BSSID" value={currentLocation?.wifiBssid || 'Not available on this device'} textColor={textColor} mutedColor={mutedColor} />
+            <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+            <DetailRow icon={<Globe2 size={17} color={accent} />} label="Network / IP" value={[currentLocation?.networkType, currentLocation?.ipAddress].filter(Boolean).join(' · ') || 'Unavailable'} textColor={textColor} mutedColor={mutedColor} />
+            <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+            <DetailRow icon={<Clock3 size={17} color={accent} />} label="Today’s attendance" value={checkOut ? `Checked out · ${formatTime(checkOut)}` : checkIn ? `Checked in · ${formatTime(checkIn)}` : 'No punches recorded today'} textColor={textColor} mutedColor={mutedColor} />
+            <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+            <DetailRow icon={<Clock3 size={17} color={accent} />} label="Attendance days · last 7 days" value={historyQuery.isLoading ? 'Loading…' : `${attendedDays} ${attendedDays === 1 ? 'day' : 'days'} recorded`} textColor={textColor} mutedColor={mutedColor} />
+            {lastPunchLocation || lastPunchTime ? <>
+              <View style={[styles.rowDivider, { backgroundColor: isDark ? '#3A444F' : '#E7EEF4' }]} />
+              <DetailRow icon={<Navigation size={17} color={accent} />} label="Most recent punch" value={[lastPunchLocation, lastPunchTime ? formatDateTime(lastPunchTime) : ''].filter(Boolean).join(' · ')} textColor={textColor} mutedColor={mutedColor} />
+            </> : null}
+          </Card>
+
+          {refreshing && !currentLocation ? <ActivityIndicator style={styles.loader} color={accent} /> : null}
         </ScreenTransition>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function readInitials(value: string) {
-  const clean = value.trim();
-  if (!clean) return 'IN';
-  return clean
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+function DetailRow({ icon, label, value, textColor, mutedColor }: { icon: React.ReactNode; label: string; value: string; textColor: string; mutedColor: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIcon}>{icon}</View>
+      <View style={styles.detailCopy}>
+        <Text style={[styles.detailLabel, { color: mutedColor }]}>{label}</Text>
+        <Text style={[styles.detailValue, { color: textColor }]}>{value}</Text>
+      </View>
+    </View>
+  );
 }
 
-async function readCurrentLocationLabel() {
+async function readCurrentLocation() {
+  const context = await readMobilePunchContext();
+  let address = 'Location detected';
   try {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== 'granted') return 'Location permission not granted';
-
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    const places = await Location.reverseGeocodeAsync({
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-    });
+    const places = await Location.reverseGeocodeAsync({ latitude: context.latitude, longitude: context.longitude });
     const place = places[0];
-    if (!place) return 'Current location detected';
-    return [place.name, place.street, place.city, place.region, place.country].filter(Boolean).join(', ');
+    if (place) address = [place.name, place.street, place.city, place.region].filter(Boolean).join(', ') || address;
   } catch {
-    return 'Current location unavailable';
+    // Coordinates remain useful when reverse geocoding is offline.
   }
+  return { ...context, address };
 }
 
-async function readPunchContextDetails() {
-  try {
-    const context = await readMobilePunchContext();
+function asRecord(value: unknown): RecordValue | null {
+  return value && typeof value === 'object' ? value as RecordValue : null;
+}
 
-    return {
-      wifiSsid: context.wifiSsid || 'Unavailable',
-      wifiBssid: context.wifiBssid || 'Unavailable',
-      latitude: context.latitude.toFixed(6),
-      longitude: context.longitude.toFixed(6),
-    };
-  } catch {
-    return {
-      wifiSsid: 'Unavailable',
-      wifiBssid: 'Unavailable',
-      latitude: '--',
-      longitude: '--',
-    };
+function readString(record: RecordValue | null, keys: string[]) {
+  if (!record) return '';
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
   }
+  return '';
+}
+
+function readNestedString(record: RecordValue | null, parents: string[], keys: string[]) {
+  if (!record) return '';
+  for (const parent of parents) {
+    const value = readString(asRecord(record[parent]), keys);
+    if (value) return value;
+  }
+  return '';
+}
+
+function formatCoordinate(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(6) : '—';
+}
+
+function formatTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingTop: 6,
-    paddingBottom: 28,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-    letterSpacing: 0.3,
-    color: '#6b7280',
-  },
-  mapShell: {
-    marginHorizontal: 0,
-    marginTop: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  mapBackdrop: {
-    height: 180,
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#e8f0e8',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  mapRoadHorizontal: {
-    position: 'absolute',
-    top: 75,
-    left: -40,
-    right: -40,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#9ca3af',
-    transform: [{ rotate: '-8deg' }],
-    opacity: 0.9,
-  },
-  mapRoadVertical: {
-    position: 'absolute',
-    top: -20,
-    bottom: -20,
-    left: '45%',
-    width: 22,
-    borderRadius: 11,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#9ca3af',
-    transform: [{ rotate: '6deg' }],
-    opacity: 0.9,
-  },
-  mapMarkerRing: {
-    position: 'absolute',
-    top: 50,
-    left: '50%',
-    marginLeft: -28,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapMarkerCore: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: COLORS.primary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  mapMarkerText: {
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  mapPinAccent: {
-    position: 'absolute',
-    top: 52,
-    left: 48,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  mapPinAccentTwo: {
-    position: 'absolute',
-    bottom: 52,
-    right: 62,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10b981',
-  },
-  mapOverlayLabel: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  mapOverlayText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  contextItemFlat: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    paddingVertical: 6,
-  },
-  contextItemContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  contextLabelFlat: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  contextValueFlat: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 2,
-  },
+  screen: { flex: 1 },
+  content: { paddingTop: 8, paddingBottom: 32 },
+  pageHeader: { marginHorizontal: 20, marginTop: 12, marginBottom: 18 },
+  eyebrow: { fontSize: 10, lineHeight: 15, fontWeight: '700', letterSpacing: 1.4 },
+  pageTitle: { marginTop: 4, fontSize: 25, lineHeight: 33, fontWeight: '600', letterSpacing: -0.5 },
+  pageDescription: { marginTop: 5, fontSize: 13, lineHeight: 19 },
+  locationCard: { marginHorizontal: 16, padding: 16, borderRadius: 18 },
+  locationCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  locationIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  locationHeading: { flex: 1, minWidth: 0 },
+  cardEyebrow: { fontSize: 9, lineHeight: 13, fontWeight: '700', letterSpacing: 1 },
+  locationName: { marginTop: 3, fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999 },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveText: { fontSize: 10, lineHeight: 14, fontWeight: '600' },
+  errorText: { marginTop: 12, fontSize: 12, lineHeight: 18 },
+  coordinatesPanel: { flexDirection: 'row', alignItems: 'center', marginTop: 16, padding: 12, borderRadius: 12 },
+  coordinateItem: { flex: 1, minWidth: 0 },
+  coordinateDivider: { width: 1, height: 34, marginHorizontal: 12 },
+  coordinateLabel: { fontSize: 9, lineHeight: 13, fontWeight: '600', letterSpacing: 0.8 },
+  coordinateValue: { marginTop: 4, fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  locationControlRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  locationControlHint: { flex: 1, fontSize: 11, lineHeight: 16 },
+  locationToggle: { width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: 'center' },
+  locationToggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF', alignSelf: 'flex-start' },
+  locationToggleKnobOn: { alignSelf: 'flex-end' },
+  locationMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 13 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { fontSize: 11, lineHeight: 16 },
+  mapButton: { marginTop: 16, minHeight: 44, minWidth: 190, alignSelf: 'center' },
+  sectionHeader: { marginHorizontal: 20, marginTop: 23, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontSize: 16, lineHeight: 23, fontWeight: '600' },
+  detailsCard: { marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 4, borderRadius: 16 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', minHeight: 64, gap: 12 },
+  detailIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  detailCopy: { flex: 1, minWidth: 0, paddingVertical: 9 },
+  detailLabel: { fontSize: 11, lineHeight: 16 },
+  detailValue: { marginTop: 2, fontSize: 13, lineHeight: 19, fontWeight: '500' },
+  rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 46 },
+  loader: { marginTop: 20 },
 });
-

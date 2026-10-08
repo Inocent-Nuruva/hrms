@@ -184,7 +184,7 @@ export function SiteHeader({
     >
       <div
         className={cn(
-          "flex w-full min-w-0 items-center gap-1.5 px-2.5 transition-[padding] sm:px-3 lg:px-4",
+          "flex w-full min-w-0 items-center gap-2 px-2.5 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
           !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
         )}
       >
@@ -202,23 +202,22 @@ export function SiteHeader({
           </div>
         ) : null}
 
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
           <div
-            className="hidden h-9 items-center px-1.5 text-foreground sm:inline-flex"
+            className="hidden h-9 shrink-0 items-center border-r border-border/70 px-2 text-foreground lg:inline-flex"
             aria-label={currentTime ? `Current time ${currentTime.toLocaleTimeString()}` : "Current local time"}
             title={currentTime ? currentTime.toLocaleDateString(undefined, { dateStyle: "full" }) : "Local time"}
           >
             <span className="grid gap-0.5 leading-none">
-              <span className="flex items-baseline gap-1 tabular-nums">
+              <span className="flex items-baseline gap-1 whitespace-nowrap tabular-nums">
                 <time className="text-[13px] font-semibold tracking-tight" dateTime={currentTime?.toISOString()}>
-                  {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}
+                  {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}:{clockPart("second") ?? "--"}
                 </time>
                 {clockPart("dayPeriod") ? (
                   <span className="text-[9px] font-semibold uppercase text-muted-foreground">{clockPart("dayPeriod")}</span>
                 ) : null}
-                <span className="text-[10px] font-medium text-muted-foreground">:{clockPart("second") ?? "--"}</span>
               </span>
-              <span className="text-[10px] font-medium text-muted-foreground">{clockDate ?? "Local time"}</span>
+              <span className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">{clockDate ?? "Local time"}</span>
             </span>
           </div>
 

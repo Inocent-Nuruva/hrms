@@ -17,7 +17,9 @@ import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { useAppAccent } from '../hooks/useAppAccent';
 import { Text } from '../components/ui/text';
+import { FluentButton } from '../components/ui/fluent-button';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -28,6 +30,7 @@ interface Props {
 export function MyAttendanceScreen({ auth }: Props) {
   const router = useRouter();
   const { isDark } = useThemePreference();
+  const accent = useAppAccent();
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const panelColor = isDark ? COLORS.surfaceDark : COLORS.surface;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
@@ -102,7 +105,7 @@ export function MyAttendanceScreen({ auth }: Props) {
             <View style={styles.headerRow}>
               <Text style={[styles.title, { color: textColor }]}>My Attendance</Text>
               <TouchableOpacity onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))} style={styles.filterButton}>
-                <Calendar size={20} color={COLORS.primary} />
+                <Calendar size={20} color={accent} />
               </TouchableOpacity>
             </View>
 
@@ -125,7 +128,7 @@ export function MyAttendanceScreen({ auth }: Props) {
               <TouchableOpacity 
                 onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))} 
                 style={styles.todayButton}>
-                <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: '600' }}>Today</Text>
+                <Text style={{ color: accent, fontSize: 12, fontWeight: '600' }}>Today</Text>
               </TouchableOpacity>
             </View>
 
@@ -152,7 +155,7 @@ export function MyAttendanceScreen({ auth }: Props) {
           <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
-            refreshControl={<RefreshControl refreshing={historyQuery.isFetching || todayQuery.isFetching} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+            refreshControl={<RefreshControl refreshing={historyQuery.isFetching || todayQuery.isFetching} onRefresh={onRefresh} colors={[accent]} />}
           >
             {historyQuery.isLoading || todayQuery.isLoading ? (
               <View style={styles.loaderWrap}>
@@ -192,9 +195,9 @@ export function MyAttendanceScreen({ auth }: Props) {
 
           {/* Bottom bar to mimic tab visibility */}
           <View style={{ padding: 12, backgroundColor: panelColor, borderTopWidth: 1, borderTopColor: lineColor, flexDirection: 'row', justifyContent: 'center' }}>
-            <TouchableOpacity onPress={() => { if (router.back) router.back(); else router.push('/(tabs)/attendance'); }} style={{ paddingHorizontal: 20, paddingVertical: 8, backgroundColor: COLORS.primary, borderRadius: 8 }}>
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Back to Attendance</Text>
-            </TouchableOpacity>
+            <FluentButton onPress={() => { if (router.canGoBack()) router.back(); else router.push('/(tabs)/attendance'); }}>
+              Back to Attendance
+            </FluentButton>
           </View>
       </SafeAreaView>
   );

@@ -99,7 +99,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
   return (
     <div
       ref={containerRef}
-      className="relative shrink-0"
+      className="relative min-w-0 shrink sm:shrink-0"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
       }}
@@ -137,7 +137,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls="header-search-results"
-          className="w-[10.5rem] max-w-full !px-4 !py-1.5 sm:w-52 sm:pr-14"
+          className="w-full min-w-28 max-w-full !px-3 !py-1.5 sm:w-52 sm:pr-14"
         />
       </Field>
       {!query ? (

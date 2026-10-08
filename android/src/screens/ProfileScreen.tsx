@@ -13,27 +13,29 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BadgeCheck, BellRing, BriefcaseBusiness, Building2, CreditCard, Fingerprint, Mail, Phone, UserRound } from 'lucide-react-native';
 
 import { COLORS } from '../lib/config';
+import { SegmentedControl } from '../components/ui/segmented-control';
 import {
   getNotificationSoundPreference,
   NOTIFICATION_SOUND_OPTIONS,
   saveNotificationSoundPreference,
   type NotificationSoundPreference,
 } from '../lib/notification-settings';
-import { SegmentedControl } from '../components/ui/segmented-control';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { ScreenTransition } from '../components/ui/screen-transition';
+import { FluentSystemIcon } from '../components/ui/fluent-system-icon';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
+import { useAppAccent } from '../hooks/useAppAccent';
 import { useToast } from '../hooks/useToast';
-import { Text } from '../components/ui/text';
+import { FluentText as Text } from '../components/ui/fluent-text';
 
 type MobileRecord = Record<string, unknown>;
 
 const PROFILE_SECTIONS = [
-  { key: 'summary', label: 'Summary' },
-  { key: 'work', label: 'Work' },
-  { key: 'personal', label: 'Personal' },
-  { key: 'records', label: 'Records' },
+  { key: 'summary', label: 'Summary', icon: 'profile' },
+  { key: 'work', label: 'Work', icon: 'work' },
+  { key: 'personal', label: 'Personal', icon: 'people' },
+  { key: 'records', label: 'Records', icon: 'documents' },
 ] as const;
 
 type ProfileSection = typeof PROFILE_SECTIONS[number]['key'];
@@ -45,9 +47,13 @@ interface Props {
 export function ProfileScreen({ auth }: Props) {
   const router = useRouter();
   const { isDark } = useThemePreference();
+  const appAccent = useAppAccent();
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
+  const surfaceColor = isDark ? COLORS.surfaceDark : '#FFFFFF';
+  const borderColor = isDark ? COLORS.outlineDark : '#DCE5EC';
+  const accentColor = appAccent;
   const biometricLabel = auth.biometricTypeLabel || 'Fingerprint';
 
   const toast = useToast();
@@ -89,6 +95,7 @@ export function ProfileScreen({ auth }: Props) {
       'Employee'
     );
   }, [employee, user]);
+  const avatarInitials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'E';
 
   const branch = readString(employee, ['branch_name']) || readString(employee?.branch || {}, ['name']) || readString(employee?.primary_branch || {}, ['name']) || 'Not assigned';
   const department = readString(employee, ['department_name']) || readString(employee?.department || {}, ['name']) || readString(employee?.primary_department || {}, ['name']) || 'Not assigned';
@@ -154,42 +161,61 @@ export function ProfileScreen({ auth }: Props) {
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} colors={[accentColor]} />}
       >
-        <ScreenTransition>
-
-          <View style={{ marginBottom: 12 }}>
-            <Text style={[styles.userName, { color: textColor }]}>{fullName}</Text>
-            <Text style={[styles.userMeta, { color: mutedColor }]}>{employeeNo} · {position} · {department}</Text>
-            <View style={styles.badgeRow}>
-              <View style={[styles.badge, { backgroundColor: isDark ? '#27272a' : '#f4f4f5' }]}>
-                <Text style={[styles.badgeText, { color: mutedColor }]}>Hired {hireDate}</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: isDark ? '#27272a' : '#f4f4f5' }]}>
-                <Text style={[styles.badgeText, { color: mutedColor }]}>{employmentStatus}</Text>
+        <ScreenTransition style={styles.profileStack}>
+          <View style={[styles.identityCard, { backgroundColor: surfaceColor, borderColor }]}>
+            <View style={[styles.identityAccent, { backgroundColor: accentColor }]} />
+            <View style={[styles.avatar, { backgroundColor: isDark ? '#21394A' : '#E8F3FA' }]}>
+              <Text style={[styles.avatarText, { color: accentColor }]}>{avatarInitials}</Text>
+              <View style={[styles.avatarStatus, { backgroundColor: employmentStatus.toLowerCase() === 'active' ? '#169B72' : '#D69200', borderColor: surfaceColor }]} />
+            </View>
+            <View style={styles.identityCopy}>
+              <Text numberOfLines={2} style={[styles.userName, { color: textColor }]}>{fullName}</Text>
+              <Text numberOfLines={1} style={[styles.userMeta, { color: mutedColor }]}>{position}</Text>
+              <View style={styles.identityMetaRow}>
+                <FluentSystemIcon name="work" size={13} color={mutedColor} />
+                <Text numberOfLines={1} style={[styles.identityMeta, { color: mutedColor }]}>{department}</Text>
+                <View style={[styles.statusPill, { backgroundColor: isDark ? '#17392F' : '#E7F7F0' }]}>
+                  <Text style={[styles.statusText, { color: isDark ? '#90E4C0' : '#14734F' }]}>{employmentStatus}</Text>
+                </View>
               </View>
             </View>
           </View>
-          <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginBottom: 12 }} />
 
-          <SegmentedControl
-            value={activeSection}
-            onChange={(next) => setActiveSection(next as ProfileSection)}
-            options={PROFILE_SECTIONS.map((item) => ({ key: item.key, label: item.label }))}
-          />
+          <View style={[styles.profileTabs, { borderBottomColor: borderColor }]} accessibilityRole="tablist">
+            {PROFILE_SECTIONS.map((section) => {
+              const selected = activeSection === section.key;
+              return (
+                <Pressable
+                  key={section.key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  onPress={() => setActiveSection(section.key)}
+                  style={styles.profileTab}
+                >
+                  <FluentSystemIcon name={section.icon} active={selected} size={17} color={selected ? accentColor : mutedColor} />
+                  <Text numberOfLines={1} style={[styles.profileTabLabel, { color: selected ? accentColor : mutedColor }, selected && styles.profileTabLabelActive]}>
+                    {section.label}
+                  </Text>
+                  {selected ? <View style={[styles.profileTabIndicator, { backgroundColor: accentColor }]} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
 
           {activeSection === 'summary' ? (
             <>
-              <View style={{ marginBottom: 16 }}>
+              <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
                 <InfoRow icon={<UserRound size={16} color={mutedColor} />} label="Employment status" value={employmentStatus} textColor={textColor} mutedColor={mutedColor} />
-                <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 4 }} />
+                <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 4 }} />
                 <InfoRow icon={<Mail size={16} color={mutedColor} />} label="Email" value={email} textColor={textColor} mutedColor={mutedColor} />
-                <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 4 }} />
+                <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 4 }} />
                 <InfoRow icon={<Phone size={16} color={mutedColor} />} label="Phone" value={phoneDisplay} textColor={textColor} mutedColor={mutedColor} />
-                <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 4 }} />
+                <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 4 }} />
                 <InfoRow icon={<BadgeCheck size={16} color={mutedColor} />} label="Hire date" value={hireDate} textColor={textColor} mutedColor={mutedColor} />
               </View>
-              <View style={{ marginBottom: 16 }}>
+              <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
                 <Text style={[styles.sectionTitle, { color: textColor }]}>Quick unlock</Text>
                 <InfoRow
                   icon={<Fingerprint size={16} color={mutedColor} />}
@@ -206,7 +232,7 @@ export function ProfileScreen({ auth }: Props) {
                   textColor={textColor}
                   mutedColor={mutedColor}
                 />
-                <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 8 }} />
+                <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 8 }} />
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={{ color: textColor, fontSize: 15, fontWeight: '600' }}>
                     Enable {biometricLabel}
@@ -214,13 +240,13 @@ export function ProfileScreen({ auth }: Props) {
                   <Switch
                     value={auth.biometricEnabled}
                     onValueChange={() => void onToggleBiometric()}
-                    trackColor={{ false: isDark ? '#3f3f46' : '#d1d5db', true: COLORS.primary }}
+                    trackColor={{ false: isDark ? '#3f3f46' : '#d1d5db', true: accentColor }}
                     thumbColor={auth.biometricEnabled ? '#fff' : '#f4f3f4'}
                     disabled={Platform.OS === 'web' || !auth.biometricSupported || !auth.biometricEnrolled}
                   />
                 </View>
               </View>
-              <View style={{ marginBottom: 16 }}>
+              <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
                 <Text style={[styles.sectionTitle, { color: textColor }]}>Notifications</Text>
                 <InfoRow
                   icon={<BellRing size={16} color={mutedColor} />}
@@ -229,7 +255,7 @@ export function ProfileScreen({ auth }: Props) {
                   textColor={textColor}
                   mutedColor={mutedColor}
                 />
-                <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 8 }} />
+                <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 8 }} />
                 <SegmentedControl
                   value={notificationSound}
                   onChange={(next) => {
@@ -248,18 +274,18 @@ export function ProfileScreen({ auth }: Props) {
           ) : null}
 
           {activeSection === 'work' ? (
-            <View style={{ marginBottom: 16 }}>
+            <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>Work assignment</Text>
               <InfoRow icon={<Building2 size={16} color={mutedColor} />} label="Branch" value={branch} textColor={textColor} mutedColor={mutedColor} />
-              <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />
+              <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />
               <InfoRow icon={<Building2 size={16} color={mutedColor} />} label="Department" value={department} textColor={textColor} mutedColor={mutedColor} />
-              <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />
+              <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />
               <InfoRow icon={<BriefcaseBusiness size={16} color={mutedColor} />} label="Position" value={position} textColor={textColor} mutedColor={mutedColor} />
             </View>
           ) : null}
 
           {activeSection === 'personal' ? (
-            <View style={{ marginBottom: 16 }}>
+            <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>Personal details</Text>
               {contacts.length ? contacts.map((contact: MobileRecord, index: number) => (
                 <View key={index}>
@@ -270,7 +296,7 @@ export function ProfileScreen({ auth }: Props) {
                     textColor={textColor}
                     mutedColor={mutedColor}
                   />
-                  {index < contacts.length - 1 && <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />}
+                  {index < contacts.length - 1 && <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />}
                 </View>
               )) : <Text style={[styles.emptyText, { color: mutedColor }]}>No personal contacts listed.</Text>}
               {addresses.length ? addresses.slice(0, 2).map((address: MobileRecord, index: number) => (
@@ -282,7 +308,7 @@ export function ProfileScreen({ auth }: Props) {
                     textColor={textColor}
                     mutedColor={mutedColor}
                   />
-                  {index < Math.min(addresses.length, 2) - 1 && <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />}
+                  {index < Math.min(addresses.length, 2) - 1 && <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />}
                 </View>
               )) : null}
               {relatives.length ? relatives.slice(0, 2).map((relative: MobileRecord, index: number) => (
@@ -294,14 +320,14 @@ export function ProfileScreen({ auth }: Props) {
                     textColor={textColor}
                     mutedColor={mutedColor}
                   />
-                  {index < Math.min(relatives.length, 2) - 1 && <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />}
+                  {index < Math.min(relatives.length, 2) - 1 && <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />}
                 </View>
               )) : null}
             </View>
           ) : null}
 
           {activeSection === 'records' ? (
-            <View style={{ marginBottom: 16 }}>
+            <View style={[styles.dataCard, { backgroundColor: surfaceColor, borderColor }]}>
               <Text style={[styles.sectionTitle, { color: textColor }]}>Records</Text>
               {identifications.length ? identifications.slice(0, 3).map((record: MobileRecord, index: number) => (
                 <View key={`id-${index}`}>
@@ -312,7 +338,7 @@ export function ProfileScreen({ auth }: Props) {
                     textColor={textColor}
                     mutedColor={mutedColor}
                   />
-                  {index < Math.min(identifications.length, 3) - 1 && <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />}
+                  {index < Math.min(identifications.length, 3) - 1 && <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />}
                 </View>
               )) : null}
               {bankAccounts.length ? bankAccounts.slice(0, 2).map((account: MobileRecord, index: number) => (
@@ -324,7 +350,7 @@ export function ProfileScreen({ auth }: Props) {
                     textColor={textColor}
                     mutedColor={mutedColor}
                   />
-                  {index < Math.min(bankAccounts.length, 2) - 1 && <View style={{ height: 1, backgroundColor: isDark ? '#3f3f46' : '#e5e7eb', marginVertical: 2 }} />}
+                  {index < Math.min(bankAccounts.length, 2) - 1 && <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 2 }} />}
                 </View>
               )) : null}
               {!identifications.length && !bankAccounts.length ? (
@@ -338,7 +364,7 @@ export function ProfileScreen({ auth }: Props) {
                 { href: '/documents', label: 'Documents' },
               ] as const).map((item) => (
                 <Pressable key={item.href} onPress={() => router.push(item.href)} style={{ paddingVertical: 10 }}>
-                  <Text style={{ color: COLORS.primary, fontWeight: '700' }}>{item.label}</Text>
+                  <Text style={{ color: accentColor, fontWeight: '700' }}>{item.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -362,13 +388,17 @@ function InfoRow({
   textColor: string;
   mutedColor: string;
 }) {
+  const { isDark } = useThemePreference();
+
   return (
     <View style={styles.infoRow}>
-      <View style={styles.infoLabelWrap}>
+      <View style={[styles.infoIcon, { backgroundColor: isDark ? '#263747' : '#EAF3F8' }]}>
         {icon}
-        <Text style={[styles.infoLabel, { color: mutedColor }]}>{label}</Text>
       </View>
-      <Text style={[styles.infoValue, { color: textColor }]}>{value}</Text>
+      <View style={styles.infoCopy}>
+        <Text numberOfLines={1} style={[styles.infoLabel, { color: mutedColor }]}>{label}</Text>
+        <Text numberOfLines={2} style={[styles.infoValue, { color: textColor }]}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -400,14 +430,43 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     gap: 14,
   },
+  profileStack: { gap: 14, paddingTop: 8 },
+  identityCard: {
+    minHeight: 116,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  identityAccent: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 4 },
+  avatar: { width: 62, height: 62, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 18 },
+  avatarText: { fontSize: 22, lineHeight: 28, fontWeight: '600' },
+  avatarStatus: { position: 'absolute', right: 0, bottom: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+  identityCopy: { flex: 1, minWidth: 0, gap: 2 },
+  identityMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
+  identityMeta: { flex: 1, minWidth: 0, fontSize: 10, lineHeight: 14 },
+  statusPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  statusText: { fontSize: 9, lineHeight: 12, fontWeight: '600', textTransform: 'capitalize' },
+  profileTabs: { minHeight: 68, flexDirection: 'row', borderBottomWidth: 1 },
+  profileTab: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', gap: 5, paddingTop: 8, position: 'relative' },
+  profileTabLabel: { fontSize: 10, lineHeight: 14, fontWeight: '500' },
+  profileTabLabelActive: { fontWeight: '700' },
+  profileTabIndicator: { position: 'absolute', bottom: -1, width: '58%', height: 3, borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  dataCard: { marginBottom: 0, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
   userName: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '600',
+    letterSpacing: -0.35,
   },
   userMeta: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 1,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -424,30 +483,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-    letterSpacing: 0.3,
-    color: '#6b7280',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   infoRow: {
-    paddingVertical: 10,
-  },
-  infoLabelWrap: {
+    minHeight: 57,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
+    gap: 11,
+    paddingVertical: 7,
   },
+  infoIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#EAF3F8' },
+  infoCopy: { flex: 1, minWidth: 0, gap: 2 },
   infoLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '500',
   },
   infoValue: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   emptyText: {
     fontSize: 14,

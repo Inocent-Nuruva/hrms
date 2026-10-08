@@ -55,6 +55,8 @@
     <array>
       <string>_expo._tcp</string>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>Allow HRMS to take a selfie for attendance check-in.</string>
     <key>NSFaceIDUsageDescription</key>
     <string>Allow HRMS to use Face ID or biometrics for quick sign in.</string>
     <key>NSLocalNetworkUsageDescription</key>
