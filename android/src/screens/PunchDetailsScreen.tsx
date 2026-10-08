@@ -459,8 +459,8 @@ function NoPunchesEmptyState({
   onToday: () => void;
   onChooseDate: () => void;
 }) {
-  const rotation = React.useRef(new Animated.Value(0)).current;
-  const float = React.useRef(new Animated.Value(0)).current;
+  const [rotation] = React.useState(() => new Animated.Value(0));
+  const [float] = React.useState(() => new Animated.Value(0));
 
   React.useEffect(() => {
     const orbit = Animated.loop(Animated.timing(rotation, {

@@ -671,7 +671,7 @@ function formatChartHours(minutes: number) {
 }
 
 function AnimatedAttendanceHours({ minutes, color }: { minutes: number; color: string }) {
-  const animatedMinutes = React.useRef(new Animated.Value(0)).current;
+  const [animatedMinutes] = React.useState(() => new Animated.Value(0));
   const [displayMinutes, setDisplayMinutes] = React.useState(0);
 
   React.useEffect(() => {

@@ -53,7 +53,7 @@ export function AttendanceScreen({ auth }: Props) {
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
   const [selfieError, setSelfieError] = useState<string | null>(null);
   const toast = useToast();
-  const fingerprintPulse = React.useRef(new Animated.Value(1)).current;
+  const [fingerprintPulse] = React.useState(() => new Animated.Value(1));
 
   const punchesQuery = useQuery({
     queryKey: ['mobileAttendancePunches'],
@@ -300,8 +300,8 @@ function HoursWorked({
   actionColor: string;
   mutedColor: string;
 }) {
-  const [now, setNow] = React.useState(Date.now());
-  const sheen = React.useRef(new Animated.Value(1)).current;
+  const [now, setNow] = React.useState(() => Date.now());
+  const [sheen] = React.useState(() => new Animated.Value(1));
   const running = Boolean(startedAt && !endedAt);
 
   React.useEffect(() => {

@@ -37,6 +37,7 @@ export default function SettingsTab() {
   const [syncPending, setSyncPending] = React.useState(false);
   const syncLock = React.useRef(false);
   const syncRequested = React.useRef(false);
+  const syncQueuedStyleRef = React.useRef<() => Promise<void>>(async () => {});
   const persistenceQueue = React.useRef<Promise<void>>(Promise.resolve());
   const latestStyle = React.useRef<ProfileCardStyle>(DEFAULT_PROFILE_CARD_STYLE);
   const storageScope = String(auth.user?.id ?? auth.user?.email ?? 'current-user');
@@ -120,10 +121,14 @@ export default function SettingsTab() {
       syncLock.current = false;
       if (syncRequested.current) {
         syncRequested.current = false;
-        void syncQueuedStyle();
+        void syncQueuedStyleRef.current();
       }
     }
   }, [localStyleKey, pendingStyleKey]);
+
+  React.useEffect(() => {
+    syncQueuedStyleRef.current = syncQueuedStyle;
+  }, [syncQueuedStyle]);
 
   React.useEffect(() => {
     let active = true;

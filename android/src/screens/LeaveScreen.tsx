@@ -102,8 +102,8 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
   const [calendarMonth, setCalendarMonth] = useState(startOfMonth(new Date()));
   const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
   const openedHighlightedRequestRef = React.useRef('');
-  const tabIndicatorIndex = React.useRef(new Animated.Value(0)).current;
-  const tabContentTranslateX = React.useRef(new Animated.Value(0)).current;
+  const [tabIndicatorIndex] = React.useState(() => new Animated.Value(0));
+  const [tabContentTranslateX] = React.useState(() => new Animated.Value(0));
   const previousTabIndex = React.useRef(0);
   const hasAnimatedTabChange = React.useRef(false);
   const tabPanelWidth = React.useRef(360);

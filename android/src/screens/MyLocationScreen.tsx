@@ -62,8 +62,13 @@ export function MyLocationScreen({ auth }: Props) {
     queryFn: () => api.getMyAttendanceToday(),
     staleTime: 1000 * 60,
   });
-  const todayKey = dateKey(new Date());
-  const historyFrom = dateKey(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+  const [{ todayKey, historyFrom }] = React.useState(() => {
+    const today = new Date();
+    return {
+      todayKey: dateKey(today),
+      historyFrom: dateKey(new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000)),
+    };
+  });
   const historyQuery = useQuery({
     queryKey: ['mobileWorkLocationAttendanceHistory', historyFrom, todayKey],
     queryFn: async () => normalizeList(await api.listMyAttendanceHistory({ from_date: historyFrom, to_date: todayKey, limit: 7 })),
