@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { DismissRegular } from "@fluentui/react-icons"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -114,7 +114,7 @@ function DialogPopup({
               type="button"
               appearance="subtle"
               aria-label="Close"
-              icon={<XIcon className="size-4" />}
+              icon={<DismissRegular className="size-4" />}
               className="!absolute top-3 right-3 z-10"
             />
           </FluentDialogTrigger>

@@ -4,6 +4,7 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
+  Badge as FluentBadge,
   Button as FluentButton,
   Card as FluentCard,
   CardFooter as FluentCardFooter,
@@ -18,6 +19,13 @@ import {
   Building20Color,
   CalendarClock20Color,
   CalendarSync20Color,
+  ArrowClockwiseRegular as PayrollRefreshIcon,
+  ArrowDownloadRegular as PayrollDownloadIcon,
+  CalendarLtrRegular as PayrollCalendarIcon,
+  DocumentRegular as PayrollDocumentIcon,
+  EyeRegular as PayrollDetailsIcon,
+  MoneyRegular as PayrollMoneyIcon,
+  WalletRegular as PayrollWalletIcon,
   Camera20Color,
   ContactCard20Color,
   Edit16Regular,
@@ -5134,6 +5142,7 @@ export function EmployeePromotionView() {
 }
 
 export function EmployeePayrollView() {
+  type PayrollSummaryTab = "year" | "payment" | "salary" | "documents"
   const { loading, error, token, employee } = useSelfEmployeeData()
   const [payslipsLoading, setPayslipsLoading] = React.useState(false)
   const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
@@ -5144,6 +5153,7 @@ export function EmployeePayrollView() {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [selectedPayslip, setSelectedPayslip] = React.useState<AdminRecord | null>(null)
   const [downloadingId, setDownloadingId] = React.useState<number | null>(null)
+  const [summaryTab, setSummaryTab] = React.useState<PayrollSummaryTab>("year")
 
   const loadPayslips = React.useCallback(async () => {
     if (!token) {
@@ -5157,7 +5167,7 @@ export function EmployeePayrollView() {
     try {
       const [payslipResult, summaryResult] = await Promise.allSettled([
         listMyPayslips(token),
-        getMyPayrollSummary(token),
+        getMyPayrollSummary(token, new Date().getFullYear()),
       ])
       if (payslipResult.status === "fulfilled") {
         setPayslips(payslipResult.value)
@@ -5261,309 +5271,289 @@ export function EmployeePayrollView() {
   )
 
   const listLoading = loading || payslipsLoading
+  const latestPayslip = payslips[0] ?? null
+  const latestPayslipId = latestPayslip ? readPayslipId(latestPayslip) : null
+  const latestStatus = latestPayslip ? readPayslipStatus(latestPayslip) : ""
+  const latestStatusKey = latestStatus.toLowerCase()
+  const latestBadgeColor = latestStatusKey.includes("paid") || latestStatusKey.includes("publish")
+    ? "success"
+    : latestStatusKey.includes("pending") || latestStatusKey.includes("process")
+      ? "warning"
+      : "informative"
 
   return (
-    <section className="space-y-4">
-      <HeroBand
-        eyebrow="My finance"
-        title="Payroll"
-        description="Payslips issued to you, with period totals, a detailed breakdown, and download."
-        actions={
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
-            onClick={() => void loadPayslips()}
-            disabled={mounted ? listLoading || !token : undefined}
-          >
-            {mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-            Refresh
-          </button>
-        }
-      />
-      <OvertimeRequestsPanel token={token} />
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <CompactStatStrip
-        items={[
-          { label: "Payslips", value: String(payslipSummary.total) },
-          { label: "Latest gross", value: payslipSummary.latestGross },
-          { label: "Latest net", value: payslipSummary.latestNet },
-        ]}
-      />
-      {payrollSummaryDetails ? (
-        <div className="grid gap-3 xl:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">YTD pay</CardTitle>
-              <CardDescription>
-                {String(readNumber(payrollSummaryDetails, ["year"]) ?? new Date().getFullYear())}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Gross" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
-              <AssignmentField label="Taxable" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
-              <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
-              <AssignmentField label="Net" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Tax and pension</CardTitle>
-              <CardDescription>Current year totals</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Tax" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
-              <AssignmentField label="Pension" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
-              <AssignmentField label="Tax rows" value={String(taxSummaryRows.length)} />
-              <AssignmentField label="Pension rows" value={String(pensionSummaryRows.length)} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Bank payroll</CardTitle>
-              <CardDescription>Payment destination</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
-              <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
-              <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
-              <AssignmentField label="Status" value={readString(bankDetails, ["verification_status"], "—")} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Documents</CardTitle>
-              <CardDescription>Published payroll files</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Payslips" value={String(payrollDocuments.length)} />
-              <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
-              <AssignmentField
-                label="Latest salary"
-                value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))}
-              />
-              <AssignmentField label="Effective" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
-            </CardContent>
-          </Card>
+    <section className="space-y-6 pb-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">My finance</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">My payroll</h1>
+          <p className="mt-1 text-sm text-muted-foreground">View your payslips, yearly pay summary, and payment details.</p>
         </div>
-      ) : null}
-      {salaryHistoryRows.length > 0 ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Salary history</CardTitle>
-            <CardDescription>Compensation changes used by payroll.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border/70 p-0">
-            {salaryHistoryRows.slice(0, 5).map((row, index) => (
-              <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-4">
-                <span className="font-medium text-foreground">
-                  {formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}
-                </span>
-                <span className="text-muted-foreground">{readString(row, ["pay_frequency"], "—")}</span>
-                <span className="text-muted-foreground">{formatDate(row.effective_from)}</span>
-                <span className="text-muted-foreground">{readString(row, ["status"], "—")}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
+        <FluentButton
+          appearance="subtle"
+          icon={mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollRefreshIcon />}
+          disabled={mounted ? listLoading || !token : undefined}
+          onClick={() => void loadPayslips()}
+        >
+          Refresh
+        </FluentButton>
+      </header>
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {payslipsError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {payslipsError}
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+
+      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-5 border-b border-border px-5 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest payslip</p>
+            {latestPayslip ? (
+              <>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">{readPayslipPeriodLabel(latestPayslip)}</h2>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>{readString(latestPayslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${latestPayslipId ?? "—"}`)}</span>
+                  <span aria-hidden="true">·</span>
+                  <FluentBadge appearance="tint" color={latestBadgeColor}>{latestStatus ? formatMovementLabel(latestStatus) : "Available"}</FluentBadge>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">No payslip available</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Published payslips will appear here.</p>
+              </>
+            )}
+          </div>
+          {latestPayslip ? (
+            <div className="flex flex-wrap gap-2">
+              <FluentButton appearance="secondary" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(latestPayslip)}>
+                Details
+              </FluentButton>
+              <FluentButton
+                appearance="primary"
+                icon={downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                disabled={downloadingId === latestPayslipId}
+                onClick={() => void handleDownloadPayslip(latestPayslip)}
+              >
+                Download payslip
+              </FluentButton>
+            </div>
+          ) : null}
+        </div>
+        {latestPayslip ? (
+          <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <div className="px-5 py-4">
+              <p className="text-sm text-muted-foreground">Net pay</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+                {formatPayslipMoney(latestPayslip.net_pay ?? latestPayslip.netPay, readPayslipCurrency(latestPayslip))}
+              </p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-muted-foreground">Gross pay</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+                {formatPayslipMoney(latestPayslip.gross_pay ?? latestPayslip.grossPay, readPayslipCurrency(latestPayslip))}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </FluentCard>
+
+      {payrollSummaryDetails ? (
+        <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border px-5 pt-4">
+            <h2 className="text-base font-semibold text-foreground">Pay details</h2>
+            <p className="mt-1 pb-3 text-sm text-muted-foreground">Year-to-date totals and the account information used for payroll.</p>
+            <div className="overflow-x-auto">
+              <TabList size="small" selectedValue={summaryTab} onTabSelect={(_, data) => setSummaryTab(data.value as PayrollSummaryTab)} className="min-w-max">
+                <Tab value="year">Year to date</Tab>
+                <Tab value="payment">Payment details</Tab>
+                <Tab value="salary">Salary history</Tab>
+                <Tab value="documents">Documents</Tab>
+              </TabList>
+            </div>
+          </div>
+          <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryTab === "year" ? (
+              <>
+                <AssignmentField label="Gross pay" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
+                <AssignmentField label="Taxable pay" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
+                <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
+                <AssignmentField label="Net pay" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
+                <AssignmentField label="Tax paid" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
+                <AssignmentField label="Pension contributions" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
+                <AssignmentField label="Tax records" value={String(taxSummaryRows.length)} />
+                <AssignmentField label="Pension records" value={String(pensionSummaryRows.length)} />
+              </>
+            ) : summaryTab === "payment" ? (
+              <>
+                <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
+                <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
+                <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
+                <AssignmentField label="Verification" value={readString(bankDetails, ["verification_status"], "—")} />
+              </>
+            ) : summaryTab === "salary" ? (
+              salaryHistoryRows.length > 0 ? (
+                <div className="-mx-5 -my-5 divide-y divide-border sm:col-span-2 xl:col-span-4">
+                  {salaryHistoryRows.slice(0, 6).map((row, index) => (
+                    <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-4">
+                      <span className="font-semibold text-foreground">{formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}</span>
+                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["pay_frequency"], "—"))}</span>
+                      <span className="text-muted-foreground">Effective {formatDate(row.effective_from)}</span>
+                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["status"], "—"))}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-muted-foreground">No salary history is available.</p>
+            ) : (
+              <>
+                <AssignmentField label="Published payslips" value={String(payrollDocuments.length)} />
+                <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
+                <AssignmentField label="Latest salary" value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))} />
+                <AssignmentField label="Effective from" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
+              </>
+            )}
+          </div>
+        </FluentCard>
+      ) : null}
+
+      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Payslip history</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{payslipSummary.total} {payslipSummary.total === 1 ? "payslip" : "payslips"} available</p>
+          </div>
+          <PayrollCalendarIcon className="text-xl text-muted-foreground" />
+        </div>
         {listLoading ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <FluentLoadingIndicator className="size-4 animate-spin" />
-            Loading your payslips...
+          <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+            <FluentLoadingIndicator className="size-4 animate-spin" /> Loading your payslips…
           </div>
         ) : payslips.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No payslips have been published to your account yet.
+          <div className="px-5 py-10 text-center">
+            <PayrollDocumentIcon className="mx-auto mb-3 text-2xl text-muted-foreground" />
+            <p className="font-medium text-foreground">No payslips published yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">When a payslip is published to your account, it will appear here.</p>
           </div>
         ) : (
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-border">
             {payslips.map((payslip) => {
               const id = readPayslipId(payslip) ?? 0
               const currency = readPayslipCurrency(payslip)
               const status = readPayslipStatus(payslip)
-              const statusTone = resolvePayslipStatusTone(status)
+              const statusKey = status.toLowerCase()
+              const badgeColor = statusKey.includes("paid") || statusKey.includes("publish") ? "success" : statusKey.includes("pending") || statusKey.includes("process") ? "warning" : "informative"
               const isDownloading = downloadingId === id
-
               return (
-                <div key={id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 space-y-2">
+                <div key={id} className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">
-                        {readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}
-                      </p>
-                      <AssignmentBadge tone={statusTone}>
-                        {status && status !== "-" ? formatMovementLabel(status) : "Available"}
-                      </AssignmentBadge>
+                      <p className="font-semibold text-foreground">{readPayslipPeriodLabel(payslip)}</p>
+                      <FluentBadge appearance="tint" color={badgeColor}>{status ? formatMovementLabel(status) : "Available"}</FluentBadge>
                     </div>
-                    <p className="text-sm text-muted-foreground">{readPayslipPeriodLabel(payslip)}</p>
-                    <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="flex items-center gap-1.5">
-                        <CalendarIcon className="size-3.5" />
-                        <span>
-                          Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <BriefcaseIcon className="size-3.5" />
-                        <span>Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <UsersIcon className="size-3.5" />
-                        <span>Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <FileTextIcon className="size-3.5" />
-                        <span>{currency || "Currency pending"}</span>
-                      </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}</p>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5"><PayrollCalendarIcon /> Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}</span>
+                      <span className="inline-flex items-center gap-1.5"><PayrollMoneyIcon /> Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
+                      <span className="inline-flex items-center gap-1.5"><PayrollWalletIcon /> Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => void openPayslipDetail(payslip)}>
-                      Details
-                    </Button>
-                    <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
-                      {isDownloading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
-                      Download
-                    </Button>
+                  <div className="flex items-center gap-2">
+                    <FluentButton appearance="subtle" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(payslip)}>Details</FluentButton>
+                    <FluentButton
+                      appearance="secondary"
+                      icon={isDownloading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                      aria-label={`Download payslip for ${readPayslipPeriodLabel(payslip)}`}
+                      disabled={isDownloading}
+                      onClick={() => void handleDownloadPayslip(payslip)}
+                    />
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-      </div>
+      </FluentCard>
 
-          <Dialog
-            open={detailOpen}
-            onOpenChange={(open) => {
-              setDetailOpen(open)
-              if (!open) {
-                setDetailLoading(false)
-              }
-            }}
-          >
-            <DialogPopup className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {selectedPayslip
-                    ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details")
-                    : "Payslip details"}
-                </DialogTitle>
-                <DialogDescription>
-                  Review payroll totals, issue dates, and any earnings or deduction rows returned by the backend.
-                </DialogDescription>
-              </DialogHeader>
+      <OvertimeRequestsPanel token={token} />
 
-              {detailLoading ? (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <FluentLoadingIndicator className="size-4 animate-spin" />
-                  Loading payslip details...
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailLoading(false)
+        }}
+      >
+        <DialogPopup className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedPayslip ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details") : "Payslip details"}
+            </DialogTitle>
+            <DialogDescription>Review your pay breakdown for {selectedPayslip ? readPayslipPeriodLabel(selectedPayslip) : "this period"}.</DialogDescription>
+          </DialogHeader>
+          {detailLoading ? (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+              <FluentLoadingIndicator className="size-4 animate-spin" /> Loading payslip details…
+            </div>
+          ) : selectedPayslip ? (
+            <div className="space-y-4">
+              <FluentCard className="rounded-xl border border-border p-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <AssignmentField label="Period" value={readPayslipPeriodLabel(selectedPayslip)} />
+                  <AssignmentField label="Status" value={<FluentBadge appearance="tint" color="informative">{readPayslipStatus(selectedPayslip) ? formatMovementLabel(readPayslipStatus(selectedPayslip)) : "Available"}</FluentBadge>} />
+                  <AssignmentField label="Gross pay" value={formatPayslipMoney(selectedPayslip.gross_pay ?? selectedPayslip.grossPay, selectedCurrency)} />
+                  <AssignmentField label="Net pay" value={formatPayslipMoney(selectedPayslip.net_pay ?? selectedPayslip.netPay, selectedCurrency)} />
+                  <AssignmentField label="Tax" value={formatPayslipMoney(selectedPayslip.tax_amount ?? selectedPayslip.taxAmount, selectedCurrency)} />
+                  <AssignmentField label="Deductions" value={formatPayslipMoney(selectedPayslip.total_deductions ?? selectedPayslip.totalDeductions, selectedCurrency)} />
+                  <AssignmentField label="Employee" value={readString(asRecord(selectedPayslip.employee), ["full_name", "name"], employeeName)} />
+                  <AssignmentField label="Payroll number" value={readString(selectedPayslip, ["payroll_number", "payrollNumber"], "—")} />
+                  <AssignmentField label="Issued" value={formatDate(selectedPayslip.issued_at ?? selectedPayslip.issuedAt)} />
                 </div>
-              ) : selectedPayslip ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Period" value={readPayslipPeriodLabel(selectedPayslip)} />
-                        <AssignmentField label="Status" value={<AssignmentBadge tone={resolvePayslipStatusTone(readPayslipStatus(selectedPayslip))}>{readPayslipStatus(selectedPayslip) ? formatMovementLabel(readPayslipStatus(selectedPayslip)) : "Available"}</AssignmentBadge>} />
-                        <AssignmentField label="Gross Pay" value={formatPayslipMoney(selectedPayslip.gross_pay ?? selectedPayslip.grossPay, selectedCurrency)} />
-                        <AssignmentField label="Net Pay" value={formatPayslipMoney(selectedPayslip.net_pay ?? selectedPayslip.netPay, selectedCurrency)} />
-                        <AssignmentField label="Tax" value={formatPayslipMoney(selectedPayslip.tax_amount ?? selectedPayslip.taxAmount, selectedCurrency)} />
-                        <AssignmentField label="Deductions" value={formatPayslipMoney(selectedPayslip.total_deductions ?? selectedPayslip.totalDeductions, selectedCurrency)} />
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Employee" value={readString(asRecord(selectedPayslip.employee), ["full_name", "name"], employeeName)} />
-                        <AssignmentField label="Payroll No" value={readString(selectedPayslip, ["payroll_number", "payrollNumber"], "—")} />
-                        <AssignmentField label="Currency" value={selectedCurrency || "—"} />
-                        <AssignmentField label="Issued At" value={formatDate(selectedPayslip.issued_at ?? selectedPayslip.issuedAt)} />
-                        <AssignmentField label="Created At" value={formatDate(selectedPayslip.created_at ?? selectedPayslip.createdAt)} />
-                        <AssignmentField label="Updated At" value={formatDate(selectedPayslip.updated_at ?? selectedPayslip.updatedAt)} />
-                      </CardContent>
-                    </Card>
+              </FluentCard>
+              {earningsRows.length > 0 ? (
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-foreground">Earnings</h3>
+                  <div className="divide-y divide-border rounded-xl border border-border">
+                    {earningsRows.map((line, index) => (
+                      <div key={`earning-${index}`} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div><p className="text-sm font-medium">{readString(line, ["name", "component_name", "componentName", "code"], "Earning")}</p><p className="text-xs text-muted-foreground">{readString(line, ["description"], "Payroll earning line")}</p></div>
+                        <span className="text-sm font-semibold tabular-nums">{formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}</span>
+                      </div>
+                    ))}
                   </div>
-
-                  {earningsRows.length > 0 ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Earnings</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {earningsRows.map((line, index) => (
-                          <div key={`earning-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">
-                                {readString(line, ["name", "component_name", "componentName", "code"], "Earning")}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {readString(line, ["description"], "Payroll earning line")}
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold text-foreground">
-                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
-                            </span>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-
-                  {deductionRows.length > 0 ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Deductions</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {deductionRows.map((line, index) => (
-                          <div key={`deduction-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">
-                                {readString(line, ["name", "component_name", "componentName", "code"], "Deduction")}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {readString(line, ["description"], "Payroll deduction line")}
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold text-foreground">
-                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
-                            </span>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                </div>
+                </section>
               ) : null}
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
-                  Close
-                </Button>
-                {selectedPayslip ? (
-                  <Button
-                    type="button"
-                    onClick={() => void handleDownloadPayslip(selectedPayslip)}
-                    disabled={downloadingId === readPayslipId(selectedPayslip)}
-                  >
-                    {downloadingId === readPayslipId(selectedPayslip) ? (
-                      <FluentLoadingIndicator className="size-4 animate-spin" />
-                    ) : (
-                      <DownloadIcon className="size-4" />
-                    )}
-                    Download payslip
-                  </Button>
-                ) : null}
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+              {deductionRows.length > 0 ? (
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-foreground">Deductions</h3>
+                  <div className="divide-y divide-border rounded-xl border border-border">
+                    {deductionRows.map((line, index) => (
+                      <div key={`deduction-${index}`} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div><p className="text-sm font-medium">{readString(line, ["name", "component_name", "componentName", "code"], "Deduction")}</p><p className="text-xs text-muted-foreground">{readString(line, ["description"], "Payroll deduction line")}</p></div>
+                        <span className="text-sm font-semibold tabular-nums">{formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <FluentButton appearance="secondary" onClick={() => setDetailOpen(false)}>Close</FluentButton>
+            {selectedPayslip ? (
+              <FluentButton
+                appearance="primary"
+                icon={downloadingId === readPayslipId(selectedPayslip) ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                onClick={() => void handleDownloadPayslip(selectedPayslip)}
+                disabled={downloadingId === readPayslipId(selectedPayslip)}
+              >
+                Download payslip
+              </FluentButton>
+            ) : null}
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </section>
   )
 }
