@@ -104,7 +104,7 @@ function DialogPopup({
       <DialogBody
         className={cn(
           "!flex !flex-col gap-3 overflow-y-auto",
-          size === "full" ? "!h-full !max-h-none" : "!max-h-[min(90dvh,48rem)]",
+          size === "full" ? "!h-full !max-h-none" : size === "medium" ? "!max-h-[min(78dvh,42rem)]" : "!max-h-[min(90dvh,48rem)]",
           bodyClassName,
         )}
       >

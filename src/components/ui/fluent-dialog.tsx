@@ -30,15 +30,15 @@ function useFluentDialogContext() {
 
 export function dialogSurfaceSize(className?: string) {
   if (!className) return "compact"
-  if (/100vw|h-dvh|h-\[calc\(100vh/.test(className)) return "full"
+  if (!/notification-dialog/.test(className) && /100vw|h-dvh|h-\[calc\(100vh/.test(className)) return "full"
   if (
-    /notification-dialog|max-w-none|max-w-(3|4|5|6|7)xl|min\((9\d{2}|1\d{3})px/.test(
+    /max-w-none|max-w-(3|4|5|6|7)xl|min\((9\d{2}|1\d{3})px/.test(
       className,
     )
   ) {
     return "wide"
   }
-  if (/max-w-(xl|2xl)|min\((7|8)\d{2}px|42rem|44rem|48rem/.test(className)) {
+  if (/notification-dialog|max-w-(xl|2xl)|min\((7|8)\d{2}px|42rem|44rem|48rem/.test(className)) {
     return "medium"
   }
   return "compact"

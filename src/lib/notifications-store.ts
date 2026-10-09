@@ -92,6 +92,7 @@ type LoadNotificationsOptions = {
   markVisibleSeen?: boolean
   notifyOnError?: boolean
   tokenOverride?: string
+  append?: boolean
 }
 
 type LoadUnreadCountOptions = {
@@ -570,8 +571,27 @@ function upsertNotification(items: NotificationItem[], item: NotificationItem) {
   }
 
   const nextItems = [...items]
-  nextItems[index] = item
+  nextItems[index] = { ...nextItems[index], ...item }
   return nextItems
+}
+
+function mergeNotificationUpdate(
+  currentItem: NotificationItem,
+  updatedItem: NotificationItem | null,
+  fallback: (item: NotificationItem) => NotificationItem,
+) {
+  return updatedItem ? { ...currentItem, ...updatedItem } : fallback(currentItem)
+}
+
+function dedupeNotificationItems(items: NotificationItem[]) {
+  const seenIds = new Set<number>()
+  return items.filter((item) => {
+    const id = readItemId(item)
+    if (id === null) return true
+    if (seenIds.has(id)) return false
+    seenIds.add(id)
+    return true
+  })
 }
 
 function markItemSeen(item: NotificationItem): NotificationItem {
@@ -851,9 +871,18 @@ async function loadNotifications(
       return state.items
     }
 
-    const rows = result.rows
+    const rows = dedupeNotificationItems(result.rows)
+    const nextItems = options.append
+      ? (() => {
+          const existingIds = new Set(state.items.map(readItemId).filter((id): id is number => id !== null))
+          return [...state.items, ...rows.filter((item) => {
+            const id = readItemId(item)
+            return id === null || !existingIds.has(id)
+          })]
+        })()
+      : rows
     setState({
-      items: rows,
+      items: nextItems,
       loading: false,
       error: null,
     })
@@ -895,7 +924,7 @@ function scheduleCurrentQueryResync() {
   clearScheduledResync()
   resyncTimer = setTimeout(() => {
     resyncTimer = null
-    void loadNotifications(state.currentQuery, { markVisibleSeen: state.drawerOpen })
+    void loadNotifications(state.currentQuery)
   }, RESYNC_DEBOUNCE_MS)
 }
 
@@ -904,7 +933,7 @@ function refreshCurrentQueryIfNeeded() {
     return
   }
 
-  void loadNotifications(state.currentQuery, { markVisibleSeen: state.drawerOpen })
+  void loadNotifications(state.currentQuery)
 }
 
 function reloadCurrentQueryAndUnreadCount(token: string) {
@@ -913,7 +942,6 @@ function reloadCurrentQueryAndUnreadCount(token: string) {
     loadAttentionItems(token),
     loadNotifications(state.currentQuery, {
       tokenOverride: token,
-      markVisibleSeen: state.drawerOpen,
     }),
   ])
 }
@@ -1283,7 +1311,7 @@ function connectSocket(token: string) {
         attentionItems: [],
         unreadCount: 0,
       }))
-      void loadNotifications(state.currentQuery, { markVisibleSeen: state.drawerOpen })
+      void loadNotifications(state.currentQuery)
       return
     }
 
@@ -1364,7 +1392,6 @@ function syncTokenFromStorage() {
     loadAttentionItems(nextToken),
     loadNotifications(nextQuery, {
       tokenOverride: nextToken,
-      markVisibleSeen: state.drawerOpen,
     }),
   ])
   connectSocket(nextToken)
@@ -1425,7 +1452,7 @@ async function markAsSeen(id: number) {
       if (readItemId(item) !== id) {
         return item
       }
-      return updatedItem ?? markItemSeen(item)
+      return mergeNotificationUpdate(item, updatedItem, markItemSeen)
     }),
   }))
   if (!archived) {
@@ -1442,6 +1469,10 @@ async function markAsRead(id: number) {
   const target = state.items.find((item) => readItemId(item) === id) ?? null
   const targetWasUnread = target !== null && isUnreadNotificationItem(target)
   const archived = target !== null && isArchivedNotificationItem(target)
+
+  if (target !== null && !targetWasUnread) {
+    return
+  }
 
   let updatedItem: NotificationItem | null = null
   if (!archived) {
@@ -1460,7 +1491,7 @@ async function markAsRead(id: number) {
       if (readItemId(item) !== id) {
         return item
       }
-      return updatedItem ?? markItemRead(item)
+      return mergeNotificationUpdate(item, updatedItem, markItemRead)
     }),
     attentionItems: current.attentionItems.filter((item) => readItemId(item) !== id),
     unreadCount: targetWasUnread ? Math.max(0, current.unreadCount - 1) : current.unreadCount,

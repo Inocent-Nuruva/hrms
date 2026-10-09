@@ -15,8 +15,6 @@ import { AccentColorPicker } from "@/components/accent-color-picker"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import {
   Dialog,
-  DialogClose,
-  DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
@@ -122,19 +120,11 @@ export function SiteHeader({
   const [currentTime, setCurrentTime] = React.useState<Date | null>(null)
   const {
     connectSocket,
-    connected,
     loadNotifications,
     loadUnreadCount,
-    socketConfigured,
     unreadCount: unreadNotificationCount,
   } = useNotifications()
 
-  const liveDotClassName = connected
-    ? "bg-emerald-500"
-    : socketConfigured
-      ? "bg-amber-500 animate-pulse"
-      : "bg-slate-400"
-  const liveStatusLabel = connected ? "Live" : socketConfigured ? "Connecting" : "REST only"
   const clockParts = currentTime
     ? new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
@@ -269,29 +259,31 @@ export function SiteHeader({
               </div>
               <DialogPopup
                 from="right"
-                showCloseButton
-                className="notification-dialog flex h-full min-h-0 flex-col overflow-hidden p-4 sm:p-5"
+                showCloseButton={false}
+                bodyClassName="!h-full !max-h-none !gap-0 !overflow-hidden"
+                className="notification-dialog flex h-dvh min-h-0 w-[min(34rem,calc(100vw-1rem))] max-w-[34rem] flex-col overflow-hidden p-4 sm:p-5"
               >
                 <DialogHeader className="mb-0 shrink-0 space-y-0 pr-10 pb-1">
-                  <div className="flex flex-col items-start gap-0.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-                        <span
-                          className={cn("size-2 shrink-0 rounded-full", liveDotClassName)}
-                          title={liveStatusLabel}
-                          aria-label={liveStatusLabel}
-                        />
-                        Notifications
-                      </DialogTitle>
+                  <div className="flex items-center gap-3 border-b border-border/70 px-1 py-2">
+                    <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <AlertBadge16Regular className="size-5" />
+                      {unreadNotificationCount > 0 ? <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-background bg-rose-500" /> : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
+                          Notification Center
+                        </DialogTitle>
+                      </div>
                       {unreadNotificationCount > 0 ? (
-                        <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums !text-white">
-                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount} unread
-                        </span>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount} unread notifications
+                        </div>
                       ) : null}
                     </div>
                     {unreadNotificationCount === 0 ? (
-                      <span className="inline-flex items-center gap-1 pl-4 text-xs font-medium tracking-wide text-emerald-600 dark:text-emerald-400">
-                        <CheckmarkCircle20Regular className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <CheckmarkCircle20Regular className="size-4" aria-hidden />
                         All caught up
                       </span>
                     ) : null}
@@ -300,9 +292,6 @@ export function SiteHeader({
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <NotificationCenter open={notificationsOpen} onOpenChange={setNotificationsOpen} />
                 </div>
-                <DialogFooter className="shrink-0 border-t border-border pt-2">
-                  <DialogClose render={<Button variant="outline" size="sm">Close</Button>} />
-                </DialogFooter>
               </DialogPopup>
             </Dialog>
           ) : null}

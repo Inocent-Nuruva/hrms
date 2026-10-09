@@ -1,8 +1,10 @@
 import React from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Alert, FlatList, Pressable, RefreshControl, StyleSheet, View, type ListRenderItem,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Check, ExternalLink, Inbox } from 'lucide-react-native';
+import { Archive, Check, CheckCircle2, Circle, ExternalLink, Inbox } from 'lucide-react-native';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { Text } from '../components/ui/text';
 import { FluentActivityIndicator } from '../components/ui/fluent-activity-indicator';
@@ -12,6 +14,8 @@ import { useThemePreference } from '../hooks/useThemePreference';
 import { useAppAccent } from '../hooks/useAppAccent';
 import { COLORS } from '../lib/config';
 import { resolveNotificationDestination, readNotificationString } from '../lib/mobile-notification-routing';
+
+type Entry = { kind: 'header'; key: string; label: string } | { kind: 'notification'; key: string; row: AppNotification };
 
 function notificationDate(row: AppNotification) {
   const value = readNotificationString(row, ['created_at', 'createdAt']);
@@ -28,6 +32,25 @@ function clockLabel(date: Date | null) {
   if (!date || Number.isNaN(date.getTime())) return '';
   return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
+function isUnread(row: AppNotification) {
+  return String(row.status ?? '').toUpperCase() === 'UNREAD';
+}
+
+function notificationIconColor(row: AppNotification, isDark: boolean) {
+  const value = [
+    readNotificationString(row, ['category']),
+    readNotificationString(row, ['type', 'entity_type', 'entityType']),
+    readNotificationString(row, ['related_module', 'relatedModule']),
+  ].join(' ').toLowerCase();
+
+  if (/leave|time.?off|attendance/.test(value)) return isDark ? '#34D399' : '#059669';
+  if (/payroll|salary|compensation|benefit/.test(value)) return isDark ? '#FBBF24' : '#D97706';
+  if (/onboard|employee|staff|hr/.test(value)) return isDark ? '#C4B5FD' : '#7C3AED';
+  if (/security|auth|access|account/.test(value)) return isDark ? '#FDA4AF' : '#E11D48';
+  if (/system|technical|integration/.test(value)) return isDark ? '#7DD3FC' : '#0284C7';
+  if (/request|approval|workflow/.test(value)) return isDark ? '#FDBA74' : '#EA580C';
+  return isDark ? '#A5B4FC' : '#4F46E5';
+}
 
 export default function NotificationsScreen() {
   const auth = useAuth();
@@ -39,89 +62,183 @@ export default function NotificationsScreen() {
   const fg = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const muted = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const border = isDark ? COLORS.outlineDark : '#E5E7EB';
-  const groups = React.useMemo(() => {
-    const result = new Map<string, AppNotification[]>();
-    notifications.notifications.forEach((row) => {
+  const unreadBg = isDark ? '#172B45' : '#EAF3FF';
+  const [selecting, setSelecting] = React.useState(false);
+  const [selected, setSelected] = React.useState<Set<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const rows = notifications.notifications;
+  const entries = React.useMemo<Entry[]>(() => {
+    const result: Entry[] = [];
+    let previousGroup = '';
+    rows.forEach((row) => {
       const date = notificationDate(row);
-      const key = date ? dayLabel(date) : 'Earlier';
-      result.set(key, [...(result.get(key) ?? []), row]);
+      const group = date ? dayLabel(date) : 'Earlier';
+      if (group !== previousGroup) {
+        result.push({ kind: 'header', key: `heading:${group}`, label: group });
+        previousGroup = group;
+      }
+      result.push({ kind: 'notification', key: String(row.id), row });
     });
-    return Array.from(result.entries());
-  }, [notifications.notifications]);
+    return result;
+  }, [rows]);
+  const toggleSelected = React.useCallback((id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const closeSelection = () => { setSelecting(false); setSelected(new Set()); };
+  const selectAllLoaded = () => setSelected(new Set(rows.map((row) => String(row.id))));
   const openItem = async (row: AppNotification) => {
-    const id = String(row.id);
-    if (String(row.status ?? '').toUpperCase() === 'UNREAD') {
-      try { await notifications.markAsRead(id); }
+    if (selecting) {
+      toggleSelected(String(row.id));
+      return;
+    }
+    if (isUnread(row)) {
+      try { await notifications.markAsRead(String(row.id)); }
       catch (error) { Alert.alert('Could not update notification', error instanceof Error ? error.message : 'Try again.'); }
     }
     router.push(resolveNotificationDestination(row) as never);
   };
-  return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: bg }]} edges={['top']}>
-      <MobileTopBar auth={auth} title="Notifications" showBackButton onBackPress={() => router.back()} variant="centered" />
-      <View style={[styles.headerActions, { borderBottomColor: border }]}>
-        <View style={styles.headerSpacer} />
-        <Text style={[styles.pageTitle, { color: fg }]}>Notifications</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Mark all notifications as read"
-          onPress={() => void notifications.markAllAsRead()}
-          disabled={!notifications.unreadCount}
-          style={styles.headerAction}
-        ><Check size={22} color={notifications.unreadCount ? fg : muted} /></Pressable>
-      </View>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={notifications.loading} onRefresh={() => void notifications.refresh()} />}
+  const runBulk = async (action: 'read' | 'archive') => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      if (action === 'read') await notifications.markManyAsRead(ids);
+      else await notifications.archiveMany(ids);
+      closeSelection();
+    } catch (error) {
+      Alert.alert('Could not update selected notifications', error instanceof Error ? error.message : 'Try again.');
+    } finally { setBulkBusy(false); }
+  };
+
+  const renderEntry: ListRenderItem<Entry> = ({ item }) => {
+    if (item.kind === 'header') {
+      return <Text style={[styles.groupTitle, { color: muted }]}>{item.label}</Text>;
+    }
+    const row = item.row;
+    const unread = isUnread(row);
+    const checked = selected.has(String(row.id));
+    const date = notificationDate(row);
+    const title = readNotificationString(row, ['title']) || 'Notification';
+    const body = readNotificationString(row, ['message', 'description']);
+    const category = readNotificationString(row, ['related_module', 'category']);
+    const iconColor = notificationIconColor(row, isDark);
+    return (
+      <Pressable
+        onPress={() => void openItem(row)}
+        style={[
+          styles.item,
+          { borderBottomColor: border, backgroundColor: checked ? (isDark ? '#203A56' : '#DDEBFF') : unread ? unreadBg : bg },
+        ]}
       >
-        {notifications.loading && !notifications.notifications.length ? <FluentActivityIndicator color={accent} /> : null}
-        {!notifications.loading && !groups.length ? (
-          <View style={styles.empty}><Inbox size={32} color={muted} /><Text style={[styles.emptyText, { color: muted }]}>You’re all caught up.</Text></View>
-        ) : null}
-        {groups.map(([group, rows]) => (
-          <View key={group}>
-            <Text style={[styles.groupTitle, { color: muted }]}>{group}</Text>
-            {rows.map((row) => {
-              const unread = String(row.status ?? '').toUpperCase() === 'UNREAD';
-              const date = notificationDate(row);
-              const title = readNotificationString(row, ['title']) || 'Notification';
-              const body = readNotificationString(row, ['message', 'description']);
-              const category = readNotificationString(row, ['related_module', 'category']);
-              return (
-                <Pressable key={String(row.id)} onPress={() => void openItem(row)} style={[styles.item, { borderBottomColor: border }]}>
-                  <View style={styles.unreadSlot}>{unread ? <View style={[styles.unreadDot, { backgroundColor: accent }]} /> : null}</View>
-                  <View style={[styles.iconShell, { backgroundColor: isDark ? '#303943' : '#F3F4F6' }]}>
-                    <Inbox size={20} color={unread ? accent : muted} />
-                  </View>
-                  <View style={styles.itemCopy}>
-                    <View style={styles.titleLine}>
-                      <Text style={[styles.itemTitle, { color: fg }, unread && styles.unreadTitle]} numberOfLines={1}>{title}</Text>
-                      <Text style={[styles.itemTime, { color: muted }]}>{clockLabel(date)}</Text>
-                    </View>
-                    <Text style={[styles.itemBody, { color: fg }]} numberOfLines={2}>{body || category}</Text>
-                    {!!category && <Text style={[styles.itemMeta, { color: muted }]} numberOfLines={1}>{category.replaceAll('_', ' ')}</Text>}
-                  </View>
-                  <ExternalLink size={15} color={muted} />
-                </Pressable>
-              );
-            })}
+        <View style={styles.selectSlot}>
+          {selecting ? (
+            <Pressable onPress={() => toggleSelected(String(row.id))} hitSlop={8} accessibilityRole="checkbox" accessibilityState={{ checked }}>
+              {checked ? <CheckCircle2 size={22} color={accent} /> : <Circle size={22} color={muted} />}
+            </Pressable>
+          ) : unread ? <View style={[styles.unreadDot, { backgroundColor: accent }]} /> : null}
+        </View>
+        <View style={[styles.iconShell, { backgroundColor: isDark ? '#303943' : '#F3F4F6' }]}>
+          <Inbox size={20} color={iconColor} />
+        </View>
+        <View style={styles.itemCopy}>
+          <View style={styles.titleLine}>
+          <Text style={[styles.itemTitle, { color: fg }, styles.unreadTitle]} numberOfLines={1}>{title}</Text>
+            <Text style={[styles.itemTime, { color: muted }]}>{clockLabel(date)}</Text>
           </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={[styles.itemBody, { color: fg }]} numberOfLines={2}>{body || category}</Text>
+          {!!category && <Text style={[styles.itemMeta, { color: muted }]} numberOfLines={1}>{category.replaceAll('_', ' ')}</Text>}
+        </View>
+        {!selecting ? <ExternalLink size={15} color={muted} /> : null}
+      </Pressable>
+    );
+  };
+
+  return (
+    <View style={[styles.root, { backgroundColor: bg }]}>
+      <MobileTopBar auth={auth} title="Notifications" showBackButton onBackPress={() => router.back()} variant="centered" />
+      <SafeAreaView edges={['bottom']} style={[styles.body, { backgroundColor: bg }]}>
+        <View style={[styles.toolbar, { borderBottomColor: border }]}>
+          {!selecting ? (
+            <>
+              <Pressable onPress={() => { setSelecting(true); setSelected(new Set()); }} style={styles.toolbarAction}>
+                <Text style={[styles.toolbarText, { color: accent }]}>Select</Text>
+              </Pressable>
+              <View style={styles.toolbarRight}>
+                <Text style={[styles.countText, { color: muted }]}>{notifications.unreadCount} unread</Text>
+                <Pressable
+                  accessibilityLabel="Mark all notifications as read"
+                  onPress={() => void notifications.markAllAsRead()}
+                  disabled={!notifications.unreadCount}
+                  style={styles.iconAction}
+                ><Check size={21} color={notifications.unreadCount ? accent : muted} /></Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <Pressable onPress={closeSelection} style={styles.toolbarAction}><Text style={[styles.toolbarText, { color: accent }]}>Cancel</Text></Pressable>
+              <View style={styles.toolbarRight}>
+                <Text style={[styles.countText, { color: muted }]}>{selected.size} selected</Text>
+                <Pressable onPress={selectAllLoaded} style={styles.toolbarAction}><Text style={[styles.toolbarText, { color: accent }]}>Select all</Text></Pressable>
+                <Pressable disabled={!selected.size || bulkBusy} onPress={() => void runBulk('read')} style={styles.iconAction} accessibilityLabel="Mark selected as read">
+                  <Check size={21} color={selected.size && !bulkBusy ? accent : muted} />
+                </Pressable>
+                <Pressable disabled={!selected.size || bulkBusy} onPress={() => void runBulk('archive')} style={styles.iconAction} accessibilityLabel="Archive selected">
+                  {bulkBusy ? <FluentActivityIndicator color={accent} /> : <Archive size={20} color={selected.size ? accent : muted} />}
+                </Pressable>
+              </View>
+            </>
+          )}
+        </View>
+        {notifications.loading && !rows.length ? <View style={styles.loader}><FluentActivityIndicator color={accent} /></View> : null}
+        {!notifications.loading && !entries.length ? (
+          <View style={styles.empty}>
+            <View style={[styles.emptyIcon, { backgroundColor: isDark ? '#252B32' : '#F3F4F6', borderColor: border }]}>
+              <Inbox size={22} color={muted} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: fg }]}>You’re all caught up</Text>
+            <Text style={[styles.emptyText, { color: muted }]}>New notifications will show up here.</Text>
+          </View>
+        ) : null}
+        <FlatList
+          data={entries}
+          keyExtractor={(entry) => entry.key}
+          renderItem={renderEntry}
+          refreshControl={<RefreshControl refreshing={notifications.loading && rows.length > 0} onRefresh={() => void notifications.refresh()} />}
+          onEndReached={() => { if (notifications.hasMore && !notifications.loadingMore) void notifications.loadMore(); }}
+          onEndReachedThreshold={0.45}
+          initialNumToRender={14}
+          maxToRenderPerBatch={14}
+          windowSize={9}
+          removeClippedSubviews
+          contentContainerStyle={styles.content}
+          ListFooterComponent={notifications.loadingMore ? <View style={styles.footerLoader}><FluentActivityIndicator color={accent} /></View> : notifications.hasMore ? (
+            <Pressable onPress={() => void notifications.loadMore()} style={styles.loadMore}>
+              <Text style={[styles.toolbarText, { color: accent }]}>Load more notifications</Text>
+            </Pressable>
+          ) : null}
+        />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  headerActions: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20 },
-  headerSpacer: { width: 36 },
-  pageTitle: { fontSize: 17, fontWeight: '700' },
-  headerAction: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  content: { paddingBottom: 24 },
-  groupTitle: { fontSize: 14, fontWeight: '700', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 10 },
-  item: { minHeight: 77, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  unreadSlot: { width: 10, alignItems: 'center' },
+  root: { flex: 1 },
+  body: { flex: 1 },
+  toolbar: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16 },
+  toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  toolbarAction: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 6 },
+  toolbarText: { fontSize: 13, fontWeight: '700' },
+  countText: { fontSize: 12 },
+  iconAction: { minWidth: 36, minHeight: 38, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingBottom: 20, flexGrow: 1 },
+  groupTitle: { fontSize: 14, fontWeight: '700', paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8 },
+  item: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  selectSlot: { width: 20, alignItems: 'center', justifyContent: 'center' },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   iconShell: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   itemCopy: { flex: 1, minWidth: 0 },
@@ -131,6 +248,11 @@ const styles = StyleSheet.create({
   itemTime: { fontSize: 11 },
   itemBody: { fontSize: 13, marginTop: 2 },
   itemMeta: { fontSize: 11, marginTop: 3, textTransform: 'capitalize' },
-  empty: { alignItems: 'center', justifyContent: 'center', gap: 10, padding: 48 },
-  emptyText: { fontSize: 14 },
+  empty: { alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 28, paddingVertical: 54 },
+  emptyIcon: { width: 48, height: 48, borderWidth: StyleSheet.hairlineWidth, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  emptyTitle: { fontSize: 15, fontWeight: '600' },
+  emptyText: { fontSize: 12, textAlign: 'center' },
+  loader: { padding: 20, alignItems: 'center' },
+  footerLoader: { padding: 16, alignItems: 'center' },
+  loadMore: { alignItems: 'center', padding: 16 },
 });

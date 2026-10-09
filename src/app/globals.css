@@ -197,7 +197,25 @@ input:focus {
 }
 
 .fui-OverlayDrawer[data-app-drawer="true"][data-size="medium"] {
-  width: min(48rem, 100vw) !important;
+  width: min(38rem, calc(100vw - 2rem)) !important;
+}
+
+.fui-OverlayDrawer.notification-dialog[data-size="medium"] {
+  position: fixed !important;
+  top: 0 !important;
+  inset-block-start: 0 !important;
+  bottom: 0 !important;
+  inset-block-end: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-block: 0 !important;
+  border: 1px solid var(--colorNeutralStroke2, #e0e0e0) !important;
+  border-radius: 0 !important;
+}
+
+.fui-OverlayDrawer.notification-dialog,
+.fui-OverlayDrawer.notification-dialog .fui-DrawerBody {
+  border-radius: 0 !important;
 }
 
 .fui-OverlayDrawer[data-app-drawer="true"][data-size="wide"] {
@@ -212,11 +230,16 @@ input:focus {
   .fui-OverlayDrawer[data-app-drawer="true"] {
     width: 100vw !important;
   }
+
+  .fui-OverlayDrawer.notification-dialog[data-size="medium"] {
+    width: calc(100vw - 1rem) !important;
+  }
 }
 
 .fui-OverlayDrawer.notification-dialog .fui-DrawerBody {
-  height: 100%;
+  height: 100dvh !important;
   max-height: none !important;
+  min-height: 0 !important;
   overflow: hidden;
 }
 

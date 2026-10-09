@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from '../../lib/api';
 import { COLORS } from '../../lib/config';
-import { DEFAULT_PROFILE_CARD_STYLE, PROFILE_CARD_PALETTES, normalizeProfileCardStyle, profilePaletteColor, profilePaletteForeground } from '../../lib/profile-card-background';
+import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteColor, profilePaletteForeground } from '../../lib/profile-card-background';
 import { TouchableScale } from '../ui/touchable-scale';
 import { ProfileCardDoodles } from '../ui/profile-card-doodles';
 import type { UseAuthReturn } from '../../hooks/useAuth';
@@ -35,6 +35,7 @@ interface Props {
   showBackButton?: boolean;
   onBackPress?: () => void;
   menuPresentation?: 'drawer' | 'dropdown';
+  neutralBackground?: boolean;
 }
 
 export function MobileTopBar({
@@ -46,6 +47,7 @@ export function MobileTopBar({
   showBackButton = false,
   onBackPress,
   menuPresentation = 'drawer',
+  neutralBackground = false,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -106,6 +108,7 @@ export function MobileTopBar({
 
   const drawerItems: Array<{ label: string; route: string; icon: React.ComponentProps<typeof FluentSystemIcon>['name'] }> = [
     { label: 'Home', route: '/', icon: 'home' },
+    { label: 'Notifications', route: '/notifications', icon: 'notifications' },
     { label: 'Attendance', route: '/attendance', icon: 'attendance' },
     { label: 'Attendance history', route: '/my-attendance', icon: 'history' },
     { label: 'Leave', route: '/leave', icon: 'leave' },
@@ -124,9 +127,14 @@ export function MobileTopBar({
   const headerTitle = title || employeeName;
   const headerSubtitle = subtitle || readGreeting();
   const selectedCardStyle = normalizeProfileCardStyle(profileCardStyleQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
-  const selectedPalette = PROFILE_CARD_PALETTES.find((item) => item.id === selectedCardStyle.palette) ?? PROFILE_CARD_PALETTES[0];
-  const barBackground = profilePaletteColor(selectedPalette.id, isDark);
-  const headerForeground = profilePaletteForeground(barBackground);
+  const useProfileColor = !neutralBackground;
+  const barBackground = useProfileColor
+    ? profilePaletteColor(selectedCardStyle.palette, isDark)
+    : isDark ? COLORS.backgroundDark : COLORS.background;
+  const topBarBackground = neutralBackground ? 'transparent' : barBackground;
+  const headerForeground = useProfileColor
+    ? profilePaletteForeground(barBackground)
+    : isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const lightPalette = headerForeground !== '#FFFFFF';
   const primaryTextColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const actionIconBg = 'transparent';
@@ -140,19 +148,21 @@ export function MobileTopBar({
       <SafeAreaView
         edges={['top']}
         style={{
-          backgroundColor: barBackground,
+          backgroundColor: topBarBackground,
           borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: lightPalette ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)',
+          borderBottomColor: neutralBackground
+            ? 'transparent'
+            : lightPalette ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)',
         }}
       >
         <View
           style={[
             styles.shell,
             variant === 'dashboard' ? styles.shellDashboard : styles.shellCompact,
-            { backgroundColor: barBackground },
+            { backgroundColor: topBarBackground },
           ]}
         >
-          <ProfileCardDoodles artwork={selectedCardStyle.artwork} onLight={lightPalette} />
+          {useProfileColor ? <ProfileCardDoodles artwork={selectedCardStyle.artwork} onLight={lightPalette} /> : null}
           <View style={styles.actionsRow}>
             <View style={styles.leadingActionRow}>
               {showBackButton ? (
@@ -198,7 +208,7 @@ export function MobileTopBar({
               <TouchableScale
                 style={[styles.menuButton, { backgroundColor: actionIconBg, borderRadius: 8 }]}
                 pressedScale={0.92}
-                onPress={() => router.push('/notifications' as never)}
+                onPress={() => router.navigate('/notifications' as never)}
               >
                 <FluentSystemIcon name="notifications" size={22} color={actionIconColor} />
                 {notifications.unreadCount ? (
@@ -243,6 +253,7 @@ export function MobileTopBar({
                   pathname={pathname}
                   auth={auth}
                   isDark={isDark}
+                  unreadCount={notifications.unreadCount}
                   router={router}
                 />
               </Animated.View>
@@ -257,6 +268,7 @@ export function MobileTopBar({
                 pathname={pathname}
                 auth={auth}
                 isDark={isDark}
+                unreadCount={notifications.unreadCount}
                 router={router}
               />
             </View>
@@ -454,6 +466,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
   },
+  drawerNotificationBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 'auto',
+  },
   drawerItemTextActive: { fontWeight: '700' },
   logoutButton: {
     flexDirection: 'row',
@@ -502,6 +524,7 @@ function MenuContent({
   pathname,
   auth,
   isDark,
+  unreadCount,
   router,
 }: {
   closeLabelIcon: React.ReactNode;
@@ -510,6 +533,7 @@ function MenuContent({
   pathname: string;
   auth: UseAuthReturn;
   isDark: boolean;
+  unreadCount: number;
   router: ReturnType<typeof useRouter>;
 }) {
   const appAccent = useAppAccent();
@@ -556,6 +580,11 @@ function MenuContent({
                 { color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface },
                 active && styles.drawerItemTextActive,
               ]}>{item.label}</Text>
+              {item.label === 'Notifications' && unreadCount > 0 ? (
+                <View style={styles.drawerNotificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              ) : null}
             </TouchableScale>
           );
         })}

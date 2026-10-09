@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
@@ -17,7 +18,8 @@ export default function ActivitiesScreen() {
   const auth = useAuth();
   const { isDark } = useThemePreference();
   const accent = useAppAccent();
-  const [view, setView] = React.useState<'reports' | 'tasks'>('reports');
+  const params = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = React.useState<'reports' | 'tasks'>(params.view === 'tasks' ? 'tasks' : 'reports');
   const [rows, setRows] = React.useState<Row[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
@@ -44,6 +46,9 @@ export default function ActivitiesScreen() {
     } finally { setLoading(false); }
   }, [view]);
   React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => {
+    if (params.view === 'reports' || params.view === 'tasks') setView(params.view);
+  }, [params.view]);
 
   const startCreate = () => { setEdit(null); setTitle(''); setDescription(''); setDueDate(new Date().toISOString().slice(0, 10)); setForm(true); };
   const startEdit = (row: Row) => { setEdit(row); setTitle(str(row.title)); setDescription(str(row.description)); setDueDate(str(row.dueDate ?? row.due_date, new Date().toISOString().slice(0, 10)).slice(0, 10)); setForm(true); };

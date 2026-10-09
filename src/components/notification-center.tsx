@@ -12,38 +12,19 @@ import {
 import {
   Alert20Regular as Bell,
   Archive20Regular as Archive,
-  ArrowSync20Regular as RefreshCw,
   ArrowUpRight20Regular as ArrowUpRight,
   Checkmark20Regular as Check,
-  CheckmarkCircle20Regular as CheckCheck,
-  Dismiss20Regular as X,
+  Clock20Regular as Clock,
   Eye20Regular as Eye,
-  Send20Regular as Send,
+  People20Regular as People,
 } from "@fluentui/react-icons"
-import { Card, Field } from "@fluentui/react-components"
-import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import {
-  createTestNotification,
   type AdminRecord,
-  type NotificationCategory,
-  type NotificationPriority,
   type NotificationQueryParams,
-  type NotificationStatus,
 } from "@/lib/admin-api"
-import { decodeJwtPayload } from "@/lib/dashboard-permissions"
 import {
   DEFAULT_NOTIFICATION_QUERY,
-  playNotificationSound,
-  unlockNotificationAudioFromGesture,
   useNotifications,
 } from "@/lib/notifications-store"
 import { showErrorAlert } from "@/lib/error-alert"
@@ -53,50 +34,6 @@ import {
 } from "@/lib/notification-attention"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-
-const LEGACY_ADMIN_TOKEN_KEY = "hrms.admin.accessToken"
-const SEARCH_DEBOUNCE_MS = 250
-
-const CATEGORY_OPTIONS: Array<{ value: NotificationCategory; label: string }> = [
-  { value: "GENERAL", label: "General" },
-  { value: "HR", label: "HR" },
-  { value: "AUTH", label: "Auth" },
-  { value: "ACCESS_CONTROL", label: "Access Control" },
-  { value: "SYSTEM", label: "System" },
-]
-
-const PRIORITY_OPTIONS: Array<{ value: NotificationPriority; label: string }> = [
-  { value: "LOW", label: "Low" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-  { value: "URGENT", label: "Urgent" },
-]
-
-type StatusFilterValue = "all" | NotificationStatus
-
-function readStoredToken() {
-  if (typeof window === "undefined") return ""
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  if (authTokensRaw) {
-    try {
-      const parsed = JSON.parse(authTokensRaw) as {
-        accessToken?: string
-        access_token?: string
-      }
-      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
-      if (accessToken) return accessToken
-    } catch {
-      // fall through
-    }
-  }
-  return (
-    window.localStorage.getItem(LEGACY_ADMIN_TOKEN_KEY)?.trim() ??
-    window.localStorage.getItem("hrms.admin.accessToken")?.trim() ??
-    ""
-  )
-}
-
 function readString(row: AdminRecord | null, keys: string[]) {
   if (!row) return ""
   for (const key of keys) {
@@ -221,20 +158,14 @@ function formatNotificationTime(value: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
 }
 
-function readCurrentCompanyUserId() {
-  const token = readStoredToken()
-  if (!token) return null
-  const jwt = decodeJwtPayload(token)
-  if (!jwt) return null
-  return (
-    readNumber(jwt, [
-      "membershipId",
-      "membership_id",
-      "company_user_id",
-      "companyUserId",
-      "company_membership_id",
-    ]) ?? null
-  )
+function notificationGroupLabel(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Earlier"
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000)
+  if (days < 1) return "Today"
+  if (days < 2) return "Yesterday"
+  if (days < 7) return "Last week"
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" })
 }
 
 /** Plain text color for category labels (no pill/card chrome). */
@@ -253,6 +184,22 @@ function categoryTextClass(label: string) {
     return "text-muted-foreground"
   }
   return "text-muted-foreground"
+}
+
+function notificationIconClass(row: AdminRecord) {
+  const value = [
+    readString(row, ["category"]),
+    readString(row, ["type", "entity_type", "entityType"]),
+    readString(row, ["related_module", "relatedModule"]),
+  ].join(" ").toLowerCase()
+
+  if (/leave|time.?off|attendance/.test(value)) return "text-emerald-600 dark:text-emerald-400"
+  if (/payroll|salary|compensation|benefit/.test(value)) return "text-amber-600 dark:text-amber-400"
+  if (/onboard|employee|staff|hr/.test(value)) return "text-violet-600 dark:text-violet-400"
+  if (/security|auth|access|account/.test(value)) return "text-rose-600 dark:text-rose-400"
+  if (/system|technical|integration/.test(value)) return "text-sky-600 dark:text-sky-400"
+  if (/request|approval|workflow/.test(value)) return "text-orange-600 dark:text-orange-400"
+  return "text-indigo-600 dark:text-indigo-400"
 }
 
 function priorityTextClass(label: string) {
@@ -295,64 +242,35 @@ export function NotificationCenter({
   const router = useRouter()
   const {
     archiveNotification,
-    clearAllNotifications,
     error,
     items,
     loadNotifications: loadNotificationsFromStore,
     loadUnreadCount,
-    markAllAsRead,
     markAsRead,
     markAsSeen,
     quietWarning,
     setViewState,
     unreadCount,
-    loading,
   } = useNotifications()
 
-  const [markingAll, setMarkingAll] = React.useState(false)
-  const [clearingAll, setClearingAll] = React.useState(false)
-  const [sendingTest, setSendingTest] = React.useState(false)
   const [busyIds, setBusyIds] = React.useState<number[]>([])
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(() => new Set())
+  const [selectionMode, setSelectionMode] = React.useState(false)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [hasMore, setHasMore] = React.useState(true)
+  const [page, setPage] = React.useState(1)
 
-  const [searchInput, setSearchInput] = React.useState("")
-  const [searchQuery, setSearchQuery] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilterValue>("all")
-  const [categoryFilter, setCategoryFilter] = React.useState<NotificationCategory | "all">("all")
-  const [priorityFilter, setPriorityFilter] = React.useState<NotificationPriority | "all">("all")
-  const [includeArchived, setIncludeArchived] = React.useState(false)
   const [inboxTab, setInboxTab] = React.useState<"all" | "requests" | "mentions" | "urgent">("all")
-
-  React.useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setSearchQuery(searchInput.trim())
-    }, SEARCH_DEBOUNCE_MS)
-    return () => window.clearTimeout(timeoutId)
-  }, [searchInput])
-
-  const activeFilterCount = React.useMemo(() => {
-    return [
-      Boolean(searchQuery),
-      statusFilter !== "all",
-      categoryFilter !== "all",
-      priorityFilter !== "all",
-      includeArchived,
-    ].filter(Boolean).length
-  }, [categoryFilter, includeArchived, priorityFilter, searchQuery, statusFilter])
 
   const requestParams = React.useMemo<NotificationQueryParams>(
     () => ({
       ...DEFAULT_NOTIFICATION_QUERY,
       page: 1,
-      limit: 30,
+      limit: 50,
       sortBy: "created_at",
       sortOrder: "DESC",
-      ...(searchQuery ? { search: searchQuery } : {}),
-      ...(statusFilter !== "all" ? { status: statusFilter } : {}),
-      ...(categoryFilter !== "all" ? { category: categoryFilter } : {}),
-      ...(priorityFilter !== "all" ? { priority: priorityFilter } : {}),
-      ...(includeArchived ? { include_archived: true } : {}),
     }),
-    [categoryFilter, includeArchived, priorityFilter, searchQuery, statusFilter]
+    []
   )
 
   const inboxCounts = React.useMemo(() => ({
@@ -367,6 +285,75 @@ export function NotificationCenter({
     if (inboxTab === "requests") return belongsToRequests(row)
     return belongsToMentions(row)
   }), [inboxTab, items])
+
+  const toggleSelected = React.useCallback((id: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAllVisible = React.useCallback(() => {
+    setSelectedIds(new Set(visibleItems.map(readNotificationId).filter((id): id is number => id !== null)))
+  }, [visibleItems])
+
+  const allVisibleSelected = visibleItems.length > 0 && visibleItems.every((row) => {
+    const id = readNotificationId(row)
+    return id !== null && selectedIds.has(id)
+  })
+
+  const toggleAllVisible = React.useCallback(() => {
+    if (allVisibleSelected) setSelectedIds(new Set())
+    else selectAllVisible()
+  }, [allVisibleSelected, selectAllVisible])
+
+  const toggleSelectionMode = React.useCallback(() => {
+    setSelectionMode((current) => {
+      if (current) setSelectedIds(new Set())
+      return !current
+    })
+  }, [])
+
+  const handleBulkAction = React.useCallback(async (action: "read" | "archive") => {
+    const ids = action === "read"
+      ? Array.from(selectedIds).filter((id) => {
+          const row = items.find((item) => readNotificationId(item) === id)
+          return row !== undefined && isUnreadNotification(row) && !isArchivedNotification(row)
+        })
+      : Array.from(selectedIds)
+    if (!ids.length) return
+    setBusyIds(ids)
+    const results = await Promise.allSettled(ids.map((id) => action === "read" ? markAsRead(id) : archiveNotification(id)))
+    const failed = results.filter((result) => result.status === "rejected").length
+    setBusyIds([])
+    setSelectedIds(new Set())
+    if (failed) showErrorAlert(`${failed} notification${failed === 1 ? "" : "s"} could not be updated.`)
+    else showSuccessAlert(action === "read" ? "Selected notifications marked as read." : "Selected notifications archived.")
+  }, [archiveNotification, items, markAsRead, selectedIds])
+
+  const selectedUnreadCount = items.filter((row) => {
+    const id = readNotificationId(row)
+    return id !== null && selectedIds.has(id) && isUnreadNotification(row) && !isArchivedNotification(row)
+  }).length
+
+  const handleLoadMore = React.useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const nextPage = page + 1
+      const rows = await loadNotificationsFromStore(
+        { ...requestParams, page: nextPage },
+        { append: true, notifyOnError: true },
+      )
+      setHasMore(rows.length >= (requestParams.limit ?? 50))
+      setPage(nextPage)
+      setViewState(open, { ...requestParams, page: nextPage })
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadNotificationsFromStore, loadingMore, open, page, requestParams, setViewState])
 
   const markBusy = React.useCallback((id: number, busy: boolean) => {
     setBusyIds((current) => {
@@ -383,13 +370,18 @@ export function NotificationCenter({
       showErrors?: boolean
       markVisibleSeen?: boolean
     } = {}) => {
-      await Promise.all([
+      const [rows] = await Promise.all([
         loadNotificationsFromStore(requestParams, {
           markVisibleSeen,
           notifyOnError: showErrors,
         }),
         loadUnreadCount({ notifyOnError: showErrors }),
       ])
+      if ((requestParams.page ?? 1) === 1) {
+        setPage(1)
+        setHasMore(rows.length >= (requestParams.limit ?? 50))
+        setSelectedIds(new Set())
+      }
     },
     [loadNotificationsFromStore, loadUnreadCount, requestParams]
   )
@@ -400,54 +392,12 @@ export function NotificationCenter({
 
   React.useEffect(() => {
     if (!open) return
-    void loadNotifications({ markVisibleSeen: true })
+    void loadNotifications()
   }, [loadNotifications, open])
 
   React.useEffect(() => {
     onUnreadCountChange?.(unreadCount)
   }, [onUnreadCountChange, unreadCount])
-
-  const clearFilters = React.useCallback(() => {
-    setSearchInput("")
-    setSearchQuery("")
-    setStatusFilter("all")
-    setCategoryFilter("all")
-    setPriorityFilter("all")
-    setIncludeArchived(false)
-  }, [])
-
-  const handleMarkAllRead = React.useCallback(async () => {
-    setMarkingAll(true)
-    try {
-      await markAllAsRead()
-      showSuccessAlert("All notifications marked as read.")
-    } catch (errorObject) {
-      showErrorAlert(
-        errorObject instanceof Error ? errorObject.message : "Failed to mark notifications as read."
-      )
-    } finally {
-      setMarkingAll(false)
-    }
-  }, [markAllAsRead])
-
-  const handleArchiveAllNotifications = React.useCallback(async () => {
-    if (items.length === 0) return
-    setClearingAll(true)
-    try {
-      const archivedCount = await clearAllNotifications()
-      showSuccessAlert(
-        archivedCount === 1
-          ? "1 notification archived."
-          : `${archivedCount} notifications archived.`
-      )
-    } catch (errorObject) {
-      showErrorAlert(
-        errorObject instanceof Error ? errorObject.message : "Failed to archive notifications."
-      )
-    } finally {
-      setClearingAll(false)
-    }
-  }, [clearAllNotifications, items.length])
 
   const handleNotificationClick = React.useCallback(
     async (row: AdminRecord) => {
@@ -526,150 +476,22 @@ export function NotificationCenter({
     [archiveNotification, markBusy]
   )
 
-  const handleSendTestNotification = React.useCallback(async () => {
-    const token = readStoredToken()
-    const receiverCompanyUserId = readCurrentCompanyUserId()
-    if (!token || receiverCompanyUserId === null) {
-      showErrorAlert("Could not determine the current company user for a test notification.")
-      return
-    }
-
-    // Unlock autoplay in this click gesture (before any await loses the gesture).
-    await unlockNotificationAudioFromGesture()
-
-    setSendingTest(true)
-    try {
-      await createTestNotification(token, {
-        receiver_company_user_id: receiverCompanyUserId,
-        title: "Dashboard test notification",
-        message: `Triggered from the dashboard on ${new Date().toLocaleString()}.`,
-        type: "dashboard_test",
-        category: "SYSTEM",
-        priority: "LOW",
-        related_module: "dashboard",
-        entity_type: "notification",
-        entity_id: "dashboard",
-        action_url: "/dashboard",
-        dedupe_key: `dashboard-test-${Date.now()}`,
-        metadata: {
-          source: "notification-center",
-          triggered_at: new Date().toISOString(),
-        },
-      })
-      showSuccessAlert("Test notification sent.")
-      // Chime immediately (works even when live socket is on REST-only).
-      playNotificationSound()
-      await loadNotifications({ markVisibleSeen: false })
-      await loadUnreadCount({ notifyOnError: false })
-    } catch (errorObject) {
-      showErrorAlert(
-        errorObject instanceof Error ? errorObject.message : "Failed to send test notification."
-      )
-    } finally {
-      setSendingTest(false)
-    }
-  }, [loadNotifications, loadUnreadCount])
-
-  const hasRecipientForTest = readCurrentCompanyUserId() !== null
   const shouldReduceMotion = useReducedMotion()
   const shouldAnimate = !shouldReduceMotion
 
-  // Re-stagger when the dialog opens or filters change (matches table page keys).
+  // Re-stagger when the dialog opens or inbox tab changes.
   const listAnimationKey = React.useMemo(
     () =>
       [
         open ? "open" : "closed",
-        statusFilter,
-        categoryFilter,
-        priorityFilter,
-        includeArchived ? "archived" : "active",
-        searchQuery,
+        inboxTab,
       ].join("|"),
-    [categoryFilter, includeArchived, open, priorityFilter, searchQuery, statusFilter]
+    [inboxTab, open]
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-col gap-2.5">
-        <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            Review recent activity and approval updates.
-          </p>
-          <div className="flex items-center gap-2">
-            {activeFilterCount > 0 ? (
-              <span className="text-xs font-medium text-primary">
-                {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            <div className="flex items-center gap-1" role="toolbar" aria-label="Notification actions">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="!size-8 !min-w-8 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                onClick={() => void loadNotifications({ showErrors: true, markVisibleSeen: open })}
-                disabled={loading}
-                title="Refresh"
-                aria-label="Refresh notifications"
-              >
-                <RefreshCw className={cn("size-5 text-blue-600 dark:text-blue-400", loading ? "animate-spin" : "")} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="!size-8 !min-w-8 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                onClick={() => void handleMarkAllRead()}
-                disabled={markingAll || unreadCount === 0}
-                title="Mark all as read"
-                aria-label="Mark all notifications as read"
-              >
-                {markingAll ? (
-                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
-                ) : (
-                  <CheckCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="!size-8 !min-w-8 rounded-md hover:bg-violet-50 dark:hover:bg-violet-950/40"
-                onClick={() => void handleArchiveAllNotifications()}
-                disabled={clearingAll || loading || items.length === 0 || includeArchived}
-                title={
-                  includeArchived
-                    ? "Switch off Archived to archive active notifications"
-                    : "Archive all notifications"
-                }
-                aria-label="Archive all notifications"
-              >
-                {clearingAll ? (
-                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
-                ) : (
-                  <Archive className="size-5 text-violet-600 dark:text-violet-400" />
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="!size-8 !min-w-8 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950/40"
-                onClick={() => void handleSendTestNotification()}
-                disabled={sendingTest || clearingAll || !hasRecipientForTest}
-                title={
-                  hasRecipientForTest
-                    ? "Send a test notification to yourself"
-                    : "Current company user could not be determined"
-                }
-                aria-label="Send test notification"
-              >
-                <Send className={cn("size-5 text-amber-600 dark:text-amber-400", sendingTest ? "animate-pulse" : "")} />
-              </Button>
-            </div>
-          </div>
-        </div>
-
         <div role="tablist" aria-label="Notification inbox" className="flex w-full items-center gap-2 overflow-x-auto border-b border-border">
           {([
             ["all", "All"],
@@ -688,11 +510,28 @@ export function NotificationCenter({
                 inboxTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
+              {key === "requests" ? <People className="size-5" /> : null}
+              {key === "mentions" ? <span className="text-xl leading-none">@</span> : null}
+              {key === "urgent" ? <Clock className="size-5" /> : null}
               {label}
               <span className={cn("rounded-full px-1.5 py-0.5 text-xs", inboxTab === key ? "bg-primary text-primary-foreground" : "bg-muted")}>{inboxCounts[key]}</span>
             </button>
           ))}
         </div>
+
+        {selectedIds.size > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+            <div className="flex items-center gap-3 text-sm font-medium">
+              <span>{selectedIds.size} selected</span>
+              <button type="button" className="text-xs text-primary hover:underline" onClick={selectAllVisible}>Select all visible</button>
+              <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setSelectedIds(new Set())}>Clear</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={selectedUnreadCount === 0} onClick={() => void handleBulkAction("read")}>Mark read</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => void handleBulkAction("archive")}>Archive</Button>
+            </div>
+          </div>
+        ) : null}
 
         {quietWarning ? (
           <div className="w-full rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
@@ -700,105 +539,51 @@ export function NotificationCenter({
           </div>
         ) : null}
 
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <FluentSearchBox
-                size="small"
-                value={searchInput}
-                onChange={(_event, data) => setSearchInput(data.value)}
-                placeholder="Search notifications"
-                aria-label="Search notifications"
-                className="w-full"
-              />
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Switch
-                checked={includeArchived}
-                onCheckedChange={(checked) => setIncludeArchived(Boolean(checked))}
-                size="sm"
-                label="Include archived"
-                aria-label="Include archived notifications"
-              />
-              {activeFilterCount > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="!size-7 !min-w-7 shrink-0 rounded-md text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={clearFilters}
-                  title="Clear filters"
-                  aria-label="Clear filters"
-                >
-                  <X className="size-4" />
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-            <Field label="Status" size="small">
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => value && setStatusFilter(value as StatusFilterValue)}
-              >
-                <SelectTrigger size="sm" className="w-full" aria-label="Status filter">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="rounded-md">All</SelectItem>
-                  <SelectItem value="UNREAD" className="rounded-md">Unread</SelectItem>
-                  <SelectItem value="READ" className="rounded-md">Read</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Category" size="small">
-              <Select
-                value={categoryFilter}
-                onValueChange={(value) =>
-                  value && setCategoryFilter(value as NotificationCategory | "all")
-                }
-              >
-                <SelectTrigger size="sm" className="w-full" aria-label="Category filter">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="rounded-md">All</SelectItem>
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="rounded-md">
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Priority" size="small">
-              <Select
-                value={priorityFilter}
-                onValueChange={(value) =>
-                  value && setPriorityFilter(value as NotificationPriority | "all")
-                }
-              >
-                <SelectTrigger size="sm" className="w-full" aria-label="Priority filter">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="rounded-md">All</SelectItem>
-                  {PRIORITY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="rounded-md">
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-        </div>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/60 pt-3 pr-0.5">
+      <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/60 pt-2 pr-0.5">
+        <div className="mb-1 flex items-center justify-between px-2">
+          <p className="text-[11px] text-muted-foreground">{items.length} loaded</p>
+          <div className="flex items-center gap-2">
+            {selectionMode ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={toggleAllVisible}
+                className="h-8 px-2 text-xs font-semibold text-primary hover:bg-primary/10 hover:text-primary"
+              >
+                {allVisibleSelected ? "Deselect all" : "Select all"}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant={selectionMode ? "default" : "outline"}
+              size="sm"
+              aria-pressed={selectionMode}
+              onClick={toggleSelectionMode}
+              className={cn(
+                "h-8 gap-1.5 px-2.5 text-xs font-semibold shadow-sm",
+                selectionMode
+                  ? "ring-2 ring-primary/25 ring-offset-1"
+                  : "border-primary/35 text-primary hover:border-primary hover:bg-primary/10 hover:text-primary",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex size-3.5 items-center justify-center rounded border-2",
+                  selectionMode
+                    ? "border-primary-foreground bg-primary-foreground text-primary"
+                    : "border-primary/70 bg-background",
+                )}
+              >
+                {selectionMode ? <Check className="size-3" /> : null}
+              </span>
+              {selectionMode ? "Selecting" : "Select notifications"}
+            </Button>
+          </div>
+        </div>
         {error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
             {error}
@@ -806,15 +591,17 @@ export function NotificationCenter({
         ) : null}
 
         {!error && visibleItems.length === 0 ? (
-          <div className="flex min-h-40 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
-            <div className="rounded-full bg-muted p-2.5">
-              <Bell className="h-4 w-4 text-muted-foreground" />
+          <div className="flex min-h-44 flex-col items-center justify-center px-5 py-8 text-center">
+            <div className="mb-3 flex size-12 items-center justify-center rounded-full border border-border/70 bg-muted/40 text-muted-foreground">
+              <Bell className="size-5" />
             </div>
-            <p className="text-sm font-medium text-foreground">No notifications</p>
-            <p className="text-xs text-muted-foreground">
-              {activeFilterCount > 0 || inboxTab !== "all"
-                ? "Try clearing filters or include archived items."
-                : "You're all caught up."}
+            <p className="text-sm font-semibold text-foreground">
+              {inboxTab === "all" ? "You’re all caught up" : `No ${inboxTab} notifications`}
+            </p>
+            <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+              {inboxTab === "all"
+                ? "New notifications will show up here."
+                : "New notifications in this category will show up here."}
             </p>
           </div>
         ) : null}
@@ -824,7 +611,7 @@ export function NotificationCenter({
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={listAnimationKey}
-                className="grid gap-1.5"
+                className="grid gap-0"
                 variants={shouldAnimate ? notificationListVariants : undefined}
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
@@ -842,10 +629,19 @@ export function NotificationCenter({
                   const categoryLabel = notificationCategoryLabel(row)
                   const busy = id !== null && busyIds.includes(id)
                   const rowKey = id != null ? `notification-${id}` : `notification-${index}`
+                  const groupLabel = notificationGroupLabel(createdAt)
+                  const previousCreatedAt = index > 0
+                    ? readString(visibleItems[index - 1], ["created_at", "createdAt"])
+                    : ""
+                  const showGroupHeading = index === 0 || notificationGroupLabel(previousCreatedAt) !== groupLabel
 
                   return (
+                    <React.Fragment key={rowKey}>
+                    {showGroupHeading ? (
+                      <p className="px-3 pb-1.5 pt-3 text-xs font-semibold text-muted-foreground">{groupLabel}</p>
+                    ) : null}
                     <motion.div
-                      key={rowKey}
+                      key={`${rowKey}-row`}
                       layout={shouldAnimate}
                       variants={shouldAnimate ? notificationItemVariants : undefined}
                       initial={shouldAnimate ? "hidden" : false}
@@ -853,48 +649,61 @@ export function NotificationCenter({
                       exit={shouldAnimate ? "exit" : undefined}
                       className={cn("group", archived ? "opacity-75" : null)}
                     >
-                      <Card
-                        appearance={unread ? "filled-alternative" : "outline"}
-                        size="small"
+                      <div
                         className={cn(
-                          "relative !flex-row !items-center gap-3 !rounded-xl !px-4 !py-3 transition-colors",
-                          unread ? "border-primary/25" : null,
+                          "relative flex items-center gap-2 border-b px-3 py-2 transition-colors",
+                          unread ? "border-blue-100 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/35" : "border-border/70 bg-background",
+                          id !== null && selectedIds.has(id) ? "border-primary bg-primary/10" : null,
                         )}
                       >
-                      {unread ? (
-                        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
-                      ) : null}
+                      {selectionMode ? <input
+                        type="checkbox"
+                        className="size-4 shrink-0 accent-primary"
+                        aria-label={`Select ${title}`}
+                        checked={id !== null && selectedIds.has(id)}
+                        disabled={id === null}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => id !== null && toggleSelected(id)}
+                      /> : <span className="flex w-3 shrink-0 justify-center">{unread ? <span className="size-2 rounded-full bg-blue-600 dark:bg-blue-400" /> : null}</span>}
 
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => void handleNotificationClick(row)}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="min-w-0 flex-1 cursor-pointer text-left"
+                        onClick={() => {
+                          if (selectionMode && id !== null) toggleSelected(id)
+                          else void handleNotificationClick(row)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            if (selectionMode && id !== null) toggleSelected(id)
+                            else void handleNotificationClick(row)
+                          }
+                        }}
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <div
                             className={cn(
-                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                              "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
                               unread
-                                ? "bg-primary/10 text-primary"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200"
                                 : "bg-muted text-muted-foreground"
                             )}
                           >
-                            <Bell className="h-5 w-5" />
+                            <Bell className={cn("h-4 w-4", notificationIconClass(row))} />
                           </div>
                           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5">
                             <div className="flex min-w-0 items-center gap-1">
-                              <p
+                              <span
                                 className={cn(
-                                  "min-w-0 truncate text-sm leading-snug tracking-tight text-foreground",
-                                  unread ? "font-semibold" : "font-medium opacity-90"
+                                  "min-w-0 truncate text-[13px] font-semibold leading-tight tracking-tight text-foreground"
                                 )}
                               >
                                 {title}
-                              </p>
+                              </span>
                               {unread ? (
-                                <span className="shrink-0 rounded-full bg-primary/10 px-1 py-px text-[9px] font-semibold leading-none text-primary">
-                                  New
-                                </span>
+                              <span className="sr-only">Unread</span>
                               ) : null}
                               {archived ? (
                                 <span className="shrink-0 rounded-full bg-violet-50 px-1 py-px text-[9px] font-medium leading-none text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
@@ -903,74 +712,61 @@ export function NotificationCenter({
                               ) : null}
                             </div>
                             {createdAt ? (
-                                <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                                <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
                                 {formatNotificationTime(createdAt)}
                               </span>
                             ) : <span />}
                             {message ? (
-                              <p className="col-span-2 line-clamp-2 text-sm leading-snug text-muted-foreground">
+                              <p className="col-span-2 line-clamp-2 text-xs leading-tight text-muted-foreground">
                                 {message}
                               </p>
                             ) : null}
-                            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] leading-tight">
-                              <span className={cn("font-medium", categoryTextClass(categoryLabel))}>
-                                {categoryLabel}
-                              </span>
-                              <span className="text-border">·</span>
-                              <span className={cn(priorityTextClass(priorityLabel))}>
-                                {priorityLabel}
-                              </span>
-                              {relatedModule ? (
-                                <>
-                                  <span className="text-border">·</span>
-                                  <span className="text-muted-foreground">
-                                    {formatLabel(relatedModule)}
-                                  </span>
-                                </>
-                              ) : null}
-                              {!seen ? (
-                                <>
-                                  <span className="text-border">·</span>
-                                  <span className="text-amber-700 dark:text-amber-400">Unseen</span>
-                                </>
-                              ) : null}
+                            <div className="col-span-2 flex min-w-0 items-center gap-1.5 text-[11px] leading-tight text-muted-foreground">
+                              <span className={cn("font-medium", categoryTextClass(categoryLabel))}>{categoryLabel}</span>
+                              {relatedModule ? <><span>·</span><span>{formatLabel(relatedModule)}</span></> : null}
+                              {priorityLabel === "Urgent" ? <span className={cn("font-medium", priorityTextClass(priorityLabel))}>· Urgent</span> : null}
+                              {!seen ? <span>· Unseen</span> : null}
                             </div>
                           </div>
                         </div>
-                      </button>
+                      </div>
 
                       {/* Always-visible inline actions — system primary color */}
                       <div
-                        className="flex shrink-0 items-center gap-0"
+                        className="relative flex shrink-0 items-center gap-0"
                         onClick={(event) => event.stopPropagation()}
                       >
                         {busy ? (
-                          <FluentLoadingIndicator className="mx-1 h-3.5 w-3.5 animate-spin text-primary" />
+                          <span
+                            role="status"
+                            aria-label="Updating notification"
+                            className="absolute -left-4 top-1/2 z-10 size-4 -translate-y-1/2 animate-spin rounded-full border-2 border-primary/20 border-t-primary bg-background"
+                          />
                         ) : null}
                             <Button
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                          className="!size-10 !min-w-10 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                           disabled={busy}
                           title="Open"
                           aria-label={`Open ${title}`}
                           onClick={() => void handleNotificationClick(row)}
                         >
-                          <ArrowUpRight className="h-3 w-3" />
+                          <ArrowUpRight className="h-5 w-5 text-sky-600 dark:text-sky-400" />
                         </Button>
                         {!archived && unread ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-10 !min-w-10 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark read"
                             aria-label={`Mark ${title} as read`}
                             onClick={() => void handleMarkRead(row)}
                           >
-                            <Check className="h-3 w-3" />
+                            <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                           </Button>
                         ) : null}
                         {!archived && !seen ? (
@@ -978,13 +774,13 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-10 !min-w-10 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark seen"
                             aria-label={`Mark ${title} as seen`}
                             onClick={() => void handleMarkSeen(row)}
                           >
-                            <Eye className="h-3 w-3" />
+                            <Eye className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                           </Button>
                         ) : null}
                         {!archived ? (
@@ -992,22 +788,31 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-10 !min-w-10 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Archive"
                             aria-label={`Archive ${title}`}
                             onClick={() => void handleArchive(row)}
                           >
-                            <Archive className="h-3 w-3" />
+                            <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                           </Button>
                         ) : null}
                       </div>
-                      </Card>
+                      </div>
                     </motion.div>
+                    </React.Fragment>
                   )
                 })}
               </motion.div>
             </AnimatePresence>
+          </div>
+        ) : null}
+        {hasMore && visibleItems.length > 0 ? (
+          <div className="flex justify-center py-4">
+            <Button type="button" variant="outline" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+              {loadingMore ? <FluentLoadingIndicator className="mr-2 size-4 animate-spin" /> : null}
+              {loadingMore ? "Loading notifications…" : "Load more notifications"}
+            </Button>
           </div>
         ) : null}
       </div>

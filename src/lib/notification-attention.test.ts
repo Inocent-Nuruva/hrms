@@ -22,6 +22,15 @@ describe("notification attention routing", () => {
     })).toBe("/dashboard/leave-management/requests?highlight=7")
   })
 
+  it("routes daily activity report reminders to the self-service report page", () => {
+    expect(resolveNotificationUrl({
+      type: "DAILY_ACTIVITY_NOT_SUBMITTED",
+      entity_type: "DAILY_ACTIVITY_REPORT",
+      action_url: "/me/daily-activities",
+      title: "Daily Activity Not Submitted",
+    })).toBe("/dashboard/me/activities/today")
+  })
+
   it("only exposes unread notification destinations", () => {
     expect(notificationAttentionRoutes([
       { status: "UNREAD", action_url: "/dashboard/me/onboarding" },

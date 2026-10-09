@@ -13,6 +13,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { Sparkles } from 'lucide-react-native';
 import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
@@ -189,7 +190,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor }]} edges={[]}>
-      <MobileTopBar auth={auth} title="Dashboard" variant="centered" titleWeight="400" />
+      <MobileTopBar auth={auth} title="Dashboard" variant="centered" titleWeight="700" />
       <ScrollView
         style={[styles.scroll, { backgroundColor }]}
         contentContainerStyle={[
@@ -199,66 +200,64 @@ export function HomeScreen({ auth, onTabChange }: Props) {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[appAccent]} />}
       >
         <ScreenTransition style={styles.screenTransition}>
-          {isOnboarding ? (
-            <View
-              style={[
-                styles.onboardingBanner,
-                {
-                  backgroundColor: isDark ? '#332A18' : '#FFFBEB',
-                  borderColor: isDark ? '#765B24' : '#FDE68A',
-                },
-              ]}
-            >
-              <View style={[styles.onboardingAccent, { backgroundColor: isDark ? '#F5C16C' : '#D97706' }]} />
-              <Text style={[styles.onboardingText, { color: isDark ? '#FDE68A' : '#92400E' }]}>
-                Your profile is still in onboarding.
-              </Text>
-              <Button
-                variant="default"
-                onPress={() => onTabChange?.('profile')}
-                style={[styles.onboardingButton, { backgroundColor: profileCardAccent, alignSelf: 'center', minWidth: 0 }]}
-              >
-                Finish onboarding
-              </Button>
-            </View>
-          ) : null}
-
-          <View style={[styles.dayHero, compactLayout && styles.dayHeroCompact]}>
-            <Text style={[styles.dateLabel, { color: mutedColor }]}>{formatHeaderDate(now)}</Text>
-            <Text style={[styles.greeting, { color: textColor }]}>
-              {getGreeting(now)}, {preferredName}
-            </Text>
-            <View style={styles.dayStatusRow}>
-              {onClock ? <View style={styles.dayPulse} /> : null}
-              <Text style={[styles.dayStatus, { color: onClock ? textColor : mutedColor }]}>{dayLine}</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: isDark ? '#252B32' : '#FFFFFF', borderColor: isDark ? '#3A4654' : '#E3EDF4' }]}>
-              {snapshots.map((snapshot, index) => (
-                <React.Fragment key={snapshot.label}>
-                  {index > 0 ? <View style={[styles.statDivider, { backgroundColor: isDark ? '#3A4654' : '#E6EEF4' }]} /> : null}
-                  <TouchableScale
-                    accessibilityRole="button"
-                    accessibilityLabel={`${snapshot.label} ${snapshot.value}`}
-                    onPress={() => onTabChange?.(snapshot.icon === 'leave' ? 'leave' : 'attendance')}
-                    style={styles.statTile}
-                  >
-                    <FluentSystemIcon name={snapshot.icon} size={16} color={profileCardAccent} />
-                    <Text style={[styles.snapshotLabel, { color: mutedColor }]}>{snapshot.label}</Text>
-                    <Text numberOfLines={1} style={[styles.snapshotValue, { color: textColor }]}>{snapshot.value}</Text>
-                  </TouchableScale>
-                </React.Fragment>
-              ))}
-            </View>
-          </View>
-
           <View style={[styles.profileCardShadow, { shadowColor: profileCardIsLight ? '#34536B' : profileCardColor }]}>
             <View style={[styles.profileCard, { backgroundColor: profileCardColor, borderColor: profileCardIsLight ? 'rgba(15,23,42,0.08)' : 'transparent' }]}>
               <View pointerEvents="none" style={styles.profileArtClip}>
                 <View style={styles.profileArtShift}>
-                  <ProfileCardDoodles artwork={profileCardStyle.artwork} vivid onLight={profileCardIsLight} />
+                  <ProfileCardDoodles artwork={profileCardStyle.artwork} onLight={profileCardIsLight} />
                 </View>
               </View>
+              <View pointerEvents="none" style={styles.profileWaves}>
+                {[0, 1, 2, 3, 4].map((wave) => (
+                  <View
+                    key={wave}
+                    style={[
+                      styles.profileWave,
+                      styles[`profileWave${wave}` as 'profileWave0'],
+                      { backgroundColor: wave === 4 ? backgroundColor : profileCardIsLight ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)' },
+                    ]}
+                  />
+                ))}
+              </View>
               <View style={styles.profileCardBody}>
+                <View style={styles.heroHeaderBand}>
+                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                    <ProfileCardDoodles artwork={profileCardStyle.artwork} onLight vivid />
+                  </View>
+                  <Text style={styles.dateLabel}>{formatHeaderDate(now)}</Text>
+                  <View style={styles.heroGreetingRow}>
+                    <Text style={styles.heroGreeting}>{getGreeting(now)},</Text>
+                    <AnimatedGreetingName name={preferredName} color={profileCardAccent} />
+                  </View>
+                </View>
+                <View style={styles.heroStats}>
+                  {snapshots.map((snapshot, index) => (
+                    <React.Fragment key={snapshot.label}>
+                      {index > 0 ? <View style={[styles.heroStatDivider, { backgroundColor: profileCardIsLight ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)' }]} /> : null}
+                      <TouchableScale
+                        accessibilityRole="button"
+                        accessibilityLabel={`${snapshot.label} ${snapshot.value}`}
+                        onPress={() => onTabChange?.(snapshot.icon === 'leave' ? 'leave' : 'attendance')}
+                        style={styles.heroStatTile}
+                      >
+                        {snapshot.icon === 'leave' ? <View style={styles.snapshotIconPlaceholder} /> : <FluentSystemIcon name={snapshot.icon} size={16} color={profileCardAccent} />}
+                        <Text style={[styles.snapshotLabel, { color: profileCardMutedColor }]}>{snapshot.label}</Text>
+                        <Text numberOfLines={1} style={[styles.snapshotValue, { color: profileCardTextColor }]}>{snapshot.value}</Text>
+                      </TouchableScale>
+                    </React.Fragment>
+                  ))}
+                </View>
+                {onClock || dayLine !== 'No check-in yet today.' ? (
+                  <View style={styles.heroStatusRow}>
+                    <View style={[styles.heroStatusDot, { backgroundColor: onClock ? '#168A63' : profileCardMutedColor }]} />
+                    <Text numberOfLines={2} style={[styles.heroStatus, { color: profileCardMutedColor }]}>
+                      {onClock ? `On the clock · ${dayLine}` : dayLine}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.heroIdentityLabel}>
+                  <Text style={[styles.heroIdentityCaption, { color: profileCardMutedColor }]}>YOUR PROFILE</Text>
+                </View>
                 <View style={styles.identityRow}>
                   <View style={[styles.avatarShell, compactLayout && styles.avatarShellCompact, { borderColor: profileCardIsLight ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.92)' }]}>
                     <NativeText style={[styles.avatarInitials, { color: profileCardIsLight ? profileCardAccent : '#FFFFFF' }]}>{initials}</NativeText>
@@ -305,8 +304,32 @@ export function HomeScreen({ auth, onTabChange }: Props) {
             </View>
           </View>
 
+          {isOnboarding ? (
+            <View
+              style={[
+                styles.onboardingBanner,
+                {
+                  backgroundColor: isDark ? '#332A18' : '#FFFBEB',
+                  borderColor: isDark ? '#765B24' : '#FDE68A',
+                },
+              ]}
+            >
+              <View style={[styles.onboardingAccent, { backgroundColor: isDark ? '#F5C16C' : '#D97706' }]} />
+              <Text style={[styles.onboardingText, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+                Your profile is still in onboarding.
+              </Text>
+              <Button
+                variant="default"
+                onPress={() => onTabChange?.('profile')}
+                style={[styles.onboardingButton, { backgroundColor: profileCardAccent, alignSelf: 'center', minWidth: 0 }]}
+              >
+                Finish onboarding
+              </Button>
+            </View>
+          ) : null}
+
           <Text style={[styles.sectionHeading, { color: textColor }]}>Shortcuts</Text>
-          <View style={[styles.shortcutCard, { backgroundColor: isDark ? '#252B32' : '#FFFFFF', borderColor: isDark ? '#3A4654' : '#E3EDF4' }]}>
+          <View style={[styles.shortcutCard, { backgroundColor: isDark ? '#252B32' : '#FFFFFF', borderColor: isDark ? '#3A4654' : '#E5E7EB' }]}>
             {quickActions.map((action, index) => (
               <React.Fragment key={action.label}>
                 {index > 0 ? <View style={[styles.shortcutDivider, { backgroundColor: isDark ? '#3A4654' : '#E6EEF4' }]} /> : null}
@@ -327,7 +350,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
             ))}
           </View>
 
-          <Card variant="elevated" style={styles.attendanceCard}>
+          <Card variant="default" style={styles.attendanceCard}>
             <View style={styles.attendanceHeader}>
               <View style={styles.attendanceHeaderCopy}>
                 <Text style={[styles.attendanceTitle, { color: textColor }]}>Your week</Text>
@@ -514,7 +537,7 @@ function formatDate(value: unknown) {
 }
 
 function formatHeaderDate(value: Date) {
-  return value.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }).toUpperCase();
+  return value.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' });
 }
 
 function getGreeting(date: Date) {
@@ -698,6 +721,47 @@ function AnimatedAttendanceHours({ minutes, color }: { minutes: number; color: s
   return <Text style={[styles.attendanceHours, { color }]}>{formatChartHours(displayMinutes)}</Text>;
 }
 
+function AnimatedGreetingName({ name, color }: { name: string; color: string }) {
+  const [sparkleValues] = React.useState(() => [
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]);
+
+  React.useEffect(() => {
+    const animations = sparkleValues.map((value, index) => Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 230),
+        Animated.timing(value, { toValue: 1, duration: 650, useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0.25, duration: 700, useNativeDriver: true }),
+        Animated.delay(750),
+        Animated.timing(value, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]),
+    ));
+    animations.forEach((animation) => animation.start());
+    return () => animations.forEach((animation) => animation.stop());
+  }, [sparkleValues]);
+
+  return (
+    <View style={styles.greetingNameWrap}>
+      <Text style={[styles.greetingName, { color }]}>{name}</Text>
+      {sparkleValues.map((value, index) => (
+        <Animated.View
+          key={index}
+          pointerEvents="none"
+          style={[
+            styles.greetingSparkle,
+            index === 0 ? { top: -5, left: -7 } : index === 1 ? { top: -6, right: -6 } : { bottom: -3, right: 3 },
+            { opacity: value, transform: [{ scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }] },
+          ]}
+        >
+          <Sparkles size={index === 2 ? 8 : 10} color={color} strokeWidth={2.5} />
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 function formatWeekRange(start: Date, end: Date) {
   const startLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const endLabel = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -718,7 +782,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 10,
     paddingRight: 8,
     paddingVertical: 6,
     overflow: 'hidden',
@@ -726,37 +790,31 @@ const styles = StyleSheet.create({
   onboardingAccent: { width: 4, alignSelf: 'stretch', borderRadius: 4 },
   onboardingText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' },
   onboardingButton: { minHeight: 34, paddingHorizontal: 12 },
-  dayHero: { marginHorizontal: 16, marginTop: 16, paddingHorizontal: 2 },
-  dayHeroCompact: { marginTop: 12 },
-  dayStatusRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 6 },
-  dayPulse: { width: 8, height: 8, marginTop: 6, borderRadius: 4, backgroundColor: '#168A63' },
-  dayStatus: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '500' },
-  statCard: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginTop: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  statDivider: { width: StyleSheet.hairlineWidth, marginVertical: 12 },
-  statTile: { flex: 1, minWidth: 0, minHeight: 74, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 10 },
-  dateLabel: { fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 1.2 },
-  greeting: { marginTop: 2, fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.8 },
-  snapshotLabel: { marginTop: 7, fontSize: 10, lineHeight: 13, fontWeight: '700', letterSpacing: 0.5 },
-  snapshotValue: { marginTop: 2, fontSize: 16, lineHeight: 21, fontWeight: '700', letterSpacing: -0.2 },
+  heroHeaderBand: { position: 'relative', overflow: 'hidden', marginHorizontal: -16, marginTop: -8, marginBottom: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 0, backgroundColor: '#FFFFFF' },
+  dateLabel: { fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 0.8, color: '#64748B' },
+  heroGreetingRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, marginTop: 2 },
+  heroGreeting: { fontSize: 23, lineHeight: 30, fontWeight: '500', letterSpacing: -0.3, color: '#243447' },
+  greetingNameWrap: { position: 'relative' },
+  greetingName: { fontSize: 23, lineHeight: 30, fontWeight: '700', letterSpacing: -0.4 },
+  greetingSparkle: { position: 'absolute' },
+  heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 0 },
+  heroStatusDot: { width: 7, height: 7, borderRadius: 4 },
+  heroStatus: { flex: 1, fontSize: 11, lineHeight: 16, fontWeight: '500' },
+  heroStats: { flexDirection: 'row', alignItems: 'stretch', marginTop: 4, paddingTop: 4, paddingBottom: 0, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128,150,170,0.2)', borderBottomColor: 'rgba(128,150,170,0.2)' },
+  heroStatTile: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 2 },
+  heroStatDivider: { width: StyleSheet.hairlineWidth, marginVertical: 3 },
+  snapshotIconPlaceholder: { height: 16 },
+  heroIdentityLabel: { marginBottom: 7 },
+  heroIdentityCaption: { fontSize: 9, lineHeight: 12, fontWeight: '700', letterSpacing: 0.8 },
+  snapshotLabel: { marginTop: 5, fontSize: 8, lineHeight: 11, fontWeight: '700', letterSpacing: 0.3 },
+  snapshotValue: { marginTop: 1, fontSize: 13, lineHeight: 17, fontWeight: '700', letterSpacing: -0.1 },
   profileCardShadow: {
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 24,
-    shadowOpacity: 0.22,
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 18,
-    elevation: 7,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   profileCard: {
-    borderRadius: 24,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderWidth: 0,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -764,86 +822,107 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 4,
     bottom: 6,
-    width: 148,
-    height: 96,
+    width: 112,
+    height: 72,
     overflow: 'hidden',
   },
   profileArtShift: {
     position: 'absolute',
-    width: 240,
-    height: 126,
-    right: -18,
-    bottom: -16,
+    width: 190,
+    height: 100,
+    right: -28,
+    bottom: -20,
   },
+  profileWaves: {
+    position: 'absolute',
+    height: 34,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  profileWave: {
+    position: 'absolute',
+    width: '130%',
+    height: 30,
+    left: '-15%',
+    borderTopLeftRadius: 80,
+    borderTopRightRadius: 80,
+  },
+  profileWave0: { bottom: -22, transform: [{ rotate: '-4deg' }] },
+  profileWave1: { bottom: -25, transform: [{ rotate: '3deg' }] },
+  profileWave2: { bottom: -28, transform: [{ rotate: '-2deg' }] },
+  profileWave3: { bottom: -31, transform: [{ rotate: '4deg' }] },
+  profileWave4: { bottom: -34, transform: [{ rotate: '-1deg' }] },
   profileCardBody: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 0,
     paddingBottom: 16,
     zIndex: 1,
   },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatarShell: {
-    width: 62,
-    height: 62,
+    width: 54,
+    height: 54,
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderRadius: 31,
+    borderRadius: 27,
     borderWidth: 2,
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
-  avatarShellCompact: { width: 56, height: 56, borderRadius: 28 },
+  avatarShellCompact: { width: 50, height: 50, borderRadius: 25 },
   avatarImage: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   avatarInitials: { fontFamily: 'Comfortaa_600SemiBold', fontSize: 18, fontWeight: '600' },
   identityCopy: { flex: 1, minWidth: 0 },
-  employeeName: { fontSize: 22, lineHeight: 28, fontWeight: '700', letterSpacing: -0.5 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  employeeName: { fontSize: 18, lineHeight: 23, fontWeight: '700', letterSpacing: -0.3 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   employeeStatusPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   employeeStatus: { fontSize: 11, lineHeight: 14, fontWeight: '600' },
   profileArrow: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14, rowGap: 10, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
+  detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 9, rowGap: 6, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 8 },
   profileField: { width: '50%', paddingRight: 10 },
-  profileFieldLabel: { fontSize: 10, lineHeight: 14, fontWeight: '600', letterSpacing: 0.3 },
-  profileFieldValue: { marginTop: 2, fontSize: 14, lineHeight: 18, fontWeight: '700' },
-  sectionHeading: { marginTop: 18, marginBottom: 8, marginHorizontal: 20, fontSize: 15, lineHeight: 20, fontWeight: '700', letterSpacing: -0.2 },
+  profileFieldLabel: { fontSize: 9, lineHeight: 12, fontWeight: '600', letterSpacing: 0.25 },
+  profileFieldValue: { marginTop: 1, fontSize: 11, lineHeight: 14, fontWeight: '700' },
+  sectionHeading: { marginTop: 12, marginBottom: 5, marginHorizontal: 18, fontSize: 14, lineHeight: 19, fontWeight: '700', letterSpacing: -0.1 },
   shortcutCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
     marginHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
   },
-  shortcutDivider: { width: StyleSheet.hairlineWidth, marginVertical: 12 },
-  shortcut: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, gap: 8 },
-  shortcutIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
-  shortcutLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', textAlign: 'center' },
+  shortcutDivider: { width: StyleSheet.hairlineWidth, marginVertical: 10 },
+  shortcut: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 9, paddingHorizontal: 3, gap: 5 },
+  shortcutIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
+  shortcutLabel: { fontSize: 10, lineHeight: 13, fontWeight: '700', textAlign: 'center' },
   attendanceCard: {
     marginHorizontal: 16,
-    marginTop: 14,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    borderRadius: 20,
+    marginTop: 12,
+    paddingHorizontal: 13,
+    paddingTop: 13,
+    paddingBottom: 12,
+    borderRadius: 12,
   },
   attendanceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   attendanceHeaderCopy: { flex: 1 },
-  attendanceTitle: { fontSize: 16, lineHeight: 22, fontWeight: '700', letterSpacing: -0.2 },
-  attendanceRange: { marginTop: 1, fontSize: 12, lineHeight: 16, fontWeight: '500' },
-  streakPill: { maxWidth: 148, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  streakLine: { fontSize: 11, lineHeight: 15, fontWeight: '700' },
+  attendanceTitle: { fontSize: 14, lineHeight: 19, fontWeight: '700', letterSpacing: -0.1 },
+  attendanceRange: { marginTop: 1, fontSize: 11, lineHeight: 15, fontWeight: '500' },
+  streakPill: { maxWidth: 148, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
+  streakLine: { fontSize: 10, lineHeight: 14, fontWeight: '700' },
   attendanceSummary: {
     flexDirection: 'row',
-    marginTop: 14,
-    paddingBottom: 12,
+    marginTop: 12,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(148,163,184,0.35)',
   },
   attendanceSummaryItem: { flex: 1 },
-  attendanceSummaryValue: { fontSize: 18, lineHeight: 23, fontWeight: '700', letterSpacing: -0.3 },
-  attendanceSummaryLabel: { marginTop: 2, fontSize: 11, lineHeight: 14, fontWeight: '600' },
-  attendanceChart: { height: 128, flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 12 },
+  attendanceSummaryValue: { fontSize: 16, lineHeight: 21, fontWeight: '700', letterSpacing: -0.2 },
+  attendanceSummaryLabel: { marginTop: 2, fontSize: 10, lineHeight: 13, fontWeight: '600' },
+  attendanceChart: { height: 116, flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 10 },
   attendanceDay: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end' },
   attendanceHours: { height: 16, fontSize: 10, lineHeight: 13, fontWeight: '700' },
   attendanceBarTrack: {

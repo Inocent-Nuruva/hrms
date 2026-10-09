@@ -55,10 +55,20 @@ export function resolveNotificationUrl(row: AdminRecord) {
     readString(row, ["entity_id", "entityId", "request_id", "requestId"]) ||
     readString(metadata, ["request_id", "requestId", "entity_id", "entityId"])
 
-  if (direct.startsWith("/")) return appendRequestHighlight(direct, requestId)
+  if (direct.startsWith("/")) {
+    if (/^\/(?:dashboard\/)?me\/daily-activities(?:\/|\?|$)/i.test(direct)) {
+      return "/dashboard/me/activities/today"
+    }
+    return appendRequestHighlight(direct, requestId)
+  }
 
   const nested = readString(metadata, ["action_url", "actionUrl", "url", "link"])
-  if (nested.startsWith("/")) return appendRequestHighlight(nested, requestId)
+  if (nested.startsWith("/")) {
+    if (/^\/(?:dashboard\/)?me\/daily-activities(?:\/|\?|$)/i.test(nested)) {
+      return "/dashboard/me/activities/today"
+    }
+    return appendRequestHighlight(nested, requestId)
+  }
 
   const entityType = (
     readString(row, ["entity_type", "entityType", "type"]) ||
@@ -77,9 +87,27 @@ export function resolveNotificationUrl(row: AdminRecord) {
     onboarding_task_assigned: "/dashboard/me/requests/actions",
     offboarding_request: "/dashboard/employees/offboarding",
     offboarding_request_submitted: "/dashboard/employees/offboarding",
+    daily_activity_report: "/dashboard/me/activities/today",
+    daily_activity_not_submitted: "/dashboard/me/activities/today",
+    daily_activity_not_submitted_employee: "/dashboard/me/activities/today",
   }
 
-  return appendRequestHighlight(destinationByType[entityType] ?? "/dashboard", requestId)
+  if (destinationByType[entityType]) {
+    return appendRequestHighlight(destinationByType[entityType], requestId)
+  }
+
+  const notificationHints = [
+    entityType,
+    readString(row, ["related_module", "relatedModule"]),
+    readString(row, ["title", "subject"]),
+    readString(row, ["message", "body", "content", "description"]),
+    readString(metadata, ["template_code", "templateCode"]),
+  ].join(" ").toLowerCase().replace(/[_-]+/g, " ")
+  if (/daily activity|activity report/.test(notificationHints)) {
+    return "/dashboard/me/activities/today"
+  }
+
+  return appendRequestHighlight("/dashboard", requestId)
 }
 
 export function normalizeAttentionPath(url: string) {

@@ -377,6 +377,10 @@ export const api = {
     return request<unknown>('/api/notifications/read-all', { method: 'PATCH' });
   },
 
+  async archiveNotification(id: string | number) {
+    return request<unknown>(`/api/notifications/${id}`, { method: 'DELETE' });
+  },
+
   async updateMyDashboardCardStyle(style: { palette: string; artwork: string }) {
     return request<unknown>('/api/users/me/dashboard-card-style', {
       method: 'PATCH',
