@@ -247,7 +247,10 @@ const adminData: SidebarData = {
       ],
       icon: EmployeesIcon,
       activeIcon: ActiveEmployeesIcon,
-      items: sidebarWorkspacesFromSections(employeeSectionTabGroups),
+      items: [
+        ...sidebarWorkspacesFromSections(employeeSectionTabGroups),
+        { title: "To do", url: "/dashboard/me/requests/actions" },
+      ],
     },
     {
       title: "Promotion",
@@ -570,7 +573,6 @@ const adminSearchIndex = [
   { title: "Departments", url: "/dashboard/departments", section: "Organization", keywords: ["department", "org"] },
   { title: "Branches", url: "/dashboard/branches", section: "Organization", keywords: ["branch", "location"] },
   { title: "Positions", url: "/dashboard/positions", section: "Organization", keywords: ["position", "job title"] },
-  { title: "Invite & register", url: "/dashboard/operations/recruitment", section: "Operations", keywords: ["hiring", "talent", "recruitment", "invite"] },
   { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
   { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },

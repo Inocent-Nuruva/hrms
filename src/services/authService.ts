@@ -841,7 +841,7 @@ export const authService = {
   },
 
   changePassword(payload: ChangePasswordRequest, token: string) {
-    return apiRequest<void>("/api/users/me/change-password", {
+    return apiRequest<unknown>("/api/users/me/change-password", {
       method: "POST",
       body: {
         old_password: payload.currentPassword,

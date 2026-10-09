@@ -139,6 +139,43 @@ export function useAuth() {
     }
   };
 
+  const refreshSession = async () => {
+    const session = readStoredSessionTokens();
+    const refreshToken = storedTokens?.refreshToken || session.refreshToken;
+    if (!refreshToken) {
+      throw new Error("Your session cannot be refreshed. Please sign in again.");
+    }
+    const response = await authService.refresh(refreshToken);
+    saveSession(response.tokens, response.user ?? storedUser ?? undefined,
+      response.user?.dashboardType ?? storedUser?.dashboardType,
+      response.user?.scope ?? storedUser?.scope);
+    requestDashboardAccessRefresh();
+    return response;
+  };
+
+  const acceptPasswordChangeTokens = (payload: unknown) => {
+    const record = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : {};
+    const data = typeof record.data === "object" && record.data !== null ? record.data as Record<string, unknown> : record;
+    const accessToken = typeof data.accessToken === "string" ? data.accessToken : typeof data.access_token === "string" ? data.access_token : "";
+    const refreshToken = typeof data.refreshToken === "string" ? data.refreshToken : typeof data.refresh_token === "string" ? data.refresh_token : "";
+    if (!accessToken || !refreshToken) {
+      throw new Error("Password changed, but the server did not return a refreshed session. Please sign in again.");
+    }
+    const nextTokens = { accessToken, refreshToken };
+    persistSessionTokens(accessToken, refreshToken);
+    setStoredTokens(nextTokens);
+    const userRecord = typeof data.user === "object" && data.user !== null ? data.user as AuthUser : storedUser;
+    if (userRecord) {
+      const nextUser = { ...userRecord, requiresPasswordChange: false };
+      setStoredUser(nextUser);
+      publishDashboardActorSnapshotFromSources(nextUser, nextTokens, accessToken);
+    } else {
+      publishDashboardActorSnapshotFromSources(nextTokens, accessToken);
+    }
+    requestDashboardAccessRefresh();
+    return nextTokens;
+  };
+
   const logout = async () => {
     try {
       const session = readStoredSessionTokens();
@@ -217,6 +254,8 @@ export function useAuth() {
     login,
     completeOtpLogin,
     refreshCurrentUser,
+    refreshSession,
+    acceptPasswordChangeTokens,
     logout,
     logoutAll,
     listSessions,

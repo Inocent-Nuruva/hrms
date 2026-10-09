@@ -10101,10 +10101,11 @@ export async function submitOnboardingRequest(
 export async function submitMyOnboardingDetails(
   token: string,
   id: string | number,
+  options: { not_provided_items?: string[] } = {},
 ) {
   return adminRequest<unknown>(
     `/api/onboarding/requests/${id}/employee-details/submit`,
-    { method: "POST", token },
+    { method: "POST", token, body: options },
   );
 }
 

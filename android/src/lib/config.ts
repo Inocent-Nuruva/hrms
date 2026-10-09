@@ -6,7 +6,7 @@
 
 export const API_BASE_URL =
   // Change this to match your backend (same as web NEXT_PUBLIC_API_BASE_URL or default)
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'http://192.168.2.22:8888';
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || 'http://192.168.1.30:9999';
 
 export const APP_NAME = 'HRMS';
 export const APP_SUBTITLE = 'Employee Portal';

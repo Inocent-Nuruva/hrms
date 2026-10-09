@@ -49,6 +49,8 @@ import {
   createMyEmployeeDocument,
   fileToBase64UploadDto,
   patchEmployeeStatus,
+  listMyOnboardingRequests,
+  submitMyOnboardingDetails,
   createAttendanceMobilePunchCheckIn,
   createAttendanceMobilePunchCheckOut,
   type AdminRecord,
@@ -3638,6 +3640,9 @@ export function EmployeeHomeDashboard() {
   const [isAdmin, setIsAdmin] = React.useState(true)
   const [showOnboardingDialog, setShowOnboardingDialog] = React.useState(false)
   const [completedOnboardingItems, setCompletedOnboardingItems] = React.useState<string[]>([])
+  const [onboardingDetailsSubmitted, setOnboardingDetailsSubmitted] = React.useState(false)
+  const [unavailableOptionalItems, setUnavailableOptionalItems] = React.useState<string[]>([])
+  const [onboardingSubmissionError, setOnboardingSubmissionError] = React.useState<string | null>(null)
   const [accessToken, setAccessToken] = React.useState<string>("")
   const [fillingItemKey, setFillingItemKey] = React.useState<string | null>(null)
   const [formValues, setFormValues] = React.useState<Record<string, string>>({})
@@ -3799,6 +3804,39 @@ export function EmployeeHomeDashboard() {
       cancelled = true
     }
   }, [])
+
+  React.useEffect(() => {
+    const userId = dashboardData?.user?.id
+    if (!userId || typeof window === "undefined") return
+    let cancelled = false
+    try {
+      const skipped = JSON.parse(window.localStorage.getItem(`onboarding_unavailable_optional_${userId}`) || "[]")
+      setUnavailableOptionalItems(Array.isArray(skipped) ? skipped.filter((item): item is string => typeof item === "string") : [])
+      setOnboardingDetailsSubmitted(window.localStorage.getItem(`onboarding_details_submitted_${userId}`) === "true")
+    } catch {
+      setUnavailableOptionalItems([])
+      setOnboardingDetailsSubmitted(false)
+    }
+    if (accessToken) {
+      void listMyOnboardingRequests(accessToken).then((requests) => {
+        if (cancelled) return
+        const openRequest = requests.find((request) => {
+          const status = String(request.status ?? request.request_status ?? "").toLowerCase()
+          return status !== "completed" && status !== "cancelled" && status !== "activating"
+        })
+        const metadata = asRecord(openRequest?.metadata)
+        const review = asRecord(openRequest?.employee_details_review) ?? asRecord(metadata?.employee_details_review)
+        const reviewStatus = String(review?.status ?? "").toLowerCase()
+        const submitted = ["submitted", "in_review", "approved"].includes(reviewStatus)
+        setOnboardingDetailsSubmitted(submitted)
+        if (submitted) window.localStorage.setItem(`onboarding_details_submitted_${userId}`, "true")
+        else window.localStorage.removeItem(`onboarding_details_submitted_${userId}`)
+      }).catch(() => {})
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, dashboardData?.user?.id])
 
   React.useEffect(() => {
     const shouldPreload = (fillingItemKey === "addresses" || showOnboardingDialog) && publicCountryStates.length === 0 && !publicLocationLoading
@@ -4003,7 +4041,9 @@ export function EmployeeHomeDashboard() {
   const unfilledItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
     if (!EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key)) return false
     const emp = dashboardData.employee as Record<string, unknown>
-    return !employeeSectionHasItems(emp, item.key) && !completedOnboardingItems.includes(item.key)
+    return !employeeSectionHasItems(emp, item.key) &&
+      !completedOnboardingItems.includes(item.key) &&
+      !unavailableOptionalItems.includes(item.key)
   })
   // Only required sections block completion; optional ones can be skipped.
   const pendingItems = unfilledItems.filter((item) => !item.optional)
@@ -4060,6 +4100,18 @@ export function EmployeeHomeDashboard() {
   }
 
   const startFilling = (key: string) => {
+    if (unavailableOptionalItems.includes(key)) {
+      const nextUnavailable = unavailableOptionalItems.filter((item) => item !== key)
+      setUnavailableOptionalItems(nextUnavailable)
+      if (dashboardData?.user?.id) {
+        window.localStorage.setItem(`onboarding_unavailable_optional_${dashboardData.user.id}`, JSON.stringify(nextUnavailable))
+      }
+    }
+    setOnboardingSubmissionError(null)
+    setOnboardingDetailsSubmitted(false)
+    if (dashboardData?.user?.id) {
+      window.localStorage.removeItem(`onboarding_details_submitted_${dashboardData.user.id}`)
+    }
     const init = getInitialFormValues(key)
 
     // Prefill known good values from loaded profile for nicer UX
@@ -4081,6 +4133,43 @@ export function EmployeeHomeDashboard() {
     setFormValues(init)
     setDocumentUploadFile(null)
     setFormError(null)
+  }
+
+  const markOptionalUnavailable = (key: string) => {
+    const nextUnavailable = Array.from(new Set([...unavailableOptionalItems, key]))
+    setUnavailableOptionalItems(nextUnavailable)
+    setOnboardingSubmissionError(null)
+    if (dashboardData?.user?.id) {
+      window.localStorage.setItem(`onboarding_unavailable_optional_${dashboardData.user.id}`, JSON.stringify(nextUnavailable))
+    }
+  }
+
+  const submitCompletedOnboardingDetails = async () => {
+    if (!dashboardData || !accessToken) return
+    setOnboardingSubmissionError(null)
+    try {
+      const requests = await listMyOnboardingRequests(accessToken)
+      const openRequest = requests.find((request) => {
+        const status = String(request.status ?? request.request_status ?? "").toLowerCase()
+        return status !== "completed" && status !== "cancelled" && status !== "activating"
+      })
+      const requestId = openRequest ? Number(openRequest.id ?? openRequest.request_id) : NaN
+      if (!Number.isFinite(requestId) || requestId <= 0) {
+        throw new Error("No open onboarding request was found for this employee. Contact HR for help.")
+      }
+      const notProvidedItems = unavailableOptionalItems.filter((key) =>
+        key === "professional_qualifications" || key === "experience_details",
+      )
+      await submitMyOnboardingDetails(accessToken, requestId, {
+        not_provided_items: notProvidedItems,
+      })
+      setOnboardingDetailsSubmitted(true)
+      window.localStorage.setItem(`onboarding_details_submitted_${dashboardData.user.id}`, "true")
+    } catch (errorObject) {
+      setOnboardingSubmissionError(
+        errorObject instanceof Error ? errorObject.message : "Could not submit your details to HR. Please try again.",
+      )
+    }
   }
 
   const cancelFilling = () => {
@@ -4166,7 +4255,7 @@ export function EmployeeHomeDashboard() {
             await saveDocument({
               title: `${certificateSection.titlePrefix} - ${String(formValues[certificateSection.titleField] || "Qualification")}`,
               type: "certificate",
-              onboarding_section: certificateSection.documentSection,
+              metadata: { onboarding_section: certificateSection.documentSection },
               classification: "CONFIDENTIAL",
               notes: `Uploaded with ${currentFillingItem?.label.toLowerCase() ?? "qualification"} profile completion.`,
               file: await fileToBase64UploadDto(documentUploadFile),
@@ -4232,7 +4321,7 @@ export function EmployeeHomeDashboard() {
 
       // If this was the last pending, close. Only HR may activate the employee;
       // a self-onboarding employee stays "onboarding" until HR reviews.
-      if (remainingAfter <= 0) {
+      if (remainingAfter <= 0 && !isSelfOnboarding) {
         if (!isSelfOnboarding && dashboardData.employee.employment_status === "onboarding") {
           try {
             await patchEmployeeStatus(accessToken, empId, {
@@ -4295,36 +4384,36 @@ export function EmployeeHomeDashboard() {
         <DialogPopup
           from="bottom"
           showCloseButton={false}
-          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-background p-0 shadow-2xl sm:max-h-[min(92dvh,52rem)] sm:w-[calc(100%-2rem)]"
+          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-xl sm:max-h-[min(88dvh,46rem)] sm:w-[calc(100%-2rem)]"
         >
-            <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 sm:px-6 sm:py-5">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
-                  <UserCheck className="size-5" />
+            <DialogHeader className="m-0 shrink-0 border-b border-border px-3 py-3 sm:px-5 sm:py-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                  <UserCheck className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <DialogTitle className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                  <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
                     {isStillOnboarding ? "Complete your onboarding" : "Complete your profile"}
                   </DialogTitle>
-                  <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                  <DialogDescription className="mt-0.5 max-w-2xl text-[11px] leading-snug text-muted-foreground sm:text-xs">
                     {isStillOnboarding
                       ? "Add the remaining details so HR can finish setting up your employee account."
                       : "Some details were not filled during registration or onboarding. You can complete them now, or continue and we will remind you the next time you sign in."}
                   </DialogDescription>
                 </div>
-                <span className="hidden shrink-0 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline-flex">
+                <span className="shrink-0 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                   {pendingItems.length} remaining
                 </span>
               </div>
 
-              <div className="mt-4 rounded-xl border border-border/80 bg-muted/40 px-4 py-3 sm:px-5">
-                <div className="mb-2 flex items-center justify-between gap-3 text-xs text-foreground">
+              <div className="mt-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2">
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-foreground">
                   <span className="font-semibold">Profile progress</span>
                   <span className="font-semibold tabular-nums text-muted-foreground">
                     {completedProfileItemCount} of {ownedProfileItemCount} complete · {profileCompletionPercent}%
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-background">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
                   <div
                     className="h-full rounded-full bg-primary transition-[width] duration-500"
                     style={{ width: `${profileCompletionPercent}%` }}
@@ -4333,49 +4422,85 @@ export function EmployeeHomeDashboard() {
               </div>
             </DialogHeader>
 
-            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-3.5">
               {pendingItems.length === 0 && !fillingItemKey ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-10 w-10 mx-auto text-emerald-600 mb-3" />
-                  <p className="text-base font-semibold">All done! Your profile is complete.</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                <div className="py-5 text-center">
+                  {isStillOnboarding ? (
+                    <MailCheck className="mx-auto mb-2 size-8 text-primary" />
+                  ) : (
+                    <CheckCircle className="mx-auto mb-2 size-8 text-emerald-600" />
+                  )}
+                  <p className="text-sm font-semibold">
                     {isStillOnboarding
-                      ? "Your account will be activated shortly."
+                      ? onboardingDetailsSubmitted
+                        ? "Your details have been submitted to HR."
+                        : "Complete or mark optional details unavailable before submitting to HR."
+                      : "All done! Your profile is complete."}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    {isStillOnboarding
+                      ? onboardingDetailsSubmitted
+                        ? "Your account remains in onboarding until HR reviews your details and completes activation."
+                        : "If you do not have professional qualifications or previous work experience, mark those sections unavailable."
                       : "Thanks for keeping your records up to date."}
                   </p>
+                  {onboardingSubmissionError ? (
+                    <p role="alert" className="mx-auto mt-2 max-w-lg text-xs text-destructive">
+                      {onboardingSubmissionError}
+                    </p>
+                  ) : null}
                   {optionalUnfilledItems.length > 0 ? (
                     <div className="mx-auto mt-5 max-w-md text-left">
-                      <p className="mb-2 text-xs font-medium text-muted-foreground">You can also add these optional details:</p>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">
+                        Optional details — add them if applicable, or mark them unavailable:
+                      </p>
                       <div className="grid gap-2">
                         {optionalUnfilledItems.map((item) => (
-                          <button
+                          <div
                             key={item.key}
-                            type="button"
-                            onClick={() => startFilling(item.key)}
-                            className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/30 hover:bg-muted/50"
+                            className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm"
                           >
                             <span className="text-primary">{item.icon}</span>
                             <span className="flex-1 font-medium text-foreground">{item.label}</span>
-                            <span className="text-muted-foreground">→</span>
-                          </button>
+                            <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => startFilling(item.key)}>
+                              Add details
+                            </Button>
+                            {isStillOnboarding ? (
+                              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => markOptionalUnavailable(item.key)}>
+                                I don’t have these details
+                              </Button>
+                            ) : null}
+                          </div>
                         ))}
                       </div>
                     </div>
                   ) : null}
+                  {isStillOnboarding && !onboardingDetailsSubmitted ? (
+                    <div className="mt-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={optionalUnfilledItems.length > 0}
+                        onClick={() => void submitCompletedOnboardingDetails()}
+                      >
+                        Submit details to HR
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
-                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-                  <div className="grid lg:grid-cols-[minmax(0,1fr)_15rem]">
-                    <div className="min-w-0 p-4 sm:p-6">
-                      <div className="mb-5 flex items-start justify-between gap-3 border-b border-border pb-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+                <div className="overflow-hidden rounded-xl border border-border bg-card">
+                  <div>
+                    <div className="min-w-0 p-3 sm:p-4">
+                      <div className="mb-3 flex items-start justify-between gap-2 border-b border-border pb-2.5">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
                             {currentFillingItem.icon}
                           </div>
                           <div className="min-w-0">
-                            <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Profile details</p>
-                            <div className="text-base font-semibold tracking-tight text-foreground">{currentFillingItem.label}</div>
-                            <div className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{currentFillingItem.description}</div>
+                            <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">Profile details</p>
+                            <div className="text-sm font-semibold tracking-tight text-foreground">{currentFillingItem.label}</div>
+                            <div className="text-[11px] leading-snug text-muted-foreground">{currentFillingItem.description}</div>
                           </div>
                         </div>
                         <button
@@ -4398,7 +4523,7 @@ export function EmployeeHomeDashboard() {
                       This section is managed by HR. Click <span className="font-medium">Mark complete</span> to finish.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2">
                       {currentFormSchema.map((field) => {
                         const val = formValues[field.name] ?? ""
                         const isAddressLookupField =
@@ -4628,7 +4753,7 @@ export function EmployeeHomeDashboard() {
                 </div>
               ) : (
                 <div>
-                  <div className="mb-3 flex items-end justify-between gap-3">
+                  <div className="mb-2 flex items-end justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Details still needed</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Choose a section and add the information you have.</p>
@@ -4637,7 +4762,7 @@ export function EmployeeHomeDashboard() {
                       {pendingItems.length} remaining
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {REQUIRED_ONBOARDING_ITEMS.map((item, itemIndex) => {
                     const isPending = unfilledItems.some(p => p.key === item.key)
                     if (!isPending) return null
@@ -4646,12 +4771,12 @@ export function EmployeeHomeDashboard() {
                         key={item.key}
                         type="button"
                         onClick={() => startFilling(item.key)}
-                        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition hover:-translate-y-px hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:p-3.5"
+                        className="group flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold tabular-nums text-muted-foreground">
                           {String(itemIndex + 1).padStart(2, "0")}
                         </span>
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                             {item.icon}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -4663,7 +4788,7 @@ export function EmployeeHomeDashboard() {
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">{item.description}</p>
                         </div>
                         <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
                       </button>
@@ -4674,7 +4799,7 @@ export function EmployeeHomeDashboard() {
               )}
             </div>
 
-            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-3 py-2 backdrop-blur sm:px-5">
               <Button 
                 variant="outline"
                 onClick={handleCloseOnboardingDialog} 
@@ -4682,12 +4807,14 @@ export function EmployeeHomeDashboard() {
               >
                 Finish later
               </Button>
-              <Button 
-                onClick={handleCloseOnboardingDialog} 
-                className="h-9 px-5 text-sm"
-              >
-                {fillingItemKey ? "Close" : "Continue to dashboard"}
-              </Button>
+              {!isStillOnboarding ? (
+                <Button
+                  onClick={handleCloseOnboardingDialog}
+                  className="h-9 px-5 text-sm"
+                >
+                  {fillingItemKey ? "Close" : "Continue to dashboard"}
+                </Button>
+              ) : null}
             </DialogFooter>
         </DialogPopup>
       </Dialog>

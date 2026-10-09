@@ -208,6 +208,17 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         return;
       }
 
+      if (response.requiresPasswordChange || response.user?.requiresPasswordChange) {
+        await finishLogin(
+          response.tokens.accessToken,
+          normalizedEmail,
+          `${ROUTES.changePassword}?required=1&next=${encodeURIComponent(homePath)}`,
+          response.dashboardType,
+          response.scope,
+        );
+        return;
+      }
+
       await finishLogin(
         response.tokens.accessToken,
         normalizedEmail,
@@ -246,7 +257,9 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       await finishLogin(
         response.tokens.accessToken,
         completedEmail,
-        homePath,
+        response.user.requiresPasswordChange
+          ? `${ROUTES.changePassword}?required=1&next=${encodeURIComponent(homePath)}`
+          : homePath,
         response.user.dashboardType,
         response.user.scope,
       );

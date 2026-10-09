@@ -4705,12 +4705,20 @@ export function EmployeeProfilePage({
       return []
     }
 
-    return fallbackDepartmentScopedPositionOptions(
+    const matching = fallbackDepartmentScopedPositionOptions(
       positionOptions,
       selectedDepartmentId,
       selectedBranchId
     )
-  }, [departmentId, positionOptions, selectedBranchId])
+    const currentEmployee = employee
+    const selected = positionOptions.find((row) => String(readNumber(row.id) ?? "") === positionId)
+      ?? (currentEmployee && positionId && readRelatedId(currentEmployee, ["primary_position", "primaryPosition", "position", "positionDetail"], ["primary_position_id", "primaryPositionId", "position_id", "positionId"]) === Number(positionId)
+        ? (currentEmployee.primary_position ?? currentEmployee.primaryPosition ?? currentEmployee.position ?? currentEmployee.positionDetail) as AdminRecord
+        : null)
+    return selected && !matching.some((row) => readNumber(row.id) === readNumber(selected.id))
+      ? [...matching, selected]
+      : matching
+  }, [departmentId, employee, positionId, positionOptions, selectedBranchId])
   const filteredCostCenterOptions = React.useMemo(() => {
     const selectedDepartmentId = departmentId ? Number(departmentId) : null
     return costCenterOptions.filter((row) => {
@@ -4744,16 +4752,22 @@ export function EmployeeProfilePage({
       return
     }
 
-    const hasSelectedDepartment = filteredDepartmentOptions.some(
+      const hasSelectedDepartment = filteredDepartmentOptions.some(
       (row) => String(readNumber(row.id) ?? "") === departmentId
-    )
+      ) || departmentOptions.some((row) => String(readNumber(row.id) ?? "") === departmentId)
     if (!hasSelectedDepartment) {
-      setDepartmentId("")
-      setPositionId("")
-      setManagerId("")
-      setCostCenterId("")
+      const currentEmployee = employee
+      const selectedDepartment = departmentOptions.find((row) => String(readNumber(row.id) ?? "") === departmentId)
+        ?? (currentEmployee && readRelatedId(currentEmployee, ["primary_department", "primaryDepartment", "department", "departmentDetail"], ["primary_department_id", "primaryDepartmentId", "department_id", "departmentId"]) === Number(departmentId)
+          ? (currentEmployee.primary_department ?? currentEmployee.primaryDepartment ?? currentEmployee.department ?? currentEmployee.departmentDetail) as AdminRecord
+          : null)
+      if (selectedDepartment) {
+        setDepartmentOptions((current) => current.some((row) => readNumber(row.id) === readNumber(selectedDepartment.id))
+          ? current
+          : [...current, selectedDepartment])
+      }
     }
-  }, [departmentId, filteredDepartmentOptions, identityDialogOpen])
+  }, [departmentId, departmentOptions, employee, filteredDepartmentOptions, identityDialogOpen])
 
   React.useEffect(() => {
     if (!identityDialogOpen || !positionId) {
@@ -5763,15 +5777,7 @@ export function EmployeeProfilePage({
                   setIdentityError("Password must be at least 6 characters.")
                   return
                 }
-                if (!departmentId) {
-                  setIdentityError("Department is required.")
-                  return
-                }
-                if (!positionId) {
-                  setIdentityError("Position is required.")
-                  return
-                }
-                if (!assignmentEffectiveDate.trim()) {
+                if ((departmentId || positionId || branchId || managerId || gradeId || costCenterId) && !assignmentEffectiveDate.trim()) {
                   setIdentityError("Assignment effective date is required.")
                   return
                 }
@@ -5799,21 +5805,23 @@ export function EmployeeProfilePage({
                       last_name: trimmedLastName,
                     })
                   }
-                  await patchEmployeeAssignment(token, employeeId, {
+                  if (departmentId || positionId || branchId || managerId || gradeId || costCenterId) {
+                    await patchEmployeeAssignment(token, employeeId, {
                     effective_date: assignmentEffectiveDate.trim(),
                     branch_id: branchId ? Number(branchId) : null,
-                    departments: [
+                    departments: departmentId ? [
                       {
                         department_id: Number(departmentId),
                         is_primary: true,
                       },
-                    ],
-                    primary_position_id: Number(positionId),
+                    ] : [],
+                    primary_position_id: positionId ? Number(positionId) : null,
                     reports_to: managerId ? Number(managerId) : null,
                     grade_id: gradeId ? Number(gradeId) : null,
                     cost_center_id: costCenterId ? Number(costCenterId) : null,
                     reason: assignmentReason.trim() || undefined,
-                  })
+                    })
+                  }
                   setIdentityDialogOpen(false)
                   await fetchEmployee()
                 } catch (errorObject) {

@@ -18,6 +18,7 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "Employee management",
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
+      { title: "Invite & Register", url: "/dashboard/operations/recruitment" },
       { title: "Inactive Employees", url: "/dashboard/employees/inactive" },
       { title: "Registration", url: "/dashboard/employees/registration" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
@@ -34,7 +35,6 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
       { title: "Organization", url: "/dashboard/me/organization" },
-      { title: "To do", url: "/dashboard/me/requests/actions" },
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
       { title: "Update details", url: "/dashboard/me/requests/profile-changes" },
@@ -149,7 +149,6 @@ export const selfRequestSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My requests",
     items: [
-      { title: "To do", url: "/dashboard/me/requests/actions" },
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
       { title: "Update details", url: "/dashboard/me/requests/profile-changes" },

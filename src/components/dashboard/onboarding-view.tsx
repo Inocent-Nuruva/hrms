@@ -134,6 +134,7 @@ import {
 } from "@/lib/onboarding-provisioning"
 import {
   filterAssigneesForStep,
+  collectAssigneeIds,
   findAssigneeRecord,
   flattenAssigneeRecord,
   isOnboardingActableStatus,
@@ -1582,16 +1583,41 @@ export function OnboardingView() {
                 }),
               }
             case "users": {
-              const companyUsers = await listAllCurrentCompanyUsers(token, {
-                maxPages: 30,
-              }).catch(() => [] as AdminRecord[])
+              const [companyUsers, employeeDirectory] = await Promise.all([
+                listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(() => [] as AdminRecord[]),
+                listEmployees(token, {
+                  page: 1,
+                  limit: 200,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }).then((result) => result.rows).catch(() => [] as AdminRecord[]),
+              ])
+              const withDepartmentAssignments = companyUsers.map((companyUser) => {
+                const flattened = flattenAssigneeRecord(companyUser)
+                const ids = new Set(collectAssigneeIds(companyUser))
+                const email = readString(companyUser, ["email"], "").trim().toLowerCase()
+                const linkedEmployees = employeeDirectory.filter((employee) => {
+                  const membership = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
+                  const linkedUser = toRecord(membership?.user) ?? toRecord(employee.user)
+                  const employeeIds = [
+                    readNumber(employee, ["user_id", "company_user_id"]),
+                    membership ? readNumber(membership, ["id", "user_id", "company_user_id"]) : null,
+                    linkedUser ? readNumber(linkedUser, ["id", "user_id", "company_user_id"]) : null,
+                  ].filter((id): id is number => id !== null)
+                  const employeeEmail = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
+                  return employeeIds.some((id) => ids.has(id)) || Boolean(email && employeeEmail === email)
+                })
+                const departmentIds = new Set(collectDepartmentIds(flattened))
+                linkedEmployees.forEach((employee) => collectDepartmentIds(employee).forEach((id) => departmentIds.add(id)))
+                return { ...flattened, department_ids: Array.from(departmentIds) }
+              })
               return {
                 key,
                 result: {
-                  rows: companyUsers,
+                  rows: withDepartmentAssignments,
                   page: 1,
-                  limit: companyUsers.length,
-                  total: companyUsers.length,
+                  limit: withDepartmentAssignments.length,
+                  total: withDepartmentAssignments.length,
                   totalPages: 1,
                 },
               }
@@ -3496,6 +3522,9 @@ export function OnboardingView() {
     return {
       status: readString(review ?? {}, ["status"], "not_submitted").toLowerCase(),
       submittedAt: readString(review ?? {}, ["submitted_at"]),
+      notProvidedItems: Array.isArray(review?.not_provided_items)
+        ? review.not_provided_items.filter((item): item is string => typeof item === "string")
+        : [],
       sections,
     }
   }, [selectedRequestDetails])
@@ -3518,6 +3547,7 @@ export function OnboardingView() {
     [employeeDetailsReview.sections]
   )
   const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
+  const currentEmployeeReviewStatus = readString(currentEmployeeReviewSection ?? {}, ["status"], "pending").toLowerCase()
   const selectedRequestSummary = React.useMemo(() => {
     const request = selectedRequestDetails ?? selectedRequestRow ?? {}
     const employee = toRecord(request.employee)
@@ -3545,6 +3575,9 @@ export function OnboardingView() {
     const comment = employeeReviewComments[sectionKey]?.trim() ?? ""
     if (!token || requestId === null || !sectionKey || sectionKey === "-") {
       showErrorAlert("Missing employee review context.")
+      return
+    }
+    if (status === "approved" && currentEmployeeReviewStatus === "approved") {
       return
     }
     if (status === "changes_requested" && !comment) {
@@ -3814,7 +3847,7 @@ export function OnboardingView() {
     setSaving(true)
     try {
       await completeOnboardingTask(token, requestId, taskId, {
-        completion_notes: "Completed by admin",
+        completion_notes: "Completed from onboarding workspace",
       })
       showSuccessAlert("Onboarding task completed.")
       await reloadCurrentRequestActivity(requestId)
@@ -5617,6 +5650,14 @@ export function OnboardingView() {
                       </div>
                     </div>
 
+                    {employeeDetailsReview.notProvidedItems.length > 0 ? (
+                      <div className="border-b border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        Employee marked as unavailable: {employeeDetailsReview.notProvidedItems
+                          .map((key) => key === "professional_qualifications" ? "Professional qualifications" : key === "experience_details" ? "Previous work experience" : key)
+                          .join(", ")}.
+                      </div>
+                    ) : null}
+
                     {employeeDetailsReview.sections.length === 0 ? (
                       <div className="p-5 text-sm text-muted-foreground">
                         Employee review details are not available yet.
@@ -5811,10 +5852,10 @@ export function OnboardingView() {
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={saving}
+                                  disabled={saving || currentEmployeeReviewStatus === "approved"}
                                   onClick={() => void saveEmployeeDetailReview("approved")}
                                 >
-                                  Approve & notify employee
+                                  {currentEmployeeReviewStatus === "approved" ? "Approved" : "Approve & notify employee"}
                                 </Button>
                               </div>
                             ) : null}
