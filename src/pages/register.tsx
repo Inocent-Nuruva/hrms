@@ -8,6 +8,11 @@ import {
   getPublicEmployeeInvitation,
   type PublicEmployeeInvitation,
 } from "@/lib/admin-api"
+import {
+  registrationCopy,
+  registrationMode,
+  validateRegistration,
+} from "@/lib/invitation-registration"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,6 +47,9 @@ export default function InvitationRegistrationPage() {
     typeof invitationTokenQuery === "string"
       ? invitationTokenQuery.trim()
       : ""
+
+  const mode = invitation ? registrationMode(invitation) : "create"
+  const copy = registrationCopy[mode]
 
   React.useEffect(() => {
     if (!router.isReady) return
@@ -78,8 +86,9 @@ export default function InvitationRegistrationPage() {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
-    if (password !== confirmation) {
-      setError("The passwords do not match.")
+    const validationError = validateRegistration(mode, password, confirmation)
+    if (validationError) {
+      setError(validationError)
       return
     }
     if (!token) return
@@ -140,8 +149,7 @@ export default function InvitationRegistrationPage() {
             ) : complete ? (
               <div className="space-y-4 text-center">
                 <p className="text-sm text-muted-foreground">
-                  You can now sign in using {invitation?.email} and the password
-                  you created.
+                  You can now sign in using {invitation?.email} {copy.done}.
                 </p>
                 <Button
                   render={
@@ -167,36 +175,45 @@ export default function InvitationRegistrationPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Create password</Label>
+                  <Label htmlFor="password">{copy.passwordLabel}</Label>
                   <Input
                     id="password"
                     type="password"
-                    autoComplete="new-password"
-                    minLength={8}
+                    autoComplete={copy.autoComplete}
+                    minLength={mode === "create" ? 8 : undefined}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Use at least 8 characters with uppercase, lowercase, a
-                    number, and a symbol.
+                    {copy.passwordHint}
                   </p>
+                  {mode === "existing" ? (
+                    <Link
+                      href={`/forgot-password?email=${encodeURIComponent(invitation.email)}`}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Forgot your password?
+                    </Link>
+                  ) : null}
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password-confirmation">
-                    Confirm password
-                  </Label>
-                  <Input
-                    id="password-confirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    minLength={8}
-                    value={confirmation}
-                    onChange={(event) => setConfirmation(event.target.value)}
-                    required
-                  />
-                </div>
+                {mode === "create" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="password-confirmation">
+                      Confirm password
+                    </Label>
+                    <Input
+                      id="password-confirmation"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={confirmation}
+                      onChange={(event) => setConfirmation(event.target.value)}
+                      required
+                    />
+                  </div>
+                ) : null}
 
                 {error ? (
                   <p
@@ -211,7 +228,7 @@ export default function InvitationRegistrationPage() {
                   {submitting ? (
                     <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : null}
-                  {submitting ? "Creating account…" : "Complete registration"}
+                  {submitting ? copy.submitting : copy.submit}
                 </Button>
               </form>
             ) : (

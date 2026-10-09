@@ -777,6 +777,8 @@ export interface PublicEmployeeInvitation {
   phone: string;
   company_name: string;
   expires_at: string;
+  /** True when the email already has an account; accept with its current password. */
+  has_existing_account?: boolean;
 }
 
 export interface AcceptEmployeeInvitationResponse {
