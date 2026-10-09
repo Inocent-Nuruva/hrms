@@ -159,6 +159,7 @@ function RootNavigator({ backgroundColor }: { backgroundColor: string }) {
         <Stack.Screen name="finance" />
         <Stack.Screen name="documents" />
         <Stack.Screen name="activities" />
+        <Stack.Screen name="notifications" />
       </Stack>
 
       {auth.isLoading && (

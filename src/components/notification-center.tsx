@@ -187,6 +187,26 @@ function notificationPriorityLabel(row: AdminRecord) {
   return priority ? formatLabel(priority) : "Low"
 }
 
+function belongsToRequests(row: AdminRecord) {
+  const value = [
+    readString(row, ["type", "entity_type", "entityType", "related_module", "relatedModule"]),
+    readString(row, ["category"]),
+  ].join(" ")
+  return /request|approval|required|onboarding|leave|offboarding|correction/i.test(value)
+}
+
+function belongsToMentions(row: AdminRecord) {
+  const explicit = readString(row, ["type", "event_key", "kind"])
+  const metadata = row.metadata && typeof row.metadata === "object"
+    ? row.metadata as AdminRecord
+    : null
+  if (/mention/i.test(explicit) || Boolean(readNumber(metadata, ["mentioned_company_user_id", "mention_id"]))) {
+    return true
+  }
+  const recipients = metadata?.mentions ?? metadata?.mentioned_users
+  return Array.isArray(recipients) && recipients.length > 0
+}
+
 function formatNotificationTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
@@ -300,6 +320,7 @@ export function NotificationCenter({
   const [categoryFilter, setCategoryFilter] = React.useState<NotificationCategory | "all">("all")
   const [priorityFilter, setPriorityFilter] = React.useState<NotificationPriority | "all">("all")
   const [includeArchived, setIncludeArchived] = React.useState(false)
+  const [inboxTab, setInboxTab] = React.useState<"all" | "requests" | "mentions" | "urgent">("all")
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -333,6 +354,19 @@ export function NotificationCenter({
     }),
     [categoryFilter, includeArchived, priorityFilter, searchQuery, statusFilter]
   )
+
+  const inboxCounts = React.useMemo(() => ({
+    all: items.length,
+    requests: items.filter(belongsToRequests).length,
+    mentions: items.filter(belongsToMentions).length,
+    urgent: items.filter((row) => readString(row, ["priority"]).toUpperCase() === "URGENT").length,
+  }), [items])
+  const visibleItems = React.useMemo(() => items.filter((row) => {
+    if (inboxTab === "all") return true
+    if (inboxTab === "urgent") return readString(row, ["priority"]).toUpperCase() === "URGENT"
+    if (inboxTab === "requests") return belongsToRequests(row)
+    return belongsToMentions(row)
+  }), [inboxTab, items])
 
   const markBusy = React.useCallback((id: number, busy: boolean) => {
     setBusyIds((current) => {
@@ -636,6 +670,30 @@ export function NotificationCenter({
           </div>
         </div>
 
+        <div role="tablist" aria-label="Notification inbox" className="flex w-full items-center gap-2 overflow-x-auto border-b border-border">
+          {([
+            ["all", "All"],
+            ["requests", "Requests"],
+            ["mentions", "Mentions"],
+            ["urgent", "Urgent"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={inboxTab === key}
+              onClick={() => setInboxTab(key)}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors",
+                inboxTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+              <span className={cn("rounded-full px-1.5 py-0.5 text-xs", inboxTab === key ? "bg-primary text-primary-foreground" : "bg-muted")}>{inboxCounts[key]}</span>
+            </button>
+          ))}
+        </div>
+
         {quietWarning ? (
           <div className="w-full rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             {quietWarning}
@@ -747,21 +805,21 @@ export function NotificationCenter({
           </div>
         ) : null}
 
-        {!error && items.length === 0 ? (
+        {!error && visibleItems.length === 0 ? (
           <div className="flex min-h-40 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
             <div className="rounded-full bg-muted p-2.5">
               <Bell className="h-4 w-4 text-muted-foreground" />
             </div>
             <p className="text-sm font-medium text-foreground">No notifications</p>
             <p className="text-xs text-muted-foreground">
-              {activeFilterCount > 0
+              {activeFilterCount > 0 || inboxTab !== "all"
                 ? "Try clearing filters or include archived items."
                 : "You're all caught up."}
             </p>
           </div>
         ) : null}
 
-        {items.length > 0 ? (
+        {visibleItems.length > 0 ? (
           <div>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
@@ -771,7 +829,7 @@ export function NotificationCenter({
                 initial={shouldAnimate ? "hidden" : false}
                 animate="visible"
               >
-                {items.map((row, index) => {
+                {visibleItems.map((row, index) => {
                   const id = readNotificationId(row)
                   const title = readString(row, ["title"]) || notificationTypeLabel(row)
                   const message = readString(row, ["message", "description"])
@@ -799,7 +857,7 @@ export function NotificationCenter({
                         appearance={unread ? "filled-alternative" : "outline"}
                         size="small"
                         className={cn(
-                          "relative !flex-row !items-center gap-2 !rounded-lg !px-2 !py-1.5 transition-colors",
+                          "relative !flex-row !items-center gap-3 !rounded-xl !px-4 !py-3 transition-colors",
                           unread ? "border-primary/25" : null,
                         )}
                       >
@@ -815,19 +873,19 @@ export function NotificationCenter({
                         <div className="flex min-w-0 items-center gap-2">
                           <div
                             className={cn(
-                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
                               unread
                                 ? "bg-primary/10 text-primary"
                                 : "bg-muted text-muted-foreground"
                             )}
                           >
-                            <Bell className="h-3 w-3" />
+                            <Bell className="h-5 w-5" />
                           </div>
                           <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5">
                             <div className="flex min-w-0 items-center gap-1">
                               <p
                                 className={cn(
-                                  "min-w-0 truncate text-xs leading-tight tracking-tight text-primary",
+                                  "min-w-0 truncate text-sm leading-snug tracking-tight text-foreground",
                                   unread ? "font-semibold" : "font-medium opacity-90"
                                 )}
                               >
@@ -845,12 +903,12 @@ export function NotificationCenter({
                               ) : null}
                             </div>
                             {createdAt ? (
-                              <span className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">
+                                <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                                 {formatNotificationTime(createdAt)}
                               </span>
                             ) : <span />}
                             {message ? (
-                              <p className="col-span-2 line-clamp-1 text-[11px] leading-tight text-muted-foreground">
+                              <p className="col-span-2 line-clamp-2 text-sm leading-snug text-muted-foreground">
                                 {message}
                               </p>
                             ) : null}
@@ -889,11 +947,11 @@ export function NotificationCenter({
                         {busy ? (
                           <FluentLoadingIndicator className="mx-1 h-3.5 w-3.5 animate-spin text-primary" />
                         ) : null}
-                        <Button
+                            <Button
                           type="button"
                           variant="ghost"
                           size="icon-sm"
-                          className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                          className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                           disabled={busy}
                           title="Open"
                           aria-label={`Open ${title}`}
@@ -906,7 +964,7 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark read"
                             aria-label={`Mark ${title} as read`}
@@ -920,7 +978,7 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Mark seen"
                             aria-label={`Mark ${title} as seen`}
@@ -934,7 +992,7 @@ export function NotificationCenter({
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="!size-6 !min-w-6 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
+                            className="!size-8 !min-w-8 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
                             disabled={busy}
                             title="Archive"
                             aria-label={`Archive ${title}`}

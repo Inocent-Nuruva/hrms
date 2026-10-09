@@ -365,6 +365,18 @@ export const api = {
     return request<unknown>('/api/users/me/dashboard-card-style');
   },
 
+  async listMyNotifications(params: Record<string, unknown> = {}) {
+    return request<unknown>(`/api/notifications${buildQuery(params)}`);
+  },
+
+  async markNotificationAsRead(id: string | number) {
+    return request<unknown>(`/api/notifications/${id}/read`, { method: 'PATCH' });
+  },
+
+  async markAllNotificationsAsRead() {
+    return request<unknown>('/api/notifications/read-all', { method: 'PATCH' });
+  },
+
   async updateMyDashboardCardStyle(style: { palette: string; artwork: string }) {
     return request<unknown>('/api/users/me/dashboard-card-style', {
       method: 'PATCH',

@@ -50,7 +50,6 @@ export function MobileTopBar({
   const router = useRouter();
   const pathname = usePathname();
   const { isDark, toggleTheme } = useThemePreference();
-  const appAccent = useAppAccent();
   const notifications = useNotifications();
   const { width: screenWidth } = useWindowDimensions();
   const profileCardStyleQuery = useQuery({
@@ -59,7 +58,6 @@ export function MobileTopBar({
     enabled: auth.isAuthenticated,
   });
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [notificationsOpen, setNotificationsOpen] = React.useState(false);
 
   const [slideAnim] = React.useState(() => new Animated.Value(-400));
 
@@ -133,7 +131,6 @@ export function MobileTopBar({
   const primaryTextColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const actionIconBg = 'transparent';
   const actionIconColor = headerForeground;
-  const secondaryTextColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const avatarBackground = lightPalette ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.14)';
   const avatarBorder = lightPalette ? 'rgba(15,23,42,0.18)' : 'rgba(255,255,255,0.38)';
   const avatarTextColor = headerForeground;
@@ -201,12 +198,12 @@ export function MobileTopBar({
               <TouchableScale
                 style={[styles.menuButton, { backgroundColor: actionIconBg, borderRadius: 8 }]}
                 pressedScale={0.92}
-                onPress={() => setNotificationsOpen(true)}
+                onPress={() => router.push('/notifications' as never)}
               >
                 <FluentSystemIcon name="notifications" size={22} color={actionIconColor} />
                 {notifications.unreadCount ? (
                   <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</Text>
+                    <Text style={styles.notificationBadgeText}>{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</Text>
                   </View>
                 ) : null}
               </TouchableScale>
@@ -264,61 +261,6 @@ export function MobileTopBar({
               />
             </View>
           )}
-        </View>
-      </Modal>
-
-      <Modal visible={notificationsOpen} transparent animationType="fade" onRequestClose={() => setNotificationsOpen(false)}>
-        <View style={styles.dropdownOverlay}>
-          <Pressable style={styles.drawerBackdrop} onPress={() => setNotificationsOpen(false)} />
-          <View style={[styles.notificationsPanel, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface }]}>
-            <View style={styles.drawerHeader}>
-              <Text style={[styles.drawerTitle, { color: primaryTextColor }]}>Notifications</Text>
-              {notifications.notifications.length ? (
-                <TouchableScale onPress={() => void notifications.markAllAsRead()} pressedScale={0.96}>
-                  <Text style={[styles.markAllText, { color: appAccent }]}>Mark all read</Text>
-                </TouchableScale>
-              ) : null}
-            </View>
-
-            {notifications.notifications.length ? (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.notificationList}>
-                {notifications.notifications.map((item) => (
-                  <TouchableScale
-                    key={item.id}
-                    style={[
-                      styles.notificationItem,
-                      {
-                        backgroundColor: item.read
-                          ? isDark
-                            ? COLORS.surfaceDark
-                            : COLORS.surface
-                          : isDark
-                            ? COLORS.surfaceVariantDark
-                            : COLORS.surfaceVariant,
-                        borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
-                      },
-                    ]}
-                    onPress={() => {
-                      void notifications.markAsRead(item.id);
-                      setNotificationsOpen(false);
-                      router.push({
-                        pathname: item.route,
-                        params: { requestId: item.requestId },
-                      } as never);
-                    }}
-                    pressedScale={0.98}
-                  >
-                    <Text style={[styles.notificationTitle, { color: primaryTextColor }]}>{item.title}</Text>
-                    <Text style={[styles.notificationBody, { color: secondaryTextColor }]}>{item.body}</Text>
-                  </TouchableScale>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.emptyNotifications}>
-                <Text style={[styles.notificationBody, { color: secondaryTextColor }]}>No notifications yet</Text>
-              </View>
-            )}
-          </View>
         </View>
       </Modal>
 
