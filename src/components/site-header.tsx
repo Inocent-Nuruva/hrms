@@ -38,6 +38,8 @@ import type { AuthScope } from "@/types"
 
 const headerActionButtonClass =
   "relative z-10 !size-6 !min-w-6 !p-0 rounded-md bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted [&_svg]:!size-3.5"
+const notificationButtonClass =
+  "relative z-10 !size-9 !min-w-9 !p-0 rounded-md bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted [&_svg]:!size-5"
 
 interface SiteHeaderProps {
   onRefresh: () => void | Promise<void>
@@ -250,17 +252,19 @@ export function SiteHeader({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      className={headerActionButtonClass}
+                      className={notificationButtonClass}
                       aria-label={unreadNotificationCount > 0 ? `Notifications, ${unreadNotificationCount} unread` : "Notifications"}
                       title="Notifications"
                     />
                   }
                 >
-                  <AlertBadge16Regular className="size-4 text-amber-600 dark:text-amber-400" />
+                  <AlertBadge16Regular className="size-5 text-amber-600 dark:text-amber-400" />
                   <span className="sr-only">Notifications</span>
                 </DialogTrigger>
                 {unreadNotificationCount > 0 ? (
-                  <span className="pointer-events-none absolute right-0.5 top-0.5 z-10 size-2 rounded-full bg-destructive ring-2 ring-background" />
+                  <span className="pointer-events-none absolute -right-1 -top-1 z-10 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold leading-none tabular-nums text-white ring-2 ring-background">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
                 ) : null}
               </div>
               <DialogPopup
