@@ -568,6 +568,7 @@ export const INSIGHTS_ROUTE_PERMISSION: PermissionRequirement = {
     "manage_dashboards",
     "launch_readiness:read",
     "security_events:read",
+    "identity_audit:read",
     "analytics:read",
     "sales_field:read",
   ],
@@ -609,6 +610,11 @@ export const INSIGHTS_MANAGER_PERMISSION: PermissionRequirement = {
 
 export const INSIGHTS_READINESS_PERMISSION: PermissionRequirement = {
   permissions: ["launch_readiness:read", "security_events:read", "view_launch_readiness"],
+  mode: "any",
+}
+
+export const INSIGHTS_IDENTITY_AUDIT_PERMISSION: PermissionRequirement = {
+  permissions: ["identity_audit:read"],
   mode: "any",
 }
 
@@ -1146,6 +1152,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/insights/manager": INSIGHTS_MANAGER_PERMISSION,
   "/dashboard/insights/sales-field": INSIGHTS_SALES_FIELD_PERMISSION,
   "/dashboard/insights/readiness": INSIGHTS_READINESS_PERMISSION,
+  "/dashboard/insights/identity-audit": INSIGHTS_IDENTITY_AUDIT_PERMISSION,
   "/dashboard/help": null,
   "/dashboard/users": {
     permissions: [

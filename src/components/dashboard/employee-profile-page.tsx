@@ -5788,11 +5788,17 @@ export function EmployeeProfilePage({
                   if (trimmedPassword) {
                     payload.password = trimmedPassword
                   }
-                  const employeePayload: AdminRecord = {
-                    first_name: trimmedFirstName,
-                    last_name: trimmedLastName,
+                  // Names/email sync between the user and its employee records
+                  // server-side in one transaction, so a linked user is updated
+                  // directly; unlinked employees are patched on their own.
+                  if (userId !== null) {
+                    await updateUserById(userId, token, payload)
+                  } else {
+                    await patchEmployeeById(employeeId, token, {
+                      first_name: trimmedFirstName,
+                      last_name: trimmedLastName,
+                    })
                   }
-                  await patchEmployeeById(employeeId, token, employeePayload)
                   await patchEmployeeAssignment(token, employeeId, {
                     effective_date: assignmentEffectiveDate.trim(),
                     branch_id: branchId ? Number(branchId) : null,
@@ -5808,9 +5814,6 @@ export function EmployeeProfilePage({
                     cost_center_id: costCenterId ? Number(costCenterId) : null,
                     reason: assignmentReason.trim() || undefined,
                   })
-                  if (userId !== null) {
-                    await updateUserById(userId, token, payload)
-                  }
                   setIdentityDialogOpen(false)
                   await fetchEmployee()
                 } catch (errorObject) {

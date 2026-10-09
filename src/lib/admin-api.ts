@@ -20424,3 +20424,109 @@ export function isSelectableDefaultAvatar(
   if (status && status !== "active") return false;
   return Boolean(extractDefaultAvatarImageUrl(row));
 }
+
+// ---------------------------------------------------------------------------
+// Identity change audit (names / email / phone synced between users and employees)
+// ---------------------------------------------------------------------------
+
+export type IdentityAuditField = "first_name" | "last_name" | "email" | "phone";
+export type IdentityAuditSource = "user_update" | "employee_update" | "rollback";
+
+export interface IdentityAuditEntry {
+  id: number;
+  change_set_id: string;
+  company_id: number;
+  user_id: number | null;
+  employee_id: number | null;
+  affected_employee_ids: number[];
+  subject_name: string | null;
+  field: IdentityAuditField;
+  old_value: string | null;
+  new_value: string | null;
+  source: IdentityAuditSource;
+  rollback_of_change_set_id: string | null;
+  rolled_back_by_change_set_id: string | null;
+  can_rollback: boolean;
+  actor_user_id: number | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface IdentityAuditQuery {
+  page?: number;
+  limit?: number;
+  user_id?: number;
+  employee_id?: number;
+  field?: IdentityAuditField;
+  source?: IdentityAuditSource;
+  search?: string;
+  from?: string;
+  to?: string;
+}
+
+function buildIdentityAuditQuery(params: IdentityAuditQuery) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+/** GET /api/identity-audit — paginated identity change history. */
+export async function listIdentityAudit(
+  token: string,
+  params: IdentityAuditQuery = {},
+) {
+  return adminRequest<{
+    items: IdentityAuditEntry[];
+    total: number;
+    page: number;
+    limit: number;
+  }>(`/api/identity-audit${buildIdentityAuditQuery(params)}`, { token });
+}
+
+/** GET /api/identity-audit/export — CSV of the filtered history. */
+export async function downloadIdentityAuditCsv(
+  token: string,
+  params: IdentityAuditQuery = {},
+): Promise<Blob> {
+  const { page: _page, limit: _limit, ...filters } = params;
+  void _page;
+  void _limit;
+  const response = await fetch(
+    buildUrl(`/api/identity-audit/export${buildIdentityAuditQuery(filters)}`),
+    {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    try {
+      payload = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      payload = { message: text };
+    }
+    throw new Error(extractMessage(payload, response.status));
+  }
+  return response.blob();
+}
+
+/** POST /api/identity-audit/{changeSetId}/rollback — revert the latest change. */
+export async function rollbackIdentityChange(
+  token: string,
+  changeSetId: string,
+  reason?: string,
+) {
+  return adminRequest<{ changeSetId: string | null; changedFields: string[] }>(
+    `/api/identity-audit/${encodeURIComponent(changeSetId)}/rollback`,
+    { method: "POST", token, body: { reason: reason || undefined } },
+  );
+}

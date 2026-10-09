@@ -435,6 +435,7 @@ export const insightsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Manager", url: "/dashboard/insights/manager" },
       { title: "Sales field", url: "/dashboard/insights/sales-field" },
       { title: "Ready?", url: "/dashboard/insights/readiness" },
+      { title: "Identity audit", url: "/dashboard/insights/identity-audit" },
     ],
   },
 ]
