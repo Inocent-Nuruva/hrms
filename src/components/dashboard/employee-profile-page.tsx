@@ -1709,7 +1709,11 @@ function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_
     return firstRecordArray(
       employee.company_user ? [asRecord(employee.company_user) ?? {}] : [],
       employee.companyUser ? [asRecord(employee.companyUser) ?? {}] : []
-    )
+    ).map((companyUser) => ({
+      ...companyUser,
+      __linked_account: true,
+      __can_manage_linked_account: true,
+    }))
   }
   const items = getProfileSectionItems(employee, def.keys)
   if (def.title !== "Contacts" || items.length > 0) {
@@ -1727,9 +1731,7 @@ function resolveProfileSectionItems(employee: AdminRecord, def: (typeof PROFILE_
           ...accountContact,
           source: "Employee or company-user account",
           __linked_account: true,
-          __can_manage_linked_account: isHistoricalEmployeeStatus(
-            employee.employment_status ?? employee.employmentStatus,
-          ),
+          __can_manage_linked_account: true,
         },
       ]
     : []
