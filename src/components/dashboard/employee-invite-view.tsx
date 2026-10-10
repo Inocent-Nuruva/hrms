@@ -29,6 +29,10 @@ import { Input as FluentInput } from "@/components/ui/input"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  invitationChannels,
+  invitationDeliveryOutcome,
+} from "@/lib/employee-invitation-channels"
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -387,6 +391,7 @@ export function EmployeeInviteView() {
   const [employmentType, setEmploymentType] =
     React.useState<string>("full_time")
   const [hireDate, setHireDate] = React.useState<string>("")
+  const [sendSmsReminder, setSendSmsReminder] = React.useState(true)
   const [workflowId, setWorkflowId] = React.useState<number | null>(null)
 
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
@@ -832,6 +837,7 @@ export function EmployeeInviteView() {
     setReportsToId(null)
     setEmploymentType("full_time")
     setHireDate("")
+    setSendSmsReminder(true)
     setWorkflowId(null)
     setSavedInviteDraft(null)
     if (typeof window !== "undefined") {
@@ -929,24 +935,20 @@ export function EmployeeInviteView() {
       reports_to: reportsToId ?? undefined,
       hire_date: hireDate || undefined,
       onboarding_workflow_id: workflowId ?? undefined,
-      channels: ["EMAIL", "SMS"],
+      channels: invitationChannels(sendSmsReminder),
     }
 
     setSubmitting(true)
     try {
       const invitation = await createEmployeeInvitation(token, payload)
-      const emailStatus = invitation.delivery?.email?.status?.toLowerCase()
-      const smsStatus = invitation.delivery?.sms?.status?.toLowerCase()
-      const failedChannels = [
-        emailStatus === "failed" ? "email" : null,
-        smsStatus === "failed" ? "SMS" : null,
-      ].filter((channel): channel is string => channel !== null)
-
-      if (failedChannels.length > 0) {
-        const message = `Invitation saved, but ${failedChannels.join(" and ")} delivery failed. You can resend it after checking the channel settings.`
-        showErrorAlert(message)
+      const outcome = invitationDeliveryOutcome({
+        email: invitation.delivery?.email?.status,
+        sms: invitation.delivery?.sms?.status,
+      })
+      if (outcome.kind === "partial") {
+        showErrorAlert(outcome.message)
       } else {
-        showSuccessAlert("Invitation sent by email and SMS.")
+        showSuccessAlert(outcome.message)
       }
       resetForm()
     } catch (err: unknown) {
@@ -1257,6 +1259,16 @@ export function EmployeeInviteView() {
         </section>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="mr-auto inline-flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={sendSmsReminder}
+              onChange={(event) => setSendSmsReminder(event.target.checked)}
+              disabled={submitting}
+            />
+            Also send an SMS reminder
+          </label>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
@@ -1271,8 +1283,8 @@ export function EmployeeInviteView() {
                 }
               />
               <TooltipContent side="top" className="max-w-xs text-left">
-                Sends one secure invitation link through both the configured
-                email and SMS channels.
+                Emails one secure registration link. The optional SMS is a
+                reminder to check email and never contains the link.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1292,7 +1304,11 @@ export function EmployeeInviteView() {
             disabled={submitting || loading}
             icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
           >
-            {submitting ? "Sending…" : "Send email & SMS invitation"}
+            {submitting
+              ? "Sending…"
+              : sendSmsReminder
+                ? "Send email & SMS invitation"
+                : "Send email invitation"}
           </Button>
         </div>
       </form>
