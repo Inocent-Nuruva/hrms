@@ -12461,6 +12461,41 @@ export async function listPendingEmployeeInvitations(token: string) {
   return normalizeList(payload) as EmployeeInvitationResponse[];
 }
 
+export type EmployeeInvitationHistoryStatus =
+  | "all"
+  | "pending"
+  | "accepted"
+  | "expired"
+  | "cancelled";
+
+export interface EmployeeInvitationHistoryQuery {
+  status?: EmployeeInvitationHistoryStatus;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** All invitations, filtered by effective status (overdue pending = expired). */
+export async function listEmployeeInvitationHistory(
+  token: string,
+  query: EmployeeInvitationHistoryQuery = {},
+) {
+  const params = new URLSearchParams();
+  if (query.status) params.set("status", query.status);
+  if (query.search?.trim()) params.set("search", query.search.trim());
+  if (query.page) params.set("page", String(query.page));
+  if (query.limit) params.set("limit", String(query.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const payload = await adminRequest<{
+    data?: unknown;
+    meta?: { totalItems?: number };
+  }>(`/api/employee-invitations/history${suffix}`, { token, dedupe: false });
+  return {
+    data: normalizeList(payload) as EmployeeInvitationResponse[],
+    totalItems: Number(payload?.meta?.totalItems ?? 0),
+  };
+}
+
 export async function resendEmployeeInvitation(
   token: string,
   invitationId: string | number,
