@@ -14937,6 +14937,32 @@ export async function archiveEmployeeProfile(
   });
 }
 
+export interface PermanentEmployeeDeletionResponse {
+  message: string;
+  employee_id: number;
+  company_user_removed: boolean;
+  user_account_removed: boolean;
+  files_removed: number;
+}
+
+/**
+ * Permanently delete an employee who is still onboarding, with their records.
+ * The backend refuses (409) once the employee has working history, supervises
+ * others, or has device access; the message explains why.
+ */
+export async function deleteEmployeePermanently(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<PermanentEmployeeDeletionResponse>(
+    `/api/employees/${employeeId}/permanent`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
+}
+
 export async function unlinkEmployeeCompanyUser(
   token: string,
   employeeId: string | number,
