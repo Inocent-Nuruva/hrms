@@ -1,5 +1,6 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import Head from "next/head"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { CheckCircle2Icon, UserRoundCheckIcon } from "lucide-react";
@@ -9,6 +10,8 @@ import {
   type PublicEmployeeInvitation,
 } from "@/lib/admin-api"
 import {
+  queryWithoutToken,
+  readInvitationToken,
   registrationCopy,
   registrationMode,
   validateRegistration,
@@ -42,17 +45,27 @@ export default function InvitationRegistrationPage() {
   const [complete, setComplete] = React.useState(false)
   const [error, setError] = React.useState("")
 
-  const invitationTokenQuery = router.query.token ?? router.query.invitation_token
-  const token =
-    typeof invitationTokenQuery === "string"
-      ? invitationTokenQuery.trim()
-      : ""
+  // Captured once, then removed from the address bar (see below).
+  const [token, setToken] = React.useState<string | null>(null)
 
   const mode = invitation ? registrationMode(invitation) : "create"
   const copy = registrationCopy[mode]
 
   React.useEffect(() => {
-    if (!router.isReady) return
+    if (!router.isReady || token !== null) return
+    const fromLink = readInvitationToken(router.query)
+    setToken(fromLink)
+    if (fromLink) {
+      void router.replace(
+        { pathname: router.pathname, query: queryWithoutToken(router.query) },
+        undefined,
+        { shallow: true },
+      )
+    }
+  }, [router, token])
+
+  React.useEffect(() => {
+    if (token === null) return
     if (!token) {
       setError(
         "This invitation link is incomplete. Ask HR to send a new invitation.",
@@ -81,7 +94,7 @@ export default function InvitationRegistrationPage() {
     return () => {
       active = false
     }
-  }, [router.isReady, token])
+  }, [token])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -106,6 +119,10 @@ export default function InvitationRegistrationPage() {
 
   return (
     <>
+      <Head>
+        {/* Never send the registration link (with its token) as a Referer. */}
+        <meta name="referrer" content="no-referrer" />
+      </Head>
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-slate-100 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
       <div className="fixed right-4 top-4 z-20">
         <ThemeTogglerButton

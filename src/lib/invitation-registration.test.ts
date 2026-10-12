@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   isStrongPassword,
+  queryWithoutToken,
+  readInvitationToken,
   registrationMode,
   validateRegistration,
 } from "./invitation-registration"
@@ -58,5 +60,25 @@ describe("validateRegistration", () => {
     expect(
       validateRegistration("create", "StrongPass#2026", "StrongPass#2026"),
     ).toBeNull()
+  })
+})
+
+describe("invitation token in the link", () => {
+  it("reads token or invitation_token, trimmed", () => {
+    expect(readInvitationToken({ token: "  abc  " })).toBe("abc")
+    expect(readInvitationToken({ invitation_token: "def" })).toBe("def")
+    expect(readInvitationToken({ token: ["a", "b"] })).toBe("")
+    expect(readInvitationToken({})).toBe("")
+  })
+
+  it("strips only the token parameters from the address bar query", () => {
+    expect(
+      queryWithoutToken({
+        token: "abc",
+        invitation_token: "def",
+        lang: "sw",
+        utm: undefined,
+      }),
+    ).toEqual({ lang: "sw" })
   })
 })

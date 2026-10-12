@@ -12510,10 +12510,14 @@ export async function resendEmployeeInvitation(
   return normalizeSingle(payload) as EmployeeInvitationResponse;
 }
 
+// The registration token is sent in the request body, never the URL, so it
+// stays out of proxy and access logs.
 export async function getPublicEmployeeInvitation(token: string) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/lookup",
     {
+      method: "POST",
+      body: { token },
       dedupe: false,
     },
   );
@@ -12525,10 +12529,10 @@ export async function acceptEmployeeInvitation(
   password: string,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/accept",
     {
       method: "POST",
-      body: { password },
+      body: { token, password },
       dedupe: false,
     },
   );

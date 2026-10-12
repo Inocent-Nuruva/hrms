@@ -4,6 +4,30 @@
 
 export type InvitationRegistrationMode = "create" | "existing"
 
+/**
+ * Reads the registration token from the link's query string. The page then
+ * removes it from the address bar so it does not linger in history, get
+ * copied with the URL, or leak through the Referer header.
+ */
+export function readInvitationToken(
+  query: Record<string, string | string[] | undefined>,
+): string {
+  const value = query.token ?? query.invitation_token
+  return typeof value === "string" ? value.trim() : ""
+}
+
+/** The query string with the token parameters removed. */
+export function queryWithoutToken(
+  query: Record<string, string | string[] | undefined>,
+): Record<string, string | string[]> {
+  const rest: Record<string, string | string[]> = {}
+  for (const [key, value] of Object.entries(query)) {
+    if (key === "token" || key === "invitation_token") continue
+    if (value !== undefined) rest[key] = value
+  }
+  return rest
+}
+
 export function registrationMode(invitation: {
   has_existing_account?: boolean | null
 }): InvitationRegistrationMode {
