@@ -749,7 +749,30 @@ export interface CreateEmployeeInvitationPayload {
   channels: EmployeeInvitationChannel[];
 }
 
+export interface PositionCapacity {
+  position_id: number;
+  headcount: number;
+  filled: number;
+  pending_invitations: number;
+  available: number;
+  /** True when one more acceptance would exceed the approved headcount. */
+  will_overfill: boolean;
+}
+
+/** Seats taken in a position, counting pending invitations as taken. */
+export async function getEmployeeInvitationPositionCapacity(
+  token: string,
+  positionId: number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/position-capacity/${positionId}`,
+    { token, dedupe: false },
+  );
+  return normalizeSingle(payload) as unknown as PositionCapacity;
+}
+
 export type EmployeeInvitationResponse = AdminRecord & {
+  capacity?: PositionCapacity | null;
   id?: number;
   status?: string;
   expires_at?: string;

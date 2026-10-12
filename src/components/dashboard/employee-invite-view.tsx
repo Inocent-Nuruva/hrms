@@ -10,6 +10,7 @@ import {
 
 import {
   createEmployeeInvitation,
+  getEmployeeInvitationPositionCapacity,
   listBranches,
   listDepartmentPositions,
   listDepartments,
@@ -18,7 +19,9 @@ import {
   listPositions,
   type AdminRecord,
   type CreateEmployeeInvitationPayload,
+  type PositionCapacity,
 } from "@/lib/admin-api"
+import { positionCapacityWarning } from "@/lib/position-capacity"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -423,6 +426,25 @@ export function EmployeeInviteView() {
   React.useEffect(() => {
     setToken(readStoredToken())
   }, [])
+
+  // Warn before sending when the chosen position has no free seat.
+  const [positionCapacity, setPositionCapacity] =
+    React.useState<PositionCapacity | null>(null)
+  React.useEffect(() => {
+    setPositionCapacity(null)
+    if (!token || positionId === null) return
+    let active = true
+    getEmployeeInvitationPositionCapacity(token, positionId)
+      .then((capacity) => {
+        if (active) setPositionCapacity(capacity)
+      })
+      // Capacity is advisory; never block the form on it.
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [token, positionId])
+  const capacityWarning = positionCapacityWarning(positionCapacity)
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
@@ -950,6 +972,8 @@ export function EmployeeInviteView() {
       } else {
         showSuccessAlert(outcome.message)
       }
+      const overfillWarning = positionCapacityWarning(invitation.capacity)
+      if (overfillWarning) toast.warning(overfillWarning)
       resetForm()
     } catch (err: unknown) {
       const status =
@@ -1170,6 +1194,14 @@ export function EmployeeInviteView() {
                   </Option>
                 ))}
               </Dropdown>
+              {capacityWarning ? (
+                <p
+                  role="status"
+                  className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                >
+                  {capacityWarning}
+                </p>
+              ) : null}
             </FieldShell>
 
             <FieldShell label="Reports to" htmlFor="reports_to">
