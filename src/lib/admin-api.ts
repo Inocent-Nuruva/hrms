@@ -8221,7 +8221,7 @@ export type LeaveImportRowResult = {
   row: number;
   employee_no: string;
   leave_type_code: string;
-  status: "created" | "failed";
+  status: "ready" | "created" | "failed";
   leave_request_id?: number | null;
   leave_no?: string | null;
   message?: string;
@@ -8230,7 +8230,9 @@ export type LeaveImportRowResult = {
 export type LeaveImportResult = {
   total: number;
   created: number;
+  ready: number;
   failed: number;
+  preview: boolean;
   results: LeaveImportRowResult[];
 };
 
@@ -8618,13 +8620,15 @@ export async function downloadLeaveImportTemplate(
   };
 }
 
-export async function importLeaveRequests(
+async function uploadLeaveRequestImport(
   token: string,
   file: File,
+  stage: "preview" | "confirm",
 ): Promise<LeaveImportResult> {
   const body = new FormData();
   body.set("file", file, file.name || "leave-import.xlsx");
-  const response = await fetch(buildUrl("/api/leave/requests/import"), {
+  const endpoint = stage === "preview" ? "preview" : "confirm";
+  const response = await fetch(buildUrl(`/api/leave/requests/import/${endpoint}`), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body,
@@ -8637,6 +8641,14 @@ export async function importLeaveRequests(
   );
   if (!response.ok) throw new Error(extractMessage(payload, response.status));
   return payload as LeaveImportResult;
+}
+
+export function previewLeaveRequests(token: string, file: File) {
+  return uploadLeaveRequestImport(token, file, "preview");
+}
+
+export function confirmLeaveRequestsImport(token: string, file: File) {
+  return uploadLeaveRequestImport(token, file, "confirm");
 }
 
 export async function createMyLeaveRequest(token: string, data: AdminRecord) {
@@ -12788,6 +12800,18 @@ export async function getMyDashboardCardStyle(token: string) {
     token,
     cacheTtlMs: 0,
     dedupe: false,
+  })
+}
+
+export async function uploadMyLeaveRequestDocument(
+  token: string,
+  id: number | string,
+  file: File,
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/documents`, {
+    method: "POST",
+    token,
+    body: { file: await fileToBase64UploadDto(file) },
   })
 }
 

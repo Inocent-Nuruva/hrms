@@ -6,9 +6,12 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import { readAsStringAsync, EncodingType } from 'expo-file-system/legacy';
 import {
   CalendarDays,
   ChevronDown,
@@ -100,7 +103,8 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
   const [selectedPolicy, setSelectedPolicy] = useState<MobileRecord | null>(null);
   const [leaveTabsWidth, setLeaveTabsWidth] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(startOfMonth(new Date()));
-  const [form, setForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
+  const [form, setForm] = useState({ leave_type_id: '', duration_type: 'FULL_DAY', start_date: '', end_date: '', half_day_session: 'FIRST_HALF', start_time: '09:00', end_time: '13:00', reason: '' });
+  const [leaveAttachment, setLeaveAttachment] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const openedHighlightedRequestRef = React.useRef('');
   const [tabIndicatorIndex] = React.useState(() => new Animated.Value(0));
   const [tabContentTranslateX] = React.useState(() => new Animated.Value(0));
@@ -161,15 +165,32 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
   });
 
   const submitMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => api.createMyLeaveRequest(payload),
-    onSuccess: async () => {
+    mutationFn: async (input: { payload: Record<string, unknown>; submit: boolean; attachment: DocumentPicker.DocumentPickerAsset | null }) => {
+      const createdPayload = await api.createMyLeaveRequest({ ...input.payload, submit: input.submit && !input.attachment });
+      const created = unwrapCreatedLeave(createdPayload);
+      const id = readRequestId(created);
+      if (input.attachment) {
+        if (!id) throw new Error('The request was created, but its ID was not returned, so the attachment could not be uploaded.');
+        const base64 = await readAsStringAsync(input.attachment.uri, { encoding: EncodingType.Base64 });
+        await api.uploadMyLeaveRequestDocument(id, {
+          fileName: input.attachment.name,
+          mimeType: input.attachment.mimeType || 'application/octet-stream',
+          fileSize: input.attachment.size || Math.floor(base64.length * 0.75),
+          fileString: base64,
+        });
+        if (input.submit) await api.submitMyLeaveRequest(id);
+      }
+      return input;
+    },
+    onSuccess: async (input) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['mobileLeaveRequests'] }),
         queryClient.invalidateQueries({ queryKey: ['mobileLeaveBalances'] }),
       ]);
       setShowApplyForm(false);
-      setForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' });
-      toast.success('Your leave request was submitted successfully.');
+      setForm({ leave_type_id: '', duration_type: 'FULL_DAY', start_date: '', end_date: '', half_day_session: 'FIRST_HALF', start_time: '09:00', end_time: '13:00', reason: '' });
+      setLeaveAttachment(null);
+      toast.success(input.submit ? 'Your leave request was submitted successfully.' : 'Your leave request was saved as a draft.');
     },
     onError: (error: unknown) =>
       toast.error(error instanceof Error ? error.message : 'Submission failed. Please review the form and try again.'),
@@ -231,7 +252,17 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
     readString(selectedLeaveType, ['name', 'display_name']) || 'Select leave type';
   const selectedLeaveBalance = findBalanceForType(balancesQuery.data || [], form.leave_type_id, selectedLeaveType);
   const availableLeaveDays = readAvailableLeaveDays(asRecord(selectedLeaveBalance));
-  const requestedLeaveDays = countInclusiveLeaveDays(form.start_date, form.end_date);
+  const requestedLeaveDays = form.duration_type === 'HALF_DAY'
+    ? (form.start_date === form.end_date ? 0.5 : null)
+    : form.duration_type === 'SHORT_LEAVE'
+      ? (() => {
+          if (form.start_date !== form.end_date) return null;
+          const [sh, sm] = form.start_time.split(':').map(Number);
+          const [eh, em] = form.end_time.split(':').map(Number);
+          const minutes = eh * 60 + em - (sh * 60 + sm);
+          return minutes > 0 ? Number((minutes / 480).toFixed(2)) : null;
+        })()
+      : countInclusiveLeaveDays(form.start_date, form.end_date);
   const leaveBalanceError = getLeaveBalanceError(availableLeaveDays, requestedLeaveDays);
   const balanceUnavailableError = form.leave_type_id && !balancesQuery.isLoading && availableLeaveDays === null
     ? 'A balance could not be found for this leave type, so the request cannot be checked. Refresh balances or contact HR.'
@@ -322,12 +353,49 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
       toast.error(requestValidationError);
       return;
     }
-    submitMutation.mutate({
+    const selectedType = leaveTypes.find((item) => String(item.id ?? '') === form.leave_type_id);
+    if ((selectedType?.requires_attachment === true || selectedType?.requires_attachment === 'true') && !leaveAttachment) {
+      toast.error('This leave type requires a supporting attachment before submission.');
+      return;
+    }
+    submitMutation.mutate({ submit: true, attachment: leaveAttachment, payload: {
       leave_type_id: Number(form.leave_type_id),
+      duration_type: form.duration_type,
       start_date: form.start_date,
       end_date: form.end_date,
+      ...(form.duration_type === 'HALF_DAY' ? { half_day_session: form.half_day_session } : {}),
+      ...(form.duration_type === 'SHORT_LEAVE' ? { start_time: form.start_time, end_time: form.end_time } : {}),
       reason: form.reason || undefined,
+    } });
+  };
+
+  const saveDraft = () => {
+    if (!form.leave_type_id || !form.start_date || !form.end_date) {
+      toast.error('Select a leave type and provide both dates.');
+      return;
+    }
+    if (requestValidationError) {
+      toast.error(requestValidationError);
+      return;
+    }
+    submitMutation.mutate({ submit: false, attachment: leaveAttachment, payload: {
+      leave_type_id: Number(form.leave_type_id),
+      duration_type: form.duration_type,
+      start_date: form.start_date,
+      end_date: form.end_date,
+      ...(form.duration_type === 'HALF_DAY' ? { half_day_session: form.half_day_session } : {}),
+      ...(form.duration_type === 'SHORT_LEAVE' ? { start_time: form.start_time, end_time: form.end_time } : {}),
+      reason: form.reason || 'Draft',
+    } });
+  };
+
+  const pickLeaveAttachment = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
+      copyToCacheDirectory: true,
+      multiple: false,
     });
+    if (!result.canceled) setLeaveAttachment(result.assets[0] ?? null);
   };
 
   const openDateField = (field: DateFieldKey) => {
@@ -888,6 +956,24 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
               </Text>
             ) : null}
 
+            <Text style={[styles.inputLabel, { color: textColor }]}>Duration</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {(['FULL_DAY', 'HALF_DAY', 'SHORT_LEAVE'] as const).map((duration) => (
+                <Pressable key={duration} onPress={() => setForm((current) => ({ ...current, duration_type: duration }))} style={{ flex: 1, padding: 9, borderRadius: 10, borderWidth: 1, borderColor: form.duration_type === duration ? accent : outlineColor, backgroundColor: form.duration_type === duration ? `${accent}18` : 'transparent' }}>
+                  <Text style={{ color: form.duration_type === duration ? accent : mutedColor, fontSize: 11, textAlign: 'center', fontWeight: '600' }}>{duration === 'FULL_DAY' ? 'Full day' : duration === 'HALF_DAY' ? 'Half day' : 'Short leave'}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {form.duration_type === 'HALF_DAY' ? (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['FIRST_HALF', 'SECOND_HALF'] as const).map((session) => (
+                  <Pressable key={session} onPress={() => setForm((current) => ({ ...current, half_day_session: session }))} style={{ flex: 1, padding: 9, borderRadius: 10, borderWidth: 1, borderColor: form.half_day_session === session ? accent : outlineColor }}>
+                    <Text style={{ color: form.half_day_session === session ? accent : mutedColor, textAlign: 'center' }}>{session === 'FIRST_HALF' ? 'First half' : 'Second half'}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
             <Text style={[styles.inputLabel, { color: textColor }]}>Start date</Text>
             <DateFieldButton
               value={form.start_date}
@@ -898,6 +984,16 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
               isDark={isDark}
               outlineColor={outlineColor}
             />
+            {form.duration_type === 'SHORT_LEAVE' ? (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                {(['start_time', 'end_time'] as const).map((field) => (
+                  <View key={field} style={{ flex: 1, gap: 5 }}>
+                    <Text style={[styles.inputLabel, { color: textColor }]}>{field === 'start_time' ? 'Start time' : 'End time'}</Text>
+                    <TextInput value={form[field]} onChangeText={(value) => setForm((current) => ({ ...current, [field]: value }))} placeholder="HH:MM" placeholderTextColor={mutedColor} keyboardType="numbers-and-punctuation" style={{ borderWidth: 1, borderColor: outlineColor, borderRadius: 10, color: textColor, backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surface, padding: 11 }} />
+                  </View>
+                ))}
+              </View>
+            ) : null}
 
             <Text style={[styles.inputLabel, { color: textColor }]}>End date</Text>
             <DateFieldButton
@@ -932,9 +1028,24 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
               style={styles.fluentMultilineInput}
             />
 
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.inputLabel, { color: textColor }]}>Supporting attachment{(selectedLeaveType?.requires_attachment === true || selectedLeaveType?.requires_attachment === 'true') ? ' (required)' : ' (optional)'}</Text>
+              <FluentButtonV1 appearance="outline" onClick={() => void pickLeaveAttachment()}>
+                <FluentText>{leaveAttachment?.name ?? 'Choose PDF or image'}</FluentText>
+              </FluentButtonV1>
+            </View>
+
             <View style={styles.formActions}>
               <FluentButton appearance="outline" onPress={() => setShowApplyForm(false)} style={styles.flexButton}>
                 Cancel
+              </FluentButton>
+              <FluentButton
+                onPress={saveDraft}
+                loading={submitMutation.isPending}
+                disabled={Boolean(requestValidationError) || balancesQuery.isLoading}
+                style={styles.flexButton}
+              >
+                Save draft
               </FluentButton>
               <FluentButton
                 onPress={submitRequest}
@@ -1413,25 +1524,21 @@ function readRequestId(value: unknown) {
   return '';
 }
 
+function unwrapCreatedLeave(value: unknown): MobileRecord | null {
+  const root = asRecord(value);
+  if (!root) return null;
+  for (const candidate of [root, asRecord(root.data), asRecord(root.result), asRecord(root.item), asRecord(root.leave_request), asRecord(root.leaveRequest)]) {
+    if (candidate && readRequestId(candidate)) return candidate;
+  }
+  return null;
+}
+
 function readString(value: unknown, keys: string[]) {
   const record = asRecord(value);
   if (!record) return '';
 
   for (const key of keys) {
     const candidate = record[key];
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-  }
-
-  return '';
-}
-
-function readNumberOrString(value: unknown, keys: string[]) {
-  const record = asRecord(value);
-  if (!record) return '';
-
-  for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
   }
 

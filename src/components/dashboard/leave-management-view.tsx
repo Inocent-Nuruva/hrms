@@ -72,7 +72,8 @@ import {
   listEmployeeGrades,
   listAllEmployees,
   generateLeaveBalances,
-  importLeaveRequests,
+  previewLeaveRequests,
+  confirmLeaveRequestsImport,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
   listAllLeaveBalances,
@@ -2460,10 +2461,14 @@ export function LeaveManagementView({
     setRequestImportBusy(true)
     setRequestImportResult(null)
     try {
-      const result = await importLeaveRequests(token, requestImportFile)
+      const result = requestImportResult?.preview
+        ? await confirmLeaveRequestsImport(token, requestImportFile)
+        : await previewLeaveRequests(token, requestImportFile)
       setRequestImportResult(result)
       if (result.created > 0) await reloadAll("requests", true)
-      if (result.failed === 0) {
+      if (result.preview && result.failed === 0) {
+        showSuccessAlert(`${result.ready} leave request${result.ready === 1 ? "" : "s"} are ready for confirmation. No requests have been created yet.`)
+      } else if (!result.preview && result.failed === 0) {
         showSuccessAlert(`${result.created} leave request${result.created === 1 ? "" : "s"} imported.`)
       }
     } catch (errorObject) {
@@ -4461,7 +4466,7 @@ export function LeaveManagementView({
           <DialogHeader>
             <DialogTitle>Import Leave Requests</DialogTitle>
             <DialogDescription>
-              Download the company template, fill one leave request per row, then upload the completed Excel file. Normal leave rules, balances, overlaps, and approvals still apply.
+              Download the company template, fill one leave request per row, then validate the workbook. Preview makes no changes; confirmation creates requests and rechecks current leave rules, balances, overlaps, and approvals.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -4490,8 +4495,9 @@ export function LeaveManagementView({
             {requestImportResult ? (
               <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">
-                  {requestImportResult.created} created · {requestImportResult.failed} failed · {requestImportResult.total} total
+                  {requestImportResult.preview ? `${requestImportResult.ready} ready · ${requestImportResult.failed} invalid · ${requestImportResult.total} total · no changes made` : `${requestImportResult.created} created · ${requestImportResult.failed} failed · ${requestImportResult.total} total`}
                 </p>
+                {requestImportResult.preview ? <p className="mt-1 text-xs text-muted-foreground">Policy, balance, overlap, and approval rules are checked again when you confirm.</p> : null}
                 {requestImportResult.failed > 0 ? (
                   <div className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-rose-700">
                     {requestImportResult.results
@@ -4518,10 +4524,10 @@ export function LeaveManagementView({
             <button
               type="button"
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium !text-white disabled:opacity-60"
-              disabled={!requestImportFile || requestImportBusy}
+              disabled={!requestImportFile || requestImportBusy || Boolean(requestImportResult && !requestImportResult.preview)}
               onClick={() => void uploadRequestImport()}
             >
-              {requestImportBusy ? "Importing…" : "Import leave requests"}
+              {requestImportBusy ? "Processing…" : requestImportResult ? requestImportResult.preview ? "Confirm and import" : "Import complete" : "Validate file"}
             </button>
           </DialogFooter>
         </DialogPopup>

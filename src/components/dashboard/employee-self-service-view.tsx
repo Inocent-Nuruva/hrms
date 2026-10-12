@@ -55,6 +55,7 @@ import {
   getMyMovement,
   getMyStatus,
   createMyLeaveRequest,
+  uploadMyLeaveRequestDocument,
   getCurrentEmployee,
   getEmployeeById,
   getCurrentAdmin,
@@ -5601,10 +5602,15 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const [requestForm, setRequestForm] = React.useState({
     leave_type_id: "",
+    duration_type: "FULL_DAY",
     start_date: "",
     end_date: "",
+    half_day_session: "FIRST_HALF",
+    start_time: "09:00",
+    end_time: "13:00",
     reason: "",
   })
+  const [leaveAttachmentFile, setLeaveAttachmentFile] = React.useState<File | null>(null)
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
   const activeTab = tab
@@ -5746,6 +5752,14 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     return availableLeaveTypes.find((item) => item.id === requestForm.leave_type_id)?.label ?? ""
   }, [availableLeaveTypes, requestForm.leave_type_id])
 
+  const selectedLeaveTypeRecord = React.useMemo(
+    () => leaveTypes.find((row) => String(row.id ?? row.leave_type_id ?? "") === requestForm.leave_type_id) ?? null,
+    [leaveTypes, requestForm.leave_type_id],
+  )
+  const selectedLeaveTypeRequiresAttachment =
+    selectedLeaveTypeRecord?.requires_attachment === true ||
+    selectedLeaveTypeRecord?.requires_attachment === "true"
+
   const selectedLeaveBalance = React.useMemo(() => {
     if (!requestForm.leave_type_id) {
       return null
@@ -5774,10 +5788,16 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }, [balances, requestForm.leave_type_id])
 
-  const requestedLeaveDays = React.useMemo(
-    () => countInclusiveLeaveDays(requestForm.start_date, requestForm.end_date),
-    [requestForm.end_date, requestForm.start_date]
-  )
+  const requestedLeaveDays = React.useMemo(() => {
+    if (requestForm.duration_type === "HALF_DAY") return 0.5
+    if (requestForm.duration_type === "SHORT_LEAVE") {
+      const [startHour, startMinute] = requestForm.start_time.split(":").map(Number)
+      const [endHour, endMinute] = requestForm.end_time.split(":").map(Number)
+      const minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute)
+      return minutes > 0 ? Number((minutes / 480).toFixed(2)) : null
+    }
+    return countInclusiveLeaveDays(requestForm.start_date, requestForm.end_date)
+  }, [requestForm.duration_type, requestForm.end_date, requestForm.end_time, requestForm.start_date, requestForm.start_time])
 
   const leaveSubmissionBalanceError = React.useMemo(
     () =>
@@ -5958,6 +5978,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setMessage(leaveSubmissionBalanceError)
       return
     }
+    if (submit && selectedLeaveTypeRequiresAttachment && !leaveAttachmentFile) {
+      setMessage("This leave type requires a supporting attachment before submission.")
+      return
+    }
 
     if (availableLeaveTypes.length === 0) {
       setMessage("Leave requests cannot be created until leave types are available to your account.")
@@ -5972,26 +5996,36 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       // the API creates the request in the approval workflow, not as a draft.
       const payload = await createMyLeaveRequest(token, {
         leave_type_id: Number(requestForm.leave_type_id),
+        duration_type: requestForm.duration_type,
         start_date: requestForm.start_date,
         end_date: requestForm.end_date,
+        ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
+        ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
         reason: requestForm.reason.trim() || (submit ? "" : "Draft"),
-        submit: submit === true,
+        submit: submit === true && !leaveAttachmentFile,
       })
+
+      const created =
+        asRecord(payload) ??
+        asRecord(asRecord(payload)?.data) ??
+        asRecord(asRecord(payload)?.result) ??
+        asRecord(asRecord(payload)?.item)
+      const createdId =
+        readNumber(created, ["id", "leave_request_id", "leaveRequestId"]) ??
+        readNumber(asRecord(created?.leave_request), ["id"]) ??
+        readNumber(asRecord(created?.leaveRequest), ["id"])
+
+      if (leaveAttachmentFile) {
+        if (createdId === null) throw new Error("The leave request was created, but its ID was not returned, so the attachment could not be uploaded.")
+        await uploadMyLeaveRequestDocument(token, createdId, leaveAttachmentFile)
+        if (submit) await submitMyLeaveRequest(token, createdId)
+      }
 
       // Some backends still create a draft even when submit:true — finish the flow.
       if (submit) {
-        const created =
-          asRecord(payload) ??
-          asRecord(asRecord(payload)?.data) ??
-          asRecord(asRecord(payload)?.result) ??
-          asRecord(asRecord(payload)?.item)
-        const createdId =
-          readNumber(created, ["id", "leave_request_id", "leaveRequestId"]) ??
-          readNumber(asRecord(created?.leave_request), ["id"]) ??
-          readNumber(asRecord(created?.leaveRequest), ["id"])
         const createdStatus = readString(created, ["status"], "").toLowerCase()
 
-        if (createdId !== null && (createdStatus === "draft" || createdStatus === "" || createdStatus === "-")) {
+        if (!leaveAttachmentFile && createdId !== null && (createdStatus === "draft" || createdStatus === "" || createdStatus === "-")) {
           await submitMyLeaveRequest(token, createdId)
         }
         if (createdId !== null) {
@@ -6004,7 +6038,17 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         }
       }
 
-      setRequestForm({ leave_type_id: "", start_date: "", end_date: "", reason: "" })
+      setRequestForm({
+        leave_type_id: "",
+        duration_type: "FULL_DAY",
+        start_date: "",
+        end_date: "",
+        half_day_session: "FIRST_HALF",
+        start_time: "09:00",
+        end_time: "13:00",
+        reason: "",
+      })
+      setLeaveAttachmentFile(null)
       setMessage(submit ? "Leave request submitted for approval." : "Leave request saved as a draft.")
       setRequestDialogOpen(false)
       await loadData()
@@ -6024,6 +6068,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     leaveSubmissionBalanceError,
     loadData,
     requestForm,
+    leaveAttachmentFile,
+    selectedLeaveTypeRequiresAttachment,
     selectedLeaveBalance?.availableDays,
     token,
   ])
@@ -6767,6 +6813,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                     : ""}
                 </p>
               ) : null}
+              {selectedLeaveTypeRequiresAttachment ? (
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">A supporting attachment is required to submit this leave type.</p>
+              ) : null}
               {requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
                 <p className="text-xs text-muted-foreground">
                   Requested duration: {requestedLeaveDays.toFixed(2)} day(s)
@@ -6776,13 +6825,24 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-rose-600">{leaveSubmissionBalanceError}</p>
               ) : null}
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="leave-duration-type">Duration</Label>
+              <Select value={requestForm.duration_type} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, duration_type: value ?? "FULL_DAY", ...(value && value !== "FULL_DAY" && prev.start_date ? { end_date: prev.start_date } : {}) }))}>
+                <SelectTrigger id="leave-duration-type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FULL_DAY">Full day or multiple days</SelectItem>
+                  <SelectItem value="HALF_DAY">Half day</SelectItem>
+                  <SelectItem value="SHORT_LEAVE">Short leave by hours</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="leave-start-date">Start Date</Label>
                 <DatePickerPresets
                   id="leave-start-date"
                   value={requestForm.start_date}
-                  onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value }))}
+                  onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { end_date: value }) }))}
                   placeholder="Pick start date"
                 />
               </div>
@@ -6791,10 +6851,35 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <DatePickerPresets
                   id="leave-end-date"
                   value={requestForm.end_date}
-                  onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value }))}
+                  onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))}
                   placeholder="Pick end date"
                 />
               </div>
+            </div>
+            {requestForm.duration_type === "HALF_DAY" ? (
+              <div className="space-y-1">
+                <Label htmlFor="leave-half-day-session">Half-day session</Label>
+                <Select value={requestForm.half_day_session} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, half_day_session: value ?? "FIRST_HALF" }))}>
+                  <SelectTrigger id="leave-half-day-session"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FIRST_HALF">First half</SelectItem>
+                    <SelectItem value="SECOND_HALF">Second half</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Half-day leave uses the same start and end date.</p>
+              </div>
+            ) : null}
+            {requestForm.duration_type === "SHORT_LEAVE" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1"><Label htmlFor="leave-short-start">Start time</Label><Input id="leave-short-start" type="time" value={requestForm.start_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_time: event.target.value }))} /></div>
+                <div className="space-y-1"><Label htmlFor="leave-short-end">End time</Label><Input id="leave-short-end" type="time" value={requestForm.end_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_time: event.target.value }))} /></div>
+                <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
+              </div>
+            ) : null}
+            <div className="space-y-1">
+              <Label htmlFor="leave-supporting-attachment">Supporting attachment {selectedLeaveTypeRequiresAttachment ? "(required to submit)" : "(optional)"}</Label>
+              <Input id="leave-supporting-attachment" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
+              {leaveAttachmentFile ? <p className="text-xs text-muted-foreground">Selected: {leaveAttachmentFile.name}</p> : null}
             </div>
             <div className="space-y-1">
               <Label>Reason {requestForm.reason.trim() ? null : <span className="font-normal text-muted-foreground">(required to submit)</span>}</Label>

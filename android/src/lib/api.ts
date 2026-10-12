@@ -529,6 +529,13 @@ export const api = {
     });
   },
 
+  async uploadMyLeaveRequestDocument(id: string | number, file: Record<string, unknown>) {
+    return request<unknown>(`/api/me/leave/requests/${id}/documents`, {
+      method: 'POST',
+      body: { file },
+    });
+  },
+
   async cancelMyLeaveRequest(id: string | number, reason: string) {
     return request<unknown>(`/api/me/leave/requests/${id}/cancel`, {
       method: 'POST',
