@@ -749,7 +749,30 @@ export interface CreateEmployeeInvitationPayload {
   channels: EmployeeInvitationChannel[];
 }
 
+export interface PositionCapacity {
+  position_id: number;
+  headcount: number;
+  filled: number;
+  pending_invitations: number;
+  available: number;
+  /** True when one more acceptance would exceed the approved headcount. */
+  will_overfill: boolean;
+}
+
+/** Seats taken in a position, counting pending invitations as taken. */
+export async function getEmployeeInvitationPositionCapacity(
+  token: string,
+  positionId: number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/position-capacity/${positionId}`,
+    { token, dedupe: false },
+  );
+  return normalizeSingle(payload) as unknown as PositionCapacity;
+}
+
 export type EmployeeInvitationResponse = AdminRecord & {
+  capacity?: PositionCapacity | null;
   id?: number;
   status?: string;
   expires_at?: string;
@@ -777,6 +800,8 @@ export interface PublicEmployeeInvitation {
   phone: string;
   company_name: string;
   expires_at: string;
+  /** True when the email already has an account; accept with its current password. */
+  has_existing_account?: boolean;
 }
 
 export interface AcceptEmployeeInvitationResponse {
@@ -12459,6 +12484,41 @@ export async function listPendingEmployeeInvitations(token: string) {
   return normalizeList(payload) as EmployeeInvitationResponse[];
 }
 
+export type EmployeeInvitationHistoryStatus =
+  | "all"
+  | "pending"
+  | "accepted"
+  | "expired"
+  | "cancelled";
+
+export interface EmployeeInvitationHistoryQuery {
+  status?: EmployeeInvitationHistoryStatus;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** All invitations, filtered by effective status (overdue pending = expired). */
+export async function listEmployeeInvitationHistory(
+  token: string,
+  query: EmployeeInvitationHistoryQuery = {},
+) {
+  const params = new URLSearchParams();
+  if (query.status) params.set("status", query.status);
+  if (query.search?.trim()) params.set("search", query.search.trim());
+  if (query.page) params.set("page", String(query.page));
+  if (query.limit) params.set("limit", String(query.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const payload = await adminRequest<{
+    data?: unknown;
+    meta?: { totalItems?: number };
+  }>(`/api/employee-invitations/history${suffix}`, { token, dedupe: false });
+  return {
+    data: normalizeList(payload) as EmployeeInvitationResponse[],
+    totalItems: Number(payload?.meta?.totalItems ?? 0),
+  };
+}
+
 export async function resendEmployeeInvitation(
   token: string,
   invitationId: string | number,
@@ -12473,10 +12533,14 @@ export async function resendEmployeeInvitation(
   return normalizeSingle(payload) as EmployeeInvitationResponse;
 }
 
+// The registration token is sent in the request body, never the URL, so it
+// stays out of proxy and access logs.
 export async function getPublicEmployeeInvitation(token: string) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/lookup",
     {
+      method: "POST",
+      body: { token },
       dedupe: false,
     },
   );
@@ -12488,10 +12552,10 @@ export async function acceptEmployeeInvitation(
   password: string,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/accept",
     {
       method: "POST",
-      body: { password },
+      body: { token, password },
       dedupe: false,
     },
   );
@@ -14933,6 +14997,32 @@ export async function archiveEmployeeProfile(
     method: "DELETE",
     token,
   });
+}
+
+export interface PermanentEmployeeDeletionResponse {
+  message: string;
+  employee_id: number;
+  company_user_removed: boolean;
+  user_account_removed: boolean;
+  files_removed: number;
+}
+
+/**
+ * Permanently delete an employee who is still onboarding, with their records.
+ * The backend refuses (409) once the employee has working history, supervises
+ * others, or has device access; the message explains why.
+ */
+export async function deleteEmployeePermanently(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<PermanentEmployeeDeletionResponse>(
+    `/api/employees/${employeeId}/permanent`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
 }
 
 export async function unlinkEmployeeCompanyUser(

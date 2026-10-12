@@ -36,6 +36,7 @@ import {
 } from "@/components/dashboard/employee-access-removal-dialog";
 import {
   archiveEmployeeProfile,
+  deleteEmployeePermanently,
   buildUserTwoFactorMap,
   disableUserTwoFactor,
   enableUserTwoFactor,
@@ -70,8 +71,15 @@ import {
 import {
   KeyRound,
   Trash2,
+  UserX,
   UsersIcon,
 } from "lucide-react";
+import {
+  PERMANENT_DELETE_CONFIRMATION,
+  canDeletePermanently,
+  isPermanentDeleteConfirmed,
+  permanentDeleteSummary,
+} from "@/lib/employee-permanent-delete";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
@@ -407,6 +415,14 @@ export function EmployeesListView({
     enabled: boolean;
   } | null>(null);
   const [twoFactorBusy, setTwoFactorBusy] = React.useState(false);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = React.useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [permanentDeleteConfirmation, setPermanentDeleteConfirmation] =
+    React.useState("");
+  const [permanentDeleteBusy, setPermanentDeleteBusy] = React.useState(false);
+  const [permanentDeleteError, setPermanentDeleteError] = React.useState("");
   const [passwordResetTarget, setPasswordResetTarget] = React.useState<{
     userId: string | number;
     employeeName: string;
@@ -429,6 +445,7 @@ export function EmployeesListView({
   const canArchiveEmployees =
     directoryMode === "current" &&
     canPerformPermission(actor.permissionLabels, "employees:delete");
+  const canDeleteOnboardingEmployees = canArchiveEmployees;
   const canAddEmployee =
     directoryMode === "current" &&
     actor.ready &&
@@ -752,6 +769,47 @@ export function EmployeesListView({
     });
     setRemovalOpen(true);
   }, []);
+
+  const openPermanentDelete = React.useCallback((row: AdminRecord) => {
+    const id = employeeRecordId(row);
+    if (id === null) return;
+    setPermanentDeleteConfirmation("");
+    setPermanentDeleteError("");
+    setPermanentDeleteTarget({ id: Number(id), name: employeeDisplayName(row) });
+  }, []);
+
+  const confirmPermanentDelete = React.useCallback(async () => {
+    if (!permanentDeleteTarget) return;
+    const token = readStoredToken();
+    if (!token) {
+      toast.error("Authentication required. Please log in again.");
+      return;
+    }
+    setPermanentDeleteBusy(true);
+    setPermanentDeleteError("");
+    try {
+      const result = await deleteEmployeePermanently(
+        token,
+        permanentDeleteTarget.id,
+      );
+      toast.success(permanentDeleteSummary(result ?? {}));
+      setSelectedEmployeeIds((current) =>
+        current.filter((id) => id !== String(permanentDeleteTarget.id)),
+      );
+      setPermanentDeleteTarget(null);
+      employeeListSnapshotCache.clear();
+      await fetchEmployees();
+    } catch (errorObject) {
+      // Keep the dialog open so HR can read why the backend refused.
+      setPermanentDeleteError(
+        errorObject instanceof Error && errorObject.message.trim()
+          ? errorObject.message
+          : "Could not delete this employee.",
+      );
+    } finally {
+      setPermanentDeleteBusy(false);
+    }
+  }, [fetchEmployees, permanentDeleteTarget]);
 
   const selectedEmployees = React.useMemo(
     () =>
@@ -1077,7 +1135,7 @@ export function EmployeesListView({
       {
         key: "actions",
         label: "Actions",
-        defaultWidth: 92,
+        defaultWidth: 120,
         sortable: false,
         render: (row: AdminRecord) => (
           <div
@@ -1117,13 +1175,29 @@ export function EmployeesListView({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
+            {canDeleteOnboardingEmployees && canDeletePermanently(row) ? (
+              <button
+                type="button"
+                className="inline-flex size-7 items-center justify-center rounded-md text-rose-700 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                title="Delete permanently (onboarding only)"
+                aria-label={`Permanently delete ${employeeDisplayName(row)}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openPermanentDelete(row);
+                }}
+              >
+                <UserX className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
         ),
       },
     ],
     [
+      canDeleteOnboardingEmployees,
       canManageTwoFactor,
       canRemoveEmployee,
+      openPermanentDelete,
       openRemovalDialog,
       requestPasswordReset,
       requestTwoFactorChange,
@@ -1351,6 +1425,65 @@ export function EmployeesListView({
                 </button>
               </>
             )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(permanentDeleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !permanentDeleteBusy) setPermanentDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {permanentDeleteTarget?.name} and all of their onboarding records,
+              documents and uploaded files will be removed. Their login is also
+              deleted unless another company uses it. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <label className="grid gap-1.5 text-sm">
+            <span>
+              Type <strong>{PERMANENT_DELETE_CONFIRMATION}</strong> to confirm
+            </span>
+            <input
+              value={permanentDeleteConfirmation}
+              onChange={(event) =>
+                setPermanentDeleteConfirmation(event.target.value)
+              }
+              disabled={permanentDeleteBusy}
+              autoComplete="off"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </label>
+
+          {permanentDeleteError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"
+            >
+              {permanentDeleteError}
+            </p>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={permanentDeleteBusy}>
+              Cancel
+            </AlertDialogCancel>
+            <button
+              type="button"
+              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              disabled={
+                permanentDeleteBusy ||
+                !isPermanentDeleteConfirmed(permanentDeleteConfirmation)
+              }
+              onClick={() => void confirmPermanentDelete()}
+            >
+              {permanentDeleteBusy ? "Deleting…" : "Delete permanently"}
+            </button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

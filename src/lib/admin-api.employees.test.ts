@@ -163,19 +163,29 @@ describe("employee admin API helpers", () => {
     await getPublicEmployeeInvitation("invite token")
     await acceptEmployeeInvitation("invite token", "StrongPass#2026")
 
+    // The token travels in the body, never in the URL.
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:8888/api/employee-invitations/accept/invite%20token",
-      expect.objectContaining({ method: "GET" }),
+      "http://localhost:8888/api/employee-invitations/lookup",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token: "invite token" }),
+      }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://localhost:8888/api/employee-invitations/accept/invite%20token",
+      "http://localhost:8888/api/employee-invitations/accept",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ password: "StrongPass#2026" }),
+        body: JSON.stringify({
+          token: "invite token",
+          password: "StrongPass#2026",
+        }),
       }),
     )
+    for (const [url] of fetchMock.mock.calls) {
+      expect(String(url)).not.toMatch(/invite(%20| )token/)
+    }
   })
 
   it("requests inactive employees with the supported lifecycle filter", async () => {
