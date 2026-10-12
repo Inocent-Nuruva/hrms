@@ -37,7 +37,7 @@ export function WorkflowChoiceCard({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className="relative overflow-hidden rounded-md border border-slate-200 bg-white px-2.5 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 aria-pressed:border-primary dark:border-border dark:bg-background dark:hover:bg-muted/40"
+      className="relative w-full min-w-0 whitespace-normal overflow-hidden rounded-md border border-slate-200 bg-white px-2.5 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 aria-pressed:border-primary dark:border-border dark:bg-background dark:hover:bg-muted/40"
     >
       {active ? (
         <motion.span
@@ -80,7 +80,7 @@ export function WorkflowSelect({
         onValueChange(next === ALL_OPTION ? "" : next)
       }}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full min-w-0">
         <span className={cn("min-w-0 flex-1 truncate text-left", selectedLabel ? undefined : "text-slate-400")}>
           {selectedLabel || placeholder}
         </span>

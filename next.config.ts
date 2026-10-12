@@ -35,6 +35,13 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     webpackMemoryOptimizations: true,
+    // Fluent UI's barrel exports hundreds of modules. Only load the controls
+    // referenced by each route so development compilation stays within the
+    // memory budget.
+    optimizePackageImports: [
+      "@fluentui/react-components",
+      "@fluentui/react-icons",
+    ],
     // Avoid compiling every route into one large resident process. Routes are
     // compiled on first visit instead, keeping development memory bounded.
     preloadEntriesOnStart: false,

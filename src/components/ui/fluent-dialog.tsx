@@ -3,21 +3,45 @@
 import * as React from "react"
 import {
   Button,
-  Dialog,
-  DialogActions,
-  DialogBody,
-  DialogContent,
-  DialogSurface,
-  DialogTitle,
-  DialogTrigger,
+  DrawerBody,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerHeaderTitle,
+  OverlayDrawer,
   type DialogProps,
+  type OverlayDrawerProps,
 } from "@fluentui/react-components"
 
+type FluentDialogContextValue = {
+  open: boolean
+  modalType: DialogProps["modalType"]
+  setOpen: (open: boolean) => void
+}
+
+const FluentDialogContext = React.createContext<FluentDialogContextValue | null>(null)
+
+function useFluentDialogContext() {
+  const context = React.useContext(FluentDialogContext)
+  if (!context) {
+    throw new Error("Fluent drawer components must be used inside FluentDialogRoot.")
+  }
+  return context
+}
+
 export function dialogSurfaceSize(className?: string) {
-  if (!className) return undefined
-  if (/100vw|h-dvh|h-\[calc\(100vh/.test(className)) return "full"
-  if (/max-w-none|max-w-(2|3|4|5)xl|max-w-\[|min\(9/.test(className)) return "wide"
-  return undefined
+  if (!className) return "compact"
+  if (!/notification-dialog/.test(className) && /100vw|h-dvh|h-\[calc\(100vh/.test(className)) return "full"
+  if (
+    /max-w-none|max-w-(3|4|5|6|7)xl|min\((9\d{2}|1\d{3})px/.test(
+      className,
+    )
+  ) {
+    return "wide"
+  }
+  if (/notification-dialog|max-w-(xl|2xl)|min\((7|8)\d{2}px|42rem|44rem|48rem/.test(className)) {
+    return "medium"
+  }
+  return "compact"
 }
 
 type FluentDialogRootProps = {
@@ -30,21 +54,30 @@ type FluentDialogRootProps = {
 
 export function FluentDialogRoot({
   open,
-  defaultOpen,
+  defaultOpen = false,
   onOpenChange,
   modalType = "modal",
   children,
 }: FluentDialogRootProps) {
-  return (
-    <Dialog
-      modalType={modalType}
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={(_event, data) => onOpenChange?.(data.open)}
-    >
-      {children as React.ReactElement}
-    </Dialog>
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen)
+  const resolvedOpen = open ?? uncontrolledOpen
+
+  const setOpen = React.useCallback(
+    (nextOpen: boolean) => {
+      if (open === undefined) {
+        setUncontrolledOpen(nextOpen)
+      }
+      onOpenChange?.(nextOpen)
+    },
+    [onOpenChange, open],
   )
+
+  const value = React.useMemo(
+    () => ({ open: resolvedOpen, modalType, setOpen }),
+    [modalType, resolvedOpen, setOpen],
+  )
+
+  return <FluentDialogContext.Provider value={value}>{children}</FluentDialogContext.Provider>
 }
 
 type TriggerElementProps = {
@@ -52,6 +85,30 @@ type TriggerElementProps = {
   className?: string
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void
   children?: React.ReactNode
+}
+
+type FluentDialogTriggerProps = {
+  children: React.ReactElement
+  action?: "open" | "close"
+  disableButtonEnhancement?: boolean
+}
+
+export function FluentDialogTrigger({
+  children,
+  action = "open",
+}: FluentDialogTriggerProps) {
+  const { setOpen } = useFluentDialogContext()
+  const typedChild = children as React.ReactElement<TriggerElementProps>
+  const childProps = typedChild.props
+
+  return React.cloneElement(typedChild, {
+    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+      childProps.onClick?.(event)
+      if (!event.defaultPrevented && !childProps.disabled) {
+        setOpen(action === "open")
+      }
+    },
+  })
 }
 
 type CloseButtonProps = {
@@ -96,19 +153,55 @@ export function FluentDialogCloseButton({
       </Button>
     )
 
+  return <FluentDialogTrigger action={action}>{button}</FluentDialogTrigger>
+}
+
+type DrawerSurfaceProps = Omit<OverlayDrawerProps, "open" | "onOpenChange" | "position" | "size"> & {
+  "data-size"?: string
+}
+
+export function DialogSurface({
+  children,
+  "data-size": dataSize = "compact",
+  ...props
+}: DrawerSurfaceProps) {
+  const { modalType, open, setOpen } = useFluentDialogContext()
+  const drawerSize: NonNullable<OverlayDrawerProps["size"]> =
+    dataSize === "full"
+      ? "full"
+      : dataSize === "wide"
+        ? "large"
+        : dataSize === "medium"
+          ? "medium"
+          : "small"
+
   return (
-    <DialogTrigger disableButtonEnhancement action={action}>
-      {button}
-    </DialogTrigger>
+    <OverlayDrawer
+      {...props}
+      data-app-drawer="true"
+      data-size={dataSize}
+      modalType={modalType}
+      open={open}
+      position="end"
+      size={drawerSize}
+      onOpenChange={(_event, data) => setOpen(data.open)}
+    >
+      {children}
+    </OverlayDrawer>
   )
 }
+
+const DialogActions = DrawerFooter
+const DialogBody = DrawerBody
+const DialogContent = DrawerBody
+const DialogTitle = DrawerHeaderTitle
 
 export {
   Button,
   DialogActions,
   DialogBody,
   DialogContent,
-  DialogSurface,
   DialogTitle,
-  DialogTrigger,
+  DrawerFooter,
+  DrawerHeader,
 }

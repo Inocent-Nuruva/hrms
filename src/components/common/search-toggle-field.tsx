@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon, XIcon } from "lucide-react"
+import { Button } from "@fluentui/react-components"
+import { SearchSparkle20Regular } from "@fluentui/react-icons"
 
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { cn } from "@/lib/utils"
 
 type SearchToggleFieldProps = {
@@ -55,20 +57,15 @@ export function SearchToggleField({
   if (!isOpen) {
     return (
       <div className={cn("flex shrink-0 items-center", className)}>
-        <button
-          type="button"
+        <Button
+          appearance={highlighted ? "primary" : "subtle"}
+          size="small"
+          icon={<SearchSparkle20Regular />}
           aria-label={`Open ${label.toLowerCase()}`}
           title={label}
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
-            highlighted
-              ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
-              : "border-sky-200/80 bg-sky-50/70 text-sky-700 hover:bg-sky-100 hover:text-sky-800",
-          )}
+          className="!size-8 !min-w-8"
           onClick={() => setIsOpen(true)}
-        >
-          <SearchIcon className="size-3.5" />
-        </button>
+        />
       </div>
     )
   }
@@ -80,27 +77,23 @@ export function SearchToggleField({
         className
       )}
     >
-      <div className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50/80 px-2 text-xs text-foreground transition-all duration-200">
-        <SearchIcon className="size-3.5 shrink-0 text-sky-700" />
-        <input
-          ref={inputRef}
-          aria-label={label}
-          className="min-w-0 w-full border-0 bg-transparent p-0 text-xs text-foreground outline-none placeholder:text-muted-foreground"
-          placeholder={placeholder}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <button
-          type="button"
-          aria-label={`Close ${label.toLowerCase()}`}
-          title={`Close ${label.toLowerCase()}`}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={handleClose}
-        >
-          <XIcon className="size-3.5" />
-        </button>
-      </div>
+      <FluentSearchBox
+        ref={inputRef}
+        size="small"
+        aria-label={label}
+        placeholder={placeholder}
+        value={value}
+        onChange={(_event, data) => onChange(data.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault()
+            handleClose()
+            return
+          }
+          onKeyDown?.(event)
+        }}
+        className="w-full min-w-0"
+      />
     </div>
   )
 }

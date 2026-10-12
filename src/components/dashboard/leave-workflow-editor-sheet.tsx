@@ -337,7 +337,7 @@ export function LeaveWorkflowEditorSheet({
   }
 
   const detailsForm = (
-    <div className="min-w-0 space-y-4">
+    <div className="w-full min-w-0 space-y-4">
       <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
         <span>Workflow name</span>
         <input
@@ -423,7 +423,7 @@ export function LeaveWorkflowEditorSheet({
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="min-w-0 text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
         Route: <span className="font-semibold text-primary">{selectedLeaveType}</span>
         {" · "}
         <span className="font-semibold text-primary">
@@ -476,19 +476,19 @@ export function LeaveWorkflowEditorSheet({
             {stage === "details" ? (
               <motion.div
                 key="details-stage"
-                className="flex h-full min-h-0 items-center justify-center overflow-y-auto px-4 py-8 sm:px-6"
+                className="flex h-full min-h-0 min-w-0 items-start justify-center overflow-y-auto px-4 py-4 sm:items-center sm:px-6 sm:py-8"
                 initial={reduce ? { opacity: 1 } : { opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduce ? { opacity: 0 } : { opacity: 0, x: -48 }}
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="w-full max-w-lg">
+                <div className="w-full min-w-0 max-w-lg">
                   <WorkflowSectionHeading
                     number="01"
                     title="Details"
                     description="Name the workflow and choose exactly when it should be used."
                   />
-                  <div className="mt-5 pl-7">{detailsForm}</div>
+                  <div className="mt-5 pl-0 sm:pl-7">{detailsForm}</div>
                 </div>
               </motion.div>
             ) : (
@@ -500,13 +500,13 @@ export function LeaveWorkflowEditorSheet({
                 exit={reduce ? { opacity: 0 } : { opacity: 0, x: 56 }}
                 transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               >
-                <section className="min-w-0 space-y-4 overflow-y-auto border-b border-border px-4 py-4 sm:px-6 lg:border-r lg:border-b-0">
+                <section className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto border-b border-border px-4 py-4 sm:px-6 lg:border-r lg:border-b-0">
                   <WorkflowSectionHeading
                     number="01"
                     title="Details"
                     description="You can still change these while you build the path."
                   />
-                  <div className="pl-7">{detailsForm}</div>
+                  <div className="pl-0 sm:pl-7">{detailsForm}</div>
                 </section>
                 <section className="flex min-h-[24rem] min-w-0 flex-col">
                   <div className="flex flex-col gap-3 border-b border-border px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
@@ -540,15 +540,15 @@ export function LeaveWorkflowEditorSheet({
           </AnimatePresence>
         </div>
 
-        <SheetFooter className="mt-0 shrink-0 flex-col gap-3 border-t border-border bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:bg-background">
-          <p className={cn("text-xs", stage === "details" ? (canGoNext ? "text-emerald-700" : "text-amber-700") : isReady ? "text-emerald-700" : "text-amber-700")}>
+        <SheetFooter className="mt-0 w-full min-w-0 shrink-0 flex-col gap-3 border-t border-border bg-white px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6 dark:bg-background">
+          <p className={cn("min-w-0 whitespace-normal text-xs leading-5 sm:flex-1", stage === "details" ? (canGoNext ? "text-emerald-700" : "text-amber-700") : isReady ? "text-emerald-700" : "text-amber-700")}>
             {readinessMessage}
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full min-w-0 flex-wrap justify-end gap-2 sm:w-auto sm:shrink-0">
             {stage === "path" ? (
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
+                className="inline-flex h-9 max-w-full items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
                 onClick={() => setStage("details")}
               >
                 Back

@@ -1,8 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   HeroBand,
@@ -311,7 +314,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `cancel-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Cancel"}
+                  {busyId === `cancel-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Cancel"}
                 </button>
               </div>
             )
@@ -357,7 +360,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           return (
             <div className="flex flex-wrap gap-1">
               <button type="button" className={actionButtonClass} disabled={busyId === `in-${id}`} onClick={(event) => { event.stopPropagation(); void onCheckIn(row) }}>
-                {busyId === `in-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Check in"}
+                {busyId === `in-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Check in"}
               </button>
               <button type="button" className={actionButtonClass} onClick={(event) => {
                 event.stopPropagation()
@@ -395,7 +398,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           actions={
             <div className="flex flex-wrap gap-2">
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
               <button type="button" className={actionButtonClass} onClick={() => {
@@ -419,7 +422,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>
@@ -485,7 +488,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           <div className="grid gap-3">
             {createMode === "plan" || createMode === "unplanned" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><input type="date" className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Visit date</span><DateInput className={inputClass} value={form.visit_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, visit_date: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span>
                   <FluentSelect
                     ariaLabel="Type"
@@ -508,11 +511,11 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Purpose</span><Textarea className={textareaClass} value={form.purpose ?? ""} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))} /></label>
               </>
             ) : null}
             {createMode === "unplanned" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Why unplanned</span><textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Why unplanned</span><Textarea className={textareaClass} value={form.unplanned_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, unplanned_reason: event.target.value }))} /></label>
             ) : null}
             {createMode === "expense" ? (
               <>
@@ -543,14 +546,14 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
             ) : null}
             {createMode === "checkout" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Discussion notes</span><Textarea className={textareaClass} value={form.discussion_notes ?? ""} onChange={(event) => setForm((current) => ({ ...current, discussion_notes: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Outcome</span><input className={inputClass} value={form.outcome ?? ""} onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))} /></label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" className="size-4 accent-sky-700" checked={form.follow_up_required === "true"} onChange={(event) => setForm((current) => ({ ...current, follow_up_required: event.target.checked ? "true" : "false" }))} />
                   <span>Create a follow-up from this visit</span>
                 </label>
                 {form.follow_up_required === "true" ? (
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><input type="date" className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
+                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Follow-up due date</span><DateInput className={inputClass} value={form.next_follow_up_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, next_follow_up_date: event.target.value }))} /></label>
                 ) : null}
               </>
             ) : null}
@@ -574,18 +577,18 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                     ]}
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date</span><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Action</span><Textarea className={textareaClass} value={form.action ?? ""} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} placeholder="What needs to happen next?" /></label>
               </>
             ) : null}
             {createMode === "complete-follow-up" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Completion note</span><Textarea className={textareaClass} value={form.completion_note ?? ""} onChange={(event) => setForm((current) => ({ ...current, completion_note: event.target.value }))} placeholder="What was done?" /></label>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

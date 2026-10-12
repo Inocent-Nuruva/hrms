@@ -1,8 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
+import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
-import { FileText, Loader2, Plus, RefreshCw, Upload } from "lucide-react"
-import { toast } from "sonner"
+import { FileText, Plus, RefreshCw, Upload } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   listEmployees,
   listOnboardingWorkflows,
@@ -252,24 +256,24 @@ export function RecruitmentPipelineView() {
               <Field title="Vacancies"><Input required min="1" type="number" value={form.vacancies ?? "1"} onChange={(event) => set("vacancies", event.target.value)} /></Field>
               <Field title="Monthly budget (TZS)"><Input required min="1" type="number" value={form.budget_amount ?? ""} onChange={(event) => set("budget_amount", event.target.value)} /></Field>
               <Field title="Job title"><Input required value={form.job_title ?? ""} onChange={(event) => set("job_title", event.target.value)} /></Field>
-              <Field title="Posting closes"><Input type="date" value={form.closes_on ?? ""} onChange={(event) => set("closes_on", event.target.value)} /></Field>
-              <div className="sm:col-span-2"><Field title="Job description"><textarea required className={fieldClass} rows={5} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
+              <Field title="Posting closes"><DateInput value={form.closes_on ?? ""} onChange={(event) => set("closes_on", event.target.value)} /></Field>
+              <div className="sm:col-span-2"><Field title="Job description"><Textarea required className={fieldClass} rows={5} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
             </> : null}
             {mode === "candidate" ? <>
               {(["first_name", "last_name", "email", "phone"] as const).map((key) => <Field key={key} title={key.replaceAll("_", " ")}><Input required type={key === "email" ? "email" : "text"} value={form[key] ?? ""} onChange={(event) => set(key, event.target.value)} /></Field>)}
               <Field title="Gender"><FluentSelect ariaLabel="Gender" className="w-full" value={form.gender ?? ""} placeholder="Select" onChange={(next) => set("gender", next)} options={[{ value: "", label: "Select" }, { value: "male", label: "Male" }, { value: "female", label: "Female" }]} /></Field>
             </> : null}
             {mode === "interview" ? <>
-              <Field title="Scheduled at"><Input required type="datetime-local" value={form.scheduled_at ?? ""} onChange={(event) => set("scheduled_at", event.target.value)} /></Field>
+              <Field title="Scheduled at"><DateTimeInput required aria-label="Scheduled at" value={form.scheduled_at ?? ""} onChange={(event) => set("scheduled_at", event.target.value)} /></Field>
               <Field title="Location"><Input required value={form.location ?? ""} onChange={(event) => set("location", event.target.value)} /></Field>
               <div className="sm:col-span-2"><Field title="Panel"><Dropdown multiselect aria-label="Panel" className="w-full" placeholder="Select panel" selectedOptions={(form.panel_ids ?? "").split(",").filter(Boolean)} onOptionSelect={(_event, data) => set("panel_ids", (data.selectedOptions ?? []).join(","))}>{users.map((row) => <Option key={idOf(row)} value={String(idOf(row))} text={label(row)}>{label(row)}</Option>)}</Dropdown></Field></div>
             </> : null}
-            {mode === "score" ? <><Field title="Score / 100"><Input required min="0" max="100" type="number" value={form.score ?? ""} onChange={(event) => set("score", event.target.value)} /></Field><div className="sm:col-span-2"><Field title="Comments"><textarea required className={fieldClass} rows={3} value={form.comments ?? ""} onChange={(event) => set("comments", event.target.value)} /></Field></div></> : null}
-            {mode === "check" ? <><Field title="Check"><FluentSelect ariaLabel="Check" className="w-full" value={form.type ?? ""} placeholder="Select" onChange={(next) => set("type", next)} options={[{ value: "", label: "Select" }, { value: "REFERENCE", label: "Reference" }, { value: "CERTIFICATE", label: "Certificate" }, { value: "NIDA", label: "NIDA" }]} /></Field><Field title="Result"><FluentSelect ariaLabel="Result" className="w-full" value={form.result ?? ""} placeholder="Select" onChange={(next) => set("result", next)} options={[{ value: "", label: "Select" }, { value: "PASS", label: "Pass" }, { value: "FAIL", label: "Fail" }]} /></Field><div className="sm:col-span-2"><Field title="Evidence note"><textarea required className={fieldClass} rows={3} value={form.evidence_note ?? ""} onChange={(event) => set("evidence_note", event.target.value)} /></Field></div></> : null}
-            {mode === "offer" ? <><Field title="Monthly salary (TZS)"><Input required min="1" type="number" value={form.salary ?? ""} onChange={(event) => set("salary", event.target.value)} /></Field><Field title="Start date"><Input required type="date" value={form.start_date ?? ""} onChange={(event) => set("start_date", event.target.value)} /></Field></> : null}
+            {mode === "score" ? <><Field title="Score / 100"><Input required min="0" max="100" type="number" value={form.score ?? ""} onChange={(event) => set("score", event.target.value)} /></Field><div className="sm:col-span-2"><Field title="Comments"><Textarea required className={fieldClass} rows={3} value={form.comments ?? ""} onChange={(event) => set("comments", event.target.value)} /></Field></div></> : null}
+            {mode === "check" ? <><Field title="Check"><FluentSelect ariaLabel="Check" className="w-full" value={form.type ?? ""} placeholder="Select" onChange={(next) => set("type", next)} options={[{ value: "", label: "Select" }, { value: "REFERENCE", label: "Reference" }, { value: "CERTIFICATE", label: "Certificate" }, { value: "NIDA", label: "NIDA" }]} /></Field><Field title="Result"><FluentSelect ariaLabel="Result" className="w-full" value={form.result ?? ""} placeholder="Select" onChange={(next) => set("result", next)} options={[{ value: "", label: "Select" }, { value: "PASS", label: "Pass" }, { value: "FAIL", label: "Fail" }]} /></Field><div className="sm:col-span-2"><Field title="Evidence note"><Textarea required className={fieldClass} rows={3} value={form.evidence_note ?? ""} onChange={(event) => set("evidence_note", event.target.value)} /></Field></div></> : null}
+            {mode === "offer" ? <><Field title="Monthly salary (TZS)"><Input required min="1" type="number" value={form.salary ?? ""} onChange={(event) => set("salary", event.target.value)} /></Field><Field title="Start date"><DateInput required value={form.start_date ?? ""} onChange={(event) => set("start_date", event.target.value)} /></Field></> : null}
             {mode === "convert" ? <div className="sm:col-span-2"><Field title="Onboarding workflow"><FluentSelect ariaLabel="Onboarding workflow" className="w-full" value={form.onboarding_workflow_id ?? ""} placeholder="Select" onChange={(next) => set("onboarding_workflow_id", next)} options={[{ value: "", label: "Select" }, ...workflows.map((row) => ({ value: String(idOf(row)), label: value(row, "name") }))]} /></Field></div> : null}
           </div>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : null} Save</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setMode(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null} Save</Button></DialogFooter>
         </form>
       </DialogPopup>
     </Dialog>

@@ -1,14 +1,13 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { MapPin, Wifi } from "lucide-react";
 import {
-  Loader2,
-  LogIn,
-  LogOut,
-  MapPin,
-  Network,
-  Wifi,
-} from "lucide-react"
+  ArrowEnter16Regular,
+  ArrowExit16Regular,
+  Globe16Regular,
+} from "@fluentui/react-icons"
 
 import {
   Dialog,
@@ -19,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { Button } from "@/components/ui/button"
+import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 import {
   createAttendanceMobilePunchCheckIn,
   createAttendanceMobilePunchCheckOut,
@@ -294,7 +294,7 @@ export function NetworkCheckButton({
         aria-label={iconOnly ? "Check network and location" : undefined}
         title={iconOnly ? "Network check" : undefined}
       >
-        <Network aria-hidden="true" />
+        <Globe16Regular className="size-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
         {iconOnly ? (
           <span
             className={cn(
@@ -322,7 +322,7 @@ export function NetworkCheckButton({
           <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
             {checking ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+                <FluentLoadingIndicator className="size-6 animate-spin text-primary" aria-hidden="true" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Checking your connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -421,7 +421,6 @@ export function AttendancePunchActions({
   canCheckOut,
   onAttendanceChanged,
   className,
-  messageClassName,
   compact = false,
 }: {
   employeeId: number
@@ -429,7 +428,6 @@ export function AttendancePunchActions({
   canCheckOut: boolean
   onAttendanceChanged?: () => Promise<void>
   className?: string
-  messageClassName?: string
   compact?: boolean
 }) {
   const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
@@ -437,6 +435,8 @@ export function AttendancePunchActions({
     tone: "success" | "error"
     text: string
   } | null>(null)
+
+  useFluentToastResultState(message, setMessage)
 
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
@@ -501,20 +501,25 @@ export function AttendancePunchActions({
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
-      <div className={cn("flex flex-wrap", compact ? "gap-1" : "gap-2")}>
+      <div className={cn(
+        "flex flex-wrap",
+        compact
+          ? "items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-sm"
+          : "gap-2",
+      )}>
         <Button
           type="button"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-7 gap-1 rounded-md px-2 text-[11px] font-semibold shadow-sm"
+            ? "h-8 min-h-8 min-w-[5.25rem] gap-1.5 rounded-md px-2.5 text-xs font-semibold shadow-none disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
           onClick={() => void submitPunch("in")}
         >
           {busyAction === "in" ? (
-            <Loader2 className={cn(compact ? "size-3" : "size-3.5", "animate-spin")} aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
-            <LogIn className={compact ? "size-3" : "size-3.5"} aria-hidden="true" />
+            <ArrowEnter16Regular className="size-4" aria-hidden="true" />
           )}
           {busyAction === "in" ? "Checking in…" : "Check in"}
         </Button>
@@ -523,33 +528,19 @@ export function AttendancePunchActions({
           variant="outline"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-7 gap-1 rounded-md border-border bg-background px-2 text-[11px] font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5"
+            ? "h-8 min-h-8 min-w-[5.5rem] gap-1.5 rounded-md border-border/70 bg-background px-2.5 text-xs font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5 disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
           onClick={() => void submitPunch("out")}
         >
           {busyAction === "out" ? (
-            <Loader2 className={cn(compact ? "size-3" : "size-3.5", "animate-spin")} aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
-            <LogOut className={compact ? "size-3" : "size-3.5"} aria-hidden="true" />
+            <ArrowExit16Regular className="size-4" aria-hidden="true" />
           )}
           {busyAction === "out" ? "Checking out…" : "Check out"}
         </Button>
       </div>
-      {message ? (
-        <p
-          className={cn(
-            "text-xs",
-            message.tone === "success"
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-destructive",
-            messageClassName,
-          )}
-          role="status"
-        >
-          {message.text}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -627,7 +618,7 @@ export function DashboardAttendanceQuickActions() {
     : "No check-in yet"
 
   return (
-    <div className="relative flex items-center gap-2 rounded-lg border border-border/70 bg-card/90 p-1 shadow-sm">
+    <div className="relative flex items-center gap-2">
       <div className="hidden min-w-[76px] flex-col pl-1 leading-tight 2xl:flex">
         <span className="flex items-center gap-1 text-[10px] font-semibold text-foreground">
           <span className={cn("size-1.5 rounded-full", state.checkOut ? "bg-muted-foreground/50" : "bg-emerald-500")} />
@@ -642,7 +633,6 @@ export function DashboardAttendanceQuickActions() {
         onAttendanceChanged={loadAttendance}
         compact
         className="relative mt-0 items-center"
-        messageClassName="absolute left-1/2 top-[calc(100%+0.5rem)] z-10 -translate-x-1/2 whitespace-nowrap border border-border bg-popover px-3 py-1.5 text-popover-foreground shadow-md"
       />
     </div>
   )

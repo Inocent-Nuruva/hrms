@@ -261,7 +261,9 @@ export function resolveHomeDashboardKind(input: {
   if (input.scope === "platform") return "platform"
 
   const fromRole = kindFromRoles(input.roleNames ?? [])
-  if (fromRole) return fromRole
+  // HR and executive dashboards stay role-specific even when their roles also
+  // carry the company overview permission.
+  if (fromRole === "hr" || fromRole === "management") return fromRole
 
   // Some HR users intentionally keep the employee shell for self-service,
   // while the API grants their HR work surface explicitly. That dedicated
@@ -275,7 +277,20 @@ export function resolveHomeDashboardKind(input: {
     return "hr"
   }
 
-  if (input.accessMode === "employee") return "employee"
+  if (input.accessMode === "employee") return fromRole ?? "employee"
+
+  // This is an explicit dashboard assignment. It must win over manager/team
+  // scope grants, which describe data access but do not select the home view.
+  if (
+    hasPermission(input.permissionLabels, {
+      permissions: ["view_company_dashboard"],
+      mode: "any",
+    })
+  ) {
+    return "company"
+  }
+
+  if (fromRole) return fromRole
 
   const fromGrant = kindFromSpecificPermissions(input.permissionLabels)
   if (fromGrant) return fromGrant

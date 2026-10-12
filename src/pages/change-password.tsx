@@ -5,8 +5,6 @@ import { KeyRoundIcon } from "lucide-react"
 
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
-import { ErrorAlertOverlay } from "@/components/error-alert-overlay"
-import { SuccessAlertOverlay } from "@/components/success-alert-overlay"
 import { BorderBeam } from "@/components/ui/border-beam"
 import { Toaster } from "@/components/ui/sonner"
 import { useAuth } from "@/hooks/useAuth"
@@ -28,7 +26,7 @@ function useClientReady() {
 export default function ChangePasswordPage() {
   const router = useRouter()
   const clientReady = useClientReady()
-  const { tokens, user, clearSession } = useAuth()
+  const { tokens, user, clearSession, acceptPasswordChangeTokens } = useAuth()
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -57,9 +55,16 @@ export default function ChangePasswordPage() {
     setError(null)
 
     try {
-      await authService.changePassword(payload, tokens.accessToken)
-      clearSession()
-      void router.replace(ROUTES.login)
+      const response = await authService.changePassword(payload, tokens.accessToken)
+      acceptPasswordChangeTokens(response)
+      if (requiresPasswordChange) {
+        const next = typeof router.query.next === "string" && router.query.next.startsWith("/")
+          ? router.query.next
+          : ROUTES.dashboard
+        window.location.assign(next)
+        return
+      }
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update password.")
     } finally {
@@ -80,8 +85,6 @@ export default function ChangePasswordPage() {
       </Head>
 
       <Toaster position="top-right" />
-      <SuccessAlertOverlay />
-      <ErrorAlertOverlay />
 
       <div className="pointer-events-none fixed inset-0 bg-background" />
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />

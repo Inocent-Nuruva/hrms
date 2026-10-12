@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Check, ChevronDown, Info, Plus, Trash2, Users } from "lucide-react"
+import { InfoLabel } from "@fluentui/react-components"
+import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 
@@ -18,7 +19,6 @@ import {
   SheetFooter,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   assignmentDefaultsFromLeaveType,
   attachedLeavePolicyTypes,
@@ -70,31 +70,21 @@ const DAY_TREATMENT_OPTIONS = LEAVE_POLICY_DAY_TREATMENT_OPTIONS
 
 function HintIcon({ text }: { text: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="inline-flex size-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            aria-label={text}
-          />
-        }
-      >
-        <Info className="size-3.5" />
-      </TooltipTrigger>
-      <TooltipContent side="top" align="start" className="max-w-64 text-left text-xs leading-relaxed">
-        {text}
-      </TooltipContent>
-    </Tooltip>
+    <InfoLabel info={text} label={{ className: "sr-only" }} size="small">
+      More information
+    </InfoLabel>
   )
 }
 
 function FieldLabel({ label, hint }: { label: string; hint?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+    <InfoLabel
+      className="text-xs font-medium text-slate-700 dark:text-slate-200"
+      info={hint}
+      size="small"
+    >
       {label}
-      {hint ? <HintIcon text={hint} /> : null}
-    </span>
+    </InfoLabel>
   )
 }
 

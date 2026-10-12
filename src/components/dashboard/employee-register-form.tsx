@@ -1,7 +1,9 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
 import ReactFlagsSelect from "react-flags-select"
@@ -10,14 +12,13 @@ import { countries as countryCodes } from "country-flag-icons"
 import { CountryFlag } from "@/components/country-flag"
 import {
   BadgeCheckIcon,
-  CalendarDaysIcon,
-  CircleHelpIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react"
+import { InfoLabel } from "@fluentui/react-components"
 
 import {
   createEmployeeProfile,
@@ -66,7 +67,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Calendar } from "@/components/ui/calendar"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -74,8 +74,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { asRecord, isLikelyRefreshToken, readString } from "@/utils/token-utils"
 import { cn } from "@/lib/utils"
@@ -298,7 +296,15 @@ const MARITAL_STATUS_OPTIONS = ["Single", "Married", "Divorced", "Widowed"]
 const CONTACT_TYPE_OPTIONS = ["personal", "work"]
 const ADDRESS_TYPE_OPTIONS = ["home", "work", "other"]
 const RELATIONSHIP_OPTIONS = ["parent", "spouse", "sibling", "child", "guardian", "other"]
-const IDENTIFICATION_TYPE_OPTIONS = ["national_id", "passport", "driving_license", "voter_id", "other"]
+const IDENTIFICATION_TYPE_OPTIONS = [
+  "national_id",
+  "passport",
+  "tax_id",
+  "social_security",
+  "driver_license",
+  "work_permit",
+  "other",
+]
 const MOBILE_MONEY_PROVIDER_OPTIONS = ["none", "M-Pesa", "Airtel Money", "Tigo Pesa", "Halopesa"]
 const DEFAULT_MOBILE_MONEY_PROVIDER = MOBILE_MONEY_PROVIDER_OPTIONS.find((option) => option !== "none") ?? "M-Pesa"
 const EMPTY_CONTACT: ContactFormState = {
@@ -1173,8 +1179,6 @@ function Field({
 function InfoTooltip({
   label,
   content,
-  side = "top",
-  align = "start",
 }: {
   label: string
   content: React.ReactNode
@@ -1182,22 +1186,9 @@ function InfoTooltip({
   align?: "start" | "center" | "end"
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground"
-            aria-label={label}
-          />
-        }
-      >
-        <CircleHelpIcon className="h-3.5 w-3.5" />
-      </TooltipTrigger>
-      <TooltipContent side={side} align={align} className="max-w-72 text-left leading-relaxed">
-        {content}
-      </TooltipContent>
-    </Tooltip>
+    <InfoLabel info={<>{content}</>} label={{ className: "sr-only" }} size="small">
+      {label}
+    </InfoLabel>
   )
 }
 
@@ -3690,28 +3681,16 @@ export function EmployeeRegisterForm() {
                       <AnimatedField delayMs={440}>
                         <div className="grid gap-2 md:col-span-2 xl:col-span-3">
                           <Label htmlFor="dob-trigger">Date of Birth</Label>
-                          <Popover>
-                            <PopoverTrigger
-                              id="dob-trigger"
-                              className="flex h-9 w-full items-center justify-start gap-2 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                            >
-                              <CalendarDaysIcon className="size-4 text-muted-foreground" />
-                              <span className={dob ? "text-foreground" : "text-muted-foreground"}>
-                                {dob ? dob.toLocaleDateString() : "Select date from calendar"}
-                              </span>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={dob}
-                                onSelect={setDob}
-                                captionLayout="dropdown"
-                                className="rounded-lg border bg-background"
-                                fromYear={1940}
-                                toYear={new Date().getFullYear()}
-                              />
-                            </PopoverContent>
-                          </Popover>
+                          <DateInput
+                            id="dob-trigger"
+                            className="max-w-none"
+                            value={dob ? dob.toISOString().slice(0, 10) : ""}
+                            max={new Date().toISOString().slice(0, 10)}
+                            placeholder="Select date from calendar"
+                            onValueChange={(value) =>
+                              setDob(value ? new Date(`${value}T12:00:00`) : undefined)
+                            }
+                          />
                         </div>
                       </AnimatedField>
                     </>
@@ -3780,18 +3759,18 @@ export function EmployeeRegisterForm() {
                           </Field>
 
                           <Field label="Planned Start Date" htmlFor="onboarding-start-date" delayMs={60}>
-                            <Input
+                            <DateInput
                               id="onboarding-start-date"
-                              type="date"
+
                               value={onboarding.plannedStartDate}
                               onChange={(event) => updateOnboardingField("plannedStartDate", event.target.value)}
                             />
                           </Field>
 
                           <Field label="Planned Completion Date" htmlFor="onboarding-end-date" delayMs={70}>
-                            <Input
+                            <DateInput
                               id="onboarding-end-date"
-                              type="date"
+
                               value={onboarding.plannedCompletionDate}
                               onChange={(event) => updateOnboardingField("plannedCompletionDate", event.target.value)}
                             />
@@ -3899,17 +3878,17 @@ export function EmployeeRegisterForm() {
                               </Select>
                             </Field>
                             <Field label="Effective From" htmlFor="provisioning-shift-from" delayMs={90}>
-                              <Input
+                              <DateInput
                                 id="provisioning-shift-from"
-                                type="date"
+
                                 value={onboarding.shiftAssignment.effectiveFrom}
                                 onChange={(event) => updateShiftAssignmentField("effectiveFrom", event.target.value)}
                               />
                             </Field>
                             <Field label="Effective To" htmlFor="provisioning-shift-to" delayMs={100}>
-                              <Input
+                              <DateInput
                                 id="provisioning-shift-to"
-                                type="date"
+
                                 value={onboarding.shiftAssignment.effectiveTo}
                                 onChange={(event) => updateShiftAssignmentField("effectiveTo", event.target.value)}
                               />
@@ -4000,9 +3979,9 @@ export function EmployeeRegisterForm() {
                               </Select>
                             </Field>
                             <Field label="Effective From" htmlFor="provisioning-timetable-from" delayMs={90}>
-                              <Input
+                              <DateInput
                                 id="provisioning-timetable-from"
-                                type="date"
+
                                 value={onboarding.timetableAssignment.effectiveFrom}
                                 onChange={(event) =>
                                   updateTimetableAssignmentField("effectiveFrom", event.target.value)
@@ -4010,9 +3989,9 @@ export function EmployeeRegisterForm() {
                               />
                             </Field>
                             <Field label="Effective To" htmlFor="provisioning-timetable-to" delayMs={100}>
-                              <Input
+                              <DateInput
                                 id="provisioning-timetable-to"
-                                type="date"
+
                                 value={onboarding.timetableAssignment.effectiveTo}
                                 onChange={(event) => updateTimetableAssignmentField("effectiveTo", event.target.value)}
                               />
@@ -4115,9 +4094,9 @@ export function EmployeeRegisterForm() {
                               </Field>
 
                               <Field label="Valid Begin Time" htmlFor="device-valid-begin" delayMs={150}>
-                                <Input
+                                <DateTimeInput
                                   id="device-valid-begin"
-                                  type="datetime-local"
+                                  aria-label="Valid begin time"
                                   value={onboarding.deviceAssignment.validBeginTime}
                                   onChange={(event) =>
                                     updateDeviceAssignmentField("validBeginTime", event.target.value)
@@ -4126,9 +4105,9 @@ export function EmployeeRegisterForm() {
                               </Field>
 
                               <Field label="Valid End Time" htmlFor="device-valid-end" delayMs={160}>
-                                <Input
+                                <DateTimeInput
                                   id="device-valid-end"
-                                  type="datetime-local"
+                                  aria-label="Valid end time"
                                   value={onboarding.deviceAssignment.validEndTime}
                                   onChange={(event) => updateDeviceAssignmentField("validEndTime", event.target.value)}
                                 />
@@ -5119,7 +5098,12 @@ export function EmployeeRegisterForm() {
                 <SelectContent>
                   {IDENTIFICATION_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option}
+                      {option === "driver_license"
+                        ? "Driver's license"
+                        : option
+                            .split("_")
+                            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                            .join(" ")}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -5322,18 +5306,20 @@ export function EmployeeRegisterForm() {
             </div>
             <div>
               <Label>Start Date</Label>
-              <Input
+              <DateInput
+                className="max-w-none"
                 value={draftAcademic.startDate}
                 onChange={(e) => updateDraftAcademic("startDate", e.target.value)}
-                placeholder="YYYY-MM-DD"
+                placeholder="Select start date"
               />
             </div>
             <div>
               <Label>End Date</Label>
-              <Input
+              <DateInput
+                className="max-w-none"
                 value={draftAcademic.endDate}
                 onChange={(e) => updateDraftAcademic("endDate", e.target.value)}
-                placeholder="YYYY-MM-DD"
+                placeholder="Select end date"
               />
             </div>
             <div className="md:col-span-2">
@@ -5390,16 +5376,20 @@ export function EmployeeRegisterForm() {
             </div>
             <div>
               <Label>Issue Date</Label>
-              <Input
+              <DateInput
+                className="max-w-none"
                 value={draftProfessional.issueDate}
                 onChange={(e) => updateDraftProfessional("issueDate", e.target.value)}
+                placeholder="Select issue date"
               />
             </div>
             <div>
               <Label>Expiry Date</Label>
-              <Input
+              <DateInput
+                className="max-w-none"
                 value={draftProfessional.expiryDate}
                 onChange={(e) => updateDraftProfessional("expiryDate", e.target.value)}
+                placeholder="Select expiry date"
               />
             </div>
             <div className="md:col-span-2">
@@ -5450,17 +5440,21 @@ export function EmployeeRegisterForm() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Start</Label>
-                <Input
+                <DateInput
+                  className="max-w-none"
                   value={draftExperience.startDate}
                   onChange={(e) => updateDraftExperience("startDate", e.target.value)}
+                  placeholder="Select start date"
                 />
               </div>
               <div>
                 <Label>End</Label>
-                <Input
+                <DateInput
+                  className="max-w-none"
                   value={draftExperience.endDate}
                   onChange={(e) => updateDraftExperience("endDate", e.target.value)}
                   disabled={draftExperience.currentlyWorking}
+                  placeholder="Select end date"
                 />
               </div>
             </div>

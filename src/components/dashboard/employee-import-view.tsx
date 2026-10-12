@@ -1,21 +1,8 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
-import {
-  ArrowDownIcon,
-  ArrowRightIcon,
-  CheckCircle2Icon,
-  CircleAlertIcon,
-  DownloadIcon,
-  FileSpreadsheetIcon,
-  FileSearchIcon,
-  InfoIcon,
-  Loader2Icon,
-  RefreshCcwIcon,
-  SendIcon,
-  UploadIcon,
-  XIcon,
-} from "lucide-react";
+import { ArrowDownIcon, ArrowRightIcon, CheckCircle2Icon, CircleAlertIcon, DownloadIcon, FileSpreadsheetIcon, FileSearchIcon, InfoIcon, RefreshCcwIcon, SendIcon, UploadIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import {
@@ -63,6 +50,7 @@ import {
 import { BorderBeam } from "@/components/ui/border-beam";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state";
 
 const IMPORT_MODES: Array<{
   value: EmployeeImportMode;
@@ -1873,7 +1861,7 @@ function ResultReportPanel({
           onClick={onFetch}
         >
           {checkingResult ? (
-            <Loader2Icon className="size-3 animate-spin" />
+            <FluentLoadingIndicator className="size-3 animate-spin" />
           ) : (
             <DownloadIcon className="size-3" />
           )}
@@ -2011,6 +1999,9 @@ export function EmployeeImportView() {
   const [inspectedBatchId, setInspectedBatchId] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  useFluentToastState(message, setMessage, "success");
+  useFluentToastState(error, setError, "error");
 
   const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([]);
   const [historyPage, setHistoryPage] = React.useState(1);
@@ -2798,7 +2789,7 @@ export function EmployeeImportView() {
             disabled={downloadingTemplate || !token}
           >
             {downloadingTemplate ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
+              <FluentLoadingIndicator className="size-3.5 animate-spin" />
             ) : (
               <DownloadIcon className="size-3.5" />
             )}
@@ -3038,7 +3029,7 @@ export function EmployeeImportView() {
                   disabled={previewing || !token || !selectedFile}
                 >
                   {previewing ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : (
                     <FileSearchIcon className="size-3.5" />
                   )}
@@ -3113,19 +3104,6 @@ export function EmployeeImportView() {
             </div>
           ) : null}
 
-          {message ? (
-            <div className="flex items-start gap-2.5 rounded-xl bg-emerald-500/[0.07] px-3.5 py-2.5 text-sm text-emerald-800 ring-1 ring-emerald-500/15 dark:text-emerald-200">
-              <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <span className="leading-relaxed">{message}</span>
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="flex items-start gap-2.5 rounded-xl bg-rose-500/[0.07] px-3.5 py-2.5 text-sm text-rose-800 ring-1 ring-rose-500/15 dark:text-rose-200">
-              <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              <span className="leading-relaxed">{error}</span>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 
@@ -3227,7 +3205,7 @@ export function EmployeeImportView() {
 
                         {importInProgress ? (
                           <div className="mt-1.5 flex items-center gap-1.5 rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-1 text-[11px] font-medium text-sky-800 dark:text-sky-200">
-                            <Loader2Icon className="size-3 shrink-0 animate-spin" />
+                            <FluentLoadingIndicator className="size-3 shrink-0 animate-spin" />
                             Importing rows… stay on this dialog until finished.
                           </div>
                         ) : null}
@@ -3466,7 +3444,7 @@ export function EmployeeImportView() {
                               }
                             >
                               {confirming ? (
-                                <Loader2Icon className="size-3.5 animate-spin" />
+                                <FluentLoadingIndicator className="size-3.5 animate-spin" />
                               ) : (
                                 <SendIcon className="size-3.5" />
                               )}
@@ -3535,7 +3513,7 @@ export function EmployeeImportView() {
                           title="Refresh"
                         >
                           {checkingResult ? (
-                            <Loader2Icon className="size-3.5 animate-spin" />
+                            <FluentLoadingIndicator className="size-3.5 animate-spin" />
                           ) : (
                             <RefreshCcwIcon className="size-3.5" />
                           )}
@@ -3640,7 +3618,7 @@ export function EmployeeImportView() {
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
               {checkingResult && !viewedBatch ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                   Loading details…
                 </div>
               ) : viewedBatch ? (
@@ -3686,7 +3664,7 @@ export function EmployeeImportView() {
                       {loadingPreviewBatchId === viewedBatch.batchId &&
                       !viewedPreviewDetails ? (
                         <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                          <Loader2Icon className="size-4 animate-spin" />
+                          <FluentLoadingIndicator className="size-4 animate-spin" />
                           Loading preview rows...
                         </div>
                       ) : viewedPreviewDetails ? (
@@ -3806,7 +3784,7 @@ export function EmployeeImportView() {
                   }}
                 >
                   {checkingResult ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : (
                     <RefreshCcwIcon className="size-3.5" />
                   )}
@@ -3875,7 +3853,7 @@ export function EmployeeImportView() {
                 disabled={loadingHistory || !token}
               >
                 {loadingHistory ? (
-                  <Loader2Icon className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <RefreshCcwIcon className="size-3.5" />
                 )}

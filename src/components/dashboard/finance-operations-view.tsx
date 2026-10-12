@@ -1,8 +1,11 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
-import { Loader2Icon, PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
-import { toast } from "sonner";
+import { PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
@@ -1145,7 +1148,7 @@ export function FinanceOperationsView({
                 disabled={loading}
               >
                 {loading ? (
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                 ) : (
                   <RefreshCwIcon className="size-4" />
                 )}
@@ -1212,7 +1215,7 @@ export function FinanceOperationsView({
               disabled={loading}
             >
               {loading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -1305,8 +1308,8 @@ export function FinanceOperationsView({
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">From</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={reportFilters.date_from ?? ""}
                     onChange={(event) =>
@@ -1319,8 +1322,8 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">To</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={reportFilters.date_to ?? ""}
                     onChange={(event) =>
@@ -1340,7 +1343,7 @@ export function FinanceOperationsView({
                   disabled={reportLoading}
                 >
                   {reportLoading ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : (
                     <RefreshCwIcon className="size-4" />
                   )}
@@ -1348,7 +1351,7 @@ export function FinanceOperationsView({
                 </button>
                 <label className={`${secondaryButtonClass} cursor-pointer`}>
                   {importingPayments ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : (
                     <UploadIcon className="size-4" />
                   )}
@@ -1372,7 +1375,7 @@ export function FinanceOperationsView({
                   disabled={postingAccounting}
                 >
                   {postingAccounting ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : null}
                   Post ERP
                 </button>
@@ -1631,7 +1634,7 @@ export function FinanceOperationsView({
                   <div className="divide-y divide-border">
                     {applicationLoading ? (
                       <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                        <Loader2Icon className="size-4 animate-spin" /> Loading
+                        <FluentLoadingIndicator className="size-4 animate-spin" /> Loading
                         documents
                       </div>
                     ) : applicationDocuments.length ? (
@@ -1866,7 +1869,7 @@ export function FinanceOperationsView({
               disabled={!applicationDetail || applicationLoading}
             >
               {applicationLoading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -2041,7 +2044,7 @@ export function FinanceOperationsView({
                       Installment schedule
                     </h3>
                     {accountLoading ? (
-                      <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                      <FluentLoadingIndicator className="size-4 animate-spin text-muted-foreground" />
                     ) : null}
                   </div>
                   <div className="max-h-80 overflow-auto">
@@ -2383,7 +2386,7 @@ export function FinanceOperationsView({
               disabled={!accountDetail || accountLoading}
             >
               {accountLoading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -2467,7 +2470,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Description</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.description ?? ""}
                     onChange={(event) =>
@@ -2681,8 +2684,8 @@ export function FinanceOperationsView({
                 </div>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Effective from</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.effective_from ?? ""}
                     onChange={(event) =>
@@ -2712,8 +2715,8 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Payment date</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.payment_date ?? ""}
                     onChange={(event) =>
@@ -2756,7 +2759,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
@@ -2786,7 +2789,7 @@ export function FinanceOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
@@ -2818,7 +2821,7 @@ export function FinanceOperationsView({
               disabled={saving}
             >
               {saving ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 "Save"
               )}

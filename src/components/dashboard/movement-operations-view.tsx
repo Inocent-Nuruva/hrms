@@ -1,14 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import {
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-} from "lucide-react"
-import { toast } from "sonner"
+import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -697,7 +694,7 @@ export function MovementOperationsView({
                       onClick={() => void openEdit(row)}
                     >
                       {busyId === `edit-${id}` ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
+                        <FluentLoadingIndicator className="size-3.5 animate-spin" />
                       ) : (
                         <PencilIcon className="size-3.5" />
                       )}
@@ -712,7 +709,7 @@ export function MovementOperationsView({
                       onClick={() => void deleteMovement(row)}
                     >
                       {busyId === `delete-${id}` ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
+                        <FluentLoadingIndicator className="size-3.5 animate-spin" />
                       ) : (
                         <Trash2Icon className="size-3.5" />
                       )}
@@ -780,7 +777,7 @@ export function MovementOperationsView({
                   onClick={() => void generateLetter(row)}
                 >
                   {busyId === `letter-${id}` ? (
-                    <Loader2Icon className="size-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   ) : null}
                   Generate letter
                 </button>
@@ -899,7 +896,7 @@ export function MovementOperationsView({
                 disabled={loading}
               >
                 {loading ? (
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                 ) : (
                   <RefreshCwIcon className="size-4" />
                 )}
@@ -1035,7 +1032,7 @@ export function MovementOperationsView({
               disabled={loading}
             >
               {loading ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 <RefreshCwIcon className="size-4" />
               )}
@@ -1192,7 +1189,7 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Reason</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) =>
@@ -1205,8 +1202,8 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Effective date</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.effective_date ?? ""}
                     onChange={(event) =>
@@ -1483,7 +1480,7 @@ export function MovementOperationsView({
                     />
                     <label className="grid gap-1.5 text-sm">
                       <span className="font-medium">Justification</span>
-                      <textarea
+                      <Textarea
                         className={textareaClass}
                         value={form.justification ?? ""}
                         onChange={(event) =>
@@ -1520,7 +1517,7 @@ export function MovementOperationsView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.comments ?? ""}
                     onChange={(event) =>
@@ -1552,7 +1549,7 @@ export function MovementOperationsView({
               disabled={saving}
             >
               {saving ? (
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
               ) : (
                 "Save"
               )}

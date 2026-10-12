@@ -1,32 +1,39 @@
 import * as React from "react"
+import {
+  Textarea as FluentTextarea,
+  type TextareaProps as FluentTextareaProps,
+} from "@fluentui/react-components"
 
 import { Error } from "@/components/ui/error"
 import { cn } from "@/lib/utils"
 
-type TextareaProps = React.ComponentProps<"textarea"> & {
+type TextareaProps = Omit<FluentTextareaProps, "size"> & {
   error?: string
   size?: "xSmall" | "small" | "mediumSmall" | "large"
   containerClassName?: string
 }
 
 const sizeClasses: Record<NonNullable<TextareaProps["size"]>, string> = {
-  xSmall: "min-h-9 px-2.5 py-2 text-xs",
-  small: "min-h-10 p-2.5 text-sm",
-  mediumSmall: "min-h-11 px-3 py-2.5 text-sm",
-  large: "min-h-12 px-3 py-2.5 text-base",
+  xSmall: "min-h-9 text-xs",
+  small: "min-h-10 text-sm",
+  mediumSmall: "min-h-11 text-sm",
+  large: "min-h-12 text-base",
 }
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, containerClassName, disabled, error, size = "small", ...props }, ref) => {
     const textarea = (
-      <textarea
+      <FluentTextarea
         ref={ref}
         data-slot="textarea"
+        appearance="outline"
+        resize="none"
+        size={size === "large" ? "large" : size === "xSmall" ? "small" : "medium"}
         className={cn(
-          "w-full resize-none rounded-md border border-input bg-background font-sans text-foreground shadow-xs outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-foreground/20 hover:ring-0",
+          "w-full min-w-0 max-w-none font-sans text-foreground",
           sizeClasses[size],
-          disabled && "cursor-not-allowed bg-muted text-muted-foreground placeholder:text-muted-foreground placeholder:opacity-50",
-          error ? "border-destructive text-destructive ring-2 ring-destructive/15" : "focus:border-primary focus:ring-2 focus:ring-primary/15",
+          disabled && "cursor-not-allowed text-muted-foreground",
+          error && "text-destructive ring-2 ring-destructive/15",
           className
         )}
         autoComplete="off"

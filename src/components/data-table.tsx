@@ -1,133 +1,48 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/fluent-toast-store";
 import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
 import { cn } from "@/lib/utils";
 import { requestDashboardAccessRefresh } from "@/lib/dashboard-permissions";
 
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-} from "@/components/animate-ui/components/base/dialog";
+  Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPopup, DialogTitle, } from "@/components/animate-ui/components/base/dialog";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+  Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger, } from "@/components/ui/drawer";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select";
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import type {
-  AdminRecord,
-  AdminResourceKey,
-  SortOrder,
-  UsersQueryParams,
-} from "@/lib/admin-api";
+  AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams, } from "@/lib/admin-api";
 import {
-  RESOURCE_LABELS,
-  assignPermissionToCurrentCompanyUser,
-  assignPermissionToRole,
-  assignUserToRole,
-  assignUserAvatar,
-  disableUserTwoFactor,
-  enableUserTwoFactor,
-  readForceTwoFactor,
-  setUserForceTwoFactor,
-  extractDefaultAvatarImageUrl,
-  getPermissionById,
-  getRoleById,
-  isSelectableDefaultAvatar,
-  listAllCurrentCompanyUsers,
-  listDefaultAvatars,
-  listResource,
-  listResourcePage,
-  listRolePermissions,
-  readDefaultAvatarId,
-  listRoleUsers,
-  readTwoFactorEnabled,
-  revokePermissionFromCurrentCompanyUser,
-  revokePermissionFromRole,
-  revokeUserFromRole,
-} from "@/lib/admin-api";
+  RESOURCE_LABELS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listResourcePage, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
 import {
-  PermissionPicker,
-  canonicalizePermissionNames,
-  isPermissionSelected,
-  permissionGroupFromName,
-  permissionTokenFromAssignment,
-  toPermissionOptions,
-  type PermissionOption,
-} from "@/components/dashboard/permission-picker";
+  PermissionPicker, canonicalizePermissionNames, isPermissionSelected, permissionGroupFromName, permissionTokenFromAssignment, toPermissionOptions, type PermissionOption, } from "@/components/dashboard/permission-picker";
 import { RoleSuggestionStrip } from "@/components/dashboard/role-suggestion-strip";
 import {
-  availableRoleSuggestions,
-  resolveSuggestionPermissions,
-  type ResolvedRoleSuggestion,
-} from "@/components/dashboard/role-suggestions";
+  availableRoleSuggestions, resolveSuggestionPermissions, type ResolvedRoleSuggestion, } from "@/components/dashboard/role-suggestions";
 import {
-  CheckIcon,
-  CopyIcon,
-  EllipsisVerticalIcon,
-  ImageIcon,
-  KeyRoundIcon,
-  Loader2Icon,
-  PencilIcon,
-  PlusIcon,
-  ShieldAlertIcon,
-  ShieldCheckIcon,
-  ShieldOffIcon,
-  Trash2Icon,
-  UsersIcon,
-  UserPlusIcon,
-  UserMinusIcon,
-} from "lucide-react";
+  CheckIcon, CopyIcon, EllipsisVerticalIcon, ImageIcon, KeyRoundIcon, PencilIcon, PlusIcon, ShieldAlertIcon, ShieldCheckIcon, ShieldOffIcon, Trash2Icon, UsersIcon, UserPlusIcon, UserMinusIcon } from "lucide-react";
+import {
+  Copy16Regular as FluentCopyIcon,
+  Delete16Regular as FluentDeleteIcon,
+  Edit16Regular as FluentEditIcon,
+} from "@fluentui/react-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePublishedCompanyModules } from "@/hooks/use-company-modules";
@@ -750,7 +665,7 @@ type DetailSheetTab = "general" | "assigned" | "permissions";
 function SectionLoader({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-12">
-      <Loader2Icon className="size-6 animate-spin text-primary" />
+      <FluentLoadingIndicator className="size-6 animate-spin text-primary" />
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
@@ -1661,16 +1576,16 @@ export function DataTable({
           >
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              className="inline-flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Open details"
               aria-label="Open details"
               onClick={() => openAccessControlRow(row.__source)}
             >
-              <PencilIcon className="size-3.5" />
+              <FluentEditIcon className="size-4" aria-hidden="true" />
             </button>
             <button
               type="button"
-              className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted"
+              className="inline-flex size-8 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Copy details"
               aria-label="Copy details"
               onClick={() => {
@@ -1680,17 +1595,17 @@ export function DataTable({
                   .catch(() => showErrorAlert("Clipboard access was denied."));
               }}
             >
-              <CopyIcon className="size-3.5" />
+              <FluentCopyIcon className="size-4" aria-hidden="true" />
             </button>
             {isEditableResource(activeResource) && canDeleteResource ? (
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-background text-rose-600 transition-colors hover:bg-rose-50"
+                className="inline-flex size-8 items-center justify-center rounded-md text-rose-600 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="Delete"
                 aria-label="Delete"
                 onClick={() => void handleDelete(row.__id)}
               >
-                <Trash2Icon className="size-3.5" />
+                <FluentDeleteIcon className="size-4" aria-hidden="true" />
               </button>
             ) : null}
           </div>
@@ -3224,30 +3139,19 @@ export function DataTable({
                 }
                 toolbarActions={
                   <>
-                    <div className="relative">
-                      <Input
-                        value={accessControlSearch}
-                        onChange={(event) =>
-                          setAccessControlSearch(event.target.value)
-                        }
-                        placeholder={
-                          activeResource === "permissions"
-                            ? "Search permissions…"
-                            : "Search roles…"
-                        }
-                        className="h-8 w-36 pr-12 text-xs sm:w-52"
-                        autoComplete="off"
-                      />
-                      {accessControlSearch.trim() ? (
-                        <button
-                          type="button"
-                          className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded px-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                          onClick={() => setAccessControlSearch("")}
-                        >
-                          Clear
-                        </button>
-                      ) : null}
-                    </div>
+                    <Input
+                      value={accessControlSearch}
+                      onChange={(event) =>
+                        setAccessControlSearch(event.target.value)
+                      }
+                      placeholder={
+                        activeResource === "permissions"
+                          ? "Search permissions…"
+                          : "Search roles…"
+                      }
+                      className="h-8 w-36 text-xs sm:w-52"
+                      autoComplete="off"
+                    />
                     {accessControlCreateDrawer}
                   </>
                 }
@@ -4316,7 +4220,7 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon
+                  <FluentLoadingIndicator
                     className="size-3.5 animate-spin"
                     data-icon="inline-start"
                   />
@@ -4454,7 +4358,7 @@ export function DataTable({
             >
               {membersBusy ? (
                 <>
-                  <Loader2Icon
+                  <FluentLoadingIndicator
                     className="size-3.5 animate-spin"
                     data-icon="inline-start"
                   />

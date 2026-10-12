@@ -91,6 +91,7 @@ import {
 } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
+import { DateTimeInput } from "@/components/ui/date-time-input"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 
@@ -3306,9 +3307,8 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1 text-xs">
                         <span className="font-medium text-muted-foreground">Due date</span>
-                        <input
-                          type="datetime-local"
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <DateTimeInput
+                          aria-label="Task due date"
                           value={taskForm.due_date}
                           onChange={(event) =>
                             setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))
@@ -3528,9 +3528,8 @@ export function OffboardingView() {
                       </div>
                       <label className="grid gap-1 text-xs">
                         <span className="font-medium text-muted-foreground">Due date</span>
-                        <input
-                          type="datetime-local"
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <DateTimeInput
+                          aria-label="Clearance due date"
                           value={clearanceForm.due_date}
                           onChange={(event) =>
                             setClearanceForm((prev) => ({ ...prev, due_date: event.target.value }))
@@ -4028,9 +4027,8 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>
-                        <input
-                          type="datetime-local"
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <DateTimeInput
+                          aria-label="Action due date"
                           value={actionForm.due_date}
                           onChange={(event) =>
                             setActionForm((prev) => ({ ...prev, due_date: event.target.value }))
@@ -4211,9 +4209,8 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>
-                        <input
-                          type="datetime-local"
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <DateTimeInput
+                          aria-label="Asset due date"
                           value={assetForm.due_date}
                           onChange={(event) =>
                             setAssetForm((prev) => ({ ...prev, due_date: event.target.value }))
@@ -4404,9 +4401,8 @@ export function OffboardingView() {
                       </label>
                       <label className="grid gap-1">
                         <span className="font-medium text-muted-foreground">Due date</span>
-                        <input
-                          type="datetime-local"
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        <DateTimeInput
+                          aria-label="Settlement due date"
                           value={settlementForm.due_date}
                           onChange={(event) =>
                             setSettlementForm((prev) => ({ ...prev, due_date: event.target.value }))

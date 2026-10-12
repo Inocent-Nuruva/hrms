@@ -16,6 +16,7 @@ type SelectOption = {
 
 type SelectTriggerProps = {
   className?: string
+  controlClassName?: string
   size?: SelectSize
   id?: string
   disabled?: boolean
@@ -128,12 +129,12 @@ function Select({
         aria-label={trigger["aria-label"]}
         title={trigger.title}
         placeholder={placeholder || "Select"}
-        value={selected?.text}
+        value={selected?.text ?? ""}
         selectedOptions={selected ? [selected.value] : []}
         disabled={disabled || trigger.disabled}
         aria-required={required || undefined}
         size={trigger.size === "sm" ? "small" : "medium"}
-        className="w-full min-w-0"
+        className={cn("!w-full !min-w-0", trigger.className, trigger.controlClassName)}
         onOptionSelect={(_event, data) => {
           const next = data.optionValue ?? null
           if (value === undefined) setUncontrolled(next ?? "")

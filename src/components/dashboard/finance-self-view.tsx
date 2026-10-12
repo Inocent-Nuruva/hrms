@@ -1,16 +1,11 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
+import { Textarea } from "@/components/ui/textarea"
 import {
-  CheckCircle2Icon,
-  FileTextIcon,
-  Loader2Icon,
-  PlusIcon,
-  RefreshCwIcon,
-  ShieldCheckIcon,
-  XCircleIcon,
-} from "lucide-react";
-import { toast } from "sonner";
+  CheckCircle2Icon, FileTextIcon, PlusIcon, RefreshCwIcon, ShieldCheckIcon, XCircleIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   CompactStatStrip,
@@ -595,7 +590,7 @@ export function FinanceSelfView() {
             disabled={mounted ? loading : undefined}
           >
             {mounted && loading ? (
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
             ) : (
               <RefreshCwIcon className="size-4" />
             )}
@@ -802,7 +797,7 @@ export function FinanceSelfView() {
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Purpose</span>
-                    <textarea
+                    <Textarea
                       className={textareaClass}
                       value={form.purpose ?? ""}
                       onChange={(event) =>
@@ -818,7 +813,7 @@ export function FinanceSelfView() {
                   <div className="mb-2 flex items-center justify-between">
                     <p className="font-medium">Eligibility</p>
                     {eligibilityLoading ? (
-                      <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                      <FluentLoadingIndicator className="size-4 animate-spin text-muted-foreground" />
                     ) : eligibility ? (
                       eligible ? (
                         <CheckCircle2Icon className="size-4 text-emerald-600" />
@@ -1060,7 +1055,7 @@ export function FinanceSelfView() {
                 disabled={saving || !canCreate}
               >
                 {saving ? (
-                  <Loader2Icon className="size-4 animate-spin" />
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
                 ) : (
                   "Create"
                 )}

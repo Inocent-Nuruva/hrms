@@ -13,9 +13,9 @@ import {
   QrCodeIcon,
   RefreshCwIcon,
   ScanFaceIcon,
-  SearchIcon,
   Trash2Icon,
 } from "lucide-react"
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,
@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   assignEmployeeDevices,
   captureEmployeeDeviceFingerprint,
@@ -809,6 +810,8 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
   const [error, setError] = React.useState<string | null>(null)
   const [employeesError, setEmployeesError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [employeeSearch, setEmployeeSearch] = React.useState("")
 
   const [assignEmployeeOpen, setAssignEmployeeOpen] = React.useState(false)
@@ -2307,7 +2310,6 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           </div>
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
       </div>
 
       {/* Tabs + content */}

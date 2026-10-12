@@ -10,61 +10,60 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Bell,
-  ChartNoAxesCombined,
-  ChevronLeft,
-  Clock,
-  FileText,
-  FolderOpen,
-  ListChecks,
-  MapPin,
-  Menu,
-  MoonStar,
-  PanelLeftClose,
-  Power,
-  SunMedium,
-  Trophy,
-  Wallet,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 
+import { api } from '../../lib/api';
 import { COLORS } from '../../lib/config';
+import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteColor, profilePaletteForeground } from '../../lib/profile-card-background';
 import { TouchableScale } from '../ui/touchable-scale';
+import { ProfileCardDoodles } from '../ui/profile-card-doodles';
 import type { UseAuthReturn } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useThemePreference } from '../../hooks/useThemePreference';
+import { useAppAccent } from '../../hooks/useAppAccent';
 import { Text } from '../ui/text';
+import { FluentSystemIcon } from '../ui/fluent-system-icon';
+import type { TextStyle } from 'react-native';
 
 interface Props {
   auth: UseAuthReturn;
   subtitle?: string;
   title?: string;
+  titleWeight?: TextStyle['fontWeight'];
   variant?: 'dashboard' | 'compact' | 'centered';
   showBackButton?: boolean;
   onBackPress?: () => void;
   menuPresentation?: 'drawer' | 'dropdown';
+  neutralBackground?: boolean;
 }
 
 export function MobileTopBar({
   auth,
   subtitle,
   title,
+  titleWeight,
   variant = 'compact',
   showBackButton = false,
   onBackPress,
   menuPresentation = 'drawer',
+  neutralBackground = false,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isDark, toggleTheme } = useThemePreference();
   const notifications = useNotifications();
   const { width: screenWidth } = useWindowDimensions();
+  const profileCardStyleQuery = useQuery({
+    queryKey: ['dashboardCardStyle'],
+    queryFn: () => api.getMyDashboardCardStyle(),
+    enabled: auth.isAuthenticated,
+  });
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [notificationsOpen, setNotificationsOpen] = React.useState(false);
 
   const [slideAnim] = React.useState(() => new Animated.Value(-400));
 
-  const drawerWidth = React.useMemo(() => Math.max(screenWidth * 0.62, 230), [screenWidth]);
+  const drawerWidth = React.useMemo(() => Math.min(Math.max(screenWidth * 0.78, 290), 380, screenWidth - 24), [screenWidth]);
 
   const openMenu = () => {
     if (menuPresentation === 'drawer') {
@@ -107,96 +106,114 @@ export function MobileTopBar({
     .slice(0, 2)
     .toUpperCase();
 
-  const drawerItems = [
-    { label: 'Attendance history', route: '/my-attendance', icon: ListChecks },
-    { label: 'Promotions', route: '/promotions', icon: Trophy },
-    { label: 'Shift', route: '/shift', icon: Clock },
-    { label: 'Payroll', route: '/payroll', icon: Wallet },
-    { label: 'Field work', route: '/field', icon: MapPin },
-    { label: 'Finance', route: '/finance', icon: FileText },
-    { label: 'Performance', route: '/performance', icon: ChartNoAxesCombined },
-    { label: 'Documents', route: '/documents', icon: FolderOpen },
+  const drawerItems: Array<{ label: string; route: string; icon: React.ComponentProps<typeof FluentSystemIcon>['name'] }> = [
+    { label: 'Home', route: '/', icon: 'home' },
+    { label: 'Notifications', route: '/notifications', icon: 'notifications' },
+    { label: 'Attendance', route: '/attendance', icon: 'attendance' },
+    { label: 'Attendance history', route: '/my-attendance', icon: 'history' },
+    { label: 'Leave', route: '/leave', icon: 'leave' },
+    { label: 'Profile', route: '/profile', icon: 'profile' },
+    { label: 'Promotions', route: '/promotions', icon: 'promotion' },
+    { label: 'Shift', route: '/shift', icon: 'shift' },
+    { label: 'Payroll', route: '/payroll', icon: 'payroll' },
+    { label: 'Field work', route: '/field', icon: 'field' },
+    { label: 'My location', route: '/my-location', icon: 'field' },
+    { label: 'Finance', route: '/finance', icon: 'finance' },
+    { label: 'Performance', route: '/performance', icon: 'performance' },
+    { label: 'Activities', route: '/activities', icon: 'work' },
+    { label: 'Documents', route: '/documents', icon: 'documents' },
   ];
 
   const headerTitle = title || employeeName;
   const headerSubtitle = subtitle || readGreeting();
-  const barBackground = isDark ? COLORS.surfaceDark : COLORS.surface;
+  const selectedCardStyle = normalizeProfileCardStyle(profileCardStyleQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
+  const useProfileColor = !neutralBackground;
+  const barBackground = useProfileColor
+    ? profilePaletteColor(selectedCardStyle.palette, isDark)
+    : isDark ? COLORS.backgroundDark : COLORS.background;
+  const topBarBackground = neutralBackground ? 'transparent' : barBackground;
+  const headerForeground = useProfileColor
+    ? profilePaletteForeground(barBackground)
+    : isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
+  const lightPalette = headerForeground !== '#FFFFFF';
   const primaryTextColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
-  const actionIconBg = isDark ? COLORS.surfaceVariantDark : COLORS.surface;
-  const actionIconColor = primaryTextColor;
-  const secondaryTextColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
-  const avatarBackground = isDark ? COLORS.surfaceVariantDark : COLORS.surface;
-  const avatarBorder = isDark ? COLORS.outlineDark : COLORS.outline;
-  const avatarTextColor = isDark ? COLORS.onSurfaceDark : COLORS.primary;
+  const actionIconBg = 'transparent';
+  const actionIconColor = headerForeground;
+  const avatarBackground = lightPalette ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.14)';
+  const avatarBorder = lightPalette ? 'rgba(15,23,42,0.18)' : 'rgba(255,255,255,0.38)';
+  const avatarTextColor = headerForeground;
 
   return (
     <>
       <SafeAreaView
         edges={['top']}
         style={{
-          backgroundColor: barBackground,
+          backgroundColor: topBarBackground,
           borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+          borderBottomColor: neutralBackground
+            ? 'transparent'
+            : lightPalette ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)',
         }}
       >
         <View
           style={[
             styles.shell,
             variant === 'dashboard' ? styles.shellDashboard : styles.shellCompact,
-            { backgroundColor: barBackground },
+            { backgroundColor: topBarBackground },
           ]}
         >
+          {useProfileColor ? <ProfileCardDoodles artwork={selectedCardStyle.artwork} onLight={lightPalette} /> : null}
           <View style={styles.actionsRow}>
             <View style={styles.leadingActionRow}>
               {showBackButton ? (
                 <TouchableScale
-                  style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+                  style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: 'transparent' }]}
                   pressedScale={0.92}
                   onPress={onBackPress}
                 >
-                  <ChevronLeft size={22} color={actionIconColor} />
+                  <FluentSystemIcon name="chevron-left" size={22} color={actionIconColor} />
                 </TouchableScale>
               ) : (
                 <TouchableScale
-                  style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+                  style={[styles.menuButton, { backgroundColor: actionIconBg, borderRadius: 8 }]}
                   pressedScale={0.92}
                   onPress={openMenu}
                 >
-                  <Menu size={22} color={actionIconColor} />
+                  <FluentSystemIcon name="menu" size={22} color={actionIconColor} />
                 </TouchableScale>
               )}
             </View>
 
             {variant === 'centered' ? (
-              <Text style={[styles.centeredTitle, { color: primaryTextColor }]} numberOfLines={1}>
+              <Text style={[styles.centeredTitle, { color: headerForeground }, titleWeight ? { fontWeight: titleWeight } : null]} numberOfLines={1}>
                 {headerTitle}
               </Text>
             ) : null}
 
             <View style={styles.topRightActions}>
               <TouchableScale
-                style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+                style={[styles.menuButton, { backgroundColor: actionIconBg, borderRadius: 8 }]}
                 pressedScale={0.92}
                 onPress={toggleTheme}
               >
                 <View style={{ alignItems: 'center', justifyContent: 'center' }}>
                   {isDark ? (
-                    <SunMedium size={20} color={actionIconColor} />
+                    <FluentSystemIcon name="sun" size={20} color={actionIconColor} />
                   ) : (
-                    <MoonStar size={20} color={actionIconColor} />
+                    <FluentSystemIcon name="moon" size={20} color={actionIconColor} />
                   )}
                 </View>
               </TouchableScale>
 
               <TouchableScale
-                style={[styles.iconButton, { backgroundColor: actionIconBg, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}
+                style={[styles.menuButton, { backgroundColor: actionIconBg, borderRadius: 8 }]}
                 pressedScale={0.92}
-                onPress={() => setNotificationsOpen(true)}
+                onPress={() => router.navigate('/notifications' as never)}
               >
-                <Bell size={20} color={actionIconColor} />
+                <FluentSystemIcon name="notifications" size={22} color={actionIconColor} />
                 {notifications.unreadCount ? (
                   <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</Text>
+                    <Text style={styles.notificationBadgeText}>{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</Text>
                   </View>
                 ) : null}
               </TouchableScale>
@@ -209,8 +226,8 @@ export function MobileTopBar({
                 <Text style={[styles.avatarText, { color: avatarTextColor }]}>{initials}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.identityName, { color: primaryTextColor }]}>{headerTitle}</Text>
-                <Text style={[styles.identitySubtitle, { color: secondaryTextColor }]}>{headerSubtitle}</Text>
+                <Text style={[styles.identityName, { color: headerForeground }]}>{headerTitle}</Text>
+              <Text style={[styles.identitySubtitle, { color: lightPalette ? '#64748B' : 'rgba(255,255,255,0.78)' }]}>{headerSubtitle}</Text>
               </View>
             </View>
           ) : null}
@@ -230,11 +247,13 @@ export function MobileTopBar({
                 transform: [{ translateX: slideAnim }],
               }]}>
                 <MenuContent
-                  closeLabelIcon={<PanelLeftClose size={18} color={primaryTextColor} />}
+                  closeLabelIcon={<FluentSystemIcon name="menu" size={22} color={primaryTextColor} />}
                   closeMenu={closeMenu}
                   drawerItems={drawerItems}
+                  pathname={pathname}
                   auth={auth}
                   isDark={isDark}
+                  unreadCount={notifications.unreadCount}
                   router={router}
                 />
               </Animated.View>
@@ -246,67 +265,14 @@ export function MobileTopBar({
                 closeLabelIcon={null}
                 closeMenu={closeMenu}
                 drawerItems={drawerItems}
+                pathname={pathname}
                 auth={auth}
                 isDark={isDark}
+                unreadCount={notifications.unreadCount}
                 router={router}
               />
             </View>
           )}
-        </View>
-      </Modal>
-
-      <Modal visible={notificationsOpen} transparent animationType="fade" onRequestClose={() => setNotificationsOpen(false)}>
-        <View style={styles.dropdownOverlay}>
-          <Pressable style={styles.drawerBackdrop} onPress={() => setNotificationsOpen(false)} />
-          <View style={[styles.notificationsPanel, { backgroundColor: isDark ? COLORS.surfaceDark : COLORS.surface }]}>
-            <View style={styles.drawerHeader}>
-              <Text style={[styles.drawerTitle, { color: primaryTextColor }]}>Notifications</Text>
-              {notifications.notifications.length ? (
-                <TouchableScale onPress={() => void notifications.markAllAsRead()} pressedScale={0.96}>
-                  <Text style={styles.markAllText}>Mark all read</Text>
-                </TouchableScale>
-              ) : null}
-            </View>
-
-            {notifications.notifications.length ? (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.notificationList}>
-                {notifications.notifications.map((item) => (
-                  <TouchableScale
-                    key={item.id}
-                    style={[
-                      styles.notificationItem,
-                      {
-                        backgroundColor: item.read
-                          ? isDark
-                            ? COLORS.surfaceDark
-                            : COLORS.surface
-                          : isDark
-                            ? COLORS.surfaceVariantDark
-                            : COLORS.surfaceVariant,
-                        borderColor: isDark ? COLORS.outlineDark : COLORS.outline,
-                      },
-                    ]}
-                    onPress={() => {
-                      void notifications.markAsRead(item.id);
-                      setNotificationsOpen(false);
-                      router.push({
-                        pathname: item.route,
-                        params: { requestId: item.requestId },
-                      } as never);
-                    }}
-                    pressedScale={0.98}
-                  >
-                    <Text style={[styles.notificationTitle, { color: primaryTextColor }]}>{item.title}</Text>
-                    <Text style={[styles.notificationBody, { color: secondaryTextColor }]}>{item.body}</Text>
-                  </TouchableScale>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.emptyNotifications}>
-                <Text style={[styles.notificationBody, { color: secondaryTextColor }]}>No notifications yet</Text>
-              </View>
-            )}
-          </View>
         </View>
       </Modal>
 
@@ -323,6 +289,8 @@ function readGreeting() {
 
 const styles = StyleSheet.create({
   shell: {
+    position: 'relative',
+    overflow: 'hidden',
     paddingHorizontal: 16,
     backgroundColor: 'transparent',
   },
@@ -366,6 +334,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.outline,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   notificationBadge: {
     position: 'absolute',
@@ -421,13 +395,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.18)',
   },
   drawerPanel: {
-    paddingTop: 32,
-    paddingHorizontal: 18,
-    paddingBottom: 28,
+    paddingTop: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
   drawerBackdrop: {
     flex: 1,
   },
+  drawerList: { flex: 1 },
   dropdownPanel: {
     position: 'absolute',
     top: 74,
@@ -463,7 +438,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 10,
   },
   drawerTitle: {
     fontSize: 22,
@@ -479,30 +454,43 @@ const styles = StyleSheet.create({
   drawerItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginBottom: 2,
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 1,
+    borderRadius: 9,
   },
+  drawerItemMarker: { width: 3, height: 18, marginRight: -8 },
   drawerItemText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '400',
   },
+  drawerNotificationBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginLeft: 'auto',
+  },
+  drawerItemTextActive: { fontWeight: '700' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 16,
+    minHeight: 48,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     marginTop: 12,
   },
   logoutText: {
-    color: COLORS.accent,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '400',
   },
   markAllText: {
-    color: COLORS.accent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -533,17 +521,22 @@ function MenuContent({
   closeLabelIcon,
   closeMenu,
   drawerItems,
+  pathname,
   auth,
   isDark,
+  unreadCount,
   router,
 }: {
   closeLabelIcon: React.ReactNode;
   closeMenu: () => void;
-  drawerItems: Array<{ label: string; route: string; icon: React.ComponentType<{ size?: number; color?: string }> }>;
+  drawerItems: Array<{ label: string; route: string; icon: React.ComponentProps<typeof FluentSystemIcon>['name'] }>;
+  pathname: string;
   auth: UseAuthReturn;
   isDark: boolean;
+  unreadCount: number;
   router: ReturnType<typeof useRouter>;
 }) {
+  const appAccent = useAppAccent();
   const primaryTextColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   return (
     <>
@@ -551,7 +544,7 @@ function MenuContent({
         <Text style={[styles.drawerTitle, { color: primaryTextColor }]}>Menu</Text>
         {closeLabelIcon ? (
           <TouchableScale
-            style={[styles.drawerCloseButton, { backgroundColor: isDark ? COLORS.surfaceVariantDark : COLORS.surfaceVariant }]}
+            style={styles.drawerCloseButton}
             onPress={closeMenu}
             pressedScale={0.92}
           >
@@ -560,23 +553,42 @@ function MenuContent({
         ) : null}
       </View>
 
-      {drawerItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <TouchableScale
-            key={item.label}
-            style={styles.drawerItem}
-            onPress={() => {
-              closeMenu();
-              router.push(item.route as never);
-            }}
-            pressedScale={0.98}
-          >
-            <Icon size={18} color={isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant} />
-            <Text style={[styles.drawerItemText, { color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface }]}>{item.label}</Text>
-          </TouchableScale>
-        );
-      })}
+      <ScrollView style={styles.drawerList} showsVerticalScrollIndicator={false}>
+        {drawerItems.map((item) => {
+          const active = pathnameMatches(pathname, item.route);
+          return (
+            <TouchableScale
+              key={item.label}
+              style={styles.drawerItem}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => {
+                closeMenu();
+                router.push(item.route as never);
+              }}
+              pressedScale={0.98}
+            >
+              <View style={[styles.drawerItemMarker, { backgroundColor: active ? appAccent : 'transparent' }]} />
+              <FluentSystemIcon
+                name={item.icon}
+                active={active}
+                size={25}
+                color={active ? appAccent : isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant}
+              />
+              <Text style={[
+                styles.drawerItemText,
+                { color: isDark ? COLORS.onSurfaceDark : COLORS.onSurface },
+                active && styles.drawerItemTextActive,
+              ]}>{item.label}</Text>
+              {item.label === 'Notifications' && unreadCount > 0 ? (
+                <View style={styles.drawerNotificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              ) : null}
+            </TouchableScale>
+          );
+        })}
+      </ScrollView>
 
       <TouchableScale
         style={styles.logoutButton}
@@ -586,9 +598,14 @@ function MenuContent({
         }}
         pressedScale={0.98}
       >
-        <Power size={18} color={COLORS.accent} />
-        <Text style={styles.logoutText}>Logout</Text>
+        <FluentSystemIcon name="logout" size={20} color={appAccent} />
+        <Text style={[styles.logoutText, { color: appAccent }]}>Logout</Text>
       </TouchableScale>
     </>
   );
+}
+
+function pathnameMatches(pathname: string, route: string) {
+  if (route === '/') return pathname === '/';
+  return pathname === route || pathname.startsWith(`${route}/`);
 }

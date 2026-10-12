@@ -2,8 +2,6 @@ import { useRouter } from "next/router";
 import { Card } from "@fluentui/react-components";
 import { LoginFlow } from "@/components/auth/LoginFlow";
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler";
-import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
-import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
 import { Toaster } from "@/components/ui/sonner";
 
 export default function LoginPage() {
@@ -23,8 +21,6 @@ export default function LoginPage() {
   return (
     <>
       <Toaster position="top-right" />
-      <SuccessAlertOverlay />
-      <ErrorAlertOverlay />
 
       {/* Theme-aware page background */}
       <div className="pointer-events-none fixed inset-0 bg-background" />

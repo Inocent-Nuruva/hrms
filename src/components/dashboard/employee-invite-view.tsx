@@ -1,21 +1,16 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import {
-  InfoIcon,
-  Loader2Icon,
-  MailIcon,
-  PhoneIcon,
-  RotateCcwIcon,
-  UserPlus2Icon,
-} from "lucide-react"
-import { toast } from "sonner"
+import { InfoIcon, MailIcon, PhoneIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   Label as FluentLabel,
 } from "@fluentui/react-components"
 
 import {
   createEmployeeInvitation,
+  getEmployeeInvitationPositionCapacity,
   listBranches,
   listDepartmentPositions,
   listDepartments,
@@ -24,7 +19,9 @@ import {
   listPositions,
   type AdminRecord,
   type CreateEmployeeInvitationPayload,
+  type PositionCapacity,
 } from "@/lib/admin-api"
+import { positionCapacityWarning } from "@/lib/position-capacity"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -34,6 +31,10 @@ import { Dropdown, Option } from "@/components/ui/dropdown"
 import { Input as FluentInput } from "@/components/ui/input"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  invitationChannels,
+  invitationDeliveryOutcome,
+} from "@/lib/employee-invitation-channels"
 import {
   Tooltip,
   TooltipContent,
@@ -393,6 +394,7 @@ export function EmployeeInviteView() {
   const [employmentType, setEmploymentType] =
     React.useState<string>("full_time")
   const [hireDate, setHireDate] = React.useState<string>("")
+  const [sendSmsReminder, setSendSmsReminder] = React.useState(true)
   const [workflowId, setWorkflowId] = React.useState<number | null>(null)
 
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
@@ -424,6 +426,25 @@ export function EmployeeInviteView() {
   React.useEffect(() => {
     setToken(readStoredToken())
   }, [])
+
+  // Warn before sending when the chosen position has no free seat.
+  const [positionCapacity, setPositionCapacity] =
+    React.useState<PositionCapacity | null>(null)
+  React.useEffect(() => {
+    setPositionCapacity(null)
+    if (!token || positionId === null) return
+    let active = true
+    getEmployeeInvitationPositionCapacity(token, positionId)
+      .then((capacity) => {
+        if (active) setPositionCapacity(capacity)
+      })
+      // Capacity is advisory; never block the form on it.
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [token, positionId])
+  const capacityWarning = positionCapacityWarning(positionCapacity)
 
   React.useEffect(() => {
     if (typeof window === "undefined") return
@@ -838,6 +859,7 @@ export function EmployeeInviteView() {
     setReportsToId(null)
     setEmploymentType("full_time")
     setHireDate("")
+    setSendSmsReminder(true)
     setWorkflowId(null)
     setSavedInviteDraft(null)
     if (typeof window !== "undefined") {
@@ -935,25 +957,23 @@ export function EmployeeInviteView() {
       reports_to: reportsToId ?? undefined,
       hire_date: hireDate || undefined,
       onboarding_workflow_id: workflowId ?? undefined,
-      channels: ["EMAIL", "SMS"],
+      channels: invitationChannels(sendSmsReminder),
     }
 
     setSubmitting(true)
     try {
       const invitation = await createEmployeeInvitation(token, payload)
-      const emailStatus = invitation.delivery?.email?.status?.toLowerCase()
-      const smsStatus = invitation.delivery?.sms?.status?.toLowerCase()
-      const failedChannels = [
-        emailStatus === "failed" ? "email" : null,
-        smsStatus === "failed" ? "SMS" : null,
-      ].filter((channel): channel is string => channel !== null)
-
-      if (failedChannels.length > 0) {
-        const message = `Invitation saved, but ${failedChannels.join(" and ")} delivery failed. You can resend it after checking the channel settings.`
-        showErrorAlert(message)
+      const outcome = invitationDeliveryOutcome({
+        email: invitation.delivery?.email?.status,
+        sms: invitation.delivery?.sms?.status,
+      })
+      if (outcome.kind === "partial") {
+        showErrorAlert(outcome.message)
       } else {
-        showSuccessAlert("Invitation sent by email and SMS.")
+        showSuccessAlert(outcome.message)
       }
+      const overfillWarning = positionCapacityWarning(invitation.capacity)
+      if (overfillWarning) toast.warning(overfillWarning)
       resetForm()
     } catch (err: unknown) {
       const status =
@@ -1174,6 +1194,14 @@ export function EmployeeInviteView() {
                   </Option>
                 ))}
               </Dropdown>
+              {capacityWarning ? (
+                <p
+                  role="status"
+                  className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300"
+                >
+                  {capacityWarning}
+                </p>
+              ) : null}
             </FieldShell>
 
             <FieldShell label="Reports to" htmlFor="reports_to">
@@ -1263,6 +1291,16 @@ export function EmployeeInviteView() {
         </section>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="mr-auto inline-flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={sendSmsReminder}
+              onChange={(event) => setSendSmsReminder(event.target.checked)}
+              disabled={submitting}
+            />
+            Also send an SMS reminder
+          </label>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger
@@ -1277,8 +1315,8 @@ export function EmployeeInviteView() {
                 }
               />
               <TooltipContent side="top" className="max-w-xs text-left">
-                Sends one secure invitation link through both the configured
-                email and SMS channels.
+                Emails one secure registration link. The optional SMS is a
+                reminder to check email and never contains the link.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1296,9 +1334,13 @@ export function EmployeeInviteView() {
             appearance="primary"
             size="large"
             disabled={submitting || loading}
-            icon={submitting ? <Loader2Icon className="animate-spin" /> : <UserPlus2Icon />}
+            icon={submitting ? <FluentLoadingIndicator className="animate-spin" /> : <UserPlus2Icon />}
           >
-            {submitting ? "Sending…" : "Send email & SMS invitation"}
+            {submitting
+              ? "Sending…"
+              : sendSmsReminder
+                ? "Send email & SMS invitation"
+                : "Send email invitation"}
           </Button>
         </div>
       </form>

@@ -1,8 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
-
+import { RefreshCwIcon } from "lucide-react";
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
@@ -67,6 +68,11 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
   const [dateTo, setDateTo] = React.useState("")
 
   const load = React.useCallback(async () => {
+    // Do not make manager API calls until the current access context is ready.
+    // A fast 403 during actor hydration can otherwise be treated as a route
+    // denial using an empty permission list and redirect the user to Profile.
+    if (!actor.ready) return
+
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -133,11 +139,12 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
       setError(first.reason instanceof Error ? first.reason.message : "Could not load manager data.")
     }
     setLoading(false)
-  }, [actionStatus, activeTab, dateFrom, dateTo, directOnly, leaveIfForbidden])
+  }, [actionStatus, activeTab, actor.ready, dateFrom, dateTo, directOnly, leaveIfForbidden])
 
   React.useEffect(() => {
+    if (!actor.ready) return
     void load()
-  }, [load])
+  }, [actor.ready, load])
 
   const rows =
     activeTab === "attendance" ? attendance : activeTab === "actions" ? actions : members
@@ -179,7 +186,7 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             description="Your dashboard, direct reports, and open action items from /api/manager."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -201,7 +208,7 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             <p className="text-sm text-muted-foreground">One backend page at a time — filters are sent on the request.</p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>
@@ -219,8 +226,8 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
             ) : null}
             {activeTab === "attendance" ? (
               <>
-                <input type="date" className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-                <input type="date" className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+                <DateInput className={inputClass + " max-w-40"} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+                <DateInput className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
               </>
             ) : null}
             {activeTab === "actions" ? (

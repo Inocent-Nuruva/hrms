@@ -1,8 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -283,7 +285,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
         actions={
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             <button
@@ -444,7 +446,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Notes (optional)</span>
-              <textarea
+              <Textarea
                 className={textareaClass}
                 value={form.description ?? ""}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -460,7 +462,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : form.id ? "Save changes" : activeTab === "grades" ? "Add grade" : "Add cost center"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : form.id ? "Save changes" : activeTab === "grades" ? "Add grade" : "Add cost center"}
             </button>
           </DialogFooter>
         </DialogPopup>

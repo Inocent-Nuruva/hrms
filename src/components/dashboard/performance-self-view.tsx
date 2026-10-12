@@ -1,8 +1,24 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, GaugeIcon, ListChecksIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, SlidersHorizontalIcon, UserRoundIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { Badge, Button as FluentButton, ProgressBar } from "@fluentui/react-components"
+import { CheckCircle2Icon, PlusIcon, RefreshCwIcon, UserRoundIcon, XIcon } from "lucide-react";
+import {
+  CheckmarkCircle20Regular as AchievementIcon,
+  CheckmarkCircle20Regular as CycleDoneIcon,
+  CalendarLtr24Regular as EmptyReviewIcon,
+  ArrowTrendingLines20Regular as DevelopmentIcon,
+  ChevronRight20Regular as NextIcon,
+  ClipboardTask20Regular as AssignedWorkIcon,
+  Clock20Regular as ReviewsIcon,
+  Gauge20Regular as ScoreIcon,
+  PersonFeedback20Regular as FeedbackIcon,
+} from "@fluentui/react-icons"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
@@ -48,6 +64,8 @@ import {
   listMyPerformanceDevelopmentPlans,
   listMyPerformanceFeedback360,
   listMyPerformanceImprovementPlans,
+  listMyEmployeeKpis,
+  listMyKpiCycleScores,
   listMyPerformanceReviews,
   listMyActivityTasks,
   submitManagerPerformanceReview,
@@ -116,6 +134,7 @@ export function PerformanceSelfView({
 }: {
   activeTab: PerformanceSelfTab
 }) {
+  const router = useRouter()
   const actor = useDashboardActor()
   const canAccess = canAccessDashboardRoute(
     `/dashboard/me/performance/${activeTab}`,
@@ -128,6 +147,8 @@ export function PerformanceSelfView({
   const [assignments, setAssignments] = React.useState<AdminRecord[]>([])
   const [taskEmployees, setTaskEmployees] = React.useState<AdminRecord[]>([])
   const [activityTasks, setActivityTasks] = React.useState<AdminRecord[]>([])
+  const [myKpis, setMyKpis] = React.useState<AdminRecord[]>([])
+  const [kpiCycleScores, setKpiCycleScores] = React.useState<AdminRecord[]>([])
   const [reviews, setReviews] = React.useState<AdminRecord[]>([])
   const [feedback360, setFeedback360] = React.useState<AdminRecord[]>([])
   const [developmentPlans, setDevelopmentPlans] = React.useState<AdminRecord[]>([])
@@ -136,8 +157,6 @@ export function PerformanceSelfView({
   const [teamAchievements, setTeamAchievements] = React.useState<AdminRecord[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [overviewSearch, setOverviewSearch] = React.useState("")
-  const [overviewStatus, setOverviewStatus] = React.useState("ALL")
   const [managerError, setManagerError] = React.useState<string | null>(null)
   const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(null)
   const [detailOpen, setDetailOpen] = React.useState(false)
@@ -181,6 +200,8 @@ export function PerformanceSelfView({
       }
       if (activeTab === "overview") {
         tasks.push(
+          listMyEmployeeKpis(token).then(setMyKpis).catch(() => setMyKpis([])),
+          listMyKpiCycleScores(token).then(setKpiCycleScores).catch(() => setKpiCycleScores([])),
           listMyActivityTasks(token, { limit: 100 })
             .then(setActivityTasks)
             .catch(() => setActivityTasks([])),
@@ -242,39 +263,19 @@ export function PerformanceSelfView({
     void load()
   }, [load])
 
+  const latestLockedKpiScore = kpiCycleScores.find((row) => readString(row, ["status"], "LOCKED").toUpperCase() === "LOCKED")
   const score =
+    readNumber(latestLockedKpiScore, ["totalWeightedScore", "total_weighted_score"]) ??
     readNumber(summary, ["current_score", "currentScore", "final_score", "finalScore", "average_score", "averageScore"]) ??
-    readNumber(asRecord(summary?.latest_review ?? summary?.latestReview), ["finalScore", "final_score"])
+    readNumber(asRecord(summary?.latest_review ?? summary?.latestReview), ["finalScore", "final_score"]) ??
+    reviews.map((review) => readNumber(review, ["finalScore", "final_score", "kpiScore", "kpi_score"])).find((value) => value !== null) ??
+    null
   const cycleStatus = readString(reviews[0], ["status"], "OPEN").toUpperCase()
   const cycleStepIndex = Math.max(
     0,
     PERFORMANCE_CYCLE_STEPS.findIndex((step) => step.key === cycleStatus),
   )
-  const overviewItems = React.useMemo(() => {
-    const tagged: AdminRecord[] = [
-      ...assignments.map((row) => ({ ...row, dashboard_kind: "Assignment" })),
-      ...activityTasks.map((row) => ({ ...row, dashboard_kind: "Activity" })),
-      ...reviews.map((row) => ({ ...row, dashboard_kind: "Review" })),
-      ...developmentPlans.map((row) => ({ ...row, dashboard_kind: "Development" })),
-      ...achievements.map((row) => ({ ...row, dashboard_kind: "Achievement" })),
-      ...pips.map((row) => ({ ...row, dashboard_kind: "Improvement" })),
-    ]
-    const needle = overviewSearch.trim().toLowerCase()
-    return tagged.filter((row) => {
-      const status = readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()
-      if (overviewStatus !== "ALL" && status !== overviewStatus) return false
-      return !needle || JSON.stringify(row).toLowerCase().includes(needle)
-    })
-  }, [achievements, activityTasks, assignments, developmentPlans, overviewSearch, overviewStatus, pips, reviews])
-  const overviewStatuses = React.useMemo(
-    () => Array.from(new Set(
-      [assignments, activityTasks, reviews, developmentPlans, achievements, pips]
-        .flat()
-        .map((row) => readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()),
-    )).sort(),
-    [achievements, activityTasks, assignments, developmentPlans, pips, reviews],
-  )
-
+  const currentCycleStep = PERFORMANCE_CYCLE_STEPS[cycleStepIndex]
   const rows =
     activeTab === "assignments"
       ? assignments
@@ -584,7 +585,7 @@ export function PerformanceSelfView({
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `decline-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Decline"}
+                  {busyId === `decline-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Decline"}
                 </button>
               </div>
             )
@@ -711,7 +712,7 @@ export function PerformanceSelfView({
                     .finally(() => setBusyId(""))
                 }}
               >
-                {busyId === id ? <Loader2Icon className="size-3.5 animate-spin" /> : "Acknowledge"}
+                {busyId === id ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Acknowledge"}
               </button>
             )
           },
@@ -769,98 +770,95 @@ export function PerformanceSelfView({
     <section className="space-y-4">
       {activeTab === "overview" ? (
         <>
-          <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">Performance</p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">My performance overview</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Track your current review cycle, assigned work, achievements, and development.</p>
+          <div className="space-y-5 px-1 pb-2 pt-2">
+            {error ? <p role="alert" className="mt-4 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p> : null}
+            <div className="grid gap-0 border-y border-border sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "My KPIs", value: myKpis.length, detail: "Goals in your cycles", icon: ScoreIcon, url: "/dashboard/me/performance/kpis" },
+                { label: "Activities", value: activityTasks.length, detail: "Work assigned to you", icon: AssignedWorkIcon, url: "/dashboard/me/activities/today" },
+                { label: "Reviews", value: reviews.length, detail: `${assignments.length} review assignments`, icon: ReviewsIcon, url: "/dashboard/me/performance/reviews" },
+                { label: "Current score", value: score === null ? "Pending" : Number.isInteger(score) ? String(score) : score.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""), detail: score === null ? "No finalized score yet" : readString(latestLockedKpiScore, ["finalRatingBand", "final_rating_band"], "Latest available result"), icon: AchievementIcon, url: "/dashboard/me/performance/achievements" },
+              ].map((metric) => {
+                const Icon = metric.icon
+                return <button key={metric.label} type="button" onClick={() => router.push(metric.url)} className="group flex min-w-0 items-center justify-between gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/30 last:border-b-0 sm:px-5 xl:border-b-0 xl:border-r xl:last:border-r-0">
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2"><Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate text-sm font-semibold text-foreground group-hover:text-primary">{metric.label}</span></span>
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">{metric.detail}</span>
+                  </span>
+                  <span className={cn("performance-overview-metric-value shrink-0 text-right font-extrabold tracking-[-0.06em] tabular-nums text-primary", metric.value === "Pending" ? "performance-overview-metric-value-pending" : String(metric.value).length > 2 ? "performance-overview-metric-value-long" : "")}>{metric.value}</span>
+                </button>
+              })}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="relative hidden sm:block">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Find performance work" className="h-9 w-56 rounded-lg border border-border bg-muted/30 pl-9 pr-3 text-xs outline-none focus:border-primary" />
-              </label>
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} Refresh
-              </button>
-            </div>
-          </header>
-          {error ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
-              {error}
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: "Current score", value: score === null || score === undefined ? "—" : String(score), hint: "Latest published result", icon: GaugeIcon },
-              { label: "Assigned work", value: activityTasks.length, hint: `${assignments.length} review assignments`, icon: ListChecksIcon },
-              { label: "Reviews", value: reviews.length, hint: `${feedback360.filter((item) => readString(item, ["status"], "PENDING") === "PENDING").length} feedback pending`, icon: Clock3Icon },
-              { label: "Achievements", value: achievements.length, hint: `${developmentPlans.length} development · ${pips.length} improvement`, icon: CheckCircle2Icon },
-            ].map((metric) => {
-              const Icon = metric.icon
-              return (
-                <article key={metric.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-                  <span className="inline-flex size-8 items-center justify-center rounded-lg border border-primary/15 bg-primary/[0.07] text-primary"><Icon className="size-4" /></span>
-                  <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value}</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{metric.label}</p>
-                  <p className="mt-1 truncate text-[10px] text-muted-foreground">{metric.hint}</p>
-                </article>
-              )
-            })}
           </div>
 
-          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div><h2 className="text-sm font-semibold">Review timeline</h2><p className="mt-0.5 text-[10px] text-muted-foreground">Your current cycle from start to published result.</p></div>
-              <span className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary">{prettify(cycleStatus)}</span>
-            </div>
-            <div className="overflow-x-auto p-4">
-              <div className="grid min-w-[720px] grid-cols-5 gap-0">
-                {PERFORMANCE_CYCLE_STEPS.map((step, index) => {
-                  const state = index < cycleStepIndex ? "done" : index === cycleStepIndex ? "current" : "upcoming"
-                  return (
-                    <div key={step.key} className="relative px-2 text-center">
-                      <div className={cn("absolute left-0 right-0 top-3 h-0.5", index === 0 ? "left-1/2" : "", index === PERFORMANCE_CYCLE_STEPS.length - 1 ? "right-1/2" : "", state === "upcoming" ? "bg-border" : "bg-primary")} />
-                      <span className={cn("relative mx-auto flex size-6 items-center justify-center rounded-full border text-[10px] font-semibold", state === "done" ? "border-primary bg-primary text-primary-foreground" : state === "current" ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground")}>
-                        {state === "done" ? <CheckCircle2Icon className="size-3.5" /> : index + 1}
-                      </span>
-                      <p className="mt-3 text-xs font-semibold text-foreground">{step.label}</p>
-                      <p className="mt-1 text-[9px] leading-4 text-muted-foreground">{step.hint}</p>
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
+            <section className="min-w-0 border-t border-border pt-2">
+              <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                <div><h2 className="text-base font-semibold text-foreground">Review cycle</h2><p className="mt-0.5 text-xs text-muted-foreground">Your latest review, from self-assessment to final result.</p></div>
+                {reviews.length ? <Badge appearance="tint" color="brand">Step {cycleStepIndex + 1} of {PERFORMANCE_CYCLE_STEPS.length}</Badge> : null}
+              </div>
+              {reviews.length ? (
+                <div className="px-4 pb-3">
+                  <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Current stage</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{currentCycleStep.label}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{currentCycleStep.hint}</p>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          </section>
+                    <FluentButton appearance="secondary" size="small" onClick={() => router.push(cycleStatus === "SELF_REVIEW_PENDING" ? "/dashboard/me/performance/reviews" : "/dashboard/me/performance/assignments")}>
+                      {cycleStatus === "SELF_REVIEW_PENDING" ? "Continue self-review" : "View review cycle"}
+                    </FluentButton>
+                  </div>
+                  <ProgressBar value={Math.min(1, (cycleStepIndex + 1) / PERFORMANCE_CYCLE_STEPS.length)} thickness="medium" className="mt-3" />
+                  <ol className="mt-3 grid gap-2 sm:grid-cols-5" aria-label="Review cycle stages">
+                    {PERFORMANCE_CYCLE_STEPS.map((step, index) => {
+                      const complete = index < cycleStepIndex
+                      const current = index === cycleStepIndex
+                      return <li key={step.key} className={cn("flex gap-2 border-l-2 py-1 pl-3 sm:block sm:border-l-0 sm:border-t-2 sm:pl-0 sm:pt-2", current ? "border-primary" : complete ? "border-primary/60" : "border-border")}>
+                        <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:mb-2", current ? "bg-primary text-primary-foreground" : complete ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                          {complete ? <CycleDoneIcon className="size-4" /> : index + 1}
+                        </span>
+                        <div><p className={cn("text-xs font-semibold", current ? "text-primary" : complete ? "text-foreground" : "text-muted-foreground")}>{step.label}</p><p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{step.hint}</p></div>
+                      </li>
+                    })}
+                  </ol>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center px-4 pb-8 pt-3 text-center">
+                  <div className="relative flex size-20 items-center justify-center rounded-full bg-primary/[0.06]" aria-hidden="true">
+                    <span className="absolute inset-2 rounded-full border border-primary/10" />
+                    <EmptyReviewIcon className="relative size-10 text-primary/75" />
+                    <span className="absolute -right-1 top-2 size-2 rounded-full bg-primary/35" />
+                    <span className="absolute bottom-2 left-0 size-1.5 rounded-full bg-primary/20" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-foreground">No review in progress</h3>
+                  <p className="mt-1 max-w-sm text-sm leading-6 text-muted-foreground">When your review begins, you’ll see each stage and what needs your attention here.</p>
+                  <FluentButton appearance="primary" size="small" className="mt-4 !px-5 !py-2" onClick={() => router.push("/dashboard/me/performance/assignments")}>View my assignments</FluentButton>
+                </div>
+              )}
+            </section>
 
-          <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div><h2 className="text-sm font-semibold">Performance work list</h2><p className="mt-0.5 text-[10px] text-muted-foreground">Everything contributing to your current performance cycle.</p></div>
-              <div className="flex items-center gap-2">
-                <label className="relative sm:hidden"><SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><input value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Search" className="h-8 w-36 rounded-lg border border-border bg-background pl-8 pr-2 text-[10px] outline-none" /></label>
-                <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
-                <FluentSelect ariaLabel="Status" size="small" value={overviewStatus} onChange={setOverviewStatus} options={[{ value: "ALL", label: "All statuses" }, ...overviewStatuses.map((status) => ({ value: status, label: prettify(status) }))]} />
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left">
-                <thead className="bg-muted/30 text-[10px] text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">Name</th><th className="px-3 py-2.5 font-medium">Type</th><th className="px-3 py-2.5 font-medium">Due date</th><th className="px-3 py-2.5 font-medium">Progress</th><th className="px-4 py-2.5 font-medium">Status</th></tr></thead>
-                <tbody className="divide-y divide-border">
-                  {overviewItems.slice(0, 12).map((row, index) => {
-                    const status = readString(row, ["status", "review_status", "reviewStatus"], "OPEN").toUpperCase()
-                    const progress = readNumber(row, ["progress", "progress_percentage", "completion_rate", "completionRate"]) ?? (["APPROVED", "COMPLETED", "PUBLISHED"].includes(status) ? 100 : 0)
-                    return (
-                      <tr key={`${readString(row, ["dashboard_kind"])}-${rowId(row) || index}`} className="cursor-pointer text-xs hover:bg-primary/[0.03]" onClick={() => { setDetailRecord(row); setDetailOpen(true) }}>
-                        <td className="px-4 py-3 font-medium">{optionLabel(row)}</td><td className="px-3 py-3 text-muted-foreground">{readString(row, ["dashboard_kind"], "Performance item")}</td><td className="px-3 py-3 text-muted-foreground"><span className="inline-flex items-center gap-1"><CalendarDaysIcon className="size-3" />{readString(row, ["due_date", "dueDate", "end_date", "endDate"], "—")}</span></td>
-                        <td className="px-3 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></div><span className="text-[10px] text-muted-foreground">{Math.round(progress)}%</span></div></td><td className="px-4 py-3"><StatusChip value={status} /></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              {!loading && overviewItems.length === 0 ? <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">No performance work matches the current search and filter.</div> : null}
-            </div>
-          </section>
+            <section className="min-w-0 border-t border-border pt-2">
+              <div className="px-4 py-4"><h2 className="text-base font-semibold text-foreground">Your next steps</h2><p className="mt-0.5 text-xs text-muted-foreground">Pick up where you left off.</p></div>
+              <nav aria-label="Your next steps" className="divide-y divide-border/70 px-4">
+                {[
+                  { label: "Activities in progress", hint: "Continue work you started", count: activityTasks.filter((row) => readString(row, ["status"], "PLANNED").toUpperCase() === "IN_PROGRESS").length, url: "/dashboard/me/activities/today?tab=tasks&status=IN_PROGRESS", icon: AssignedWorkIcon },
+                  { label: "Feedback requests", hint: "Respond to pending feedback", count: feedback360.filter((row) => readString(row, ["status"], "PENDING").toUpperCase() === "PENDING").length, url: "/dashboard/me/performance/feedback", icon: FeedbackIcon },
+                  { label: "Development plans", hint: "Track your growth goals", count: developmentPlans.length, url: "/dashboard/me/performance/development", icon: DevelopmentIcon },
+                  { label: "Improvement plans", hint: "Review your action plan", count: pips.length, url: "/dashboard/me/performance/improvement", icon: AchievementIcon },
+                ].map((item) => {
+                  const Icon = item.icon
+                  return <button key={item.label} type="button" onClick={() => router.push(item.url)} className="group flex w-full items-center gap-3 py-3.5 text-left transition-colors hover:text-primary focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-primary">
+                    <Icon className="size-5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground group-hover:text-primary">{item.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{item.hint}</span></span>
+                    <span className={cn("min-w-5 text-right text-sm font-semibold tabular-nums", item.count ? "text-foreground" : "text-muted-foreground")}>{item.count}</span>
+                    <NextIcon className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+                  </button>
+                })}
+              </nav>
+            </section>
+          </div>
+
         </>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -889,7 +887,7 @@ export function PerformanceSelfView({
             </p>
           </div>
           <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         </div>
@@ -977,8 +975,8 @@ export function PerformanceSelfView({
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Status</span><FluentSelect ariaLabel="Status" className="w-full" value="PLANNED" disabled onChange={() => {}} options={[{ value: "PLANNED", label: "Not started" }]} /></label>
               <label className="grid gap-1.5 text-sm"><span className="font-medium">Priority</span><FluentSelect ariaLabel="Priority" className="w-full" value={taskForm.priority ?? "MEDIUM"} onChange={(value) => setTaskForm((current) => ({ ...current, priority: value }))} options={[{ value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }, { value: "URGENT", label: "Urgent" }]} /></label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><input type="date" className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><input type="date" className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Start date</span><DateInput className={inputClass} value={taskForm.activity_date ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, activity_date: event.target.value, planned_start_time: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Due date <span className="font-normal text-muted-foreground">(optional)</span></span><DateInput className={inputClass} value={taskForm.planned_end_time ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, planned_end_time: event.target.value }))} /></label>
             </div>
 
             <div className="space-y-2">
@@ -992,13 +990,13 @@ export function PerformanceSelfView({
               ))}
             </div>
 
-            <label className="grid gap-1.5 text-sm"><span className="font-medium">Notes</span><textarea className={`${textareaClass} min-h-28`} placeholder="Describe the expected outcome and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} /></label>
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Notes</span><Textarea className={`${textareaClass} min-h-28`} placeholder="Describe the expected outcome and any handover details." value={taskForm.description ?? ""} onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))} /></label>
             <p className="text-xs text-muted-foreground">After creation, open the task from Activities to update progress, complete the checklist, and continue the conversation.</p>
           </div>
           {taskError ? <p className="mx-4 mb-3 text-sm text-rose-600 sm:mx-6">{taskError}</p> : null}
           <div className="flex justify-end border-t border-border px-4 py-4 sm:px-6">
             <button type="button" className={primaryButtonClass} onClick={() => void saveManagerTask()} disabled={taskSaving}>
-              {taskSaving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {taskSaving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               {taskAudience === "employee" ? "Assign task" : "Create my task"}
             </button>
           </div>
@@ -1063,19 +1061,19 @@ export function PerformanceSelfView({
             {actionMode === "self-review" || actionMode === "manager-review" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Comment</span>
-                <textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "self-review" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Highlights</span>
-                <textarea className={textareaClass} value={form.highlights ?? ""} onChange={(event) => setForm((current) => ({ ...current, highlights: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.highlights ?? ""} onChange={(event) => setForm((current) => ({ ...current, highlights: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "appeal" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Reason</span>
-                <textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "achievement" || actionMode === "validate" ? (
@@ -1087,24 +1085,24 @@ export function PerformanceSelfView({
             {actionMode === "achievement" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Comment</span>
-                <textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "validate" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Manager comment</span>
-                <textarea className={textareaClass} value={form.manager_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, manager_comment: event.target.value }))} />
+                <Textarea className={textareaClass} value={form.manager_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, manager_comment: event.target.value }))} />
               </label>
             ) : null}
             {actionMode === "manager-review" ? (
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Strengths (one per line)</span>
-                  <textarea className={textareaClass} value={form.areas_of_strength ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_of_strength: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.areas_of_strength ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_of_strength: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Improvements (one per line)</span>
-                  <textarea className={textareaClass} value={form.areas_for_improvement ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_for_improvement: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.areas_for_improvement ?? ""} onChange={(event) => setForm((current) => ({ ...current, areas_for_improvement: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -1130,15 +1128,15 @@ export function PerformanceSelfView({
                 </div>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Strengths</span>
-                  <textarea className={textareaClass} value={form.strengths ?? ""} onChange={(event) => setForm((current) => ({ ...current, strengths: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.strengths ?? ""} onChange={(event) => setForm((current) => ({ ...current, strengths: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Improvement areas</span>
-                  <textarea className={textareaClass} value={form.improvement_areas ?? ""} onChange={(event) => setForm((current) => ({ ...current, improvement_areas: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.improvement_areas ?? ""} onChange={(event) => setForm((current) => ({ ...current, improvement_areas: event.target.value }))} />
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>
-                  <textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -1164,7 +1162,7 @@ export function PerformanceSelfView({
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comment</span>
-                  <textarea className={textareaClass} value={form.employee_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_comment: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.employee_comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_comment: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -1173,7 +1171,7 @@ export function PerformanceSelfView({
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setActionOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSaveAction()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Submit"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Submit"}
             </button>
           </DialogFooter>
         </DialogPopup>

@@ -5,6 +5,7 @@ export type NotificationDestinationPath =
   | '/(tabs)/home'
   | '/(tabs)/leave'
   | '/(tabs)/profile'
+  | '/activities'
   | '/my-attendance';
 
 export type NotificationDestination = {
@@ -253,9 +254,17 @@ export function resolveNotificationDestination(row: MobileRecord): NotificationD
     .map((value) => normalizeHint(value))
     .filter(Boolean);
 
+  if (hintValues.some((value) => /daily activity|activity report/.test(value))) {
+    return buildDestination('/activities', { view: 'reports' });
+  }
+
   if (actionUrl) {
     const actionDestination = resolveFromActionUrl(row, metadata, actionUrl);
     if (actionDestination) return actionDestination;
+  }
+
+  if (hintValues.some((value) => /daily activity|activity report/.test(value))) {
+    return buildDestination('/activities', { view: 'reports' });
   }
 
   if (hintValues.some((value) => value.includes('leave balance'))) {
@@ -315,6 +324,7 @@ export function parseNotificationDestinationPayload(payload: unknown): Notificat
   const rawPathname =
     readNotificationString(record, ['destinationPathname', 'pathname', 'route']) || '/(tabs)/home';
   const validPathname = [
+    '/activities',
     '/(tabs)/attendance',
     '/(tabs)/home',
     '/(tabs)/leave',
@@ -343,6 +353,7 @@ export function parseNotificationDestinationPayload(payload: unknown): Notificat
     const tab = readNotificationString(record, ['tab']);
     const section = readNotificationString(record, ['section']);
     const date = readNotificationString(record, ['date', 'attendanceDate', 'attendance_date']);
+      const view = readNotificationString(record, ['view']);
 
     params = Object.fromEntries(
       [
@@ -350,6 +361,7 @@ export function parseNotificationDestinationPayload(payload: unknown): Notificat
         ['tab', tab],
         ['section', section],
         ['date', date],
+        ['view', view],
       ].filter((entry): entry is [string, string] => Boolean(entry[1]))
     );
   }

@@ -1,31 +1,47 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
-  ArrowLeft,
-  ArrowRightIcon,
-  CheckCircle2,
-  BriefcaseIcon,
-  Building2Icon,
-  CalendarIcon,
-  ClockIcon,
-  DownloadIcon,
-  FileTextIcon,
-  Loader2,
-  PencilIcon,
-  RefreshCwIcon,
-  UserIcon,
-  UsersIcon,
-} from "lucide-react"
-
+  Badge as FluentBadge,
+  Button as FluentButton,
+  Card as FluentCard,
+  CardFooter as FluentCardFooter,
+  makeStyles,
+  Persona,
+  Tab,
+  TabList,
+  Text as FluentText,
+} from "@fluentui/react-components"
+import {
+  Briefcase20Color,
+  Building20Color,
+  CalendarClock20Color,
+  CalendarSync20Color,
+  ArrowClockwiseRegular as PayrollRefreshIcon,
+  ArrowDownloadRegular as PayrollDownloadIcon,
+  CalendarLtrRegular as PayrollCalendarIcon,
+  DocumentRegular as PayrollDocumentIcon,
+  EyeRegular as PayrollDetailsIcon,
+  MoneyRegular as PayrollMoneyIcon,
+  WalletRegular as PayrollWalletIcon,
+  Camera20Color,
+  ContactCard20Color,
+  Edit16Regular,
+  PeopleTeam20Color,
+  Person20Color,
+  PersonKey20Color,
+} from "@fluentui/react-icons"
+import {
+  ArrowLeft, ArrowRightIcon, CheckCircle2, BriefcaseIcon, Building2Icon, CalendarIcon, ClockIcon, DownloadIcon, FileTextIcon, PencilIcon, RefreshCwIcon, UserIcon, UsersIcon } from "lucide-react";
 import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
 import { Settings } from "@/components/animate-ui/icons/settings"
 import { Sparkles } from "@/components/animate-ui/icons/sparkles"
 
-import { LumaSpin } from "@/components/ui/luma-spin"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroGhostButtonClass, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import {
@@ -87,7 +103,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -119,6 +135,16 @@ function BackToSettingsLink() {
 
 type SelfLeaveTab = "requests" | "balances" | "holidays" | "policies"
 type SelfProfileTab = "summary" | "assignments" | "personal" | "records" | "updates"
+
+const useProfileNavigationStyles = makeStyles({
+  tabList: {
+    minWidth: "max-content",
+  },
+  tab: {
+    fontSize: "10.72px",
+    lineHeight: "16px",
+  },
+})
 
 type EmployeeSelfServiceLeaveViewProps = {
   tab: SelfLeaveTab
@@ -1317,6 +1343,25 @@ function hasEmployeeProfileData(employee: AdminRecord | null) {
   )
 }
 
+function employeeBelongsToCurrentUser(
+  employee: AdminRecord | null,
+  currentUser: AdminRecord | null,
+  currentAdmin: AdminRecord | null,
+) {
+  if (!employee) return true
+
+  const employeeCompanyUser = asRecord(employee.company_user)
+  const linkedUser = asRecord(employeeCompanyUser?.user) ?? employeeCompanyUser
+  const employeeUserId =
+    readNumber(linkedUser, ["id", "user_id"]) ?? readNumber(employee, ["user_id"])
+  const currentUserId =
+    readNumber(currentUser, ["id", "user_id"]) ?? readNumber(currentAdmin, ["id", "user_id"])
+
+  // The employee endpoint may return a rich but unrelated record for admin
+  // accounts. Only reject it when both records expose comparable user IDs.
+  return employeeUserId === null || currentUserId === null || employeeUserId === currentUserId
+}
+
 function isMissingCoreEmployeeFields(employee: AdminRecord | null) {
   if (!employee) {
     return true
@@ -1482,6 +1527,9 @@ function useSelfEmployeeData() {
       setCurrentUser(mergedCurrentUser)
 
       let resolvedEmployee = await getCurrentEmployee(nextToken).catch(() => null)
+      if (!employeeBelongsToCurrentUser(resolvedEmployee, mergedCurrentUser, currentAdmin)) {
+        resolvedEmployee = null
+      }
       const employeeFromMe = resolvedEmployee
       const hasRichEmployeeData = hasEmployeeProfileData(resolvedEmployee)
 
@@ -1502,22 +1550,6 @@ function useSelfEmployeeData() {
           const detailedEmployee = await getEmployeeById(matchedEmployeeId, nextToken).catch(() => null)
           if (detailedEmployee) {
             resolvedEmployee = mergeEmployeeRecords(resolvedEmployee, detailedEmployee)
-          }
-        }
-
-        if (!hasEmployeeProfileData(resolvedEmployee)) {
-          const likelyEmployeeId = resolveEmployeeId(
-            mergedCurrentUser,
-            currentAdmin,
-            asRecord(mergedCurrentUser.user),
-            asRecord(tokenPayload?.user),
-            asRecord(Array.isArray(tokenPayload?.companies) ? tokenPayload?.companies[0] : null)
-          )
-          if (likelyEmployeeId !== null) {
-            const detailedEmployee = await getEmployeeById(likelyEmployeeId, nextToken).catch(() => null)
-            if (detailedEmployee) {
-              resolvedEmployee = mergeEmployeeRecords(resolvedEmployee, detailedEmployee)
-            }
           }
         }
 
@@ -1545,11 +1577,7 @@ function useSelfEmployeeData() {
       if (isMissingCoreEmployeeFields(resolvedEmployee)) {
         const likelyEmployeeId = resolveEmployeeId(
           resolvedEmployee,
-          mergedCurrentUser,
-          currentAdmin,
-          asRecord(mergedCurrentUser.user),
-          asRecord(tokenPayload?.user),
-          asRecord(Array.isArray(tokenPayload?.companies) ? tokenPayload?.companies[0] : null)
+          { employee_id: readNestedEmployeeId(mergedCurrentUser) },
         )
         if (likelyEmployeeId !== null) {
           const detailedEmployee = await getEmployeeById(likelyEmployeeId, nextToken).catch(() => null)
@@ -1560,6 +1588,9 @@ function useSelfEmployeeData() {
       }
 
       // Re-assert /employees/me as authoritative when present.
+      if (!employeeBelongsToCurrentUser(resolvedEmployee, mergedCurrentUser, currentAdmin)) {
+        resolvedEmployee = null
+      }
       resolvedEmployee = mergeEmployeeRecords(employeeFromMe, resolvedEmployee)
 
       resolvedEmployee = enrichEmployeeFromAssignments(resolvedEmployee)
@@ -1902,12 +1933,14 @@ function SelfServiceSectionCard({
   barClassName?: string
 }) {
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card">
+    <section className="min-w-0 max-w-full border-b border-border/60 pb-4 last:border-b-0 last:pb-0">
       <div className="flex min-w-0">
-        <div className={cn("w-1 shrink-0", barClassName)} />
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 px-3 py-2.5">
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} aria-hidden="true" />
+              {title}
+            </h3>
             {subtitle ? (
               <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
             ) : null}
@@ -1922,8 +1955,8 @@ function SelfServiceSectionCard({
           </div>
         </div>
       </div>
-      <div className="min-w-0 divide-y divide-border/70 border-t border-border/70">{children}</div>
-    </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   )
 }
 
@@ -1941,19 +1974,28 @@ function ProfileDataItem({
   badge,
   fields,
   barClassName = "bg-primary",
+  persona,
 }: {
   title?: string
   badge?: React.ReactNode
   fields: Array<{ label: string; value: React.ReactNode }>
   barClassName?: string
+  persona?: { name: string; secondaryText?: string }
 }) {
   return (
-    <div className="flex">
-      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
-      <div className="min-w-0 flex-1 px-3 py-3">
-        {title || badge ? (
+    <div className="min-w-0 border-b border-border/40 py-3 last:border-b-0">
+      <div className="min-w-0 px-3">
+        {title || badge || persona ? (
           <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-            {title ? <p className="text-sm font-semibold text-foreground">{title}</p> : <span />}
+            {persona ? (
+              <Persona
+                name={persona.name}
+                secondaryText={persona.secondaryText}
+                avatar={{ initials: persona.name.slice(0, 2).toUpperCase(), color: "colorful" }}
+                size="small"
+                className="[&_.fui-Persona__primaryText]:font-medium [&_.fui-Persona__secondaryText]:text-muted-foreground"
+              />
+            ) : title ? <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className={cn("size-1.5 rounded-full", barClassName)} aria-hidden="true" />{title}</p> : <span />}
             {badge}
           </div>
         ) : null}
@@ -2155,12 +2197,11 @@ function AssignmentSection({
   barClassName?: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <section className="min-w-0 border-b border-border/60 pb-4 last:border-b-0 last:pb-0">
       <div className="flex">
-        <div className={cn("w-1 shrink-0", barClassName)} />
         <div className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            {Icon ? <Icon className="size-4 shrink-0 text-primary" /> : null}
+            {Icon ? <Icon className="size-5 shrink-0" /> : <span className={cn("size-1.5 shrink-0 rounded-full", barClassName)} />}
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-foreground">{title}</h3>
               {subtitle ? (
@@ -2175,8 +2216,8 @@ function AssignmentSection({
           ) : null}
         </div>
       </div>
-      <div className="border-t border-border/70">{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   )
 }
 
@@ -2192,11 +2233,10 @@ function AssignmentItemCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex border-b border-border/70 last:border-b-0">
-      <div className={cn("w-1 shrink-0 self-stretch", barClassName)} />
-      <div className="min-w-0 flex-1 px-3 py-3">
+    <div className="min-w-0 border-b border-border/40 py-3 last:border-b-0">
+      <div className="min-w-0 px-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className={cn("size-1.5 rounded-full", barClassName)} aria-hidden="true" />{title}</p>
           {badge}
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
@@ -2234,6 +2274,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
   ]
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div
       className="space-y-4"
       variants={assignmentsStagger}
@@ -2243,7 +2284,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
       {/* Snapshot chips */}
       <motion.div
         variants={assignmentsItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {snapshotChips.map((chip, index, arr) => (
           <div
@@ -2276,7 +2317,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
           <AssignmentSection
             title="Department"
             subtitle="Your org placement"
-            icon={Building2Icon}
+            icon={Building20Color}
             count={departments.length}
           >
             {departments.length ? (
@@ -2319,7 +2360,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
           <AssignmentSection
             title="Position"
             subtitle="Role assignment"
-            icon={BriefcaseIcon}
+            icon={Briefcase20Color}
             count={positionAssignments.length}
           >
             {positionAssignments.length ? (
@@ -2365,7 +2406,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         <AssignmentSection
           title="Attendance assignment"
           subtitle="Shifts, timetables, and overrides"
-          icon={ClockIcon}
+          icon={CalendarClock20Color}
           count={assignmentSummaryRows.length}
         >
           {assignmentSummaryRows.length ? (
@@ -2397,7 +2438,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         <AssignmentSection
           title="Upcoming schedule"
           subtitle="Next published work days"
-          icon={CalendarIcon}
+          icon={CalendarSync20Color}
           count={previewDays.length}
           barClassName="bg-sky-500"
         >
@@ -2519,6 +2560,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
         </AssignmentSection>
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -2533,10 +2575,11 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
   const relatives = asRecordList(employee.relatives)
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {[
           { label: "Contacts", value: contacts.length },
@@ -2573,7 +2616,10 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
                       return (
                         <ProfileDataItem
                           key={`contact-${index}`}
-                          title={readString(record, ["contact_type"], "Contact")}
+                          persona={{
+                            name: readString(record, ["contact_type"], "Contact"),
+                            secondaryText: readString(record, ["email", "phone_number", "phone"], ""),
+                          }}
                           barClassName={isPrimary ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"}
                           badge={
                             isPrimary ? (
@@ -2670,18 +2716,17 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
         />
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
 function ProfileRecordsTab({
   employee,
   correctionRequests,
-  profileUpdateRequests,
   teamAttendance,
 }: {
   employee: AdminRecord | null
   correctionRequests: AdminRecord[]
-  profileUpdateRequests: AdminRecord[]
   teamAttendance: AdminRecord[]
 }) {
   const identifications = asRecordList(employee?.identifications)
@@ -2697,21 +2742,17 @@ function ProfileRecordsTab({
   }).length
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
       >
         {[
           {
             label: "Corrections",
             value: String(correctionRequests.length),
             highlight: pendingCorrections > 0,
-          },
-          {
-            label: "Profile updates",
-            value: String(profileUpdateRequests.length),
-            highlight: false,
           },
           { label: "Team today", value: String(teamAttendance.length), highlight: false },
           { label: "IDs", value: String(identifications.length), highlight: false },
@@ -2740,8 +2781,8 @@ function ProfileRecordsTab({
         ))}
       </motion.div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <motion.div variants={profileTabItem}>
+      <div className="divide-y divide-border/70">
+        <motion.div variants={profileTabItem} className="py-4 first:pt-0">
           <SelfServiceSectionCard
             title="Attendance corrections"
             count={correctionRequests.length}
@@ -2751,7 +2792,8 @@ function ProfileRecordsTab({
             {correctionRequests.length === 0 ? (
               <ProfileEmptyRow message="No attendance correction requests found." />
             ) : (
-              correctionRequests.map((row, index) => {
+              <div role="list" aria-label="Attendance correction requests" className="max-h-64 divide-y divide-border/50 overflow-y-auto overscroll-contain">
+              {correctionRequests.map((row, index) => {
                 const titleText =
                   readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
                   readString(row, ["reason", "request_type", "change_type"], "Correction request")
@@ -2760,52 +2802,24 @@ function ProfileRecordsTab({
                     ? formatDateTime(row.created_at)
                     : formatDate(row.date)
                 return (
+                  <div key={String(row.id ?? index)} role="listitem" className="py-1">
                   <ProfileRequestRow
-                    key={String(row.id ?? index)}
                     title={titleText}
                     status={readString(row, ["status"], "draft")}
                     dateLabel={createdAt}
                   />
+                  </div>
                 )
               })
+              }
+              </div>
             )}
           </SelfServiceSectionCard>
         </motion.div>
 
-        <motion.div variants={profileTabItem}>
-          <SelfServiceSectionCard
-            title="Profile update requests"
-            count={profileUpdateRequests.length}
-            subtitle="Recent change requests"
-            barClassName="bg-sky-500"
-          >
-            {profileUpdateRequests.length === 0 ? (
-              <ProfileEmptyRow message="No profile update requests found." />
-            ) : (
-              profileUpdateRequests.map((row, index) => {
-                const titleText =
-                  readString(row, ["title", "request_no", "leave_no", "reference_no", "reference"], "") ||
-                  readString(row, ["reason", "request_type", "change_type"], "Profile update")
-                const createdAt =
-                  formatDateTime(row.created_at) !== "-"
-                    ? formatDateTime(row.created_at)
-                    : formatDate(row.date)
-                return (
-                  <ProfileRequestRow
-                    key={String(row.id ?? index)}
-                    title={titleText}
-                    status={readString(row, ["status"], "draft")}
-                    dateLabel={createdAt}
-                    detail={readString(row, ["reason"], "") || undefined}
-                  />
-                )
-              })
-            )}
-          </SelfServiceSectionCard>
-        </motion.div>
       </div>
 
-      <motion.div variants={profileTabItem}>
+      <motion.div variants={profileTabItem} className="py-4">
         <SelfServiceSectionCard
           title="Direct reports today"
           count={teamAttendance.length}
@@ -2814,7 +2828,8 @@ function ProfileRecordsTab({
           {teamAttendance.length === 0 ? (
             <ProfileEmptyRow message="No team attendance rows were returned for your account." />
           ) : (
-            teamAttendance.map((row, index) => {
+            <div role="list" aria-label="Direct reports attendance" className="max-h-80 divide-y divide-border/50 overflow-y-auto overscroll-contain">
+            {teamAttendance.map((row, index) => {
               const nestedEmployee = asRecord(row.employee)
               const employeeLabel =
                 readString(row, ["employee_name", "full_name", "name"], "") ||
@@ -2829,8 +2844,8 @@ function ProfileRecordsTab({
               const status = readString(row, ["status", "attendance_status"], "—")
               const checkIn = formatUnknownValue(row.check_in_at ?? row.first_punch_at)
               return (
+                <div key={String(row.id ?? index)} role="listitem">
                 <ProfileDataItem
-                  key={String(row.id ?? index)}
                   title={employeeLabel}
                   barClassName={
                     status.toLowerCase().includes("absent")
@@ -2854,8 +2869,11 @@ function ProfileRecordsTab({
                     { label: "Check in", value: checkIn },
                   ]}
                 />
+                </div>
               )
             })
+            }
+            </div>
           )}
         </SelfServiceSectionCard>
       </motion.div>
@@ -3044,6 +3062,35 @@ function ProfileRecordsTab({
         </motion.div>
       ) : null}
     </motion.div>
+    </FluentCard>
+  )
+}
+
+function UpdateActionTile({
+  title,
+  description,
+  icon: Icon,
+  onClick,
+}: {
+  title: string
+  description: string
+  icon: React.ComponentType<{ className?: string }>
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Request ${title.toLowerCase()} update`}
+      className="group flex min-h-[4.75rem] min-w-0 items-center gap-3 border border-border/70 bg-background px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      <Icon className="size-6 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold leading-5 text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{description}</span>
+      </span>
+      <ArrowRightIcon className="size-4 shrink-0 text-primary/70 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+    </button>
   )
 }
 
@@ -3088,6 +3135,7 @@ function ProfileUpdatesTab({
       description: "Name, email, phone, and city",
       fields: ["first_name", "last_name", "email", "phone", "city"] as EditableUserField[],
       label: "Personal Details",
+      icon: Person20Color,
     },
     {
       key: "contact-details",
@@ -3095,6 +3143,7 @@ function ProfileUpdatesTab({
       description: "Email, phone, and city",
       fields: ["email", "phone", "city"] as EditableUserField[],
       label: "Contact Details",
+      icon: ContactCard20Color,
     },
     {
       key: "profile-photo",
@@ -3102,6 +3151,7 @@ function ProfileUpdatesTab({
       description: "Change your picture",
       fields: ["profile_photo_url"] as EditableUserField[],
       label: "Profile Picture",
+      icon: Camera20Color,
     },
     {
       key: "password",
@@ -3109,10 +3159,12 @@ function ProfileUpdatesTab({
       description: "Update sign-in password",
       fields: ["password"] as EditableUserField[],
       label: "Password",
+      icon: PersonKey20Color,
     },
   ]
 
   return (
+    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
     <motion.div
       className="w-full min-w-0 max-w-full space-y-4"
       variants={profileTabStagger}
@@ -3151,7 +3203,7 @@ function ProfileUpdatesTab({
 
       <motion.div
         variants={profileTabItem}
-        className="flex max-w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overscroll-x-contain rounded-lg border border-border"
+        className="flex max-w-full min-w-0 flex-nowrap items-stretch overflow-x-auto overscroll-x-contain border-b border-border/60"
       >
         {[
           { label: "All", value: String(statusCounts.total), className: "text-primary" },
@@ -3189,38 +3241,27 @@ function ProfileUpdatesTab({
 
       {/* Quick update types */}
       <motion.div variants={profileTabItem} className="min-w-0 max-w-full">
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex min-w-0">
-            <div className="w-1 shrink-0 bg-primary" />
-            <div className="min-w-0 flex-1 px-3 py-2.5">
-              <h3 className="text-sm font-semibold text-foreground">What do you want to change?</h3>
-              <p className="text-[11px] text-muted-foreground">
-                Each request is sent to HR for approval.
-              </p>
-            </div>
+        <section aria-labelledby="profile-update-actions-title">
+          <div className="mb-3">
+            <h3 id="profile-update-actions-title" className="text-sm font-semibold text-foreground">
+              What do you want to change?
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              Each request is sent to HR for approval.
+            </p>
           </div>
-          <div className="grid min-w-0 gap-0 border-t border-border/70 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
             {updateActions.map((action) => (
-              <button
+              <UpdateActionTile
                 key={action.key}
-                type="button"
+                title={action.title}
+                description={action.description}
+                icon={action.icon}
                 onClick={() => openSectionEditor(action.key, action.label, action.fields)}
-                className="flex min-w-0 items-center gap-2.5 border-b border-border/70 px-3 py-3 text-left transition-colors hover:bg-muted/40 sm:gap-3 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <PencilIcon className="size-3.5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {action.title}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">{action.description}</span>
-                </span>
-                <span className="shrink-0 text-xs font-medium text-primary">Request →</span>
-              </button>
+              />
             ))}
           </div>
-        </div>
+        </section>
       </motion.div>
 
       <motion.div variants={profileTabItem}>
@@ -3334,6 +3375,7 @@ function ProfileUpdatesTab({
         </SelfServiceSectionCard>
       </motion.div>
     </motion.div>
+    </FluentCard>
   )
 }
 
@@ -3402,11 +3444,11 @@ function ProfileSummaryFieldRow({
   value: React.ReactNode
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2">
-      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="grid min-h-10 grid-cols-[minmax(6.5rem,0.9fr)_minmax(0,1.1fr)] items-center gap-3 py-1.5">
+      <FluentText size={100} weight="semibold" className="truncate uppercase tracking-wide text-muted-foreground">
         {label}
-      </span>
-      <span className="min-w-0 text-right text-sm font-medium text-foreground break-words">{value}</span>
+      </FluentText>
+      <FluentText size={300} className="min-w-0 text-right text-foreground [overflow-wrap:anywhere]">{value}</FluentText>
     </div>
   )
 }
@@ -3417,34 +3459,27 @@ function ProfileSummarySection({
   icon: Icon,
   action,
   children,
-  barClassName = "bg-primary",
 }: {
   title: string
   subtitle?: string
   icon: React.ComponentType<{ className?: string }>
-  action?: React.ReactNode
+  action?: React.ReactElement | null
   children: React.ReactNode
-  barClassName?: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex">
-        <div className={cn("w-1 shrink-0", barClassName)} />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2 border-r border-t border-primary/40 px-3 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <Icon className="size-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">{title}</div>
-              {subtitle ? (
-                <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>
-              ) : null}
-            </div>
+    <section className="min-w-0">
+      <div className="mb-2 flex min-h-11 min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <Icon className="size-5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <FluentText size={300} weight="semibold" className="block" truncate>{title}</FluentText>
+            {subtitle ? <FluentText size={200} className="block truncate text-muted-foreground">{subtitle}</FluentText> : null}
           </div>
-          {action}
         </div>
+        {action}
       </div>
-      <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   )
 }
 
@@ -3526,40 +3561,45 @@ function ProfileSummaryTab({
   return (
     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
       <div
-        className={cn(heroPanelClass, pageBleedClass)}
-        style={{ backgroundColor: "var(--primary)" }}
+        className={cn(
+          heroPanelClass,
+          pageBleedClass,
+          "!rounded-none border border-border/70 !bg-card !py-4 !text-foreground shadow-sm sm:!px-5",
+        )}
       >
-        <div className="relative z-10 space-y-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
-              {profilePhotoUrl ? <AvatarImage src={profilePhotoUrl} alt={displayName} /> : null}
-              <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
-                {initials || "ME"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
-                  {displayName}
-                </h1>
-                <span className="text-[11px] font-semibold capitalize text-white/85">
-                  {employmentStatusLabel}
-                </span>
-              </div>
-              <div className="flex min-w-0 items-center gap-2">
-                <p className="min-w-0 truncate text-xs font-semibold text-white/90">{positionLabel}</p>
-                <Button
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1 overflow-hidden" aria-hidden>
+          <span className="w-1/4 bg-[#f25022]" />
+          <span className="w-1/4 bg-[#7fba00]" />
+          <span className="w-1/4 bg-[#00a4ef]" />
+          <span className="w-1/4 bg-[#ffb900]" />
+        </div>
+        <div className="relative z-10 space-y-4 pt-1">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <Persona
+              name={displayName}
+              secondaryText={positionLabel}
+              avatar={{
+                image: profilePhotoUrl ? { src: profilePhotoUrl, alt: displayName } : undefined,
+                initials: initials || "ME",
+              }}
+              size="large"
+              className="min-w-0 [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__secondaryText]:text-muted-foreground"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center border border-primary/15 bg-primary/5 px-2 py-0.5 text-[11px] font-medium capitalize text-primary">
+                {employmentStatusLabel}
+              </span>
+              <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 shrink-0 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="h-7 shrink-0 border-border bg-background px-2.5 text-xs text-foreground hover:bg-muted"
                   onClick={() =>
                     openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
                   }
-                >
-                  Change photo
-                </Button>
-              </div>
+              >
+                Change photo
+              </Button>
             </div>
           </div>
 
@@ -3572,10 +3612,10 @@ function ProfileSummaryTab({
               { label: "Joined", value: hireDateLabel },
             ].map((field) => (
               <div key={field.label} className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {field.label}
                 </p>
-                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
+                <p className="truncate text-xs font-semibold text-foreground">{field.value}</p>
               </div>
             ))}
           </div>
@@ -3583,7 +3623,7 @@ function ProfileSummaryTab({
       </div>
 
       {/* Today's attendance detail row */}
-      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+      <div className="divide-y divide-border overflow-hidden border border-border">
         <div className="flex bg-background">
           <div className={cn("w-1 shrink-0", punchTone.bar)} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
@@ -3693,18 +3733,23 @@ function ProfileSummaryTab({
         </div>
       </div>
 
-      {/* My info sections — compact bordered lists */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* One Fluent surface keeps the summary aligned without nested cards or heavy dividers. */}
+      <FluentCard
+        appearance="outline"
+        size="small"
+        className="w-full min-w-0 !gap-0 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5"
+      >
+      <div className="grid min-w-0 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
         <ProfileSummarySection
           title="Contact"
           subtitle="Personal details"
-          icon={UserIcon}
+          icon={Person20Color}
           action={
-            <Button
+            <FluentButton
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-primary hover:bg-primary/10 hover:text-primary"
+              appearance="subtle"
+              size="small"
+              icon={<Edit16Regular />}
               onClick={() =>
                 openSectionEditor("contact-details", "Contact Details", [
                   "first_name",
@@ -3714,45 +3759,46 @@ function ProfileSummaryTab({
                 ])
               }
             >
-              <PencilIcon className="mr-1 size-3.5" />
               Edit
-            </Button>
+            </FluentButton>
           }
         >
           <ProfileSummaryFieldRow label="Email" value={email} />
           <ProfileSummaryFieldRow label="Phone" value={phone} />
           <ProfileSummaryFieldRow label="Employee ID" value={empId} />
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2">
-            <button
+          <FluentCardFooter className="mt-2 flex flex-wrap items-center gap-1 !px-0 !py-0">
+            <FluentButton
               type="button"
-              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              appearance="subtle"
+              size="small"
               onClick={() => openSectionEditor("password", "Password", ["password"])}
             >
               Change Password
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton
               type="button"
-              className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              appearance="subtle"
+              size="small"
               onClick={() =>
                 openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
               }
             >
               Change Photo
-            </button>
-          </div>
+            </FluentButton>
+          </FluentCardFooter>
         </ProfileSummarySection>
 
         <ProfileSummarySection
           title="Organization"
           subtitle="Work placement"
-          icon={Building2Icon}
+          icon={Building20Color}
         >
           <ProfileSummaryFieldRow label="Branch" value={branchLabel} />
           <ProfileSummaryFieldRow label="Department" value={departmentLabel} />
           <ProfileSummaryFieldRow label="Position" value={positionLabel} />
         </ProfileSummarySection>
 
-        <ProfileSummarySection title="Reporting" subtitle="Manager chain" icon={UsersIcon}>
+        <ProfileSummarySection title="Reporting" subtitle="Manager chain" icon={PeopleTeam20Color}>
           <ProfileSummaryFieldRow label="Reports to" value={manager.name || "—"} />
           <ProfileSummaryFieldRow label="Manager no." value={manager.employeeNo || "—"} />
           <ProfileSummaryFieldRow label="Full name" value={displayName} />
@@ -3761,7 +3807,7 @@ function ProfileSummaryTab({
         <ProfileSummarySection
           title="Employment"
           subtitle="Status & tenure"
-          icon={BriefcaseIcon}
+          icon={Briefcase20Color}
         >
           <ProfileSummaryFieldRow
             label="Status"
@@ -3782,6 +3828,7 @@ function ProfileSummaryTab({
           <ProfileSummaryFieldRow label="Hired" value={hireDateLabel} />
         </ProfileSummarySection>
       </div>
+      </FluentCard>
     </div>
   )
 }
@@ -3792,10 +3839,13 @@ export function EmployeeSelfServiceProfileView() {
   const { url: myProfilePhotoUrl, refresh: refreshMyProfilePhoto } = useMyProfilePhoto(token)
   const searchParams = useSearchParams()
   const pathname = usePathname()
+  const router = useRouter()
+  const profileNavigationStyles = useProfileNavigationStyles()
   const activeTab = (searchParams?.get("tab") as SelfProfileTab) || "summary"
   const editTarget = searchParams?.get("edit") ?? ""
   const autoOpenedEditTargetRef = React.useRef("")
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const tabs: Array<{ key: SelfProfileTab; label: string }> = [
     { key: "summary", label: "Summary" },
     { key: "assignments", label: "Assignments" },
@@ -4125,6 +4175,19 @@ export function EmployeeSelfServiceProfileView() {
       return
     }
 
+    const hasChangedValue = sectionEditor.fields.some((field) => {
+      if (field === "password") return Boolean(sectionValues[field].trim())
+      if (field === "profile_photo_url") return false
+      return sectionValues[field].trim() !== baseEditorValues[field].trim()
+    })
+    if (!hasChangedValue) {
+      setSectionError(null)
+      setSectionErrorLines([])
+      setSectionEditor(null)
+      setMessage("No changes to submit.")
+      return
+    }
+
     const requestedChanges: AdminRecord = {}
     for (const field of sectionEditor.fields) {
       const nextValue = sectionValues[field].trim()
@@ -4137,10 +4200,9 @@ export function EmployeeSelfServiceProfileView() {
       if (field === "profile_photo_url") {
         continue
       }
-      if (nextValue) {
-        const apiField = field === "phone" ? "phone_number" : field
-        requestedChanges[apiField] = nextValue
-      }
+      if (nextValue === baseEditorValues[field].trim()) continue
+      const apiField = field === "phone" ? "phone_number" : field
+      requestedChanges[apiField] = nextValue
     }
     if (!Object.keys(requestedChanges).length) {
       setSectionError("Nothing to update for this section.")
@@ -4198,6 +4260,7 @@ export function EmployeeSelfServiceProfileView() {
   }, [
     profilePhotoFileName,
     profilePhotoPreviewUrl,
+    baseEditorValues,
     refresh,
     refreshMyProfilePhoto,
     sectionEditor,
@@ -4394,31 +4457,36 @@ export function EmployeeSelfServiceProfileView() {
         </div>
       ) : null}
       <DoodleSprites />
-      <div className="tab-rail-scroll">
-        <div className="inline-flex min-w-full items-center gap-4 border-b border-border/80">
+      <div className="tab-rail-scroll border-b border-border/80">
+        <TabList
+          aria-label="Profile sections"
+          size="small"
+          selectedValue={activeTab}
+          onTabSelect={(_event, data) => {
+            const nextTab = String(data.value)
+            if (tabs.some((tab) => tab.key === nextTab)) {
+              router.push(`${pathname}?tab=${nextTab}`, { scroll: false })
+            }
+          }}
+          className={profileNavigationStyles.tabList}
+        >
           {tabs.map((tab) => {
-            const isActive = activeTab === tab.key
             return (
-              <Link
+              <Tab
                 key={tab.key}
-                href={`${pathname}?tab=${tab.key}`}
-                className={cn(
-                  "shrink-0 border-b-2 px-1 py-2 text-[0.92rem] font-medium whitespace-nowrap transition-colors duration-200",
-                  isActive
-                    ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                )}
+                value={tab.key}
+                className={profileNavigationStyles.tab}
               >
                 {tab.label}
-              </Link>
+              </Tab>
             )
           })}
-        </div>
+        </TabList>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center gap-4 py-10">
-          <LumaSpin />
+          <FluentLoadingIndicator size="large" />
           <p className="text-sm text-muted-foreground">Loading your profile...</p>
         </div>
       ) : null}
@@ -4461,7 +4529,6 @@ export function EmployeeSelfServiceProfileView() {
             <ProfileRecordsTab
               employee={employee}
               correctionRequests={correctionRequests}
-              profileUpdateRequests={profileUpdateRequests}
               teamAttendance={teamAttendance}
             />
           ) : null}
@@ -4536,10 +4603,10 @@ export function EmployeeSelfServiceProfileView() {
                             Default avatars
                           </p>
                           {defaultAvatarsLoading ? (
-                            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Loader2 className="size-3.5 animate-spin" />
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                              <FluentLoadingIndicator className="size-3.5 animate-spin" />
                               Loading avatars…
-                            </p>
+                            </div>
                           ) : defaultAvatars.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                               No default avatars available yet.
@@ -4620,7 +4687,7 @@ export function EmployeeSelfServiceProfileView() {
                       selectedDefaultAvatarId == null)
                   }
                 >
-                  {sectionSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                  {sectionSaving ? <FluentLoadingIndicator className="mr-1 size-4 animate-spin" /> : null}
                   {sectionEditor?.fields.length === 1 && sectionEditor.fields[0] === "profile_photo_url"
                     ? selectedDefaultAvatarId != null
                       ? "Apply Avatar"
@@ -4631,7 +4698,6 @@ export function EmployeeSelfServiceProfileView() {
             </DialogPopup>
           </Dialog>
 
-      {message ? <p className="px-1 text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
     </div>
   )
 }
@@ -4649,7 +4715,7 @@ export function EmployeeOrganizationView() {
         <CardContent>
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-4 py-10">
-              <LumaSpin />
+              <FluentLoadingIndicator size="large" />
               <p className="text-sm text-muted-foreground">Loading organization details...</p>
             </div>
           ) : null}
@@ -4689,6 +4755,7 @@ export function EmployeePromotionView() {
   const [selectedMovement, setSelectedMovement] = React.useState<AdminRecord | null>(null)
   const [acknowledgingId, setAcknowledgingId] = React.useState<number | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const [statusFilter, setStatusFilter] = React.useState<"all" | "awaiting" | "applied">("all")
 
   const loadMovements = React.useCallback(async () => {
@@ -4838,7 +4905,7 @@ export function EmployeePromotionView() {
             onClick={() => void loadMovements()}
             disabled={listLoading || !token}
           >
-            {listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -4873,11 +4940,6 @@ export function EmployeePromotionView() {
           })}
         </div>
       </div>
-      {message ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {message}
-        </div>
-      ) : null}
       {movementsError ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {movementsError}
@@ -4886,7 +4948,7 @@ export function EmployeePromotionView() {
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {listLoading ? (
           <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+            <FluentLoadingIndicator className="size-4 animate-spin" />
             Loading your movements…
           </div>
         ) : visibleMovements.length === 0 ? (
@@ -4960,7 +5022,7 @@ export function EmployeePromotionView() {
                         onClick={() => void handleAcknowledgeMovement(movement)}
                         disabled={isAcknowledging}
                       >
-                        {isAcknowledging ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                        {isAcknowledging ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                         Acknowledge
                       </button>
                     ) : null}
@@ -5001,7 +5063,7 @@ export function EmployeePromotionView() {
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {detailLoading ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
                 Loading movement details…
               </div>
             ) : selectedMovement ? (
@@ -5057,7 +5119,7 @@ export function EmployeePromotionView() {
                       disabled={acknowledgingId === readMovementId(selectedMovement)}
                     >
                       {acknowledgingId === readMovementId(selectedMovement) ? (
-                        <Loader2 className="size-4 animate-spin" />
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
                       ) : (
                         <CheckCircle2 className="size-4" />
                       )}
@@ -5080,6 +5142,7 @@ export function EmployeePromotionView() {
 }
 
 export function EmployeePayrollView() {
+  type PayrollSummaryTab = "year" | "payment" | "salary" | "documents"
   const { loading, error, token, employee } = useSelfEmployeeData()
   const [payslipsLoading, setPayslipsLoading] = React.useState(false)
   const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
@@ -5090,6 +5153,7 @@ export function EmployeePayrollView() {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [selectedPayslip, setSelectedPayslip] = React.useState<AdminRecord | null>(null)
   const [downloadingId, setDownloadingId] = React.useState<number | null>(null)
+  const [summaryTab, setSummaryTab] = React.useState<PayrollSummaryTab>("year")
 
   const loadPayslips = React.useCallback(async () => {
     if (!token) {
@@ -5103,7 +5167,7 @@ export function EmployeePayrollView() {
     try {
       const [payslipResult, summaryResult] = await Promise.allSettled([
         listMyPayslips(token),
-        getMyPayrollSummary(token),
+        getMyPayrollSummary(token, new Date().getFullYear()),
       ])
       if (payslipResult.status === "fulfilled") {
         setPayslips(payslipResult.value)
@@ -5207,309 +5271,289 @@ export function EmployeePayrollView() {
   )
 
   const listLoading = loading || payslipsLoading
+  const latestPayslip = payslips[0] ?? null
+  const latestPayslipId = latestPayslip ? readPayslipId(latestPayslip) : null
+  const latestStatus = latestPayslip ? readPayslipStatus(latestPayslip) : ""
+  const latestStatusKey = latestStatus.toLowerCase()
+  const latestBadgeColor = latestStatusKey.includes("paid") || latestStatusKey.includes("publish")
+    ? "success"
+    : latestStatusKey.includes("pending") || latestStatusKey.includes("process")
+      ? "warning"
+      : "informative"
 
   return (
-    <section className="space-y-4">
-      <HeroBand
-        eyebrow="My finance"
-        title="Payroll"
-        description="Payslips issued to you, with period totals, a detailed breakdown, and download."
-        actions={
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
-            onClick={() => void loadPayslips()}
-            disabled={mounted ? listLoading || !token : undefined}
-          >
-            {mounted && listLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-            Refresh
-          </button>
-        }
-      />
-      <OvertimeRequestsPanel token={token} />
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <CompactStatStrip
-        items={[
-          { label: "Payslips", value: String(payslipSummary.total) },
-          { label: "Latest gross", value: payslipSummary.latestGross },
-          { label: "Latest net", value: payslipSummary.latestNet },
-        ]}
-      />
-      {payrollSummaryDetails ? (
-        <div className="grid gap-3 xl:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">YTD pay</CardTitle>
-              <CardDescription>
-                {String(readNumber(payrollSummaryDetails, ["year"]) ?? new Date().getFullYear())}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Gross" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
-              <AssignmentField label="Taxable" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
-              <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
-              <AssignmentField label="Net" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Tax and pension</CardTitle>
-              <CardDescription>Current year totals</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Tax" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
-              <AssignmentField label="Pension" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
-              <AssignmentField label="Tax rows" value={String(taxSummaryRows.length)} />
-              <AssignmentField label="Pension rows" value={String(pensionSummaryRows.length)} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Bank payroll</CardTitle>
-              <CardDescription>Payment destination</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
-              <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
-              <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
-              <AssignmentField label="Status" value={readString(bankDetails, ["verification_status"], "—")} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Documents</CardTitle>
-              <CardDescription>Published payroll files</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <AssignmentField label="Payslips" value={String(payrollDocuments.length)} />
-              <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
-              <AssignmentField
-                label="Latest salary"
-                value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))}
-              />
-              <AssignmentField label="Effective" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
-            </CardContent>
-          </Card>
+    <section className="space-y-6 pb-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">My finance</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">My payroll</h1>
+          <p className="mt-1 text-sm text-muted-foreground">View your payslips, yearly pay summary, and payment details.</p>
         </div>
-      ) : null}
-      {salaryHistoryRows.length > 0 ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Salary history</CardTitle>
-            <CardDescription>Compensation changes used by payroll.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border/70 p-0">
-            {salaryHistoryRows.slice(0, 5).map((row, index) => (
-              <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-4">
-                <span className="font-medium text-foreground">
-                  {formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}
-                </span>
-                <span className="text-muted-foreground">{readString(row, ["pay_frequency"], "—")}</span>
-                <span className="text-muted-foreground">{formatDate(row.effective_from)}</span>
-                <span className="text-muted-foreground">{readString(row, ["status"], "—")}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
+        <FluentButton
+          appearance="subtle"
+          icon={mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollRefreshIcon />}
+          disabled={mounted ? listLoading || !token : undefined}
+          onClick={() => void loadPayslips()}
+        >
+          Refresh
+        </FluentButton>
+      </header>
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {payslipsError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {payslipsError}
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+
+      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-5 border-b border-border px-5 py-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest payslip</p>
+            {latestPayslip ? (
+              <>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">{readPayslipPeriodLabel(latestPayslip)}</h2>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>{readString(latestPayslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${latestPayslipId ?? "—"}`)}</span>
+                  <span aria-hidden="true">·</span>
+                  <FluentBadge appearance="tint" color={latestBadgeColor}>{latestStatus ? formatMovementLabel(latestStatus) : "Available"}</FluentBadge>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">No payslip available</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Published payslips will appear here.</p>
+              </>
+            )}
+          </div>
+          {latestPayslip ? (
+            <div className="flex flex-wrap gap-2">
+              <FluentButton appearance="secondary" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(latestPayslip)}>
+                Details
+              </FluentButton>
+              <FluentButton
+                appearance="primary"
+                icon={downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                disabled={downloadingId === latestPayslipId}
+                onClick={() => void handleDownloadPayslip(latestPayslip)}
+              >
+                Download payslip
+              </FluentButton>
+            </div>
+          ) : null}
+        </div>
+        {latestPayslip ? (
+          <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <div className="px-5 py-4">
+              <p className="text-sm text-muted-foreground">Net pay</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+                {formatPayslipMoney(latestPayslip.net_pay ?? latestPayslip.netPay, readPayslipCurrency(latestPayslip))}
+              </p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-muted-foreground">Gross pay</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+                {formatPayslipMoney(latestPayslip.gross_pay ?? latestPayslip.grossPay, readPayslipCurrency(latestPayslip))}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </FluentCard>
+
+      {payrollSummaryDetails ? (
+        <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border px-5 pt-4">
+            <h2 className="text-base font-semibold text-foreground">Pay details</h2>
+            <p className="mt-1 pb-3 text-sm text-muted-foreground">Year-to-date totals and the account information used for payroll.</p>
+            <div className="overflow-x-auto">
+              <TabList size="small" selectedValue={summaryTab} onTabSelect={(_, data) => setSummaryTab(data.value as PayrollSummaryTab)} className="min-w-max">
+                <Tab value="year">Year to date</Tab>
+                <Tab value="payment">Payment details</Tab>
+                <Tab value="salary">Salary history</Tab>
+                <Tab value="documents">Documents</Tab>
+              </TabList>
+            </div>
+          </div>
+          <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryTab === "year" ? (
+              <>
+                <AssignmentField label="Gross pay" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
+                <AssignmentField label="Taxable pay" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
+                <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
+                <AssignmentField label="Net pay" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
+                <AssignmentField label="Tax paid" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
+                <AssignmentField label="Pension contributions" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
+                <AssignmentField label="Tax records" value={String(taxSummaryRows.length)} />
+                <AssignmentField label="Pension records" value={String(pensionSummaryRows.length)} />
+              </>
+            ) : summaryTab === "payment" ? (
+              <>
+                <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
+                <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
+                <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
+                <AssignmentField label="Verification" value={readString(bankDetails, ["verification_status"], "—")} />
+              </>
+            ) : summaryTab === "salary" ? (
+              salaryHistoryRows.length > 0 ? (
+                <div className="-mx-5 -my-5 divide-y divide-border sm:col-span-2 xl:col-span-4">
+                  {salaryHistoryRows.slice(0, 6).map((row, index) => (
+                    <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-4">
+                      <span className="font-semibold text-foreground">{formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}</span>
+                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["pay_frequency"], "—"))}</span>
+                      <span className="text-muted-foreground">Effective {formatDate(row.effective_from)}</span>
+                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["status"], "—"))}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-muted-foreground">No salary history is available.</p>
+            ) : (
+              <>
+                <AssignmentField label="Published payslips" value={String(payrollDocuments.length)} />
+                <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
+                <AssignmentField label="Latest salary" value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))} />
+                <AssignmentField label="Effective from" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
+              </>
+            )}
+          </div>
+        </FluentCard>
+      ) : null}
+
+      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Payslip history</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{payslipSummary.total} {payslipSummary.total === 1 ? "payslip" : "payslips"} available</p>
+          </div>
+          <PayrollCalendarIcon className="text-xl text-muted-foreground" />
+        </div>
         {listLoading ? (
-          <div className="flex items-center justify-center gap-2 px-3 py-10 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading your payslips...
+          <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+            <FluentLoadingIndicator className="size-4 animate-spin" /> Loading your payslips…
           </div>
         ) : payslips.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            No payslips have been published to your account yet.
+          <div className="px-5 py-10 text-center">
+            <PayrollDocumentIcon className="mx-auto mb-3 text-2xl text-muted-foreground" />
+            <p className="font-medium text-foreground">No payslips published yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">When a payslip is published to your account, it will appear here.</p>
           </div>
         ) : (
-          <div className="divide-y divide-border/70">
+          <div className="divide-y divide-border">
             {payslips.map((payslip) => {
               const id = readPayslipId(payslip) ?? 0
               const currency = readPayslipCurrency(payslip)
               const status = readPayslipStatus(payslip)
-              const statusTone = resolvePayslipStatusTone(status)
+              const statusKey = status.toLowerCase()
+              const badgeColor = statusKey.includes("paid") || statusKey.includes("publish") ? "success" : statusKey.includes("pending") || statusKey.includes("process") ? "warning" : "informative"
               const isDownloading = downloadingId === id
-
               return (
-                <div key={id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 space-y-2">
+                <div key={id} className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">
-                        {readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}
-                      </p>
-                      <AssignmentBadge tone={statusTone}>
-                        {status && status !== "-" ? formatMovementLabel(status) : "Available"}
-                      </AssignmentBadge>
+                      <p className="font-semibold text-foreground">{readPayslipPeriodLabel(payslip)}</p>
+                      <FluentBadge appearance="tint" color={badgeColor}>{status ? formatMovementLabel(status) : "Available"}</FluentBadge>
                     </div>
-                    <p className="text-sm text-muted-foreground">{readPayslipPeriodLabel(payslip)}</p>
-                    <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="flex items-center gap-1.5">
-                        <CalendarIcon className="size-3.5" />
-                        <span>
-                          Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <BriefcaseIcon className="size-3.5" />
-                        <span>Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <UsersIcon className="size-3.5" />
-                        <span>Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <FileTextIcon className="size-3.5" />
-                        <span>{currency || "Currency pending"}</span>
-                      </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}</p>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5"><PayrollCalendarIcon /> Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}</span>
+                      <span className="inline-flex items-center gap-1.5"><PayrollMoneyIcon /> Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
+                      <span className="inline-flex items-center gap-1.5"><PayrollWalletIcon /> Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" onClick={() => void openPayslipDetail(payslip)}>
-                      Details
-                    </Button>
-                    <Button type="button" onClick={() => void handleDownloadPayslip(payslip)} disabled={isDownloading}>
-                      {isDownloading ? <Loader2 className="size-4 animate-spin" /> : <DownloadIcon className="size-4" />}
-                      Download
-                    </Button>
+                  <div className="flex items-center gap-2">
+                    <FluentButton appearance="subtle" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(payslip)}>Details</FluentButton>
+                    <FluentButton
+                      appearance="secondary"
+                      icon={isDownloading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                      aria-label={`Download payslip for ${readPayslipPeriodLabel(payslip)}`}
+                      disabled={isDownloading}
+                      onClick={() => void handleDownloadPayslip(payslip)}
+                    />
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-      </div>
+      </FluentCard>
 
-          <Dialog
-            open={detailOpen}
-            onOpenChange={(open) => {
-              setDetailOpen(open)
-              if (!open) {
-                setDetailLoading(false)
-              }
-            }}
-          >
-            <DialogPopup className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {selectedPayslip
-                    ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details")
-                    : "Payslip details"}
-                </DialogTitle>
-                <DialogDescription>
-                  Review payroll totals, issue dates, and any earnings or deduction rows returned by the backend.
-                </DialogDescription>
-              </DialogHeader>
+      <OvertimeRequestsPanel token={token} />
 
-              {detailLoading ? (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading payslip details...
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailLoading(false)
+        }}
+      >
+        <DialogPopup className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedPayslip ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details") : "Payslip details"}
+            </DialogTitle>
+            <DialogDescription>Review your pay breakdown for {selectedPayslip ? readPayslipPeriodLabel(selectedPayslip) : "this period"}.</DialogDescription>
+          </DialogHeader>
+          {detailLoading ? (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+              <FluentLoadingIndicator className="size-4 animate-spin" /> Loading payslip details…
+            </div>
+          ) : selectedPayslip ? (
+            <div className="space-y-4">
+              <FluentCard className="rounded-xl border border-border p-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <AssignmentField label="Period" value={readPayslipPeriodLabel(selectedPayslip)} />
+                  <AssignmentField label="Status" value={<FluentBadge appearance="tint" color="informative">{readPayslipStatus(selectedPayslip) ? formatMovementLabel(readPayslipStatus(selectedPayslip)) : "Available"}</FluentBadge>} />
+                  <AssignmentField label="Gross pay" value={formatPayslipMoney(selectedPayslip.gross_pay ?? selectedPayslip.grossPay, selectedCurrency)} />
+                  <AssignmentField label="Net pay" value={formatPayslipMoney(selectedPayslip.net_pay ?? selectedPayslip.netPay, selectedCurrency)} />
+                  <AssignmentField label="Tax" value={formatPayslipMoney(selectedPayslip.tax_amount ?? selectedPayslip.taxAmount, selectedCurrency)} />
+                  <AssignmentField label="Deductions" value={formatPayslipMoney(selectedPayslip.total_deductions ?? selectedPayslip.totalDeductions, selectedCurrency)} />
+                  <AssignmentField label="Employee" value={readString(asRecord(selectedPayslip.employee), ["full_name", "name"], employeeName)} />
+                  <AssignmentField label="Payroll number" value={readString(selectedPayslip, ["payroll_number", "payrollNumber"], "—")} />
+                  <AssignmentField label="Issued" value={formatDate(selectedPayslip.issued_at ?? selectedPayslip.issuedAt)} />
                 </div>
-              ) : selectedPayslip ? (
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Period" value={readPayslipPeriodLabel(selectedPayslip)} />
-                        <AssignmentField label="Status" value={<AssignmentBadge tone={resolvePayslipStatusTone(readPayslipStatus(selectedPayslip))}>{readPayslipStatus(selectedPayslip) ? formatMovementLabel(readPayslipStatus(selectedPayslip)) : "Available"}</AssignmentBadge>} />
-                        <AssignmentField label="Gross Pay" value={formatPayslipMoney(selectedPayslip.gross_pay ?? selectedPayslip.grossPay, selectedCurrency)} />
-                        <AssignmentField label="Net Pay" value={formatPayslipMoney(selectedPayslip.net_pay ?? selectedPayslip.netPay, selectedCurrency)} />
-                        <AssignmentField label="Tax" value={formatPayslipMoney(selectedPayslip.tax_amount ?? selectedPayslip.taxAmount, selectedCurrency)} />
-                        <AssignmentField label="Deductions" value={formatPayslipMoney(selectedPayslip.total_deductions ?? selectedPayslip.totalDeductions, selectedCurrency)} />
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="grid gap-3 p-4">
-                        <AssignmentField label="Employee" value={readString(asRecord(selectedPayslip.employee), ["full_name", "name"], employeeName)} />
-                        <AssignmentField label="Payroll No" value={readString(selectedPayslip, ["payroll_number", "payrollNumber"], "—")} />
-                        <AssignmentField label="Currency" value={selectedCurrency || "—"} />
-                        <AssignmentField label="Issued At" value={formatDate(selectedPayslip.issued_at ?? selectedPayslip.issuedAt)} />
-                        <AssignmentField label="Created At" value={formatDate(selectedPayslip.created_at ?? selectedPayslip.createdAt)} />
-                        <AssignmentField label="Updated At" value={formatDate(selectedPayslip.updated_at ?? selectedPayslip.updatedAt)} />
-                      </CardContent>
-                    </Card>
+              </FluentCard>
+              {earningsRows.length > 0 ? (
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-foreground">Earnings</h3>
+                  <div className="divide-y divide-border rounded-xl border border-border">
+                    {earningsRows.map((line, index) => (
+                      <div key={`earning-${index}`} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div><p className="text-sm font-medium">{readString(line, ["name", "component_name", "componentName", "code"], "Earning")}</p><p className="text-xs text-muted-foreground">{readString(line, ["description"], "Payroll earning line")}</p></div>
+                        <span className="text-sm font-semibold tabular-nums">{formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}</span>
+                      </div>
+                    ))}
                   </div>
-
-                  {earningsRows.length > 0 ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Earnings</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {earningsRows.map((line, index) => (
-                          <div key={`earning-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">
-                                {readString(line, ["name", "component_name", "componentName", "code"], "Earning")}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {readString(line, ["description"], "Payroll earning line")}
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold text-foreground">
-                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
-                            </span>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-
-                  {deductionRows.length > 0 ? (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Deductions</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        {deductionRows.map((line, index) => (
-                          <div key={`deduction-${index}`} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">
-                                {readString(line, ["name", "component_name", "componentName", "code"], "Deduction")}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {readString(line, ["description"], "Payroll deduction line")}
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold text-foreground">
-                              {formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}
-                            </span>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                </div>
+                </section>
               ) : null}
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDetailOpen(false)}>
-                  Close
-                </Button>
-                {selectedPayslip ? (
-                  <Button
-                    type="button"
-                    onClick={() => void handleDownloadPayslip(selectedPayslip)}
-                    disabled={downloadingId === readPayslipId(selectedPayslip)}
-                  >
-                    {downloadingId === readPayslipId(selectedPayslip) ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <DownloadIcon className="size-4" />
-                    )}
-                    Download payslip
-                  </Button>
-                ) : null}
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+              {deductionRows.length > 0 ? (
+                <section>
+                  <h3 className="mb-2 text-sm font-semibold text-foreground">Deductions</h3>
+                  <div className="divide-y divide-border rounded-xl border border-border">
+                    {deductionRows.map((line, index) => (
+                      <div key={`deduction-${index}`} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div><p className="text-sm font-medium">{readString(line, ["name", "component_name", "componentName", "code"], "Deduction")}</p><p className="text-xs text-muted-foreground">{readString(line, ["description"], "Payroll deduction line")}</p></div>
+                        <span className="text-sm font-semibold tabular-nums">{formatPayslipMoney(line.amount ?? line.value, selectedCurrency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <FluentButton appearance="secondary" onClick={() => setDetailOpen(false)}>Close</FluentButton>
+            {selectedPayslip ? (
+              <FluentButton
+                appearance="primary"
+                icon={downloadingId === readPayslipId(selectedPayslip) ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
+                onClick={() => void handleDownloadPayslip(selectedPayslip)}
+                disabled={downloadingId === readPayslipId(selectedPayslip)}
+              >
+                Download payslip
+              </FluentButton>
+            ) : null}
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </section>
   )
 }
@@ -5545,6 +5589,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [holidays, setHolidays] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [message, setMessage] = React.useState<string | null>(null)
+  useFluentToastState(message, setMessage, "success")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
   const [requestToCancel, setRequestToCancel] = React.useState<number | string | null>(null)
@@ -5600,11 +5645,22 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const availableLeaveTypes = React.useMemo(() => {
     const options = new Map<string, { id: string; label: string }>()
+    // leaveTypes is already filtered to the employee's eligible types (gender), so
+    // other sources may only relabel those, never add restricted types back.
+    const eligibleIds = new Set(
+      leaveTypes
+        .map((row) => readNumberish(row.id ?? row.leave_type_id))
+        .filter((id): id is number => id !== null)
+        .map(String),
+    )
 
     const addOption = (idValue: unknown, labelValue: unknown) => {
       const id = readNumberish(idValue)
       const label = typeof labelValue === "string" ? labelValue.trim() : ""
       if (id === null || !label) {
+        return
+      }
+      if (eligibleIds.size > 0 && !eligibleIds.has(String(id))) {
         return
       }
       options.set(String(id), { id: String(id), label })
@@ -6067,7 +6123,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   if (loadingProfile) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-10">
-        <LumaSpin />
+        <FluentLoadingIndicator size="large" />
         <p className="text-sm text-muted-foreground">Loading your profile...</p>
       </div>
     )
@@ -6228,7 +6284,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
         {loading && requests.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-10">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading leave requests…</p>
           </div>
         ) : null}
@@ -6451,7 +6507,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </motion.div>
         ) : null}
 
-        {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
         {error ? <p className="text-xs text-red-600">{error}</p> : null}
       </motion.section>
     )
@@ -6467,7 +6522,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         </div>
         {loading ? (
           <div className="flex items-center gap-2 py-2">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading balances...</p>
           </div>
         ) : null}
@@ -6566,7 +6621,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               onClick={() => void loadData()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           }
@@ -6587,7 +6642,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
           {loading && sortedHolidays.length === 0 ? (
             <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading holidays...
             </div>
           ) : sortedHolidays.length === 0 ? (
@@ -6643,7 +6698,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Policies</h2>
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-4">
-            <LumaSpin />
+            <FluentLoadingIndicator size="large" />
             <p className="text-sm text-muted-foreground">Loading policies...</p>
           </div>
         ) : null}
@@ -6750,7 +6805,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
             </div>
-            {message ? <p className="text-sm text-slate-700 dark:text-slate-300">{message}</p> : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRequestDialogOpen(false)}>

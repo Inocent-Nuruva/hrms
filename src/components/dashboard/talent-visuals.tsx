@@ -13,11 +13,11 @@ export const inputClass =
 export const textareaClass =
   "min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background"
 export const actionButtonClass =
-  "inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
+  "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
 export const primaryButtonClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+  "inline-flex h-8 min-w-24 items-center justify-center gap-1 rounded border border-transparent bg-primary px-3 text-sm font-semibold !text-white transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
 export const secondaryButtonClass =
-  "inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
+  "inline-flex h-8 min-w-24 items-center justify-center gap-1 rounded border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
 export const heroActionButtonClass =
   "inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-white/90 disabled:opacity-60"
 export const heroGhostButtonClass =
@@ -237,53 +237,69 @@ export function HeroBand({
   description,
   actions,
   identity,
+  variant = "brand",
 }: {
   eyebrow: string
   title: React.ReactNode
   description?: string
   actions?: React.ReactNode
   identity?: React.ReactNode
+  variant?: "brand" | "dashboard"
 }) {
   const motionPreset = useDashboardMotion()
+  const dashboardStyle = variant === "dashboard"
   return (
     <motion.div
-      className={cn(heroPanelClass, pageBleedClass)}
-      style={{ backgroundColor: "var(--primary)" }}
+      className={cn(
+        dashboardStyle
+          ? "relative min-w-0 overflow-hidden border-b border-border/70 bg-card px-4 py-4 text-foreground sm:px-5 sm:py-5"
+          : cn(heroPanelClass, pageBleedClass),
+      )}
+      style={dashboardStyle ? undefined : { backgroundColor: "var(--primary)" }}
       variants={motionPreset.rise}
       initial="hidden"
       animate="show"
     >
-      <TalentDoodleSprites />
-      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <motion.div
-          className="absolute -left-8 top-1/2 h-28 w-44 -translate-y-1/2 bg-white/12"
-          style={{ clipPath: "polygon(0% 18%, 78% 0%, 100% 42%, 22% 100%)" }}
-          animate={
-            motionPreset.reduce
-              ? undefined
-              : { x: [0, 8, 0], y: [0, -6, 0] }
-          }
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute right-[22%] -top-6 h-24 w-36 bg-white/10"
-          style={{ clipPath: "polygon(18% 0%, 100% 22%, 72% 100%, 0% 68%)" }}
-          animate={
-            motionPreset.reduce
-              ? undefined
-              : { x: [0, -6, 0], y: [0, 8, 0] }
-          }
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <div className="absolute inset-y-0 left-0 w-[68%] text-white/35">
-          <TalentDoodle />
+      {dashboardStyle ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden text-sky-500/60 dark:text-sky-300/50">
+          <span className="absolute left-[29%] top-4 text-xs text-blue-400/60 dark:text-blue-200/45">✧</span>
+          <span className="absolute left-[43%] bottom-3 text-sm">✦</span>
+          <span className="absolute right-[42%] top-3 text-[10px] text-blue-400/60 dark:text-blue-200/45">✧</span>
+          <span className="absolute right-[34%] top-9 text-xs text-blue-400/70 dark:text-blue-200/50">✧</span>
+          <span className="absolute right-[26%] bottom-3 text-[10px] text-sky-400/60 dark:text-sky-200/45">✧</span>
+          <span className="absolute right-[18%] top-3 text-lg">✦</span>
+          <span className="absolute right-[8%] bottom-2 text-sm">✦</span>
         </div>
-      </div>
+      ) : (
+        <>
+          <TalentDoodleSprites />
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+            <motion.div
+              className="absolute -left-8 top-1/2 h-28 w-44 -translate-y-1/2 bg-white/12"
+              style={{ clipPath: "polygon(0% 18%, 78% 0%, 100% 42%, 22% 100%)" }}
+              animate={motionPreset.reduce ? undefined : { x: [0, 8, 0], y: [0, -6, 0] }}
+              transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+              className="absolute right-[22%] -top-6 h-24 w-36 bg-white/10"
+              style={{ clipPath: "polygon(18% 0%, 100% 22%, 72% 100%, 0% 68%)" }}
+              animate={motionPreset.reduce ? undefined : { x: [0, -6, 0], y: [0, 8, 0] }}
+              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <div className="absolute inset-y-0 left-0 w-[68%] text-white/35">
+              <TalentDoodle />
+            </div>
+          </div>
+        </>
+      )}
       <div className="relative z-10 flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
           {identity ? <div className="mb-3">{identity}</div> : null}
           <motion.p
-            className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70"
+            className={cn(
+              "text-[11px] font-semibold uppercase tracking-[0.18em]",
+              dashboardStyle ? "text-muted-foreground" : "text-white/70",
+            )}
             initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.32 }}
@@ -291,7 +307,10 @@ export function HeroBand({
             {eyebrow}
           </motion.p>
           <motion.h1
-            className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl"
+            className={cn(
+              "flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl",
+              dashboardStyle ? "text-foreground" : "text-white",
+            )}
             initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.06 }}
@@ -300,7 +319,7 @@ export function HeroBand({
           </motion.h1>
           {description ? (
             <motion.p
-              className="text-sm text-white/75"
+              className={cn("text-sm", dashboardStyle ? "text-muted-foreground" : "text-white/75")}
               initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.38, delay: 0.12 }}
@@ -311,7 +330,10 @@ export function HeroBand({
         </div>
         {actions ? (
           <motion.div
-            className="relative z-10 flex flex-wrap gap-2 [&_button.bg-white]:!text-slate-900"
+            className={cn(
+              "relative z-10 flex flex-wrap gap-2 [&_button.bg-white]:!text-slate-900",
+              dashboardStyle && "[&_a]:!border-border [&_a]:!bg-background [&_a]:!text-foreground [&_a]:hover:!bg-muted [&_button]:!border-border [&_button]:!bg-background [&_button]:!text-foreground [&_button]:hover:!bg-muted",
+            )}
             initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.32, delay: 0.16 }}

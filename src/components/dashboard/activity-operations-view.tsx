@@ -1,8 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -305,7 +308,7 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
             description="Team reports, pending manager reviews, and exceptions — shown only if you have the grant."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -342,7 +345,7 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "setup" ? (
@@ -440,7 +443,7 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Comments</span>
-                  <textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
+                  <Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
                 </label>
               </>
             ) : null}
@@ -448,12 +451,12 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Code</span><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Name</span><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
               </>
             ) : null}
             {createMode === "policy" ? (
               <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Effective from</span><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Effective from</span><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Minimum activities</span><input type="number" className={inputClass} value={form.minimum_activity_count ?? ""} onChange={(event) => setForm((current) => ({ ...current, minimum_activity_count: event.target.value }))} /></label>
               </>
             ) : null}
@@ -462,7 +465,7 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
           </div>
           <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
             <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}</button>
+            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

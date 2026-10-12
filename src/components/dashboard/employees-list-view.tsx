@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { useRouter } from "next/navigation";
 
 import {
@@ -14,10 +13,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Field } from "@fluentui/react-components";
-import { Switch } from "@/components/ui/switch";
+import {
+  Avatar as FluentAvatar,
+  Field,
+  Switch as FluentSwitch,
+  TableCellLayout,
+} from "@fluentui/react-components";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -34,6 +36,7 @@ import {
 } from "@/components/dashboard/employee-access-removal-dialog";
 import {
   archiveEmployeeProfile,
+  deleteEmployeePermanently,
   buildUserTwoFactorMap,
   disableUserTwoFactor,
   enableUserTwoFactor,
@@ -62,14 +65,22 @@ import {
 import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import { env } from "@/lib/env";
 import {
+  Add16Regular,
+  ArrowClockwise16Regular,
+} from "@fluentui/react-icons";
+import {
   KeyRound,
-  PlusIcon,
-  RefreshCwIcon,
-  SlidersHorizontalIcon,
   Trash2,
+  UserX,
   UsersIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import {
+  PERMANENT_DELETE_CONFIRMATION,
+  canDeletePermanently,
+  isPermanentDeleteConfirmed,
+  permanentDeleteSummary,
+} from "@/lib/employee-permanent-delete";
+import { toast } from "@/components/ui/fluent-toast-store";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt";
@@ -404,6 +415,14 @@ export function EmployeesListView({
     enabled: boolean;
   } | null>(null);
   const [twoFactorBusy, setTwoFactorBusy] = React.useState(false);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = React.useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [permanentDeleteConfirmation, setPermanentDeleteConfirmation] =
+    React.useState("");
+  const [permanentDeleteBusy, setPermanentDeleteBusy] = React.useState(false);
+  const [permanentDeleteError, setPermanentDeleteError] = React.useState("");
   const [passwordResetTarget, setPasswordResetTarget] = React.useState<{
     userId: string | number;
     employeeName: string;
@@ -426,6 +445,7 @@ export function EmployeesListView({
   const canArchiveEmployees =
     directoryMode === "current" &&
     canPerformPermission(actor.permissionLabels, "employees:delete");
+  const canDeleteOnboardingEmployees = canArchiveEmployees;
   const canAddEmployee =
     directoryMode === "current" &&
     actor.ready &&
@@ -750,6 +770,47 @@ export function EmployeesListView({
     setRemovalOpen(true);
   }, []);
 
+  const openPermanentDelete = React.useCallback((row: AdminRecord) => {
+    const id = employeeRecordId(row);
+    if (id === null) return;
+    setPermanentDeleteConfirmation("");
+    setPermanentDeleteError("");
+    setPermanentDeleteTarget({ id: Number(id), name: employeeDisplayName(row) });
+  }, []);
+
+  const confirmPermanentDelete = React.useCallback(async () => {
+    if (!permanentDeleteTarget) return;
+    const token = readStoredToken();
+    if (!token) {
+      toast.error("Authentication required. Please log in again.");
+      return;
+    }
+    setPermanentDeleteBusy(true);
+    setPermanentDeleteError("");
+    try {
+      const result = await deleteEmployeePermanently(
+        token,
+        permanentDeleteTarget.id,
+      );
+      toast.success(permanentDeleteSummary(result ?? {}));
+      setSelectedEmployeeIds((current) =>
+        current.filter((id) => id !== String(permanentDeleteTarget.id)),
+      );
+      setPermanentDeleteTarget(null);
+      employeeListSnapshotCache.clear();
+      await fetchEmployees();
+    } catch (errorObject) {
+      // Keep the dialog open so HR can read why the backend refused.
+      setPermanentDeleteError(
+        errorObject instanceof Error && errorObject.message.trim()
+          ? errorObject.message
+          : "Could not delete this employee.",
+      );
+    } finally {
+      setPermanentDeleteBusy(false);
+    }
+  }, [fetchEmployees, permanentDeleteTarget]);
+
   const selectedEmployees = React.useMemo(
     () =>
       rows.flatMap((row) => {
@@ -932,22 +993,24 @@ export function EmployeesListView({
           const position = employeePosition(row);
           const number = employeeNumber(row);
           const photoUrl = employeePhotoUrl(row);
+          const description = `${position !== "—" && position !== "-" ? position : "Position not assigned"}${number !== "-" ? ` · ${number}` : ""}`;
           return (
-            <div className="flex min-w-0 items-center gap-2.5 py-1">
-              <Avatar className="size-8 shrink-0 ring-1 ring-border">
-                {photoUrl ? <AvatarImage src={photoUrl} alt={name} /> : null}
-                <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">
-                  {employeeInitials(row)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-foreground">{name}</p>
-                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                  {position !== "—" && position !== "-" ? position : "Position not assigned"}
-                  {number !== "-" ? ` · ${number}` : ""}
-                </p>
-              </div>
-            </div>
+            <TableCellLayout
+              appearance="primary"
+              className="min-w-0 py-1"
+              description={description}
+              media={
+                <FluentAvatar
+                  color="brand"
+                  image={photoUrl ? { src: photoUrl } : undefined}
+                  initials={employeeInitials(row)}
+                  name={name}
+                  size={32}
+                />
+              }
+            >
+              <span className="truncate">{name}</span>
+            </TableCellLayout>
           );
         },
       },
@@ -1040,20 +1103,17 @@ export function EmployeesListView({
         },
       },
       {
-        key: "actions",
-        label: "Actions",
-        defaultWidth: 175,
+        key: "twoFactor",
+        label: "2FA",
+        defaultWidth: 82,
         sortable: false,
         render: (row: AdminRecord) => (
           <div
-            className="flex items-center justify-end gap-2"
+            className="flex items-center"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="text-[10px] font-medium text-muted-foreground">
-              2FA
-            </span>
-            <Switch
-              size="sm"
+            <FluentSwitch
+              size="small"
               checked={employeeTwoFactorEnabled(row)}
               disabled={!canManageTwoFactor || employeeUserId(row) == null}
               aria-label={`Toggle 2FA for ${employeeDisplayName(row)}`}
@@ -1066,9 +1126,22 @@ export function EmployeesListView({
                       ? "2FA is enabled — click to disable"
                       : "2FA is off — click to require setup on next login"
               }
-              onCheckedChange={() => requestTwoFactorChange(row)}
+              onChange={() => requestTwoFactorChange(row)}
               onClick={(event) => event.stopPropagation()}
             />
+          </div>
+        ),
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        defaultWidth: 120,
+        sortable: false,
+        render: (row: AdminRecord) => (
+          <div
+            className="flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
@@ -1102,13 +1175,29 @@ export function EmployeesListView({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
+            {canDeleteOnboardingEmployees && canDeletePermanently(row) ? (
+              <button
+                type="button"
+                className="inline-flex size-7 items-center justify-center rounded-md text-rose-700 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                title="Delete permanently (onboarding only)"
+                aria-label={`Permanently delete ${employeeDisplayName(row)}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openPermanentDelete(row);
+                }}
+              >
+                <UserX className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
         ),
       },
     ],
     [
+      canDeleteOnboardingEmployees,
       canManageTwoFactor,
       canRemoveEmployee,
+      openPermanentDelete,
       openRemovalDialog,
       requestPasswordReset,
       requestTwoFactorChange,
@@ -1116,17 +1205,17 @@ export function EmployeesListView({
   );
 
   return (
-    <section className="overflow-hidden border border-border bg-background shadow-sm">
+    <section className="mt-2 overflow-hidden border border-border bg-background shadow-sm">
       <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
             {directoryMode === "inactive" ? "Inactive employees" : "All employees"}
           </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {directoryMode === "inactive"
-              ? "Review former employees and retained employment records"
-              : "Manage employee records, account security, and workforce access"}
-          </p>
+          {directoryMode === "inactive" ? (
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Review former employees and retained employment records
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
@@ -1181,48 +1270,60 @@ export function EmployeesListView({
         className="[&>div:last-child]:mb-2"
         toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
         frameClassName="rounded-none border-0 shadow-none"
-        toolbarStart={
-          <>
-            <span className="hidden shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:flex">
-              <SlidersHorizontalIcon className="size-3" /> Filters
-            </span>
-            <SearchToggleField
-              className="min-w-0 !w-auto !max-w-[15rem] !flex-none"
-              placeholder="Search employees"
-              value={query.search}
-              onChange={(value) => {
-                setPage(1);
-                setQuery((previous) => ({ ...previous, search: value }));
-              }}
-            />
-            {directoryMode === "current" ? (
-              <Select
-                value={query.employment_status || ALL_STATUSES_VALUE}
-                onValueChange={(value) => {
+        fluent
+        filterCount={Number(Boolean(query.search.trim())) + Number(Boolean(query.employment_status))}
+        filterContent={
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Search employees</span>
+              <Input
+                size="small"
+                aria-label="Search employees"
+                className="[&>input]:!h-[26px] [&>input]:!text-xs"
+                placeholder="Name, employee number…"
+                value={query.search}
+                onChange={(_event, data) => {
                   setPage(1);
-                  setQuery((previous) => ({
-                    ...previous,
-                    employment_status:
-                      value === ALL_STATUSES_VALUE
-                        ? ""
-                        : (value as typeof previous.employment_status),
-                  }));
+                  setQuery((previous) => ({ ...previous, search: data.value }));
                 }}
-              >
-                <SelectTrigger size="sm" className="w-36 bg-background" aria-label="Filter employment status">
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value={ALL_STATUSES_VALUE}>All statuses</SelectItem>
-                    <SelectItem value="onboarding">Onboarding</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              />
+            </div>
+            {directoryMode === "current" ? (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Employment status</span>
+                <Select
+                  value={query.employment_status || ALL_STATUSES_VALUE}
+                  onValueChange={(value) => {
+                    setPage(1);
+                    setQuery((previous) => ({
+                      ...previous,
+                      employment_status:
+                        value === ALL_STATUSES_VALUE
+                          ? ""
+                          : (value as typeof previous.employment_status),
+                    }));
+                  }}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full bg-background"
+                    controlClassName="[&>button]:!h-6 [&>button]:!min-h-6 [&>button]:!text-[8px]"
+                    aria-label="Filter employment status"
+                  >
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={ALL_STATUSES_VALUE}>All</SelectItem>
+                      <SelectItem value="onboarding">Onboarding</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
             ) : null}
-          </>
+          </div>
         }
         toolbarActions={
           <>
@@ -1245,20 +1346,22 @@ export function EmployeesListView({
               type="button"
               variant="outline"
               size="icon-sm"
+              className="!w-[47px] !min-w-[47px] !px-1 !py-0.5"
               disabled={loading}
               aria-label="Refresh employees"
               title="Refresh employees"
               onClick={() => void fetchEmployees()}
             >
-              <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
+              <ArrowClockwise16Regular className={loading ? "animate-spin" : undefined} />
             </Button>
             {canAddEmployee ? (
               <Button
                 type="button"
                 size="sm"
+                className="!py-1.5"
                 onClick={() => router.push("/dashboard/employees/registration")}
               >
-                <PlusIcon data-icon="inline-start" />
+                <Add16Regular data-icon="inline-start" />
                 Add employee
               </Button>
             ) : null}
@@ -1322,6 +1425,65 @@ export function EmployeesListView({
                 </button>
               </>
             )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(permanentDeleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !permanentDeleteBusy) setPermanentDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {permanentDeleteTarget?.name} and all of their onboarding records,
+              documents and uploaded files will be removed. Their login is also
+              deleted unless another company uses it. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <label className="grid gap-1.5 text-sm">
+            <span>
+              Type <strong>{PERMANENT_DELETE_CONFIRMATION}</strong> to confirm
+            </span>
+            <input
+              value={permanentDeleteConfirmation}
+              onChange={(event) =>
+                setPermanentDeleteConfirmation(event.target.value)
+              }
+              disabled={permanentDeleteBusy}
+              autoComplete="off"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </label>
+
+          {permanentDeleteError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"
+            >
+              {permanentDeleteError}
+            </p>
+          ) : null}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={permanentDeleteBusy}>
+              Cancel
+            </AlertDialogCancel>
+            <button
+              type="button"
+              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              disabled={
+                permanentDeleteBusy ||
+                !isPermanentDeleteConfirmed(permanentDeleteConfirmation)
+              }
+              onClick={() => void confirmPermanentDelete()}
+            >
+              {permanentDeleteBusy ? "Deleting…" : "Delete permanently"}
+            </button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

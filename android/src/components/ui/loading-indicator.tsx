@@ -3,6 +3,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
+import { useAppAccent } from '../../hooks/useAppAccent';
 
 interface LoadingIndicatorProps {
   size?: 'sm' | 'md' | 'lg';
@@ -20,6 +21,7 @@ export function LoadingIndicator({
   type = 'dot-circle',
 }: LoadingIndicatorProps) {
   const { isDark } = useThemePreference();
+  const accent = useAppAccent();
   const [spin] = React.useState(() => new Animated.Value(0));
   const dimension = SIZE_MAP[size];
 
@@ -44,7 +46,7 @@ export function LoadingIndicator({
     outputRange: ['0deg', '360deg'],
   });
 
-  const dotColor = isDark ? '#f4f4f5' : COLORS.primary;
+  const dotColor = isDark ? '#f4f4f5' : accent;
   const fadedColor = isDark ? 'rgba(244,244,245,0.22)' : 'rgba(67,56,202,0.18)';
   const ringRadius = dimension / 2;
   const dotSize = Math.max(5, Math.round(dimension / 6));

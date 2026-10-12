@@ -1,7 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, InfoIcon, Loader2Icon, SearchIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, InfoIcon } from "lucide-react";
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -199,7 +201,7 @@ export function PermissionPicker({
       >
         {loading && options.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-10">
-            <Loader2Icon className="size-5 animate-spin text-primary" />
+            <FluentLoadingIndicator className="size-5 animate-spin text-primary" />
             <p className="text-xs text-slate-500">Loading permissions…</p>
           </div>
         ) : grouped.length === 0 ? (

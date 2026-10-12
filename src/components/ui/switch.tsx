@@ -4,6 +4,7 @@ import {
   Switch as FluentSwitch,
   type SwitchProps as FluentSwitchProps,
 } from "@fluentui/react-components"
+import { cn } from "@/lib/utils"
 
 type SwitchProps = Omit<FluentSwitchProps, "onChange" | "size"> & {
   size?: "sm" | "default" | "small" | "medium"
@@ -21,6 +22,10 @@ function Switch({
     <FluentSwitch
       {...props}
       data-slot="switch"
+      className={cn(
+        "[&_.fui-Switch__indicator]:!inline-flex [&_.fui-Switch__indicator]:!items-center [&_.fui-Switch__indicator]:!justify-start [&_.fui-Switch__indicator>svg]:!block",
+        props.className,
+      )}
       size={size === "sm" || size === "small" ? "small" : "medium"}
       onChange={(event, data) => {
         onChange?.(event, data)

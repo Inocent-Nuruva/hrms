@@ -1,8 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -633,7 +636,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               disabled={busyId === `onboarding-${actionId}`}
               onClick={() => void completeAssignedOnboardingTask(row)}
             >
-              {busyId === `onboarding-${actionId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Mark done"}
+              {busyId === `onboarding-${actionId}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Mark done"}
             </button>
           )
         },
@@ -682,6 +685,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
+        variant="dashboard"
         eyebrow="My requests"
         title={copy.title}
         description={copy.description}
@@ -693,7 +697,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               onClick={() => void load()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "documents" ? (
@@ -727,8 +731,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </div>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Last working day</span>
-            <input
-              type="date"
+            <DateInput
+
               className={inputClass}
               value={form.last_working_date ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, last_working_date: event.target.value }))}
@@ -736,8 +740,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Notice date (optional)</span>
-            <input
-              type="date"
+            <DateInput
+
               className={inputClass}
               value={form.notice_date ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, notice_date: event.target.value }))}
@@ -745,7 +749,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Reason</span>
-            <textarea
+            <Textarea
               className={textareaClass}
               value={form.reason ?? ""}
               onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
@@ -762,7 +766,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             }}
             disabled={saving}
           >
-            {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Send to HR"}
+            {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Send to HR"}
           </button>
         </div>
       ) : (
@@ -844,8 +848,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Expires (optional)</span>
-                  <input
-                    type="date"
+                  <DateInput
+
                     className={inputClass}
                     value={form.expiry_date ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, expiry_date: event.target.value }))}
@@ -853,7 +857,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 </label>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Notes (optional)</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.description ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -910,7 +914,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                 )}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Why (optional)</span>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={form.reason ?? ""}
                     onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
@@ -926,7 +930,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               Cancel
             </button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
             </button>
           </DialogFooter>
         </DialogPopup>

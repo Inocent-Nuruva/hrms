@@ -1,6 +1,23 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
+import {
+  Button,
+  Field,
+  Input,
+  Skeleton,
+  SkeletonItem,
+  Tab,
+  TabList,
+} from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
+import {
+  ArrowReset20Regular,
+  ArrowSync20Regular,
+  Filter20Regular,
+} from "@fluentui/react-icons"
 import {
   AnimatePresence,
   motion,
@@ -10,11 +27,7 @@ import {
   AlarmClockCheckIcon,
   AlertTriangle,
   CalendarDays,
-  Filter,
   PlusIcon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  SearchIcon,
   TimerResetIcon,
 } from "lucide-react"
 
@@ -22,10 +35,11 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { TimeClockPicker } from "@/components/ui/time-clock-picker"
+import { TimeInput } from "@/components/ui/time-input"
 import { Textarea } from "@/components/ui/textarea"
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { LumaSpin } from "@/components/ui/luma-spin"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   Popover,
   PopoverContent,
@@ -628,6 +642,63 @@ function correctionRequestStatusTone(statusValue: string) {
   }
 }
 
+type SummaryFilterTab = {
+  value: string | null
+  label: string
+  count: number
+  countClassName?: string
+}
+
+function SummaryFilterTabs({
+  ariaLabel,
+  selectedValue,
+  tabs,
+  onSelectedValueChange,
+}: {
+  ariaLabel: string
+  selectedValue: string | null
+  tabs: SummaryFilterTab[]
+  onSelectedValueChange: (value: string | null) => void
+}) {
+  const allValue = "__all__"
+  const fluentSelectedValue = selectedValue ?? allValue
+
+  return (
+    <TabList
+      aria-label={ariaLabel}
+      appearance="subtle"
+      size="small"
+      selectedValue={fluentSelectedValue}
+      onTabSelect={(_event, data) => {
+        const value = String(data.value)
+        const nextValue = value === allValue ? null : value
+        onSelectedValueChange(nextValue === selectedValue ? null : nextValue)
+      }}
+      className="inline-flex max-w-full overflow-x-auto border-b border-border"
+    >
+      {tabs.map((tab) => (
+        <Tab
+          key={tab.value ?? allValue}
+          value={tab.value ?? allValue}
+          className="min-w-fit shrink-0 !px-2.5"
+        >
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="text-[11px] font-medium">{tab.label}</span>
+            <span
+              className={cn(
+                "inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground",
+                tab.countClassName
+              )}
+            >
+              {tab.count}
+            </span>
+          </span>
+        </Tab>
+      ))}
+    </TabList>
+  )
+}
+
 function TodayOverview({ record }: { record: AdminRecord | null }) {
   const prefersReducedMotion = useReducedMotion()
   const animate = !prefersReducedMotion
@@ -755,10 +826,12 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
   return (
     <div className="space-y-3">
       <motion.div
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
+        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto"
         initial={animate ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
+        role="group"
+        aria-label="Attendance summary"
       >
         {summaryChips.map((chip, index, arr) => {
           const chipTone = attendanceHistoryStatusTone(chip.toneKey)
@@ -1305,22 +1378,37 @@ async function findEmployeesForDailySummarySearch(
   cachedEmployees: AdminRecord[],
 ): Promise<AdminRecord[]> {
   const localMatches = matchEmployeesByName(cachedEmployees, searchTerm)
-  if (localMatches.length > 0) {
-    return localMatches
+  const remoteMatches: AdminRecord[] = []
+  try {
+    const pageSize = 100
+    let page = 1
+    while (true) {
+      const result = await listEmployees(token, {
+        page,
+        limit: pageSize,
+        search: searchTerm,
+        sortBy: "first_name",
+        sortOrder: "ASC",
+      })
+      remoteMatches.push(...matchEmployeesByName(result.rows, searchTerm))
+      if (
+        result.rows.length < pageSize ||
+        (result.totalPages !== null && page >= result.totalPages)
+      ) {
+        break
+      }
+      page += 1
+    }
+  } catch {
+    // Keep local matches available when the directory search endpoint is unavailable.
   }
 
-  try {
-    const result = await listEmployees(token, {
-      page: 1,
-      limit: 100,
-      search: searchTerm,
-      sortBy: "first_name",
-      sortOrder: "ASC",
-    })
-    return matchEmployeesByName(result.rows, searchTerm)
-  } catch {
-    return []
+  const matchesById = new Map<number, AdminRecord>()
+  for (const employee of [...localMatches, ...remoteMatches]) {
+    const id = readDirectoryEmployeeId(employee)
+    if (id !== null) matchesById.set(id, employee)
   }
+  return [...matchesById.values()]
 }
 
 function filterDailySummaryDisplayRows(
@@ -2445,12 +2533,42 @@ function getProcessingExceptionId(row: AdminRecord | null) {
   return readNumberFromRow(row ?? {}, ["id", "exception_id", "exceptionId"])
 }
 
-function AttendanceViewLoader({ label = "Loading attendance data…" }: { label?: string }) {
+function AttendanceViewLoader({
+  section,
+  label = "Loading attendance data…",
+}: {
+  section: AttendanceActivitySectionKey
+  label?: string
+}) {
+  const hasFilterTabs = ["attendance-history", "schedule-preview", "corrections"].includes(section)
+  const rowCount = section === "today" ? 3 : 5
+
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-10 shadow-sm">
-      <LumaSpin />
-      <p className="text-sm font-medium text-foreground">{label}</p>
-    </div>
+    <Skeleton aria-label={label}>
+      <div className="w-full space-y-3">
+        <div className="flex items-center gap-2 border-b border-border pb-1.5">
+          {Array.from({ length: hasFilterTabs ? 3 : 4 }, (_, index) => (
+            <SkeletonItem
+              key={index}
+              className={cn("h-7", hasFilterTabs ? "w-20" : "w-24")}
+            />
+          ))}
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border">
+          {Array.from({ length: rowCount }, (_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-[minmax(7rem,0.8fr)_repeat(3,minmax(5rem,1fr))] items-center gap-4 border-b border-border px-3 py-3 last:border-b-0"
+            >
+              <SkeletonItem className="h-3 w-28 max-w-full" />
+              <SkeletonItem className="h-3 w-20 max-w-full" />
+              <SkeletonItem className="h-3 w-24 max-w-full" />
+              <SkeletonItem className="h-3 w-16 max-w-full justify-self-end" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </Skeleton>
   )
 }
 
@@ -2694,6 +2812,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
+  useFluentToastState(message, setMessage, "success")
+
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const branchesRef = React.useRef<AdminRecord[]>([])
@@ -2767,6 +2887,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
   const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false)
   const [correctionBusy, setCorrectionBusy] = React.useState(false)
+  const [correctionSaveMode, setCorrectionSaveMode] = React.useState<"draft" | "submit" | null>(null)
   const [pendingCorrectionAction, setPendingCorrectionAction] = React.useState<{
     id: string | number
     action: "submit" | "cancel"
@@ -3121,16 +3242,21 @@ export function AttendanceActivityView({ section }: { section: string }) {
         let resultTotalPages: number | null = null
 
         if (!resolvedEmployeeId && matchedEmployeeIds.length > 1) {
-          const pages = await Promise.all(
-            matchedEmployeeIds.slice(0, 20).map((employeeId) =>
-              listAttendanceDailySummariesPage(token, {
-                ...listParams,
-                page: 1,
-                employee_id: employeeId,
-              }),
-            ),
-          )
-          resultRows = pages.flatMap((page) => page.rows)
+          // Search can match more than twenty employees; fetch all matched IDs
+          // in small batches so valid matches are not silently omitted.
+          for (let index = 0; index < matchedEmployeeIds.length; index += 10) {
+            const batch = matchedEmployeeIds.slice(index, index + 10)
+            const pages = await Promise.all(
+              batch.map((employeeId) =>
+                listAttendanceDailySummariesPage(token, {
+                  ...listParams,
+                  page: 1,
+                  employee_id: employeeId,
+                }),
+              ),
+            )
+            resultRows.push(...pages.flatMap((page) => page.rows))
+          }
           resultTotal = resultRows.length
           resultTotalPages = 1
         } else {
@@ -3570,7 +3696,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
   }, [detailsRow, exceptionResolutionNote, exceptionStatus, fetchSectionData])
 
-  const submitCorrectionRequest = async () => {
+  const saveCorrectionRequest = async (mode: "draft" | "submit") => {
     const token = readStoredToken()
     if (!token) {
       setError("Authentication required. Please log in again.")
@@ -3583,6 +3709,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     }
 
     setCorrectionBusy(true)
+    setCorrectionSaveMode(mode)
     setError(null)
     setMessage(null)
 
@@ -3606,15 +3733,33 @@ export function AttendanceActivityView({ section }: { section: string }) {
       const createdStatus = (
         readStringFromRow(createdRecord ?? {}, ["status", "request_status"]) ?? ""
       ).toLowerCase()
-      if (createdRequestId !== null && !["", "-", "draft"].includes(createdStatus)) {
+
+      let submittedRequest = createdRequest
+      let wasSubmitted = !["", "-", "draft"].includes(createdStatus)
+      if (mode === "submit" && !wasSubmitted) {
+        if (createdRequestId === null) {
+          throw new Error("The request was saved as a draft, but its id was not returned so it could not be submitted.")
+        }
+        submittedRequest = await submitMyAttendanceCorrectionRequest(token, createdRequestId)
+        wasSubmitted = true
+      }
+
+      if (mode === "submit" && wasSubmitted) {
         void notifySubmittedRequestApprovers({
           kind: "attendance_correction_request",
           token,
-          request: createdRequest,
-          loadRequest: () => getMyAttendanceCorrectionRequest(token, createdRequestId),
+          request: submittedRequest,
+          loadRequest:
+            createdRequestId !== null
+              ? () => getMyAttendanceCorrectionRequest(token, createdRequestId)
+              : undefined,
         })
       }
-      setMessage("Attendance correction request created.")
+      setMessage(
+        mode === "submit"
+          ? "Attendance correction request submitted."
+          : "Attendance correction request saved as draft."
+      )
       setCorrectionDialogOpen(false)
       setCorrectionForm({
         attendance_date: getTodayDateInputValue(),
@@ -3626,9 +3771,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
       })
       await fetchSectionData(true)
     } catch (errorObject) {
-      setError(formatLoadError(errorObject, "Could not create the attendance correction request."))
+      setError(
+        formatLoadError(
+          errorObject,
+          mode === "submit"
+            ? "Could not create and submit the attendance correction request."
+            : "Could not save the attendance correction request as a draft."
+        )
+      )
     } finally {
       setCorrectionBusy(false)
+      setCorrectionSaveMode(null)
     }
   }
 
@@ -3764,7 +3917,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         aria-label="Open filters"
         title="Filters"
       >
-        <Filter className="size-3 text-primary" />
+        <Filter20Regular className="size-3 text-primary" />
         {dailySummaryActiveFilterCount > 0 ? (
           <span className="absolute -right-1 -top-1 inline-flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold text-primary-foreground">
             {dailySummaryActiveFilterCount}
@@ -3772,26 +3925,26 @@ export function AttendanceActivityView({ section }: { section: string }) {
         ) : null}
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(100vw-1rem,17.5rem)] p-2"
+        className="w-[min(22rem,calc(100vw-1rem))] p-3"
         align="end"
         sideOffset={6}
       >
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Filters
             </span>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="inline-flex h-5 items-center rounded px-1.5 text-[9px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 onClick={resetDailySummaryFiltersToToday}
               >
                 Reset
               </button>
               <button
                 type="button"
-                className="inline-flex h-5 items-center rounded bg-primary px-1.5 text-[9px] font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
+                className="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:opacity-60"
                 disabled={loading}
                 onClick={applyDailySummaryDraftFilters}
               >
@@ -3800,7 +3953,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
             <label className={dailySummaryFilterLabelClass}>
               <span>From</span>
               <DatePickerPresets
@@ -3809,7 +3962,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   setDailySummaryFilters((current) => ({ ...current, from_date: value }))
                 }
                 placeholder="From"
-                className="h-6 gap-0.5 border-slate-300 bg-white px-1.5 text-[10px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-2.5"
+                className="h-8 w-full min-w-0 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
               />
             </label>
             <label className={dailySummaryFilterLabelClass}>
@@ -3820,7 +3973,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   setDailySummaryFilters((current) => ({ ...current, to_date: value }))
                 }
                 placeholder="To"
-                className="h-6 gap-0.5 border-slate-300 bg-white px-1.5 text-[10px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-2.5"
+                className="h-8 w-full min-w-0 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
               />
             </label>
             <label className={dailySummaryFilterLabelClass}>
@@ -3950,11 +4103,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </label>
           </div>
 
-          <div className="flex items-center gap-0.5 border-t border-border/70 pt-1.5">
-            <span className="mr-auto text-[9px] text-muted-foreground">Export</span>
+          <div className="flex items-center gap-1.5 border-t border-border/70 pt-2">
+            <span className="mr-auto text-[10px] font-medium text-muted-foreground">Export</span>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("xlsx")}
               disabled={attendanceExporting}
             >
@@ -3962,7 +4115,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("csv")}
               disabled={attendanceExporting}
             >
@@ -3970,7 +4123,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-5 items-center rounded border border-slate-300 bg-white px-1.5 text-[9px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 dark:hover:bg-[#303030]"
               onClick={() => void exportDailySummaryReport("pdf")}
               disabled={attendanceExporting}
             >
@@ -3992,7 +4145,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         aria-label="Filter processing exceptions"
         title="Filter processing exceptions"
       >
-        <Filter className="size-3.5 text-primary" />
+        <Filter20Regular className="size-3.5 text-primary" />
         {processingExceptionActiveFilterCount > 0 ? (
           <span className="absolute -right-1 -top-1 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold text-primary-foreground">
             {processingExceptionActiveFilterCount}
@@ -4143,7 +4296,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   const refreshButton = (
     <button
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
       type="button"
       disabled={loading}
       aria-label="Refresh"
@@ -4153,7 +4306,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         void fetchSectionData(true)
       }}
     >
-      <RefreshCwIcon className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+      <ArrowSync20Regular className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
     </button>
   )
 
@@ -4173,8 +4326,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
   return (
     <div className="space-y-4">
       <DoodleSprites />
-      {/* Daily summaries + recalculation jobs host titles/actions on the table toolbar row. */}
-      {activeSection !== "daily-summaries" && activeSection !== "recalculation-jobs" ? (
+      {/* Data-heavy views host their titles/actions on the table toolbar row. */}
+      {activeSection !== "daily-summaries" &&
+      activeSection !== "processing-exceptions" &&
+      activeSection !== "recalculation-jobs" &&
+      activeSection !== "unmatched-logs" ? (
         <div className="flex flex-nowrap items-center justify-between gap-2">
           {sectionTitleBlock}
           <div className="flex shrink-0 items-center gap-1">
@@ -4192,11 +4348,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
               <>
                 <Popover>
                   <PopoverTrigger
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Filter by date"
                     title="Filter by date"
                   >
-                    <Filter className="size-3.5 text-primary" />
+                    <Filter20Regular className="size-3.5 text-primary" />
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-4" align="end">
                     <div className="space-y-3">
@@ -4230,7 +4386,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 </Popover>
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-foreground transition hover:bg-muted disabled:opacity-50"
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   title="Reset filters"
                   aria-label="Reset filters"
                   disabled={
@@ -4243,7 +4399,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     setHistoryStatusFilter(null)
                   }}
                 >
-                  <RotateCcwIcon className="size-3.5 text-primary" />
+                  <ArrowReset20Regular className="size-3.5 text-primary" />
                   <span className="hidden sm:inline">Reset</span>
                 </button>
               </>
@@ -4256,16 +4412,20 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       <div>
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-4 text-sm text-green-600">{message}</p> : null}
 
         {loading &&
         activeSection !== "daily-summaries" &&
+        activeSection !== "processing-exceptions" &&
         activeSection !== "recalculation-jobs" &&
+        activeSection !== "unmatched-logs" &&
         rows.length === 0 &&
         !singleRecord &&
         correctionRequests.length === 0 ? (
           <div className="mt-4">
-            <AttendanceViewLoader label={`Loading ${config.title.toLowerCase()}…`} />
+            <AttendanceViewLoader
+              section={activeSection}
+              label={`Loading ${config.title.toLowerCase()}…`}
+            />
           </div>
         ) : null}
 
@@ -4312,69 +4472,20 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
                 return (
                   <>
-                    {/* Summary grids — click to filter; width hugs content (no empty right space) */}
-                    <motion.div
-                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
-                      initial={animate ? { opacity: 0, y: 8 } : false}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setHistoryStatusFilter(null)}
-                        className={cn(
-                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
-                          historyStatusFilter === null
-                            ? "bg-primary/10"
-                            : "hover:bg-muted/40"
-                        )}
-                        title="Show all days"
-                        aria-pressed={historyStatusFilter === null}
-                      >
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Days
-                        </span>
-                        <span className="text-base font-semibold tabular-nums text-foreground">
-                          {rows.length}
-                        </span>
-                      </button>
-                      {statusTallies.map(([status, count], index, arr) => {
-                        const tone = attendanceHistoryStatusTone(status)
-                        const isActive = historyStatusFilter === status
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() =>
-                              setHistoryStatusFilter((current) =>
-                                current === status ? null : status
-                              )
-                            }
-                            className={cn(
-                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
-                              tone.chip,
-                              isActive
-                                ? "ring-2 ring-inset ring-primary/40"
-                                : "hover:brightness-95 dark:hover:brightness-110",
-                              index < arr.length - 1 ? "border-r border-border/60" : null
-                            )}
-                            title={
-                              isActive
-                                ? `Clear ${status.replace(/[_-]+/g, " ")} filter`
-                                : `Filter by ${status.replace(/[_-]+/g, " ")}`
-                            }
-                            aria-pressed={isActive}
-                          >
-                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
-                              {status.replace(/[_-]+/g, " ")}
-                            </span>
-                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
-                              {count}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </motion.div>
+                    <SummaryFilterTabs
+                      ariaLabel="Filter attendance history"
+                      selectedValue={historyStatusFilter}
+                      onSelectedValueChange={setHistoryStatusFilter}
+                      tabs={[
+                        { value: null, label: "Days", count: rows.length },
+                        ...statusTallies.map(([status, count]) => ({
+                          value: status,
+                          label: status.replace(/[_-]+/g, " "),
+                          count,
+                          countClassName: attendanceHistoryStatusTone(status).count,
+                        })),
+                      ]}
+                    />
 
                     {historyStatusFilter ? (
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -4586,66 +4697,20 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
                 return (
                   <>
-                    <motion.div
-                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
-                      initial={animate ? { opacity: 0, y: 8 } : false}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setScheduleKindFilter(null)}
-                        className={cn(
-                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
-                          scheduleKindFilter === null ? "bg-primary/10" : "hover:bg-muted/40"
-                        )}
-                        title="Show all days"
-                        aria-pressed={scheduleKindFilter === null}
-                      >
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Days
-                        </span>
-                        <span className="text-base font-semibold tabular-nums text-foreground">
-                          {rows.length}
-                        </span>
-                      </button>
-                      {kindTallies.map(([kind, count], index, arr) => {
-                        const tone = schedulePreviewKindTone(kind)
-                        const isActive = scheduleKindFilter === kind
-                        return (
-                          <button
-                            key={kind}
-                            type="button"
-                            onClick={() =>
-                              setScheduleKindFilter((current) =>
-                                current === kind ? null : kind
-                              )
-                            }
-                            className={cn(
-                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
-                              tone.chip,
-                              isActive
-                                ? "ring-2 ring-inset ring-primary/40"
-                                : "hover:brightness-95 dark:hover:brightness-110",
-                              index < arr.length - 1 ? "border-r border-border/60" : null
-                            )}
-                            title={
-                              isActive
-                                ? `Clear ${kind} filter`
-                                : `Filter by ${kind}`
-                            }
-                            aria-pressed={isActive}
-                          >
-                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
-                              {kind}
-                            </span>
-                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
-                              {count}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </motion.div>
+                    <SummaryFilterTabs
+                      ariaLabel="Filter schedule preview"
+                      selectedValue={scheduleKindFilter}
+                      onSelectedValueChange={setScheduleKindFilter}
+                      tabs={[
+                        { value: null, label: "Days", count: rows.length },
+                        ...kindTallies.map(([kind, count]) => ({
+                          value: kind,
+                          label: kind,
+                          count,
+                          countClassName: schedulePreviewKindTone(kind).count,
+                        })),
+                      ]}
+                    />
 
                     {scheduleKindFilter ? (
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -4867,68 +4932,20 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
                 return (
                   <>
-                    <motion.div
-                      className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
-                      initial={animate ? { opacity: 0, y: 8 } : false}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setCorrectionStatusFilter(null)}
-                        className={cn(
-                          "flex min-w-[4.5rem] shrink-0 cursor-pointer flex-col justify-center border-r border-border px-3 py-2 text-left transition",
-                          correctionStatusFilter === null
-                            ? "bg-primary/10"
-                            : "hover:bg-muted/40"
-                        )}
-                        title="Show all requests"
-                        aria-pressed={correctionStatusFilter === null}
-                      >
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          All
-                        </span>
-                        <span className="text-base font-semibold tabular-nums text-foreground">
-                          {correctionRequests.length}
-                        </span>
-                      </button>
-                      {statusTallies.map(([status, count], index, arr) => {
-                        const tone = correctionRequestStatusTone(status)
-                        const isActive = correctionStatusFilter === status
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() =>
-                              setCorrectionStatusFilter((current) =>
-                                current === status ? null : status
-                              )
-                            }
-                            className={cn(
-                              "flex min-w-[5.5rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition",
-                              tone.chip,
-                              isActive
-                                ? "ring-2 ring-inset ring-primary/40"
-                                : "hover:brightness-95 dark:hover:brightness-110",
-                              index < arr.length - 1 ? "border-r border-border/60" : null
-                            )}
-                            title={
-                              isActive
-                                ? `Clear ${status} filter`
-                                : `Filter by ${status}`
-                            }
-                            aria-pressed={isActive}
-                          >
-                            <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
-                              {status.replace(/[_-]+/g, " ")}
-                            </span>
-                            <span className={cn("text-base font-semibold tabular-nums", tone.count)}>
-                              {count}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </motion.div>
+                    <SummaryFilterTabs
+                      ariaLabel="Filter correction requests"
+                      selectedValue={correctionStatusFilter}
+                      onSelectedValueChange={setCorrectionStatusFilter}
+                      tabs={[
+                        { value: null, label: "All", count: correctionRequests.length },
+                        ...statusTallies.map(([status, count]) => ({
+                          value: status,
+                          label: status.replace(/[_-]+/g, " "),
+                          count,
+                          countClassName: correctionRequestStatusTone(status).count,
+                        })),
+                      ]}
+                    />
 
                     {correctionStatusFilter ? (
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -5228,30 +5245,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
               toolbarStart={sectionTitleBlock}
               toolbarActions={
                 <>
-                  <label className="relative inline-flex h-7 min-w-[10rem] max-w-[16rem] flex-1 items-center sm:min-w-[12rem]">
-                    <SearchIcon className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
-                    <input
-                      className="h-7 w-full rounded-md border border-border bg-background py-0 pl-7 pr-6 text-xs text-foreground outline-none placeholder:text-muted-foreground"
-                      value={recordSearch}
-                      onChange={(event) => setRecordSearch(event.target.value)}
-                      placeholder="Search names…"
-                      aria-label="Search daily summaries by employee name"
-                    />
-                    {recordSearch.trim() ? (
-                      <button
-                        type="button"
-                        className="absolute right-1.5 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setRecordSearch("")}
-                        aria-label="Clear search"
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </label>
-                  <label className="inline-flex h-7 items-center gap-0.5 rounded-md border border-border bg-background px-1 text-[10px] text-muted-foreground">
-                    <span className="hidden sm:inline pl-0.5">Rows</span>
+                  <FluentSearchBox
+                    size="small"
+                    className="min-w-[10rem] max-w-[16rem] flex-1 sm:min-w-[12rem]"
+                    value={recordSearch}
+                    onChange={(_event, data) => setRecordSearch(data.value)}
+                    placeholder="Search names…"
+                    aria-label="Search daily summaries by employee name"
+                  />
+                  <div className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-muted/40 px-2 text-[10px] font-medium text-muted-foreground">
+                    <span>Rows</span>
                     <FluentSelect
-                      ariaLabel="Number of records to display"
+                      ariaLabel="Rows per page"
                       size="small"
                       className="max-w-[3.25rem]"
                       value={String(dailySummaryPageSize)}
@@ -5269,7 +5274,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         label: String(size),
                       }))}
                     />
-                  </label>
+                  </div>
                   {dailySummaryFilterPopover}
                   {refreshButton}
                 </>
@@ -5282,89 +5287,119 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {/* Punch Action is only available in the native mobile app (iOS/Android). No content shown in browser. */}
 
-        {activeSection === "recalculation-jobs" ? (
+        {activeSection === "processing-exceptions" ? (
           <TableBlock
             rows={rows}
             section={activeSection}
             loading={loading}
-            onRowSelect={(_, row) => {
-              void openRecordDetails(row)
-            }}
             toolbarStart={sectionTitleBlock}
             toolbarActions={
               <>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={recalcActionBusy || loading}
-                  onClick={() => void runPendingJobs()}
-                  title="Run pending jobs"
-                >
-                  <AlarmClockCheckIcon className="size-3.5" />
-                  <span className="hidden sm:inline">Run pending</span>
-                </button>
+                {processingExceptionFilterPopover}
+                {refreshButton}
+              </>
+            }
+          />
+        ) : null}
 
-                <Popover open={rebuildFormOpen} onOpenChange={setRebuildFormOpen}>
-                  <PopoverTrigger
-                    className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
-                    aria-label="Refresh daily summaries"
-                    title="Refresh daily summaries"
+        {activeSection === "unmatched-logs" ? (
+          <TableBlock
+            rows={rows}
+            section={activeSection}
+            loading={loading}
+            toolbarStart={sectionTitleBlock}
+            toolbarActions={refreshButton}
+            onRowSelect={(_, row) => {
+              void openRecordDetails(row)
+            }}
+          />
+        ) : null}
+
+        {activeSection === "recalculation-jobs" ? (
+          <div className="mt-[9px]">
+            <TableBlock
+              rows={rows}
+              section={activeSection}
+              loading={loading}
+              onRowSelect={(_, row) => {
+                void openRecordDetails(row)
+              }}
+              toolbarStart={sectionTitleBlock}
+              toolbarActions={
+                <>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={recalcActionBusy || loading}
+                    onClick={() => void runPendingJobs()}
+                    title="Run pending jobs"
                   >
-                    <TimerResetIcon className="size-3.5 text-primary" />
-                    <span className="hidden sm:inline">Rebuild</span>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[min(100vw-1.5rem,19rem)] p-2.5" align="end">
-                    <div className="space-y-1.5">
+                    <AlarmClockCheckIcon className="size-3.5" />
+                    <span className="hidden sm:inline">Run pending</span>
+                  </button>
+
+                  <Popover open={rebuildFormOpen} onOpenChange={setRebuildFormOpen}>
+                    <PopoverTrigger
+                      className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border px-2 text-xs font-medium text-foreground transition hover:bg-muted"
+                      aria-label="Refresh daily summaries"
+                      title="Refresh daily summaries"
+                    >
+                      <TimerResetIcon className="size-3.5 text-primary" />
+                      <span className="hidden sm:inline">Rebuild</span>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[min(100vw-1.5rem,21rem)] p-3" align="end">
+                    <div className="space-y-2">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Refresh summaries
+                        Rebuild daily summaries
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <label className="grid min-w-0 gap-0.5 text-[10px]">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">Start</span>
+                      <div className="grid gap-2">
+                        <Field label="Start date" size="small">
                           <DatePickerPresets
                             value={recalculateValues.start_date}
                             onChange={(value) =>
                               setRecalculateValues((current) => ({ ...current, start_date: value }))
                             }
-                            placeholder="Start"
-                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                            placeholder="Select start date"
+                            className="w-full [&_.fui-Input]:!w-full"
                           />
-                        </label>
-                        <label className="grid min-w-0 gap-0.5 text-[10px]">
-                          <span className="font-medium text-slate-600 dark:text-slate-300">End</span>
+                        </Field>
+                        <Field label="End date" size="small">
                           <DatePickerPresets
                             value={recalculateValues.end_date}
                             onChange={(value) =>
                               setRecalculateValues((current) => ({ ...current, end_date: value }))
                             }
-                            placeholder="End"
-                            className="h-7 gap-1 border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100 [&_svg]:size-3"
+                            placeholder="Select end date"
+                            className="w-full [&_.fui-Input]:!w-full"
                           />
-                        </label>
+                        </Field>
                       </div>
-                      <input
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        placeholder="Employee ID (optional)"
-                        value={recalculateValues.employee_id}
-                        onChange={(event) =>
-                          setRecalculateValues((current) => ({
-                            ...current,
-                            employee_id: event.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        className="h-7 w-full rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900 dark:border-[#3a3a3a] dark:bg-[#262626] dark:text-slate-100"
-                        placeholder="Device ID (optional)"
-                        value={recalculateValues.device_id}
-                        onChange={(event) =>
-                          setRecalculateValues((current) => ({
-                            ...current,
-                            device_id: event.target.value,
-                          }))
-                        }
-                      />
+                      <Field label="Employee ID" hint="Optional" size="small">
+                        <Input
+                          size="small"
+                          value={recalculateValues.employee_id}
+                          onChange={(_event, data) =>
+                            setRecalculateValues((current) => ({
+                              ...current,
+                              employee_id: data.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                      <Field label="Device ID" hint="Optional" size="small">
+                        <Input
+                          size="small"
+                          value={recalculateValues.device_id}
+                          onChange={(_event, data) =>
+                            setRecalculateValues((current) => ({
+                              ...current,
+                              device_id: data.value,
+                            }))
+                          }
+                        />
+                      </Field>
                       <FluentSelect
+                        label="Processing source"
                         ariaLabel="Processing source"
                         size="small"
                         className="w-full"
@@ -5388,6 +5423,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         ]}
                       />
                       <FluentSelect
+                        label="Refresh mode"
                         ariaLabel="Refresh mode"
                         size="small"
                         className="w-full"
@@ -5404,6 +5440,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         ]}
                       />
                       <FluentSelect
+                        label="Execution mode"
                         ariaLabel="Execution mode"
                         size="small"
                         className="w-full"
@@ -5429,13 +5466,14 @@ export function AttendanceActivityView({ section }: { section: string }) {
                         {recalcActionBusy ? "Starting…" : "Start rebuild"}
                       </button>
                     </div>
-                  </PopoverContent>
-                </Popover>
+                    </PopoverContent>
+                  </Popover>
 
-                {refreshButton}
-              </>
-            }
-          />
+                  {refreshButton}
+                </>
+              }
+            />
+          </div>
         ) : null}
 
         {!loading &&
@@ -5443,7 +5481,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
         activeSection !== "today" &&
         activeSection !== "attendance-history" &&
         activeSection !== "schedule-preview" &&
+        activeSection !== "processing-exceptions" &&
         activeSection !== "recalculation-jobs" &&
+        activeSection !== "unmatched-logs" &&
         activeSection !== "corrections" ? (
           <div className="mt-6">
             <TableBlock
@@ -5465,18 +5505,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
       </div>
 
       <Dialog open={correctionDialogOpen} onOpenChange={setCorrectionDialogOpen}>
-        <DialogPopup className="sm:max-w-2xl">
+        <DialogPopup className="sm:max-w-lg" bodyClassName="!h-full !max-h-none">
           <DialogHeader>
             <DialogTitle>Request attendance correction</DialogTitle>
             <DialogDescription>Create a correction request for an incorrect or missing attendance record.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Attendance date</span>
-                <input
+                <DateInput
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                  type="date"
+
                   value={correctionForm.attendance_date}
                   onChange={(event) => setCorrectionForm((current) => ({ ...current, attendance_date: event.target.value }))}
                 />
@@ -5495,18 +5535,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Requested check-in time</span>
-                <input
+                <TimeInput
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                  type="time"
+                  aria-label="Requested check-in time"
                   value={correctionForm.requested_check_in_at}
                   onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_in_at: event.target.value }))}
                 />
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Requested check-out time</span>
-                <input
+                <TimeInput
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                  type="time"
+                  aria-label="Requested check-out time"
                   value={correctionForm.requested_check_out_at}
                   onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_out_at: event.target.value }))}
                 />
@@ -5534,22 +5574,31 @@ export function AttendanceActivityView({ section }: { section: string }) {
               />
             </label>
           </div>
-          <DialogFooter>
-            <button
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          <DialogFooter className="sticky bottom-0 z-10 mt-auto border-t border-border bg-background py-3">
+            <Button
+              appearance="secondary"
               type="button"
+              disabled={correctionBusy}
+              onClick={() => void saveCorrectionRequest("draft")}
+            >
+              {correctionSaveMode === "draft" ? "Saving…" : "Save as draft"}
+            </Button>
+            <Button
+              appearance="outline"
+              type="button"
+              disabled={correctionBusy}
               onClick={() => setCorrectionDialogOpen(false)}
             >
               Close
-            </button>
-            <button
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium !text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+            </Button>
+            <Button
+              appearance="primary"
               type="button"
               disabled={correctionBusy}
-              onClick={() => void submitCorrectionRequest()}
+              onClick={() => void saveCorrectionRequest("submit")}
             >
-              Create request
-            </button>
+              {correctionSaveMode === "submit" ? "Submitting…" : "Create request"}
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -5648,9 +5697,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Check-in at</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                  type="datetime-local"
+                <DateTimeInput
+                  aria-label="Check-in at"
                   value={adjustmentForm.check_in_at}
                   onChange={(event) =>
                     setAdjustmentForm((current) => ({ ...current, check_in_at: event.target.value }))
@@ -5659,9 +5707,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
               </label>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Check-out at</span>
-                <input
-                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
-                  type="datetime-local"
+                <DateTimeInput
+                  aria-label="Check-out at"
                   value={adjustmentForm.check_out_at}
                   onChange={(event) =>
                     setAdjustmentForm((current) => ({ ...current, check_out_at: event.target.value }))

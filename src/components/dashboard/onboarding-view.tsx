@@ -1,10 +1,30 @@
 "use client"
 
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
+import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
-import { SearchToggleField } from "@/components/common/search-toggle-field"
+import {
+  Button as FluentButton,
+  Field,
+  Table as FluentTable,
+  TableBody as FluentTableBody,
+  TableCell as FluentTableCell,
+  TableCellLayout,
+  TableHeader as FluentTableHeader,
+  TableHeaderCell,
+  TableRow as FluentTableRow,
+} from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
+import {
+  Add16Regular,
+  ClipboardTaskListLtr20Regular,
+  Delete16Regular,
+  Edit16Regular,
+} from "@fluentui/react-icons"
 import {
   Ban,
   CalendarDays,
@@ -59,7 +79,7 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
-  listPendingEmployeeInvitations,
+  listEmployeeInvitationHistory,
   listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingRequests,
@@ -79,8 +99,14 @@ import {
   uploadOnboardingDocument,
   verifyOnboardingDocument,
   type AdminRecord,
+  type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
 } from "@/lib/admin-api"
+import {
+  INVITATION_STATUS_FILTERS,
+  canResendInvitation,
+  invitationEffectiveStatus,
+} from "@/lib/employee-invitation-status"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -93,7 +119,6 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
   DialogClose,
@@ -115,6 +140,7 @@ import {
 } from "@/lib/onboarding-provisioning"
 import {
   filterAssigneesForStep,
+  collectAssigneeIds,
   findAssigneeRecord,
   flattenAssigneeRecord,
   isOnboardingActableStatus,
@@ -1266,6 +1292,8 @@ export function OnboardingView() {
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
   const [invitationSearch, setInvitationSearch] = React.useState("")
+  const [invitationStatusFilter, setInvitationStatusFilter] =
+    React.useState<EmployeeInvitationHistoryStatus>("pending")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("")
@@ -1563,16 +1591,41 @@ export function OnboardingView() {
                 }),
               }
             case "users": {
-              const companyUsers = await listAllCurrentCompanyUsers(token, {
-                maxPages: 30,
-              }).catch(() => [] as AdminRecord[])
+              const [companyUsers, employeeDirectory] = await Promise.all([
+                listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(() => [] as AdminRecord[]),
+                listEmployees(token, {
+                  page: 1,
+                  limit: 200,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }).then((result) => result.rows).catch(() => [] as AdminRecord[]),
+              ])
+              const withDepartmentAssignments = companyUsers.map((companyUser) => {
+                const flattened = flattenAssigneeRecord(companyUser)
+                const ids = new Set(collectAssigneeIds(companyUser))
+                const email = readString(companyUser, ["email"], "").trim().toLowerCase()
+                const linkedEmployees = employeeDirectory.filter((employee) => {
+                  const membership = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
+                  const linkedUser = toRecord(membership?.user) ?? toRecord(employee.user)
+                  const employeeIds = [
+                    readNumber(employee, ["user_id", "company_user_id"]),
+                    membership ? readNumber(membership, ["id", "user_id", "company_user_id"]) : null,
+                    linkedUser ? readNumber(linkedUser, ["id", "user_id", "company_user_id"]) : null,
+                  ].filter((id): id is number => id !== null)
+                  const employeeEmail = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
+                  return employeeIds.some((id) => ids.has(id)) || Boolean(email && employeeEmail === email)
+                })
+                const departmentIds = new Set(collectDepartmentIds(flattened))
+                linkedEmployees.forEach((employee) => collectDepartmentIds(employee).forEach((id) => departmentIds.add(id)))
+                return { ...flattened, department_ids: Array.from(departmentIds) }
+              })
               return {
                 key,
                 result: {
-                  rows: companyUsers,
+                  rows: withDepartmentAssignments,
                   page: 1,
-                  limit: companyUsers.length,
-                  total: companyUsers.length,
+                  limit: withDepartmentAssignments.length,
+                  total: withDepartmentAssignments.length,
                   totalPages: 1,
                 },
               }
@@ -1773,7 +1826,7 @@ export function OnboardingView() {
 
       const fetchKey =
         targetTab === "invitations"
-          ? "invitations:pending"
+          ? `invitations:${invitationStatusFilter}`
           : targetTab === "requests"
             ? `requests:${JSON.stringify(requestQuery)}`
             : `workflows:${JSON.stringify(workflowQuery)}`
@@ -1794,7 +1847,10 @@ export function OnboardingView() {
       setError(null)
       try {
         if (targetTab === "invitations") {
-          const invitationRows = await listPendingEmployeeInvitations(token)
+          const { data: invitationRows } = await listEmployeeInvitationHistory(
+            token,
+            { status: invitationStatusFilter, limit: 100 },
+          )
           setInvitations(invitationRows)
           invitationsFetchKeyRef.current = fetchKey
         } else if (targetTab === "requests") {
@@ -1917,6 +1973,7 @@ export function OnboardingView() {
       requestEmployeeFilter,
       requestStatusFilter,
       workflowStatusFilter,
+      invitationStatusFilter,
     ]
   )
 
@@ -1951,6 +2008,7 @@ export function OnboardingView() {
     requestEmployeeFilter,
     requestStatusFilter,
     workflowStatusFilter,
+    invitationStatusFilter,
     reloadAll,
   ])
 
@@ -2253,24 +2311,54 @@ export function OnboardingView() {
   const assignableUsers = React.useMemo(() => {
     const departmentId = Number(workflowForm.assigned_department_id)
     const selectedId = Number(workflowForm.assigned_user_id)
-    const catalog = users.map(flattenAssigneeRecord)
+    const idsFrom = (record: AdminRecord | null, keys: string[]) =>
+      record
+        ? keys.map((key) => readNumber(record, [key])).filter((id): id is number => id !== null)
+        : []
+    const catalog = users.map((user) => {
+      const flattened = flattenAssigneeRecord(user)
+      const userCompany = toRecord(user.company_user) ?? toRecord(user.companyUser)
+      const userProfile = toRecord(user.user) ?? toRecord(userCompany?.user)
+      const userIds = new Set(
+        [
+          ...idsFrom(flattened, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(userProfile, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(userCompany, ["id", "user_id", "company_user_id"]),
+        ],
+      )
+      const userEmail = readString(userProfile ?? user, ["email"], "").trim().toLowerCase()
+      const linkedEmployees = employees.filter((employee) => {
+        const companyUser = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
+        const linkedUser = toRecord(companyUser?.user) ?? toRecord(employee.user)
+        const employeeIds = [
+          ...idsFrom(employee, ["user_id", "company_user_id"]),
+          ...idsFrom(companyUser, ["id", "user_id", "company_user_id"]),
+          ...idsFrom(linkedUser, ["id", "user_id", "company_user_id"]),
+        ]
+        const email = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
+        return employeeIds.some((id) => userIds.has(id)) || Boolean(userEmail && email === userEmail)
+      })
+      const departmentIds = new Set(collectDepartmentIds(flattened))
+      linkedEmployees.forEach((employee) => {
+        collectDepartmentIds(employee).forEach((id) => departmentIds.add(id))
+      })
+      return { ...flattened, department_ids: Array.from(departmentIds) }
+    })
     const filtered = filterAssigneesForStep(catalog, {
       selectedId: Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
     })
-    const hasDepartmentData = filtered.some((row) => collectDepartmentIds(row).size > 0)
     const departmentUsers =
       Number.isFinite(departmentId) && departmentId > 0
         ? filtered.filter((row) => collectDepartmentIds(row).has(departmentId))
         : []
-    const usable = hasDepartmentData ? departmentUsers : filtered
     const seen = new Set<number>()
-    return usable.filter((row) => {
+    return departmentUsers.filter((row) => {
       const id = preferredAssigneeId(row)
       if (id === null || seen.has(id)) return false
       seen.add(id)
       return true
     })
-  }, [users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
+  }, [employees, users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
 
   const selectedStepAssigneeId = React.useMemo(() => {
     const value = Number(workflowForm.assigned_user_id)
@@ -3447,6 +3535,9 @@ export function OnboardingView() {
     return {
       status: readString(review ?? {}, ["status"], "not_submitted").toLowerCase(),
       submittedAt: readString(review ?? {}, ["submitted_at"]),
+      notProvidedItems: Array.isArray(review?.not_provided_items)
+        ? review.not_provided_items.filter((item): item is string => typeof item === "string")
+        : [],
       sections,
     }
   }, [selectedRequestDetails])
@@ -3469,6 +3560,7 @@ export function OnboardingView() {
     [employeeDetailsReview.sections]
   )
   const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
+  const currentEmployeeReviewStatus = readString(currentEmployeeReviewSection ?? {}, ["status"], "pending").toLowerCase()
   const selectedRequestSummary = React.useMemo(() => {
     const request = selectedRequestDetails ?? selectedRequestRow ?? {}
     const employee = toRecord(request.employee)
@@ -3496,6 +3588,9 @@ export function OnboardingView() {
     const comment = employeeReviewComments[sectionKey]?.trim() ?? ""
     if (!token || requestId === null || !sectionKey || sectionKey === "-") {
       showErrorAlert("Missing employee review context.")
+      return
+    }
+    if (status === "approved" && currentEmployeeReviewStatus === "approved") {
       return
     }
     if (status === "changes_requested" && !comment) {
@@ -3765,7 +3860,7 @@ export function OnboardingView() {
     setSaving(true)
     try {
       await completeOnboardingTask(token, requestId, taskId, {
-        completion_notes: "Completed by admin",
+        completion_notes: "Completed from onboarding workspace",
       })
       showSuccessAlert("Onboarding task completed.")
       await reloadCurrentRequestActivity(requestId)
@@ -4196,6 +4291,21 @@ export function OnboardingView() {
       render: (row) => readString(row, ["phone"]),
     },
     {
+      key: "status",
+      label: "Status",
+      defaultWidth: 105,
+      render: (row) => {
+        const status = invitationEffectiveStatus(row)
+        return (
+          <span
+            className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(status))}
+          >
+            {toTitleCaseWords(status || "-")}
+          </span>
+        )
+      },
+    },
+    {
       key: "delivery",
       label: "Delivery",
       defaultWidth: 170,
@@ -4238,6 +4348,9 @@ export function OnboardingView() {
         const resending = invitationId !== null && resendingInvitationId === invitationId
         if (!canResendPendingInvitations) {
           return <span className="text-[11px] text-muted-foreground">View only</span>
+        }
+        if (!canResendInvitation(row)) {
+          return <span className="text-[11px] text-muted-foreground">-</span>
         }
         return (
           <Button
@@ -4485,7 +4598,7 @@ export function OnboardingView() {
       {activeTab === "invitations" && canViewPendingInvitations ? (
         <div className="space-y-2">
           <ResizableTable
-            title="Pending Employee Invitations"
+            title="Employee Invitations"
             data={filteredInvitations}
             columns={invitationColumns}
             loading={loading}
@@ -4499,12 +4612,26 @@ export function OnboardingView() {
             getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
             onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
-              <SearchToggleField
-                className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
-                placeholder="Search name, email or phone"
-                value={invitationSearch}
-                onChange={setInvitationSearch}
-              />
+              <>
+                <FluentSearchBox
+                  size="small"
+                  aria-label="Search invitations"
+                  className="!w-[14rem] max-w-full shrink-0"
+                  placeholder="Search name, email or phone"
+                  value={invitationSearch}
+                  onChange={(_event, data) => setInvitationSearch(data.value)}
+                />
+                <FluentSelect
+                  ariaLabel="Filter invitation status"
+                  size="small"
+                  className="min-w-[8.5rem]"
+                  value={invitationStatusFilter}
+                  onChange={(value) =>
+                    setInvitationStatusFilter(value as EmployeeInvitationHistoryStatus)
+                  }
+                  options={INVITATION_STATUS_FILTERS}
+                />
+              </>
             }
             toolbarActions={
               <button
@@ -4540,7 +4667,7 @@ export function OnboardingView() {
                 <div className="space-y-5 px-4 pb-6">
                   <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
                     {[
-                      ["Status", toTitleCaseWords(readString(selectedInvitation, ["status"]))],
+                      ["Status", toTitleCaseWords(invitationEffectiveStatus(selectedInvitation) || "-")],
                       ["Email", readString(selectedInvitation, ["email"])],
                       ["Phone", readString(selectedInvitation, ["phone"])],
                       ["Employment type", toTitleCaseWords(readString(selectedInvitation, ["employment_type"]))],
@@ -4681,11 +4808,13 @@ export function OnboardingView() {
             }}
             toolbarStart={
               <>
-                <SearchToggleField
-                  className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
-                  placeholder="Search name, email, phone, user_no"
+                <FluentSearchBox
+                  size="small"
+                  aria-label="Search onboarding requests"
+                  className="!w-[14rem] max-w-full shrink-0"
+                  placeholder="Search name, email, phone, user no."
                   value={requestSearch}
-                  onChange={setRequestSearch}
+                  onChange={(_event, data) => setRequestSearch(data.value)}
                 />
                 <FluentSelect
                   ariaLabel="Filter request status"
@@ -4940,9 +5069,9 @@ export function OnboardingView() {
 
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                         Planned start
-                        <Input
+                        <DateInput
                           className="h-9"
-                          type="date"
+
                           value={requestForm.planned_start_date}
                           onChange={(event) =>
                             setRequestForm((prev) => ({
@@ -4955,9 +5084,9 @@ export function OnboardingView() {
 
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                         Planned completion
-                        <Input
+                        <DateInput
                           className="h-9"
-                          type="date"
+
                           value={requestForm.planned_completion_date}
                           onChange={(event) =>
                             setRequestForm((prev) => ({
@@ -5134,9 +5263,9 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Effective from
-                                  <Input
+                                  <DateInput
                                     className="h-9"
-                                    type="date"
+
                                     value={requestProvisioning.shiftAssignment.effectiveFrom}
                                     onChange={(event) =>
                                       updateRequestShiftAssignmentField("effectiveFrom", event.target.value)
@@ -5145,9 +5274,9 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Effective to
-                                  <Input
+                                  <DateInput
                                     className="h-9"
-                                    type="date"
+
                                     value={requestProvisioning.shiftAssignment.effectiveTo}
                                     onChange={(event) =>
                                       updateRequestShiftAssignmentField("effectiveTo", event.target.value)
@@ -5232,9 +5361,9 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Effective from
-                                  <Input
+                                  <DateInput
                                     className="h-9"
-                                    type="date"
+
                                     value={requestProvisioning.timetableAssignment.effectiveFrom}
                                     onChange={(event) =>
                                       updateRequestTimetableAssignmentField("effectiveFrom", event.target.value)
@@ -5243,9 +5372,9 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Effective to
-                                  <Input
+                                  <DateInput
                                     className="h-9"
-                                    type="date"
+
                                     value={requestProvisioning.timetableAssignment.effectiveTo}
                                     onChange={(event) =>
                                       updateRequestTimetableAssignmentField("effectiveTo", event.target.value)
@@ -5397,9 +5526,8 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Valid from
-                                  <Input
-                                    className="h-9 bg-white text-slate-900"
-                                    type="datetime-local"
+                                  <DateTimeInput
+                                    aria-label="Valid from"
                                     value={requestProvisioning.deviceAssignment.validBeginTime}
                                     onChange={(event) =>
                                       updateRequestDeviceAssignmentField("validBeginTime", event.target.value)
@@ -5408,9 +5536,8 @@ export function OnboardingView() {
                                 </label>
                                 <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                                   Valid until
-                                  <Input
-                                    className="h-9 bg-white text-slate-900"
-                                    type="datetime-local"
+                                  <DateTimeInput
+                                    aria-label="Valid until"
                                     value={requestProvisioning.deviceAssignment.validEndTime}
                                     onChange={(event) =>
                                       updateRequestDeviceAssignmentField("validEndTime", event.target.value)
@@ -5565,6 +5692,14 @@ export function OnboardingView() {
                         </span>
                       </div>
                     </div>
+
+                    {employeeDetailsReview.notProvidedItems.length > 0 ? (
+                      <div className="border-b border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        Employee marked as unavailable: {employeeDetailsReview.notProvidedItems
+                          .map((key) => key === "professional_qualifications" ? "Professional qualifications" : key === "experience_details" ? "Previous work experience" : key)
+                          .join(", ")}.
+                      </div>
+                    ) : null}
 
                     {employeeDetailsReview.sections.length === 0 ? (
                       <div className="p-5 text-sm text-muted-foreground">
@@ -5725,7 +5860,7 @@ export function OnboardingView() {
 
                             <label className="grid gap-1.5 text-xs font-medium text-foreground">
                               Review note
-                              <textarea
+                              <Textarea
                                 className="min-h-16 border border-input bg-background px-3 py-2 text-xs font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 value={
                                   employeeReviewComments[readString(currentEmployeeReviewSection, ["key"], "")] ?? ""
@@ -5760,10 +5895,10 @@ export function OnboardingView() {
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={saving}
+                                  disabled={saving || currentEmployeeReviewStatus === "approved"}
                                   onClick={() => void saveEmployeeDetailReview("approved")}
                                 >
-                                  Approve & notify employee
+                                  {currentEmployeeReviewStatus === "approved" ? "Approved" : "Approve & notify employee"}
                                 </Button>
                               </div>
                             ) : null}
@@ -6207,7 +6342,7 @@ export function OnboardingView() {
                         </label>
                         <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
                           Description
-                          <textarea
+                          <Textarea
                             className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                             value={documentForm.description}
                             onChange={(event) =>
@@ -6599,7 +6734,7 @@ export function OnboardingView() {
                         </div>
                         <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
                           Description
-                          <textarea
+                          <Textarea
                             className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                             value={taskForm.description}
                             onChange={(event) =>
@@ -6909,7 +7044,7 @@ export function OnboardingView() {
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
                   <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
-                    <SelectTrigger className="h-11 w-full">
+                      <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
                           ? resolveWorkflowLabel(Number(replacementWorkflowId))
@@ -7000,7 +7135,7 @@ export function OnboardingView() {
                 ) : null}
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Reason for change
-                  <textarea
+                  <Textarea
                     value={approvalReassignmentReason}
                     onChange={(event) => setApprovalReassignmentReason(event.target.value)}
                     placeholder="Explain why the approver is being replaced"
@@ -7058,11 +7193,13 @@ export function OnboardingView() {
             }}
             toolbarStart={
               <>
-                <SearchToggleField
-                  className="min-w-0 !w-auto !max-w-[14rem] !flex-none"
+                <FluentSearchBox
+                  size="small"
+                  aria-label="Search onboarding workflows"
+                  className="!w-[14rem] max-w-full shrink-0"
                   placeholder="Search workflows"
                   value={workflowSearch}
-                  onChange={setWorkflowSearch}
+                  onChange={(_event, data) => setWorkflowSearch(data.value)}
                 />
                 <FluentSelect
                   ariaLabel="Filter workflow status"
@@ -7142,22 +7279,21 @@ export function OnboardingView() {
                   </div>
                 ) : null}
                 <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-1 text-xs font-medium text-slate-700">
-                    Workflow name
+                  <Field label="Workflow name" size="small" className="gap-1">
                     <Input
-                      className="h-9 bg-white text-slate-900"
+                      size="medium"
+                      className="rounded-md !border !border-input bg-background focus-within:!border-primary focus-within:ring-2 focus-within:ring-primary/20"
                       value={workflowForm.name}
-                      onChange={(event) =>
+                      onChange={(_event, data) =>
                         setWorkflowForm((prev) => ({
                           ...prev,
-                          name: event.target.value,
+                          name: data.value,
                         }))
                       }
                       placeholder="Workflow name"
                     />
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-slate-700">
-                    Status
+                  </Field>
+                  <Field label="Status" size="small" className="gap-1">
                     <Select
                       value={workflowForm.status || "active"}
                       onValueChange={(value) =>
@@ -7167,23 +7303,22 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Workflow status">
                         <SelectValue placeholder="Status">
-                          <span className="text-slate-900">{toTitleCaseWords(workflowForm.status || "active")}</span>
+                          <span>{toTitleCaseWords(workflowForm.status || "active")}</span>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="active" className="text-slate-900">
+                        <SelectItem value="active">
                           Active
                         </SelectItem>
-                        <SelectItem value="inactive" className="text-slate-900">
+                        <SelectItem value="inactive">
                           Inactive
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-slate-700">
-                    Default workflow
+                  </Field>
+                  <Field label="Default workflow" size="small" className="gap-1">
                     <Select
                       value={workflowForm.is_default || "false"}
                       onValueChange={(value) =>
@@ -7193,47 +7328,48 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Default workflow">
                         <SelectValue placeholder="Default workflow">
-                          <span className="text-slate-900">
+                          <span>
                             {workflowForm.is_default === "true" ? "Default" : "Not default"}
                           </span>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="true" className="text-slate-900">
+                        <SelectItem value="true">
                           Default
                         </SelectItem>
-                        <SelectItem value="false" className="text-slate-900">
+                        <SelectItem value="false">
                           Not default
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-slate-700">
-                    Description
+                  </Field>
+                  <Field label="Description" size="small" className="gap-1">
                     <Input
-                      className="h-9 bg-white text-slate-900"
+                      size="medium"
+                      className="rounded-md !border !border-input bg-background focus-within:!border-primary focus-within:ring-2 focus-within:ring-primary/20"
                       value={workflowForm.description}
-                      onChange={(event) =>
+                      onChange={(_event, data) =>
                         setWorkflowForm((prev) => ({
                           ...prev,
-                          description: event.target.value,
+                          description: data.value,
                         }))
                       }
                       placeholder="Workflow description"
                     />
-                  </label>
+                  </Field>
                   <div className="md:col-span-2 flex flex-wrap gap-2">
-                    <Button
+                    <FluentButton
                       type="button"
+                      appearance="primary"
+                      size="small"
+                      icon={<Add16Regular />}
                       onClick={openCreateStepDialog}
                       disabled={saving}
-                      className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                     >
-                      <Plus className="h-4 w-4" />
                       Add Step
-                    </Button>
+                    </FluentButton>
                   </div>
                 </div>
 
@@ -7249,97 +7385,97 @@ export function OnboardingView() {
                     </p>
                   ) : (
                     <HorizontalScrollContainer className="rounded-lg border border-border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Step Name</TableHead>
-                            <TableHead>Checklist / Instructions</TableHead>
-                            <TableHead>Step Type</TableHead>
-                            <TableHead>Required</TableHead>
-                            <TableHead>Due Days</TableHead>
-                            <TableHead>Department</TableHead>
-                            <TableHead>Specific Person</TableHead>
-                            <TableHead className="sticky right-0 z-10 bg-muted text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
+                      <FluentTable
+                        aria-label="Workflow steps"
+                        size="small"
+                        style={{ tableLayout: "fixed", width: "100%" }}
+                      >
+                        <FluentTableHeader>
+                          <FluentTableRow>
+                            <TableHeaderCell style={{ width: "31%" }}>Step name</TableHeaderCell>
+                            <TableHeaderCell style={{ width: "26%" }}>Checklist</TableHeaderCell>
+                            <TableHeaderCell style={{ width: "28%" }}>Assignment</TableHeaderCell>
+                            <TableHeaderCell className="text-right" style={{ width: "15%" }}>
+                              Actions
+                            </TableHeaderCell>
+                          </FluentTableRow>
+                        </FluentTableHeader>
+                        <FluentTableBody>
                           {workflowSteps.map((step, index) => (
-                            <TableRow key={`step-${index}`}>
-                              <TableCell className="font-medium">{step.name || `Step ${index + 1}`}</TableCell>
-                              <TableCell className="min-w-64">
-                                {step.checklist_items.length > 0 ? (
-                                  <ol className="list-inside list-decimal space-y-0.5 text-sm">
-                                    {step.checklist_items.map((item, itemIndex) => (
-                                      <li key={`${index}-checklist-${itemIndex}`}>
-                                        <span className="font-medium">{item.name}</span>
-                                        {item.description ? (
-                                          <span className="text-muted-foreground"> — {item.description}</span>
-                                        ) : null}
-                                      </li>
-                                    ))}
-                                  </ol>
-                                ) : (
-                                  <span className="text-muted-foreground">No checklist</span>
-                                )}
-                                {step.description ? (
-                                  <p className="mt-1 text-xs text-muted-foreground">{step.description}</p>
-                                ) : null}
-                              </TableCell>
-                              <TableCell>{toTitleCaseWords(step.step_type || "task")}</TableCell>
-                              <TableCell>{resolveYesNoLabel(step.is_required)}</TableCell>
-                              <TableCell>{step.due_days ? `${String(step.due_days)} day(s)` : "-"}</TableCell>
-                              <TableCell>
-                                {resolveOptionLabel(
-                                  departments,
-                                  step.assigned_department_id ?? null,
-                                  ["id", "department_id"],
-                                  ["name", "title", "code"]
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {step.assigned_user_id
-                                  ? resolveOptionLabel(
-                                      users,
-                                      step.assigned_user_id,
-                                      ["id", "user_id", "company_user_id"],
-                                      ["full_name", "name", "email"]
-                                    )
-                                  : step.assigned_department_id
-                                    ? "Whole department"
-                                    : step.assigned_role_id
-                                      ? "Legacy role assignment"
-                                      : "-"}
-                              </TableCell>
-                              <TableCell className="sticky right-0 z-10 bg-background">
-                                <div className="flex items-center justify-end gap-2">
+                            <FluentTableRow key={`step-${index}`}>
+                              <FluentTableCell>
+                                <TableCellLayout
+                                  media={<ClipboardTaskListLtr20Regular />}
+                                  description={`${toTitleCaseWords(step.step_type || "task")} · ${resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · ${step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}`}
+                                >
+                                  {step.name || `Step ${index + 1}`}
+                                </TableCellLayout>
+                              </FluentTableCell>
+                              <FluentTableCell>
+                                <TableCellLayout
+                                  description={step.description || undefined}
+                                  truncate
+                                >
+                                  {step.checklist_items.length > 0
+                                    ? step.checklist_items.map((item) => item.name).join(", ")
+                                    : "No checklist"}
+                                </TableCellLayout>
+                              </FluentTableCell>
+                              <FluentTableCell>
+                                <TableCellLayout
+                                  description={
+                                    step.assigned_user_id
+                                      ? resolveOptionLabel(
+                                          users,
+                                          step.assigned_user_id,
+                                          ["id", "user_id", "company_user_id"],
+                                          ["full_name", "name", "email"]
+                                        )
+                                      : step.assigned_department_id
+                                        ? "Whole department"
+                                        : step.assigned_role_id
+                                          ? "Legacy role assignment"
+                                          : "Unassigned"
+                                  }
+                                >
+                                  {resolveOptionLabel(
+                                    departments,
+                                    step.assigned_department_id ?? null,
+                                    ["id", "department_id"],
+                                    ["name", "title", "code"]
+                                  )}
+                                </TableCellLayout>
+                              </FluentTableCell>
+                              <FluentTableCell>
+                                <div className="flex items-center justify-end gap-1">
                                   <Button
                                     type="button"
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 px-0"
+                                    className="size-7 p-0"
                                     onClick={() => editWorkflowStep(step, index)}
                                     aria-label={`Edit step ${index + 1}`}
                                     title="Edit step"
                                   >
-                                    <Pencil className="h-4 w-4" />
+                                    <Edit16Regular data-icon="icon-only" />
                                   </Button>
                                   <Button
                                     type="button"
                                     size="sm"
                                     variant="ghost"
-                                    className="h-8 w-8 px-0 text-rose-600"
+                                    className="size-7 p-0 text-rose-600"
                                     onClick={() => removeWorkflowStep(index)}
                                     aria-label={`Remove step ${index + 1}`}
                                     title="Remove step"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Delete16Regular data-icon="icon-only" />
                                   </Button>
                                 </div>
-                              </TableCell>
-                            </TableRow>
+                              </FluentTableCell>
+                            </FluentTableRow>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </FluentTableBody>
+                      </FluentTable>
                     </HorizontalScrollContainer>
                   )}
                 </div>
@@ -7393,7 +7529,7 @@ export function OnboardingView() {
                       }))
                     }
                     placeholder="e.g. Prepare employee workstation"
-                    className="h-11"
+                    className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                 </label>
                 {workflowForm.step_type !== "sign_off" ? (
@@ -7483,7 +7619,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Step type">
                         {toTitleCaseWords(workflowForm.step_type || "task")}
                       </SelectValue>
@@ -7494,7 +7630,7 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Step type is limited to the values accepted by the onboarding workflow API.
+                    Choose whether this step creates tasks or records an approval.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7507,7 +7643,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Required">{resolveYesNoLabel(workflowForm.is_required)}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -7516,7 +7652,7 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Mark this as required if onboarding cannot proceed without this step.
+                    Choose Yes if onboarding cannot continue until this step is complete.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7531,10 +7667,10 @@ export function OnboardingView() {
                       }))
                     }
                     placeholder="Due days"
-                    className="h-11"
+                    className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Number of days expected to complete this step. Minimum is 1 day.
+                    Set how many days the assignee has to complete this step (at least 1).
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -7548,7 +7684,7 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select department">
                         {workflowForm.assigned_department_id
                           ? resolveOptionLabel(
@@ -7578,7 +7714,7 @@ export function OnboardingView() {
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Choose the department responsible for this step.</p>
+                  <p className="text-xs text-muted-foreground">Choose the department responsible for completing this step.</p>
                 </div>
                 <div className="grid gap-1">
                   <Select
@@ -7592,7 +7728,7 @@ export function OnboardingView() {
                     disabled={!workflowForm.assigned_department_id}
                   >
                     <SelectTrigger
-                      className="h-11 w-full"
+                      className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                       aria-invalid={selectedStepAssigneeMissingPermission || undefined}
                     >
                       <SelectValue placeholder="Specific person (optional)">
@@ -7624,9 +7760,8 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Leave this blank to assign every active person in the selected department. When the workflow runs,
-                    they receive the task through each enabled notification channel and can track it under My Requests →
-                    To do.
+                    Choose a person from the selected department, or leave this as Whole department to assign the step
+                    to its active members. Assignees can track their tasks under My Requests → To do.
                   </p>
                   {selectedStepAssigneeMissingPermission ? (
                     <Alert variant="destructive" className="mt-2">
@@ -7722,7 +7857,7 @@ export function OnboardingView() {
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
                   <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
-                    <SelectTrigger className="h-11 w-full">
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
                           ? resolveWorkflowLabel(Number(replacementWorkflowId))
@@ -7778,7 +7913,7 @@ export function OnboardingView() {
                   New approver
                   <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
                     <SelectTrigger
-                      className="h-11 w-full"
+                      className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                       aria-invalid={replacementApproverMissingPermission || undefined}
                     >
                       <SelectValue placeholder="Select approver">
@@ -7841,7 +7976,7 @@ export function OnboardingView() {
                 ) : null}
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Reason for change
-                  <textarea
+                  <Textarea
                     value={approvalReassignmentReason}
                     onChange={(event) => setApprovalReassignmentReason(event.target.value)}
                     placeholder="Explain why the approver is being replaced"
@@ -7915,7 +8050,7 @@ export function OnboardingView() {
                 </label>
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Description (optional)
-                  <textarea
+                  <Textarea
                     value={checklistItemForm.description}
                     onChange={(event) =>
                       setChecklistItemForm((current) => ({

@@ -1,19 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import { useSearchParams } from "next/navigation"
 import {
-  ArrowRightIcon,
-  CheckIcon,
-  FilterIcon,
-  HistoryIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  UserRoundIcon,
-  XIcon,
-} from "lucide-react"
-import { toast } from "sonner"
+  ArrowRightIcon, CheckIcon, FilterIcon, HistoryIcon, RefreshCwIcon, RotateCcwIcon, UserRoundIcon, XIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -251,7 +244,7 @@ function PhotoFrame({
     <figure className="flex min-w-0 flex-col items-center text-center">
       <div className="flex size-36 items-center justify-center overflow-hidden rounded-full bg-slate-100 sm:size-40">
         {loading ? (
-          <Loader2Icon className="size-5 animate-spin text-slate-400" />
+          <FluentLoadingIndicator className="size-5 animate-spin text-slate-400" />
         ) : src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt="" className="size-full object-cover" />
@@ -829,7 +822,7 @@ export function HrProfileChangeRequestsView() {
                       .finally(() => setBusyId(""))
                   }}
                 >
-                  {busyId === `rev-${detailId}` ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+                  {busyId === `rev-${detailId}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : null}
                   Start review
                 </button>
               ) : null}
@@ -880,13 +873,13 @@ export function HrProfileChangeRequestsView() {
           </DialogHeader>
           <div className="grid gap-3">
             {form.mode === "reject" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Rejection reason</span><textarea className={textareaClass} value={form.rejection_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, rejection_reason: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Rejection reason</span><Textarea className={textareaClass} value={form.rejection_reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, rejection_reason: event.target.value }))} /></label>
             ) : null}
             {form.mode === "correct" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Correction instructions</span><Textarea className={textareaClass} value={form.correction_instructions ?? ""} onChange={(event) => setForm((current) => ({ ...current, correction_instructions: event.target.value }))} /></label>
             ) : null}
             {form.mode !== "approve" ? (
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
+              <label className="grid gap-1.5 text-sm"><span className="font-medium">Comment</span><Textarea className={textareaClass} value={form.comment ?? ""} onChange={(event) => setForm((current) => ({ ...current, comment: event.target.value }))} /></label>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
@@ -898,7 +891,7 @@ export function HrProfileChangeRequestsView() {
               onClick={() => void onDecide()}
               disabled={saving}
             >
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               {form.mode === "approve" ? "Approve request" : form.mode === "reject" ? "Decline request" : "Send back"}
             </button>
           </DialogFooter>

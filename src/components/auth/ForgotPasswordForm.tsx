@@ -1,9 +1,9 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { Loader2Icon, MailIcon } from "lucide-react"
-
+import { MailIcon } from "lucide-react";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -107,7 +107,7 @@ export function ForgotPasswordForm({
       ) : null}
 
       <Button type="submit" className="h-10 w-full gap-2" disabled={loading}>
-        {loading ? <Loader2Icon className="size-4 animate-spin" /> : <MailIcon className="size-4" />}
+        {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <MailIcon className="size-4" />}
         {loading ? "Sending…" : "Send reset link"}
       </Button>
 

@@ -1,8 +1,29 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { CheckIcon, Loader2Icon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import {
+  AddRegular,
+  ArrowClockwiseRegular,
+  CheckmarkRegular,
+  DismissRegular,
+} from "@fluentui/react-icons"
+import {
+  Badge,
+  Button,
+  Input,
+  Tab,
+  TabList,
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+} from "@fluentui/react-components"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   createMyOvertimeRequest,
@@ -132,71 +153,65 @@ export function OvertimeRequestsPanel({ token }: { token: string | null }) {
     <section className="space-y-4 border-b border-border pb-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Overtime</h2>
-        <button type="button" title="Refresh overtime requests" aria-label="Refresh overtime requests" onClick={() => void load()} disabled={loading || !token} className="inline-flex size-9 items-center justify-center rounded-md border border-border hover:bg-muted disabled:opacity-50">
-          {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-        </button>
+        <Button appearance="subtle" size="small" title="Refresh overtime requests" aria-label="Refresh overtime requests" onClick={() => void load()} disabled={loading || !token} icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwiseRegular />} />
       </div>
 
-      <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Overtime requests">
+      <TabList size="small" selectedValue={queue} onTabSelect={(_, data) => { setQueue(data.value as Queue); setReviewing(null); setComments(""); setError(null) }} aria-label="Overtime requests">
         {([
           ["mine", "My requests"],
           ...(isManager ? [["manager", `Manager approvals${manager.length ? ` (${manager.length})` : ""}`]] : []),
           ...(isHr ? [["hr", `HR approvals${hr.length ? ` (${hr.length})` : ""}`]] : []),
         ] as [Queue, string][]).map(([id, text]) => (
-          <button key={id} type="button" role="tab" aria-selected={queue === id} onClick={() => { setQueue(id); setReviewing(null); setComments(""); setError(null) }} className={`border-b-2 px-3 py-2 text-sm font-medium ${queue === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {text}
-          </button>
+          <Tab key={id} value={id}>{text}</Tab>
         ))}
-      </div>
+      </TabList>
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
       {queue === "mine" ? (
         <form onSubmit={(event) => void submit(event)} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto] md:items-end">
-          <label className="grid gap-1 text-sm"><span>Work date</span><input type="date" required value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
-          <label className="grid gap-1 text-sm"><span>Minutes</span><input type="number" required min={1} max={1440} step={1} value={requestedMinutes} onChange={(event) => setRequestedMinutes(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
-          <label className="grid gap-1 text-sm"><span>Reason</span><input type="text" required maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
-          <button type="submit" disabled={saving || !token} className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            {saving ? <Loader2Icon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />} Request
-          </button>
+          <label className="grid gap-1 text-sm"><span>Work date</span><DateInput required value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-3" /></label>
+          <label className="grid gap-1 text-sm"><span>Minutes</span><Input appearance="outline" type="number" required min={1} max={1440} step={1} value={requestedMinutes} onChange={(event) => setRequestedMinutes(event.target.value)} className="min-w-0" /></label>
+          <label className="grid gap-1 text-sm"><span>Reason</span><Input appearance="outline" type="text" required maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} className="min-w-0" /></label>
+          <Button type="submit" appearance="primary" disabled={saving || !token} icon={saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <AddRegular />}>Request</Button>
         </form>
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-border text-xs text-muted-foreground"><tr>
-            {queue !== "mine" ? <th className="px-2 py-2 font-medium">Employee</th> : null}
-            <th className="px-2 py-2 font-medium">Work date</th>
-            <th className="px-2 py-2 font-medium">Requested</th>
-            <th className="px-2 py-2 font-medium">Recorded</th>
-            <th className="px-2 py-2 font-medium">Reason</th>
-            <th className="px-2 py-2 font-medium">Status</th>
-            {queue !== "mine" ? <th className="px-2 py-2 font-medium">Action</th> : null}
-          </tr></thead>
-          <tbody>
+        <Table size="small" className="w-full min-w-[640px]">
+          <TableHeader><TableRow>
+            {queue !== "mine" ? <TableHeaderCell>Employee</TableHeaderCell> : null}
+            <TableHeaderCell>Work date</TableHeaderCell>
+            <TableHeaderCell>Requested</TableHeaderCell>
+            <TableHeaderCell>Recorded</TableHeaderCell>
+            <TableHeaderCell>Reason</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            {queue !== "mine" ? <TableHeaderCell>Action</TableHeaderCell> : null}
+          </TableRow></TableHeader>
+          <TableBody>
             {rows.map((row) => (
-              <tr key={String(row.id)} className="border-b border-border/70">
-                {queue !== "mine" ? <td className="px-2 py-2 font-medium">{label(row)}</td> : null}
-                <td className="px-2 py-2">{String(value(row, "workDate", "work_date") ?? "")}</td>
-                <td className="px-2 py-2">{minutes(row, "requestedMinutes", "requested_minutes")} min</td>
-                <td className="px-2 py-2">{minutes(row, "actualMinutes", "actual_minutes")} min</td>
-                <td className="max-w-64 truncate px-2 py-2" title={String(row.reason ?? "")}>{String(row.reason ?? "")}</td>
-                <td className="px-2 py-2">{statusLabel(row.status)}</td>
-                {queue !== "mine" ? <td className="px-2 py-2"><button type="button" onClick={() => { setReviewing(row); setComments(""); setError(null) }} className="font-medium text-primary hover:underline">Review</button></td> : null}
-              </tr>
+              <TableRow key={String(row.id)}>
+                {queue !== "mine" ? <TableCell className="font-medium">{label(row)}</TableCell> : null}
+                <TableCell>{String(value(row, "workDate", "work_date") ?? "")}</TableCell>
+                <TableCell>{minutes(row, "requestedMinutes", "requested_minutes")} min</TableCell>
+                <TableCell>{minutes(row, "actualMinutes", "actual_minutes")} min</TableCell>
+                <TableCell className="max-w-64 truncate" title={String(row.reason ?? "")}>{String(row.reason ?? "")}</TableCell>
+                <TableCell><Badge appearance="tint" color={String(row.status ?? "").includes("APPROVED") ? "success" : String(row.status ?? "").includes("REJECTED") ? "danger" : "warning"}>{statusLabel(row.status)}</Badge></TableCell>
+                {queue !== "mine" ? <TableCell><Button appearance="subtle" size="small" onClick={() => { setReviewing(row); setComments(""); setError(null) }}>Review</Button></TableCell> : null}
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {!loading && rows.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No overtime requests.</p> : null}
       </div>
 
       {reviewing && queue !== "mine" ? (
         <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <label className="grid gap-1 text-sm"><span>Review comments</span><textarea rows={2} maxLength={2000} value={comments} onChange={(event) => setComments(event.target.value)} className="min-w-0 rounded-md border border-input bg-background px-3 py-2" /></label>
+          <label className="grid gap-1 text-sm"><span>Review comments</span><Textarea rows={2} maxLength={2000} value={comments} onChange={(event) => setComments(event.target.value)} className="min-w-0 rounded-md border border-input bg-background px-3 py-2" /></label>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void decide("approve")} disabled={saving} className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"><CheckIcon className="size-4" /> Approve</button>
-            <button type="button" onClick={() => void decide("reject")} disabled={saving || !comments.trim()} className="inline-flex h-9 items-center gap-2 rounded-md border border-destructive px-3 text-sm font-medium text-destructive disabled:opacity-50"><XIcon className="size-4" /> Reject</button>
-            <button type="button" onClick={() => { setReviewing(null); setComments("") }} className="h-9 px-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+            <Button type="button" appearance="primary" icon={<CheckmarkRegular />} onClick={() => void decide("approve")} disabled={saving}>Approve</Button>
+            <Button type="button" appearance="outline" icon={<DismissRegular />} onClick={() => void decide("reject")} disabled={saving || !comments.trim()}>Reject</Button>
+            <Button type="button" appearance="subtle" onClick={() => { setReviewing(null); setComments("") }}>Cancel</Button>
           </div>
         </div>
       ) : null}

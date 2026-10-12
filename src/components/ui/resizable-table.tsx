@@ -1,13 +1,36 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Download, ChevronDown } from "lucide-react";
+import {
+  ArrowDownload16Regular,
+  ArrowSort16Filled,
+  ChevronDown16Regular,
+  ColumnTriple20Regular,
+  Filter16Regular,
+} from "@fluentui/react-icons";
+import {
+  Checkbox as FluentCheckbox,
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableHeaderCell,
+  TableRow,
+} from "@fluentui/react-components";
 import { Resizable } from "react-resizable";
 import "react-resizable/css/styles.css";
 import React from "react";
 import { useTheme } from "@/components/theme-provider";
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export interface Employee {
   id: string;
@@ -395,17 +418,25 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   showToolbar?: boolean;
   /** Content on the left side of the toolbar (e.g. titles). */
   toolbarStart?: React.ReactNode;
+  /** Optional compact summary row rendered immediately above the table frame. */
+  toolbarSummary?: React.ReactNode;
+  /** Controls grouped inside one Filter popover. Sort is included automatically. */
+  filterContent?: React.ReactNode;
+  /** Number of active page filters shown on the Filter trigger. */
+  filterCount?: number;
   /** Extra actions rendered before Sort/Export (e.g. filter, refresh). */
   toolbarActions?: React.ReactNode;
   /** Optional page-specific styling for the toolbar row. */
   toolbarClassName?: string;
   /** Optional page-specific styling for the bordered table frame. */
   frameClassName?: string;
-  /** Use denser typography and row spacing for operational workspaces. */
+  /** Use denser typography and row spacing. Defaults to the app-wide table density. */
   compact?: boolean;
   enableColumnVisibility?: boolean;
   hiddenColumnKeys?: string[];
   storageKey?: string;
+  /** Render the data surface with Fluent UI table primitives. */
+  fluent?: boolean;
 }
 
 type SortOrder = "asc" | "desc";
@@ -462,13 +493,17 @@ export function ResizableTable<T = Record<string, unknown>>({
   showSort = true,
   showToolbar = true,
   toolbarStart,
+  toolbarSummary,
+  filterContent,
+  filterCount = 0,
   toolbarActions,
   toolbarClassName,
   frameClassName,
-  compact = false,
+  compact = true,
   enableColumnVisibility = false,
   hiddenColumnKeys = [],
-  storageKey
+  storageKey,
+  fluent = true,
 }: ResizableTableProps<T> = {}) {
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const selectedIds = controlledSelectedRowIds ?? internalSelectedIds;
@@ -478,8 +513,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [hiddenColumns, setHiddenColumns] = useState<string[]>(hiddenColumnKeys);
-  const [showColumnsMenu, setShowColumnsMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
   const overflowRef = useRef<HTMLDivElement>(null);
@@ -746,6 +781,7 @@ export function ResizableTable<T = Record<string, unknown>>({
       setSortOrder("asc");
     }
     setShowSortMenu(false);
+    setShowFilterMenu(false);
     setCurrentPage(1);
   };
 
@@ -753,6 +789,7 @@ export function ResizableTable<T = Record<string, unknown>>({
     setSortField(null);
     setSortOrder("asc");
     setShowSortMenu(false);
+    setShowFilterMenu(false);
     setCurrentPage(1);
   };
 
@@ -1054,9 +1091,6 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   const sortableColumns = visibleTableColumns.filter((c) => c.sortable !== false);
 
-  const toolbarButtonClass =
-    "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground shadow-xs transition-colors hover:border-primary/30 hover:bg-muted";
-
   return (
     <div className={`w-full min-w-0 max-w-full ${className}`}>
       {showToolbar ? (
@@ -1067,98 +1101,149 @@ export function ResizableTable<T = Record<string, unknown>>({
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+            {filterContent ? (
+              <Popover open={showFilterMenu} onOpenChange={setShowFilterMenu}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      appearance="outline"
+                      size="small"
+                      className={cn(
+                        "h-8 min-h-8 shrink-0",
+                        filterCount > 0 && "!border-primary/40 !text-primary",
+                      )}
+                    />
+                  }
+                  aria-label="Open filters and sorting"
+                  title="Filters and sorting"
+                >
+                  <Filter16Regular data-icon="inline-start" />
+                  <span>Filters</span>
+                  {filterCount > 0 ? <Badge>{filterCount}</Badge> : null}
+                  <ChevronDown16Regular data-icon="inline-end" />
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="grid w-[min(36rem,calc(100vw-1.5rem))] grid-cols-1 gap-0 overflow-hidden p-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.82fr)]"
+                >
+                  <div className="flex min-w-0 flex-col gap-3 p-3">
+                    <div className="text-sm font-semibold text-foreground">Filters</div>
+                    {filterContent}
+                  </div>
+                  {showSort ? (
+                    <div className="flex min-w-0 flex-col items-center justify-center gap-x-px gap-y-[3px] border-t border-border p-3 text-[10px] sm:border-l sm:border-t-0">
+                      <div className="text-[10px] font-semibold text-foreground">Sort by</div>
+                      <Button
+                        type="button"
+                        onClick={clearSort}
+                        appearance={sortField === null ? "secondary" : "subtle"}
+                        size="small"
+                        className="w-full justify-center !text-[10px]"
+                        aria-pressed={sortField === null}
+                      >
+                        Default view
+                      </Button>
+                      {sortableColumns.map((col) => (
+                        <Button
+                          key={col.key}
+                          type="button"
+                          onClick={() => handleSort(col.key)}
+                          appearance={sortField === col.key ? "secondary" : "subtle"}
+                          size="small"
+                          className="w-full justify-center !text-[10px]"
+                          aria-pressed={sortField === col.key}
+                        >
+                          {col.label}
+                          {sortField === col.key
+                            ? ` (${sortOrder === "asc" ? "↑" : "↓"})`
+                            : ""}
+                        </Button>
+                      ))}
+                      {enableColumnVisibility ? (
+                        <>
+                          <div className="my-1 h-px w-full bg-border" />
+                          <div className="flex items-center justify-center gap-1 text-[10px] font-semibold text-foreground">
+                            <ColumnTriple20Regular />
+                            Columns
+                          </div>
+                          <div className="grid w-full grid-cols-1 gap-x-px gap-y-[3px]">
+                            {candidateTableColumns.map((col) => {
+                              const checked = !hiddenColumns.includes(col.key);
+                              return (
+                                <label
+                                  key={col.key}
+                                  className="flex cursor-pointer items-center justify-center gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted/50"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={() => toggleColumnVisibility(col.key)}
+                                  />
+                                  <span className="truncate">{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
+            ) : null}
             {toolbarStart}
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
             {toolbarActions}
 
-            {enableColumnVisibility ? (
+            {showSort && !filterContent ? (
               <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowColumnsMenu(!showColumnsMenu)}
-                  className={toolbarButtonClass}
-                >
-                  Columns
-                  {hiddenColumns.length > 0 ? (
-                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
-                      {hiddenColumns.length}
-                    </span>
-                  ) : null}
-                  <ChevronDown size={12} className="opacity-50" />
-                </button>
-
-                {showColumnsMenu && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowColumnsMenu(false)} />
-                    <div className="absolute right-0 mt-1 w-48 bg-background border border-border/50 shadow-lg rounded-md z-20 py-1 max-h-80 overflow-auto text-xs">
-                      {candidateTableColumns.map((col) => {
-                        const checked = !hiddenColumns.includes(col.key);
-                        return (
-                          <label
-                            key={col.key}
-                            className="flex cursor-pointer items-center gap-2 px-2 py-1 hover:bg-muted/50 transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-3.5 w-3.5 rounded border-border/40"
-                              checked={checked}
-                              onChange={() => toggleColumnVisibility(col.key)}
-                            />
-                            <span className="truncate">{col.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : null}
-
-            {showSort ? (
-              <div className="relative">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowSortMenu(!showSortMenu)}
-                  className={toolbarButtonClass}
+                  appearance="outline"
+                  size="small"
+                  className="!h-8 !min-h-8"
                   aria-label="Sort"
                   title="Sort"
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-primary">
-                    <path d="M3 6L6 3L9 6M6 3V13M13 10L10 13L7 10M10 13V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <ArrowSort16Filled className="size-3.5 text-primary" />
                   <span className="hidden sm:inline">Sort</span>
                   {sortField ? (
                     <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
                       1
                     </span>
                   ) : null}
-                </button>
+                </Button>
 
                 {showSortMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
                     <div className="absolute right-0 mt-1 w-40 bg-background border border-border/50 shadow-lg rounded-md z-20 py-0.5 max-h-72 overflow-auto text-xs">
-                      <button
+                      <Button
                         type="button"
                         onClick={clearSort}
-                        className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === null ? "bg-muted/30" : ""}`}
+                        appearance={sortField === null ? "secondary" : "subtle"}
+                        size="small"
+                        className="w-full justify-start"
                       >
                         Default view
-                      </button>
+                      </Button>
                       {sortableColumns.length > 0 ? (
                         <>
                           <div className="my-0.5 border-t border-border/40" />
                           {sortableColumns.map((col) => (
-                            <button
+                            <Button
                               key={col.key}
                               type="button"
                               onClick={() => handleSort(col.key)}
-                              className={`w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors ${sortField === col.key ? "bg-muted/30" : ""}`}
+                              appearance={sortField === col.key ? "secondary" : "subtle"}
+                              size="small"
+                              className="w-full justify-start"
                             >
                               {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
-                            </button>
+                            </Button>
                           ))}
                         </>
                       ) : (
@@ -1172,40 +1257,46 @@ export function ResizableTable<T = Record<string, unknown>>({
 
             {showExport ? (
               <div className="relative">
-                <button
+                <Button
                   type="button"
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  className={toolbarButtonClass}
+                  appearance="outline"
+                  size="small"
+                  className="!h-8 !min-h-8"
                 >
-                  <Download size={12} />
+                  <ArrowDownload16Regular data-icon="inline-start" />
                   <span className="hidden sm:inline">Export</span>
-                  <ChevronDown size={12} className="opacity-50" />
-                </button>
+                  <ChevronDown16Regular data-icon="inline-end" />
+                </Button>
 
                 {showExportMenu && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
                     <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => {
                           exportToCSV();
                           setShowExportMenu(false);
                         }}
-                        className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
+                        appearance="subtle"
+                        size="small"
+                        className="w-full justify-start"
                       >
                         CSV
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => {
                           exportToJSON();
                           setShowExportMenu(false);
                         }}
-                        className="w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors border-t border-border/30"
+                        appearance="subtle"
+                        size="small"
+                        className="w-full justify-start"
                       >
                         JSON
-                      </button>
+                      </Button>
                     </div>
                   </>
                 )}
@@ -1215,13 +1306,177 @@ export function ResizableTable<T = Record<string, unknown>>({
         </div>
       ) : null}
 
+      {toolbarSummary ? (
+        <div className="mb-2 flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-1 pb-1.5 text-[10px] text-muted-foreground">
+          {toolbarSummary}
+        </div>
+      ) : null}
+
       <div
         className={cn(
-          "relative max-w-full overflow-hidden rounded-md border border-border bg-background shadow-xs",
+          "relative max-w-full overflow-hidden border border-border bg-background shadow-sm",
           frameClassName,
         )}
       >
-        {/* overflow-y-clip: overflow-x-auto alone promotes y to auto and flashes a scrollbar during row enter animations */}
+        {fluent ? (
+          <div
+            className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
+            ref={overflowRef}
+          >
+            <Table
+              sortable
+              aria-label={`${title} table`}
+              className="min-w-full"
+              style={{
+                minWidth: Math.max(tableContentWidth, 640),
+                width: "100%",
+              }}
+            >
+              <TableHeader>
+                <TableRow>
+                  {showCheckboxes ? (
+                    <TableHeaderCell
+                      className={cn(
+                        compact && "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                      )}
+                      style={{ width: getColumnWidth("checkbox") || 36 }}
+                    >
+                      <FluentCheckbox
+                        aria-label={`Select all ${title.toLowerCase()} on this page`}
+                        checked={
+                          paginatedData.length > 0 &&
+                          paginatedData.every((item, index) =>
+                            selectedIds.includes(getRowIdentifier(item, index)),
+                          )
+                        }
+                        onChange={() => handleSelectAll()}
+                      />
+                    </TableHeaderCell>
+                  ) : null}
+
+                  {visibleTableColumns.map((col) => {
+                    const isActions = col.key === "actions" || col.key === "act"
+                    const canSort = !isActions && col.sortable !== false
+                    const isActiveSort = sortField === col.key
+                    return (
+                      <TableHeaderCell
+                        key={col.key}
+                        className={cn(
+                          isActions && "text-right",
+                          compact && "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                        )}
+                        style={{ width: getColumnWidth(col) }}
+                        sortDirection={
+                          isActiveSort
+                            ? sortOrder === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : undefined
+                        }
+                        onClick={canSort ? () => handleSort(col.key) : undefined}
+                      >
+                        {col.label}
+                      </TableHeaderCell>
+                    )
+                  })}
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {paginatedData.map((item, index) => {
+                  const rowId = getRowIdentifier(item, index)
+                  const isSelected = selectedIds.includes(rowId)
+                  return (
+                    <TableRow
+                      key={rowId}
+                      className={cn(
+                        "cursor-pointer",
+                        compact && "!h-9",
+                        isSelected && "bg-muted/30",
+                      )}
+                      onClick={() => handleRowSelect(rowId, item)}
+                    >
+                      {showCheckboxes ? (
+                        <TableCell
+                          className={cn(compact && "!h-9 !px-2 !py-1 !text-[11px] !leading-4")}
+                          style={{ width: getColumnWidth("checkbox") || 36 }}
+                        >
+                          <FluentCheckbox
+                            aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
+                            checked={isSelected}
+                            onChange={(event) => {
+                              event.stopPropagation()
+                              handleSelectionToggle(rowId)
+                            }}
+                          />
+                        </TableCell>
+                      ) : null}
+
+                      {visibleTableColumns.map((col) => {
+                        const isActions = col.key === "actions" || col.key === "act"
+                        return (
+                          <TableCell
+                            key={col.key}
+                            className={cn(
+                              "min-w-0",
+                              compact && "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
+                              isActions && "overflow-visible text-right",
+                            )}
+                            style={{ width: getColumnWidth(col) }}
+                            onClick={(event) => {
+                              if ((event.target as HTMLElement).closest("a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']")) {
+                                event.stopPropagation()
+                              }
+                            }}
+                          >
+                            {renderCell(col, item)}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  )
+                })}
+
+                {loading && tableData.length === 0
+                  ? loadingSkeletonRows.map((_, index) => (
+                      <TableRow
+                        key={`skeleton-row-${index}`}
+                      >
+                        {showCheckboxes ? (
+                          <TableCell
+                            className={cn(compact && "!h-9 !px-2 !py-1")}
+                            style={{ width: getColumnWidth("checkbox") || 36 }}
+                          >
+                            <div className="h-4 animate-pulse rounded bg-muted/70" />
+                          </TableCell>
+                        ) : null}
+                        {visibleTableColumns.map((column) => (
+                          <TableCell
+                            key={`${column.key}-${index}`}
+                            className={cn(compact && "!h-9 !px-2 !py-1")}
+                            style={{ width: getColumnWidth(column) }}
+                          >
+                            <div className="h-4 animate-pulse rounded bg-muted/70" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  : sortedData.length === 0
+                    ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={visibleTableColumns.length + (showCheckboxes ? 1 : 0)}
+                            className="py-4 text-center text-xs text-muted-foreground"
+                          >
+                            No records found.
+                          </TableCell>
+                        </TableRow>
+                      )
+                    : null}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
         <div
           className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
           ref={overflowRef}
@@ -1400,6 +1655,7 @@ export function ResizableTable<T = Record<string, unknown>>({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {totalPages > 1 && (
@@ -1410,22 +1666,24 @@ export function ResizableTable<T = Record<string, unknown>>({
           </div>
 
           <div className="flex shrink-0 gap-1">
-            <button
+            <Button
               type="button"
               onClick={() => goToPage(activePage - 1)}
               disabled={activePage === 1 || loading}
-              className="px-1.5 py-0.5 bg-background border border-border/50 text-foreground hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded text-xs"
+              appearance="outline"
+              size="small"
             >
               Prev
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => goToPage(activePage + 1)}
               disabled={activePage === totalPages || loading}
-              className="px-1.5 py-0.5 bg-background border border-border/50 text-foreground hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded text-xs"
+              appearance="outline"
+              size="small"
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
       )}

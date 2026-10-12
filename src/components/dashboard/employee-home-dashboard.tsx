@@ -1,44 +1,16 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { DateInput } from "@/components/ui/date-input"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
-  CalendarIcon,
-  CalendarClockIcon,
-  ClockIcon,
-  MailIcon,
-  PhoneIcon,
-  Sparkles,
-  Users,
-  MapPin,
-  User,
-  CreditCard,
-  Landmark,
-  Target,
-  BadgeCheck,
-  Building2,
-  GraduationCap,
-  Briefcase,
-  Award,
-  FileText,
-  CheckCircle,
-  UserCheck,
-  Globe2,
-  ShieldCheck,
-  ShieldAlert,
-  MailCheck,
-  MailWarning,
-  Loader2,
-  LogIn,
-  LogOut,
-  Network,
-  Wifi,
-} from "lucide-react"
+  CalendarIcon, CalendarClockIcon, ClockIcon, MailIcon, PhoneIcon, Sparkles, Users, MapPin, User, CreditCard, Landmark, Target, BadgeCheck, Building2, GraduationCap, Briefcase, Award, FileText, CheckCircle, UserCheck, Globe2, ShieldCheck, ShieldAlert, MailCheck, MailWarning, LogIn, LogOut, Network, Wifi } from "lucide-react";
 import { countries as countryCodes } from "country-flag-icons"
 
 import { CountryFlag } from "@/components/country-flag"
-import { LumaSpin } from "@/components/ui/luma-spin"
+import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -68,10 +40,17 @@ import {
   listMyAttendancePunches,
   listMyLeaveBalances,
   listLeaveTypes,
+  getMyDashboardCardStyle,
+  updateMyDashboardCardStyle,
+  type DashboardCardStyle,
   createEmployeeSectionItem,
   createEmployeeDocument,
+  createMyEmployeeSectionItem,
+  createMyEmployeeDocument,
   fileToBase64UploadDto,
   patchEmployeeStatus,
+  listMyOnboardingRequests,
+  submitMyOnboardingDetails,
   createAttendanceMobilePunchCheckIn,
   createAttendanceMobilePunchCheckOut,
   type AdminRecord,
@@ -291,6 +270,7 @@ type EmployeeDashboardData = {
 
 type EmployeeDashboardViewProps = {
   dashboardData: EmployeeDashboardData
+  token: string
   attendanceToday?: AdminRecord | null
   attendancePunchesToday?: AdminRecord[]
   leaveBalances?: AdminRecord[]
@@ -307,7 +287,8 @@ type LeaveBalanceSummary = {
   allocated?: string
 }
 
-const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode }> = [
+// `optional` sections can be skipped: they are listed but never block completion.
+const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description: string; icon: React.ReactNode; optional?: boolean }> = [
   { key: "contacts", label: "Contacts", description: "Add phone, email and primary contact info", icon: <Users className="h-5 w-5" /> },
   { key: "addresses", label: "Addresses", description: "Your home and work addresses", icon: <MapPin className="h-5 w-5" /> },
   { key: "relatives", label: "Relatives", description: "Emergency contacts and family members", icon: <User className="h-5 w-5" /> },
@@ -315,8 +296,8 @@ const REQUIRED_ONBOARDING_ITEMS: Array<{ key: string; label: string; description
   { key: "bank_accounts", label: "Bank Accounts", description: "Salary and payment account details", icon: <Landmark className="h-5 w-5" /> },
   { key: "departments", label: "Departments", description: "Your assigned department information", icon: <Building2 className="h-5 w-5" /> },
   { key: "academic_qualifications", label: "Academic Qualifications", description: "Degrees, diplomas and education records", icon: <GraduationCap className="h-5 w-5" /> },
-  { key: "professional_qualifications", label: "Professional Qualifications", description: "Certifications and professional licenses", icon: <Award className="h-5 w-5" /> },
-  { key: "experience_details", label: "Experience Details", description: "Previous jobs and work history", icon: <Briefcase className="h-5 w-5" /> },
+  { key: "professional_qualifications", label: "Professional Qualifications", description: "Certifications and professional licenses", icon: <Award className="h-5 w-5" />, optional: true },
+  { key: "experience_details", label: "Experience Details", description: "Previous jobs and work history", icon: <Briefcase className="h-5 w-5" />, optional: true },
   { key: "documents", label: "Documents", description: "Supporting files and attachments", icon: <FileText className="h-5 w-5" /> },
 ]
 
@@ -337,6 +318,22 @@ const EMPLOYEE_OWNED_PROFILE_KEYS = new Set(
   REQUIRED_ONBOARDING_ITEMS.map((item) => item.key).filter((key) => key !== "departments"),
 )
 
+// Sections whose certificate file is mandatory and verification link optional.
+const CERTIFICATE_SECTIONS: Record<string, { urlField: string; documentSection: string; titlePrefix: string; titleField: string }> = {
+  academic_qualifications: {
+    urlField: "academic_certificate_document_url",
+    documentSection: "education",
+    titlePrefix: "Academic certificate",
+    titleField: "degree_or_certificate",
+  },
+  professional_qualifications: {
+    urlField: "professional_certificate_document_url",
+    documentSection: "professional",
+    titlePrefix: "Professional certificate",
+    titleField: "programme_name",
+  },
+}
+
 function employeeSectionHasItems(employee: Record<string, unknown> | null | undefined, key: string) {
   if (!employee) return false
   const aliases = PROFILE_SECTION_ALIASES[key] ?? [key]
@@ -344,6 +341,39 @@ function employeeSectionHasItems(employee: Record<string, unknown> | null | unde
     const value = employee[alias]
     return Array.isArray(value) && value.length > 0
   })
+}
+
+function findHttpsDocumentUrl(value: unknown, depth = 0): string | null {
+  if (depth > 5) return null
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const url = findHttpsDocumentUrl(entry, depth + 1)
+      if (url) return url
+    }
+    return null
+  }
+  const record = asRecord(value)
+  if (!record) return null
+  const directUrl = readString(record, [
+    "file_url",
+    "fileUrl",
+    "document_url",
+    "documentUrl",
+    "academic_certificate_document_url",
+    "url",
+  ])
+  if (directUrl) {
+    try {
+      if (new URL(directUrl).protocol === "https:") return directUrl
+    } catch {
+      // Continue looking through nested upload response data.
+    }
+  }
+  for (const key of ["data", "result", "document", "file", "item", "uploaded_document", "uploadedDocument"]) {
+    const url = findHttpsDocumentUrl(record[key], depth + 1)
+    if (url) return url
+  }
+  return null
 }
 
 function mergeEmployeeSectionRecords(
@@ -525,7 +555,7 @@ interface OnboardingFormField {
   name: string
   label: string
   placeholder?: string
-  type?: "text" | "email" | "tel" | "date" | "select" | "file"
+  type?: "text" | "email" | "tel" | "url" | "date" | "select" | "file"
   required?: boolean
   options?: string[]
   defaultValue?: string
@@ -583,7 +613,7 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "is_primary", label: "Primary Relative?", type: "select", options: ["true", "false"], defaultValue: "false" },
   ],
   identifications: [
-    { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "drivers_license", "other"], defaultValue: "national_id", required: true },
+    { name: "identification_type", label: "ID Type", type: "select", options: ["national_id", "passport", "tax_id", "social_security", "driver_license", "work_permit", "other"], defaultValue: "national_id", required: true },
     { name: "identification_number", label: "ID Number", placeholder: "ID-123456789", required: true },
     { name: "issued_country", label: "Issued Country", placeholder: "United States" },
     { name: "expiry_date", label: "Expiry Date (optional)", type: "date" },
@@ -596,23 +626,32 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
     { name: "is_primary", label: "Primary Salary Account?", type: "select", options: ["true", "false"], defaultValue: "true" },
   ],
   academic_qualifications: [
+    { name: "country_of_residence", label: "Country of Residence", placeholder: "Tanzania", required: true },
     { name: "institution_name", label: "Institution / School", placeholder: "University of Example", required: true },
     { name: "degree_or_certificate", label: "Degree / Certificate", placeholder: "Bachelor of Science", required: true },
     { name: "field_of_study", label: "Field of Study", placeholder: "Computer Science" },
     { name: "education_level", label: "Level", type: "select", options: ["Certificate", "Diploma", "Bachelor's Degree", "Master's Degree", "Other"], defaultValue: "Bachelor's Degree" },
     { name: "start_date", label: "Start Date", type: "date" },
     { name: "end_date", label: "End Date / Graduation", type: "date" },
+    { name: "academic_certificate_document_url", label: "Verification Link (HTTPS, optional)", type: "url", placeholder: "https://…" },
+    // Mandatory, enforced by hasValidCertificateProof (file inputs aren't tracked in formValues).
+    { name: "academic_certificate_file", label: "Academic Certificate Attachment *", type: "file" },
   ],
   professional_qualifications: [
+    { name: "country_of_residence", label: "Country of Residence", placeholder: "Tanzania", required: true },
+    { name: "institution_name", label: "Institution / Training Provider", placeholder: "Example Institute", required: true },
     { name: "programme_name", label: "Program / Certification Name", placeholder: "AWS Solutions Architect", required: true },
     { name: "issuing_organization", label: "Issuing Organization", placeholder: "Amazon Web Services", required: true },
-    { name: "issue_date", label: "Issue Date", type: "date" },
+    { name: "issue_date", label: "Issue Date", type: "date", required: true },
     { name: "expiry_date", label: "Expiry Date (if any)", type: "date" },
+    { name: "professional_certificate_document_url", label: "Verification Link (HTTPS, optional)", type: "url", placeholder: "https://…" },
+    // Mandatory, enforced by hasValidCertificateProof (file inputs aren't tracked in formValues).
+    { name: "professional_certificate_file", label: "Certificate Attachment *", type: "file" },
   ],
   experience_details: [
     { name: "company_name", label: "Company Name", placeholder: "Acme Corp", required: true },
     { name: "job_title", label: "Job Title / Role", placeholder: "Software Engineer", required: true },
-    { name: "responsibilities_description", label: "Key Responsibilities", placeholder: "Built and maintained..." },
+    { name: "responsibilities_description", label: "Key Responsibilities", placeholder: "Built and maintained...", required: true },
     { name: "start_date", label: "Start Date", type: "date", required: true },
     { name: "end_date", label: "End Date (leave blank if current)", type: "date" },
   ],
@@ -663,6 +702,8 @@ function buildPayload(key: string, values: Record<string, string>): AdminRecord 
   if (key === "addresses" && !payload.address_type) payload.address_type = "home"
   if (key === "identifications" && !payload.identification_type) payload.identification_type = "national_id"
   if (key === "bank_accounts" && payload.is_primary === undefined) payload.is_primary = true
+  // A blank end date means the employee still works there.
+  if (key === "experience_details") payload.currently_working = !payload.end_date
   if (key === "documents" && typeof payload.onboarding_section === "string") {
     payload.metadata = { onboarding_section: payload.onboarding_section }
     delete payload.onboarding_section
@@ -2026,48 +2067,109 @@ function DashboardSection({
   )
 }
 
-// Reusable doodle components (same as profile summary)
-function DoodleSprites() {
-  return (
-    <svg width="0" height="0" className="hidden" aria-hidden="true">
-      <symbol id="doodle-circles" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="5" opacity="0.3">
-          <path d="M 323.074 256.963 C 312.956 263.991 295.834 280.024 295.479 292.107 C 294.971 309.41 311.806 311.371 322.384 317.098" />
-          <path d="M 322.384 225.723 C 303.276 230.431 291.393 236.843 273.403 256.963 C 252.542 280.29 261.674 308.503 261.674 315.536" />
-          <path d="M 320.316 193.268 C 285.716 194.491 258.866 221.733 245.117 244.813 C 225.414 277.888 238.218 316.923 236.839 320.568" />
-        </g>
-      </symbol>
-      <symbol id="doodle-curves" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeWidth="4" opacity="0.25">
-          <path d="M 50 50 Q 150 20 250 80 Q 100 150 200 250" />
-          <path d="M 30 100 Q 120 70 220 140 Q 80 200 180 280" />
-        </g>
-      </symbol>
-      <symbol id="doodle-grass" viewBox="0 0 316 316">
-        <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" opacity="0.2">
-          <path d="M 20 300 Q 40 200 30 100" />
-          <path d="M 60 300 Q 80 180 70 80" />
-          <path d="M 100 300 Q 120 220 110 120" />
-          <path d="M 150 300 Q 170 190 160 90" />
-          <path d="M 200 300 Q 220 210 210 110" />
-          <path d="M 250 300 Q 270 200 260 100" />
-          <path d="M 290 300 Q 310 220 300 120" />
-        </g>
-      </symbol>
-    </svg>
-  )
+const dashboardCardPalettes = [
+  { id: "ocean", label: "Ocean", color: "#0877B9" },
+  { id: "forest", label: "Forest", color: "#08785C" },
+  { id: "plum", label: "Plum", color: "#6845A8" },
+  { id: "coral", label: "Coral", color: "#B84F3E" },
+  { id: "midnight", label: "Midnight", color: "#334155" },
+  { id: "berry", label: "Berry", color: "#A33F69" },
+  { id: "neutral", label: "Neutral", color: "#64748B" },
+  { id: "white", label: "Dynamic", color: "#FFFFFF" },
+] as const
+
+const dashboardCardArtworks = [
+  { id: "none", label: "None" },
+  { id: "orbit", label: "Orbit" },
+  { id: "waves", label: "Waves" },
+  { id: "confetti", label: "Confetti" },
+  { id: "arches", label: "Arches" },
+  { id: "sprigs", label: "Sprigs" },
+] as const
+
+type DashboardCardArtworkId = (typeof dashboardCardArtworks)[number]["id"]
+type DashboardCardLook = DashboardCardStyle
+
+const defaultDashboardCardLook: DashboardCardLook = {
+  palette: "ocean",
+  artwork: "waves",
 }
 
-function Doodle({ name = "doodle-circles" }: { name?: string }) {
-  const doodleType = name.replace('doodle-', '');
+function normalizeDashboardCardLook(value: unknown): DashboardCardLook | null {
+  if (!value || typeof value !== "object") return null
+  const parsed = value as Partial<DashboardCardLook>
+  const palette = dashboardCardPalettes.find((item) => item.id === parsed.palette)
+  const artwork = dashboardCardArtworks.find((item) => item.id === parsed.artwork)
+  return palette && artwork ? { palette: palette.id, artwork: artwork.id } : null
+}
+
+function CardDoodleArtwork({
+  pattern,
+  className,
+}: {
+  pattern: DashboardCardArtworkId
+  className?: string
+}) {
+  if (pattern === "none") return null
   return (
-    <svg 
-      className={`absolute inset-0 w-full h-full pointer-events-none doodle doodle-${doodleType}`} 
+    <svg
+      viewBox="0 0 420 220"
+      preserveAspectRatio="xMidYMid slice"
+      className={cn("pointer-events-none", className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
       aria-hidden="true"
     >
-      <use href={`#${name}`} />
+      {pattern === "orbit" ? (
+        <g>
+          <circle cx="320" cy="110" r="66" />
+          <circle cx="320" cy="110" r="43" />
+          <circle cx="320" cy="110" r="19" />
+          <path d="M235 160c46-72 105-112 178-118M248 56c51 25 95 68 130 130" />
+          <circle cx="250" cy="57" r="5" fill="currentColor" />
+          <circle cx="402" cy="42" r="5" fill="currentColor" />
+          <circle cx="250" cy="57" r="3" fill="#38BDF8" stroke="none" />
+          <circle cx="402" cy="42" r="3" fill="#FBBF24" stroke="none" />
+        </g>
+      ) : null}
+      {pattern === "waves" ? (
+        <g>
+          <path d="M205 58c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M180 91c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M205 124c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+          <path d="M180 157c32-25 63 25 96 0s64 25 97 0 64 25 97 0" />
+        </g>
+      ) : null}
+      {pattern === "confetti" ? (
+        <g>
+          <circle cx="268" cy="56" r="7" /><circle cx="337" cy="42" r="4" />
+          <circle cx="389" cy="89" r="8" /><circle cx="300" cy="120" r="5" />
+          <circle cx="365" cy="157" r="6" /><circle cx="245" cy="171" r="4" />
+          <path d="m322 78 14-15m43 55 14 14m-99 7-12 17m-19-91 9 9m81 73 9-11" />
+          <path d="m280 96 7-7m88-57 8 10m-33 150 7-7" />
+          <circle cx="268" cy="56" r="3" fill="#F9A8D4" stroke="none" />
+          <circle cx="389" cy="89" r="3" fill="#FCD34D" stroke="none" />
+          <circle cx="365" cy="157" r="3" fill="#7DD3FC" stroke="none" />
+        </g>
+      ) : null}
+      {pattern === "arches" ? (
+        <g>
+          <path d="M230 190V116a45 45 0 0 1 90 0v74" />
+          <path d="M265 190v-58a28 28 0 0 1 56 0v58" />
+          <path d="M320 190V98a57 57 0 0 1 114 0v92" />
+          <path d="M354 190v-71a23 23 0 0 1 46 0v71" />
+        </g>
+      ) : null}
+      {pattern === "sprigs" ? (
+        <g>
+          <path d="M300 205c12-47 36-84 73-119m-49 49c-22-2-37-14-43-35 21-2 38 9 43 35Zm22-24c-2-23 8-41 29-51 4 21-6 40-29 51Zm-10 34c-20-6-32-22-33-44 21 3 34 17 33 44Zm32-37c2-22 15-37 37-42 0 22-13 38-37 42Z" />
+          <path d="M220 206c9-33 25-59 50-80m-35 32c-16-2-26-11-30-26 15-1 26 8 30 26Zm16-17c0-16 7-28 22-35 2 15-5 27-22 35Z" />
+        </g>
+      ) : null}
     </svg>
-  );
+  )
 }
 
 type BrowserNetworkInformation = {
@@ -2248,7 +2350,7 @@ function NetworkCheckButton() {
           <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
             {checking ? (
               <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" aria-hidden="true" />
+                <FluentLoadingIndicator className="size-6 animate-spin text-primary" aria-hidden="true" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Checking your connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -2347,6 +2449,8 @@ function AttendancePunchActions({
     text: string
   } | null>(null)
 
+  useFluentToastResultState(message, setMessage)
+
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
       setMessage(null)
@@ -2421,7 +2525,7 @@ function AttendancePunchActions({
           onClick={() => void submitPunch("in")}
         >
           {busyAction === "in" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
             <LogIn className="size-3.5" aria-hidden="true" />
           )}
@@ -2436,7 +2540,7 @@ function AttendancePunchActions({
           onClick={() => void submitPunch("out")}
         >
           {busyAction === "out" ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
           ) : (
             <LogOut className="size-3.5" aria-hidden="true" />
           )}
@@ -2444,25 +2548,13 @@ function AttendancePunchActions({
         </Button>
         <NetworkCheckButton />
       </div>
-      {message ? (
-        <p
-          className={cn(
-            "text-xs",
-            message.tone === "success"
-              ? "text-emerald-700 dark:text-emerald-400"
-              : "text-destructive",
-          )}
-          role="status"
-        >
-          {message.text}
-        </p>
-      ) : null}
     </div>
   )
 }
 
 export function EmployeeDashboardView({
   dashboardData,
+  token,
   attendanceToday,
   attendancePunchesToday,
   leaveBalances,
@@ -2475,6 +2567,39 @@ export function EmployeeDashboardView({
   const actor = useDashboardActor()
   const dashboardIdentity = useDashboardIdentity()
   useForbiddenPrefixes()
+  const [dashboardCardLook, setDashboardCardLook] = React.useState<DashboardCardLook>(defaultDashboardCardLook)
+  const [dashboardCardLookSaveState, setDashboardCardLookSaveState] = React.useState<"idle" | "saving" | "error">("idle")
+  const dashboardCardLookKey = dashboardData?.user?.id
+    ? `hrms.dashboard.card-look.v1:${dashboardData.user.id}`
+    : null
+
+  React.useEffect(() => {
+    if (!dashboardCardLookKey || !token) return
+    let active = true
+    setDashboardCardLookSaveState("idle")
+    void getMyDashboardCardStyle(token)
+      .then((style) => {
+        if (active) setDashboardCardLook(normalizeDashboardCardLook(style) ?? defaultDashboardCardLook)
+      })
+      .catch(() => {
+        if (active) setDashboardCardLook(defaultDashboardCardLook)
+      })
+    return () => {
+      active = false
+    }
+  }, [dashboardCardLookKey, token])
+
+  const saveDashboardCardLook = React.useCallback(async (next: DashboardCardLook) => {
+    setDashboardCardLook(next)
+    setDashboardCardLookSaveState("saving")
+    try {
+      const saved = await updateMyDashboardCardStyle(token, next)
+      setDashboardCardLook(normalizeDashboardCardLook(saved) ?? next)
+      setDashboardCardLookSaveState("idle")
+    } catch {
+      setDashboardCardLookSaveState("error")
+    }
+  }, [token])
 
   if (!isEmployeeDashboardData(dashboardData)) {
     return (
@@ -2491,6 +2616,13 @@ export function EmployeeDashboardView({
     )
   }
 
+  const activeDashboardCardPalette =
+    dashboardCardPalettes.find((palette) => palette.id === dashboardCardLook.palette) ??
+    dashboardCardPalettes[0]
+  const isDynamicDashboardCard = dashboardCardLook.palette === "white"
+  const dashboardCardBackground = isDynamicDashboardCard
+    ? "var(--background)"
+    : activeDashboardCardPalette.color
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
   const preferredName =
     dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
@@ -2768,8 +2900,6 @@ export function EmployeeDashboardView({
       initial="hidden"
       animate="show"
     >
-      <DoodleSprites />
-
       {/* Greeting + day snapshot on the right */}
       <motion.div
         variants={dashboardItem}
@@ -2845,36 +2975,118 @@ export function EmployeeDashboardView({
       {/* Hero — primary card with labeled identity */}
       <motion.div
         variants={dashboardItem}
-        className={cn(heroPanelClass, pageBleedClass)}
-        style={{ backgroundColor: "var(--primary)" }}
+        className={cn(heroPanelClass, pageBleedClass, "overflow-visible")}
+        style={{ backgroundColor: dashboardCardBackground }}
       >
+        <CardDoodleArtwork
+          pattern={dashboardCardLook.artwork}
+          className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/15" : "text-white/20")}
+        />
         <div className="relative z-10 space-y-4">
+          <div className="flex justify-end">
+            <details className="group relative z-50">
+              <summary className={cn("inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted focus-visible:ring-ring" : "border-white/30 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/70")}>
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                Card artwork
+              </summary>
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(21rem,calc(100vw-2rem))] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+                <div>
+                  <p className="text-xs font-semibold">Doodle structure</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Choose a pattern for your card.</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {dashboardCardArtworks.map((artwork) => {
+                      const selected = dashboardCardLook.artwork === artwork.id
+                      return (
+                        <button
+                          key={artwork.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, artwork: artwork.id })}
+                          className={cn(
+                            "overflow-hidden rounded-lg border text-left text-[10px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            selected ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/50",
+                          )}
+                        >
+                          <span
+                            className="relative block h-10 overflow-hidden"
+                            style={{ backgroundColor: dashboardCardBackground }}
+                          >
+                            <CardDoodleArtwork pattern={artwork.id} className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/50" : "text-white/70")} />
+                          </span>
+                          <span className="block px-1.5 py-1">{artwork.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="text-xs font-semibold">Color</p>
+                  <div className="mt-2 grid grid-cols-6 gap-2">
+                    {dashboardCardPalettes.map((palette) => {
+                      const selected = dashboardCardLook.palette === palette.id
+                      return (
+                        <button
+                          key={palette.id}
+                          type="button"
+                          aria-label={`${palette.label} card color`}
+                          aria-pressed={selected}
+                          title={palette.label}
+                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, palette: palette.id })}
+                          className={cn(
+                            "relative size-8 rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            selected ? "border-foreground ring-2 ring-primary/30" : "border-border hover:scale-110",
+                          )}
+                          style={palette.id === "white"
+                            ? { backgroundImage: "linear-gradient(135deg, #fff 0 50%, #111 50% 100%)" }
+                            : { backgroundColor: palette.color }}
+                        >
+                          {palette.id === "white" ? (
+                            <span aria-hidden="true" className="pointer-events-none absolute inset-[5px] flex overflow-hidden rounded-full">
+                              <span className="flex flex-1 items-center justify-center bg-white"><span className="size-1.5 rounded-full bg-black" /></span>
+                              <span className="flex flex-1 items-center justify-center bg-black"><span className="size-1.5 rounded-full bg-white" /></span>
+                            </span>
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground" aria-live="polite">
+                    {dashboardCardLookSaveState === "saving"
+                      ? "Syncing to mobile…"
+                      : dashboardCardLookSaveState === "error"
+                        ? "Could not sync. Check your connection and try again."
+                        : `${activeDashboardCardPalette.label} · shared across web and mobile`}
+                  </p>
+                </div>
+              </div>
+            </details>
+          </div>
           <div className="flex min-w-0 items-start gap-3">
             <motion.div
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 320, damping: 20, delay: 0.12 }}
             >
-              <Avatar className="size-14 shrink-0 ring-2 ring-white/30 md:size-16">
+              <Avatar className={cn("size-14 shrink-0 ring-2 md:size-16", isDynamicDashboardCard ? "ring-border" : "ring-white/30")}>
                 {employeeProfilePhotoUrl ? (
                   <AvatarImage src={employeeProfilePhotoUrl} alt={fullName} />
                 ) : null}
-                <AvatarFallback className="bg-white/20 text-lg font-semibold text-white">
+                <AvatarFallback className={cn("text-lg font-semibold", isDynamicDashboardCard ? "bg-muted text-foreground" : "bg-white/20 text-white")}>
                   {initialsFor(fullName)}
                 </AvatarFallback>
               </Avatar>
             </motion.div>
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                <h2 className={cn("text-xl font-semibold tracking-tight md:text-2xl", isDynamicDashboardCard ? "text-foreground" : "text-white")}>
                   {fullName}
                 </h2>
-                <span className="text-[11px] font-semibold capitalize text-white/85">
+                <span className={cn("text-[11px] font-semibold capitalize", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/85")}>
                   {employmentStatus}
                 </span>
               </div>
               {dashboardIdentity.rolesLabel ? (
-                <p className="text-[10px] font-semibold uppercase leading-4 tracking-[0.15em] text-white/75">
+                <p className={cn("text-[10px] font-semibold uppercase leading-4 tracking-[0.15em]", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/75")}>
                   {dashboardIdentity.rolesLabel}
                 </p>
               ) : null}
@@ -2882,7 +3094,7 @@ export function EmployeeDashboardView({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 px-2.5 text-xs border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className={cn("h-7 px-2.5 text-xs", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted hover:text-foreground" : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white")}
                 >
                   View full profile
                 </Button>
@@ -2905,10 +3117,10 @@ export function EmployeeDashboardView({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + index * 0.05, duration: 0.3 }}
               >
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-white/50">
+                <p className={cn("text-[9px] font-semibold uppercase tracking-wide", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/70")}>
                   {field.label}
                 </p>
-                <p className="truncate text-xs font-semibold text-white">{field.value}</p>
+                <p className={cn("truncate text-xs font-semibold", isDynamicDashboardCard ? "text-foreground" : "text-white")}>{field.value}</p>
               </motion.div>
             ))}
           </div>
@@ -3428,6 +3640,9 @@ export function EmployeeHomeDashboard() {
   const [isAdmin, setIsAdmin] = React.useState(true)
   const [showOnboardingDialog, setShowOnboardingDialog] = React.useState(false)
   const [completedOnboardingItems, setCompletedOnboardingItems] = React.useState<string[]>([])
+  const [onboardingDetailsSubmitted, setOnboardingDetailsSubmitted] = React.useState(false)
+  const [unavailableOptionalItems, setUnavailableOptionalItems] = React.useState<string[]>([])
+  const [onboardingSubmissionError, setOnboardingSubmissionError] = React.useState<string | null>(null)
   const [accessToken, setAccessToken] = React.useState<string>("")
   const [fillingItemKey, setFillingItemKey] = React.useState<string | null>(null)
   const [formValues, setFormValues] = React.useState<Record<string, string>>({})
@@ -3549,6 +3764,7 @@ export function EmployeeHomeDashboard() {
           const hasPendingProfileItems = REQUIRED_ONBOARDING_ITEMS.some(
             (item) =>
               EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key) &&
+              !item.optional &&
               !employeeSectionHasItems(mergedEmployee, item.key),
           )
           if (hasPendingProfileItems && !sessionStorage.getItem(dismissedKey)) {
@@ -3588,6 +3804,39 @@ export function EmployeeHomeDashboard() {
       cancelled = true
     }
   }, [])
+
+  React.useEffect(() => {
+    const userId = dashboardData?.user?.id
+    if (!userId || typeof window === "undefined") return
+    let cancelled = false
+    try {
+      const skipped = JSON.parse(window.localStorage.getItem(`onboarding_unavailable_optional_${userId}`) || "[]")
+      setUnavailableOptionalItems(Array.isArray(skipped) ? skipped.filter((item): item is string => typeof item === "string") : [])
+      setOnboardingDetailsSubmitted(window.localStorage.getItem(`onboarding_details_submitted_${userId}`) === "true")
+    } catch {
+      setUnavailableOptionalItems([])
+      setOnboardingDetailsSubmitted(false)
+    }
+    if (accessToken) {
+      void listMyOnboardingRequests(accessToken).then((requests) => {
+        if (cancelled) return
+        const openRequest = requests.find((request) => {
+          const status = String(request.status ?? request.request_status ?? "").toLowerCase()
+          return status !== "completed" && status !== "cancelled" && status !== "activating"
+        })
+        const metadata = asRecord(openRequest?.metadata)
+        const review = asRecord(openRequest?.employee_details_review) ?? asRecord(metadata?.employee_details_review)
+        const reviewStatus = String(review?.status ?? "").toLowerCase()
+        const submitted = ["submitted", "in_review", "approved"].includes(reviewStatus)
+        setOnboardingDetailsSubmitted(submitted)
+        if (submitted) window.localStorage.setItem(`onboarding_details_submitted_${userId}`, "true")
+        else window.localStorage.removeItem(`onboarding_details_submitted_${userId}`)
+      }).catch(() => {})
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, dashboardData?.user?.id])
 
   React.useEffect(() => {
     const shouldPreload = (fillingItemKey === "addresses" || showOnboardingDialog) && publicCountryStates.length === 0 && !publicLocationLoading
@@ -3757,7 +4006,7 @@ export function EmployeeHomeDashboard() {
     return (
       <Card className="rounded-2xl border border-border bg-card">
         <CardContent className="flex flex-col items-center justify-center gap-4 py-10">
-          <LumaSpin />
+          <FluentLoadingIndicator size="large" />
           <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
         </CardContent>
       </Card>
@@ -3789,13 +4038,18 @@ export function EmployeeHomeDashboard() {
     return null
   }
 
-  const pendingItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
+  const unfilledItems = REQUIRED_ONBOARDING_ITEMS.filter((item) => {
     if (!EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key)) return false
     const emp = dashboardData.employee as Record<string, unknown>
-    return !employeeSectionHasItems(emp, item.key) && !completedOnboardingItems.includes(item.key)
+    return !employeeSectionHasItems(emp, item.key) &&
+      !completedOnboardingItems.includes(item.key) &&
+      !unavailableOptionalItems.includes(item.key)
   })
+  // Only required sections block completion; optional ones can be skipped.
+  const pendingItems = unfilledItems.filter((item) => !item.optional)
+  const optionalUnfilledItems = unfilledItems.filter((item) => item.optional)
   const ownedProfileItemCount = REQUIRED_ONBOARDING_ITEMS.filter((item) =>
-    EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key),
+    EMPLOYEE_OWNED_PROFILE_KEYS.has(item.key) && !item.optional,
   ).length
   const completedProfileItemCount = Math.max(
     0,
@@ -3821,6 +4075,19 @@ export function EmployeeHomeDashboard() {
         .map((f) => f.label)
     : []
 
+  const certificateSection = fillingItemKey ? CERTIFICATE_SECTIONS[fillingItemKey] ?? null : null
+  const certificateUrl = certificateSection ? formValues[certificateSection.urlField]?.trim() ?? "" : ""
+  const hasValidCertificateProof = (() => {
+    if (!certificateSection) return true
+    if (!documentUploadFile) return false
+    if (!certificateUrl) return true
+    try {
+      return new URL(certificateUrl).protocol === "https:"
+    } catch {
+      return false
+    }
+  })()
+
   const handleCloseOnboardingDialog = () => {
     const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
     sessionStorage.setItem(dismissedKey, "true")
@@ -3833,6 +4100,18 @@ export function EmployeeHomeDashboard() {
   }
 
   const startFilling = (key: string) => {
+    if (unavailableOptionalItems.includes(key)) {
+      const nextUnavailable = unavailableOptionalItems.filter((item) => item !== key)
+      setUnavailableOptionalItems(nextUnavailable)
+      if (dashboardData?.user?.id) {
+        window.localStorage.setItem(`onboarding_unavailable_optional_${dashboardData.user.id}`, JSON.stringify(nextUnavailable))
+      }
+    }
+    setOnboardingSubmissionError(null)
+    setOnboardingDetailsSubmitted(false)
+    if (dashboardData?.user?.id) {
+      window.localStorage.removeItem(`onboarding_details_submitted_${dashboardData.user.id}`)
+    }
     const init = getInitialFormValues(key)
 
     // Prefill known good values from loaded profile for nicer UX
@@ -3854,6 +4133,43 @@ export function EmployeeHomeDashboard() {
     setFormValues(init)
     setDocumentUploadFile(null)
     setFormError(null)
+  }
+
+  const markOptionalUnavailable = (key: string) => {
+    const nextUnavailable = Array.from(new Set([...unavailableOptionalItems, key]))
+    setUnavailableOptionalItems(nextUnavailable)
+    setOnboardingSubmissionError(null)
+    if (dashboardData?.user?.id) {
+      window.localStorage.setItem(`onboarding_unavailable_optional_${dashboardData.user.id}`, JSON.stringify(nextUnavailable))
+    }
+  }
+
+  const submitCompletedOnboardingDetails = async () => {
+    if (!dashboardData || !accessToken) return
+    setOnboardingSubmissionError(null)
+    try {
+      const requests = await listMyOnboardingRequests(accessToken)
+      const openRequest = requests.find((request) => {
+        const status = String(request.status ?? request.request_status ?? "").toLowerCase()
+        return status !== "completed" && status !== "cancelled" && status !== "activating"
+      })
+      const requestId = openRequest ? Number(openRequest.id ?? openRequest.request_id) : NaN
+      if (!Number.isFinite(requestId) || requestId <= 0) {
+        throw new Error("No open onboarding request was found for this employee. Contact HR for help.")
+      }
+      const notProvidedItems = unavailableOptionalItems.filter((key) =>
+        key === "professional_qualifications" || key === "experience_details",
+      )
+      await submitMyOnboardingDetails(accessToken, requestId, {
+        not_provided_items: notProvidedItems,
+      })
+      setOnboardingDetailsSubmitted(true)
+      window.localStorage.setItem(`onboarding_details_submitted_${dashboardData.user.id}`, "true")
+    } catch (errorObject) {
+      setOnboardingSubmissionError(
+        errorObject instanceof Error ? errorObject.message : "Could not submit your details to HR. Please try again.",
+      )
+    }
   }
 
   const cancelFilling = () => {
@@ -3893,8 +4209,34 @@ export function EmployeeHomeDashboard() {
     const apiSection = getApiSectionForKey(fillingItemKey)
     const payload = buildPayload(fillingItemKey, formValues)
 
+    if (certificateSection && certificateUrl) {
+      try {
+        if (new URL(certificateUrl).protocol !== "https:") {
+          setFormError("The verification link must use https://, or leave it empty.")
+          return
+        }
+      } catch {
+        setFormError("Enter a valid HTTPS verification link, or leave it empty.")
+        return
+      }
+    }
+    if (certificateSection && !documentUploadFile) {
+      setFormError("Attach your certificate file.")
+      return
+    }
+
     // For departments or empty schema we just optimistically complete
     const isNoApi = !apiSection || getFormSchema(fillingItemKey).length === 0
+
+    // Onboarding employees save through the self-scoped /employees/me/* routes,
+    // which resolve the employee from the token and need no HR permissions.
+    const isSelfOnboarding = !isAdmin && dashboardData.employee.employment_status === "onboarding"
+    const saveDocument = (data: AdminRecord) =>
+      isSelfOnboarding ? createMyEmployeeDocument(accessToken, data) : createEmployeeDocument(accessToken, empId, data)
+    const saveSectionItem = (section: EmployeeProfileSection, data: AdminRecord) =>
+      isSelfOnboarding
+        ? createMyEmployeeSectionItem(accessToken, section, data)
+        : createEmployeeSectionItem(accessToken, empId, section, data)
 
     setIsSaving(true)
     setFormError(null)
@@ -3907,9 +4249,26 @@ export function EmployeeHomeDashboard() {
             return
           }
           payload.file = await fileToBase64UploadDto(documentUploadFile)
-          await createEmployeeDocument(accessToken, empId, payload)
+          await saveDocument(payload)
+        } else if (certificateSection) {
+          if (documentUploadFile) {
+            await saveDocument({
+              title: `${certificateSection.titlePrefix} - ${String(formValues[certificateSection.titleField] || "Qualification")}`,
+              type: "certificate",
+              metadata: { onboarding_section: certificateSection.documentSection },
+              classification: "CONFIDENTIAL",
+              notes: `Uploaded with ${currentFillingItem?.label.toLowerCase() ?? "qualification"} profile completion.`,
+              file: await fileToBase64UploadDto(documentUploadFile),
+            })
+          }
+          if (certificateUrl) {
+            payload[certificateSection.urlField] = certificateUrl
+          } else {
+            delete payload[certificateSection.urlField]
+          }
+          await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         } else {
-          await createEmployeeSectionItem(accessToken, empId, apiSection as EmployeeProfileSection, payload)
+          await saveSectionItem(apiSection as EmployeeProfileSection, payload)
         }
       }
 
@@ -3960,9 +4319,10 @@ export function EmployeeHomeDashboard() {
         }).catch(() => {})
       }
 
-      // If this was the last pending, optionally activate + close
-      if (remainingAfter <= 0) {
-        if (dashboardData.employee.employment_status === "onboarding") {
+      // If this was the last pending, close. Only HR may activate the employee;
+      // a self-onboarding employee stays "onboarding" until HR reviews.
+      if (remainingAfter <= 0 && !isSelfOnboarding) {
+        if (!isSelfOnboarding && dashboardData.employee.employment_status === "onboarding") {
           try {
             await patchEmployeeStatus(accessToken, empId, {
               employment_status: "active",
@@ -4010,6 +4370,7 @@ export function EmployeeHomeDashboard() {
 
       <EmployeeDashboardView
         dashboardData={dashboardData}
+        token={accessToken}
         attendanceToday={attendanceToday}
         attendancePunchesToday={attendancePunchesToday}
         leaveBalances={leaveBalances}
@@ -4023,75 +4384,133 @@ export function EmployeeHomeDashboard() {
         <DialogPopup
           from="bottom"
           showCloseButton={false}
-          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-2xl border border-border bg-background p-0 shadow-2xl sm:max-h-[min(92dvh,52rem)] sm:w-[calc(100%-2rem)]"
+          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-xl sm:max-h-[min(88dvh,46rem)] sm:w-[calc(100%-2rem)]"
         >
-            <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 sm:px-6 sm:py-5">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
-                  <UserCheck className="size-5" />
+            <DialogHeader className="m-0 shrink-0 border-b border-border px-3 py-3 sm:px-5 sm:py-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                  <UserCheck className="size-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <DialogTitle className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                  <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
                     {isStillOnboarding ? "Complete your onboarding" : "Complete your profile"}
                   </DialogTitle>
-                  <DialogDescription className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                  <DialogDescription className="mt-0.5 max-w-2xl text-[11px] leading-snug text-muted-foreground sm:text-xs">
                     {isStillOnboarding
                       ? "Add the remaining details so HR can finish setting up your employee account."
                       : "Some details were not filled during registration or onboarding. You can complete them now, or continue and we will remind you the next time you sign in."}
                   </DialogDescription>
                 </div>
-                <span className="hidden shrink-0 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline-flex">
+                <span className="shrink-0 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                   {pendingItems.length} remaining
                 </span>
               </div>
 
-              <div className="mt-4 rounded-xl bg-primary px-4 py-3 text-primary-foreground shadow-sm sm:px-5">
-                <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+              <div className="mt-2.5 rounded-lg border border-border/80 bg-muted/30 px-3 py-2">
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] text-foreground">
                   <span className="font-semibold">Profile progress</span>
-                  <span className="font-semibold tabular-nums">
+                  <span className="font-semibold tabular-nums text-muted-foreground">
                     {completedProfileItemCount} of {ownedProfileItemCount} complete · {profileCompletionPercent}%
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
                   <div
-                    className="h-full rounded-full bg-white transition-[width] duration-500"
+                    className="h-full rounded-full bg-primary transition-[width] duration-500"
                     style={{ width: `${profileCompletionPercent}%` }}
                   />
                 </div>
               </div>
             </DialogHeader>
 
-            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-3.5">
               {pendingItems.length === 0 && !fillingItemKey ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-10 w-10 mx-auto text-emerald-600 mb-3" />
-                  <p className="text-base font-semibold">All done! Your profile is complete.</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                <div className="py-5 text-center">
+                  {isStillOnboarding ? (
+                    <MailCheck className="mx-auto mb-2 size-8 text-primary" />
+                  ) : (
+                    <CheckCircle className="mx-auto mb-2 size-8 text-emerald-600" />
+                  )}
+                  <p className="text-sm font-semibold">
                     {isStillOnboarding
-                      ? "Your account will be activated shortly."
+                      ? onboardingDetailsSubmitted
+                        ? "Your details have been submitted to HR."
+                        : "Complete or mark optional details unavailable before submitting to HR."
+                      : "All done! Your profile is complete."}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    {isStillOnboarding
+                      ? onboardingDetailsSubmitted
+                        ? "Your account remains in onboarding until HR reviews your details and completes activation."
+                        : "If you do not have professional qualifications or previous work experience, mark those sections unavailable."
                       : "Thanks for keeping your records up to date."}
                   </p>
-                </div>
-              ) : fillingItemKey && currentFillingItem ? (
-                <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
-                        {currentFillingItem.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-base font-semibold text-foreground">{currentFillingItem.label}</div>
-                        <div className="text-xs leading-relaxed text-muted-foreground sm:text-sm">{currentFillingItem.description}</div>
+                  {onboardingSubmissionError ? (
+                    <p role="alert" className="mx-auto mt-2 max-w-lg text-xs text-destructive">
+                      {onboardingSubmissionError}
+                    </p>
+                  ) : null}
+                  {optionalUnfilledItems.length > 0 ? (
+                    <div className="mx-auto mt-5 max-w-md text-left">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">
+                        Optional details — add them if applicable, or mark them unavailable:
+                      </p>
+                      <div className="grid gap-2">
+                        {optionalUnfilledItems.map((item) => (
+                          <div
+                            key={item.key}
+                            className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left text-sm"
+                          >
+                            <span className="text-primary">{item.icon}</span>
+                            <span className="flex-1 font-medium text-foreground">{item.label}</span>
+                            <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => startFilling(item.key)}>
+                              Add details
+                            </Button>
+                            {isStillOnboarding ? (
+                              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => markOptionalUnavailable(item.key)}>
+                                I don’t have these details
+                              </Button>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={cancelFilling}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    >
-                      ← <span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
-                    </button>
-                  </div>
+                  ) : null}
+                  {isStillOnboarding && !onboardingDetailsSubmitted ? (
+                    <div className="mt-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={optionalUnfilledItems.length > 0}
+                        onClick={() => void submitCompletedOnboardingDetails()}
+                      >
+                        Submit details to HR
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : fillingItemKey && currentFillingItem ? (
+                <div className="overflow-hidden rounded-xl border border-border bg-card">
+                  <div>
+                    <div className="min-w-0 p-3 sm:p-4">
+                      <div className="mb-3 flex items-start justify-between gap-2 border-b border-border pb-2.5">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                            {currentFillingItem.icon}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">Profile details</p>
+                            <div className="text-sm font-semibold tracking-tight text-foreground">{currentFillingItem.label}</div>
+                            <div className="text-[11px] leading-snug text-muted-foreground">{currentFillingItem.description}</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={cancelFilling}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        >
+                          <span aria-hidden="true">←</span><span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
+                        </button>
+                      </div>
 
                   {formError && (
                     <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
@@ -4104,7 +4523,7 @@ export function EmployeeHomeDashboard() {
                       This section is managed by HR. Click <span className="font-medium">Mark complete</span> to finish.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2">
                       {currentFormSchema.map((field) => {
                         const val = formValues[field.name] ?? ""
                         const isAddressLookupField =
@@ -4201,7 +4620,7 @@ export function EmployeeHomeDashboard() {
                                         ? "No"
                                         : opt === opt.toUpperCase()
                                           ? opt
-                                          : opt.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+                                          : opt.replace(/_/g, " ").replace(/(^|\s)([a-z])/g, (_match, space: string, character: string) => `${space}${character.toUpperCase()}`),
                                 }))}
                               />
                             ) : field.type === "file" ? (
@@ -4220,12 +4639,24 @@ export function EmployeeHomeDashboard() {
                                   required={!!field.required}
                                 />
                                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                  {documentUploadFile ? `Selected: ${documentUploadFile.name}` : "Choose the attachment to upload with this document."}
+                                  {documentUploadFile
+                                    ? `Selected: ${documentUploadFile.name}`
+                                    : certificateSection
+                                      ? "Required: attach the certificate PDF or image."
+                                      : "Choose the attachment to upload with this document."}
                                 </p>
                               </div>
+                            ) : field.type === "date" ? (
+                              <DateInput
+                                value={String(val ?? "")}
+                                placeholder={field.placeholder}
+                                onChange={(event) => updateFormValue(field.name, event.target.value)}
+                                className="mt-1 h-9 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                required={!!field.required}
+                              />
                             ) : (
                               <Input
-                                type={field.type === "date" ? "date" : field.type || "text"}
+                                type={field.type || "text"}
                                 value={val}
                                 placeholder={field.placeholder}
                                 onChange={(e) => updateFormValue(field.name, e.target.value)}
@@ -4233,6 +4664,9 @@ export function EmployeeHomeDashboard() {
                                 required={!!field.required}
                               />
                             )}
+                            {field.name === "academic_certificate_document_url" || field.name === "professional_certificate_document_url" ? (
+                              <p className="mt-1 text-xs text-muted-foreground">Optional. If provided, the link must use https://.</p>
+                            ) : null}
                           </div>
                         )
                       })}
@@ -4272,31 +4706,54 @@ export function EmployeeHomeDashboard() {
                   ) : null}
 
                   {missingRequiredFields.length > 0 && (
-                    <div className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                    <div className="mb-3 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                       Please fill required fields: {missingRequiredFields.join(", ")}
                     </div>
                   )}
+                  {!hasValidCertificateProof ? (
+                    <p className="mb-3 text-xs font-medium text-destructive">{documentUploadFile ? "The verification link must be a valid HTTPS URL, or leave it empty." : "Attach the certificate file to continue."}</p>
+                  ) : null}
 
-                  <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
                     <Button
                       onClick={handleSaveFilling}
-                      disabled={isSaving || missingRequiredFields.length > 0}
-                      className="flex-1 h-9 rounded-lg text-sm"
+                      disabled={isSaving || missingRequiredFields.length > 0 || !hasValidCertificateProof}
+                      className="h-10 flex-1 rounded-lg text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
                     </Button>
-                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-9 rounded-lg text-sm sm:w-auto">
+                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-10 rounded-lg text-sm sm:w-auto">
                       Cancel
                     </Button>
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-slate-500 dark:text-slate-500">
+                  <p className="mt-3 text-center text-[11px] text-muted-foreground">
                     Data is stored securely for HR, payroll and compliance.
                   </p>
+                    </div>
+                    <aside className="border-t border-border bg-muted/30 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Before you save</p>
+                      {certificateSection ? (
+                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
+                          <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <p className="font-semibold text-foreground">Attach your certificate</p>
+                            <p className="mt-1">The certificate file is required. A secure HTTPS verification link is optional.</p>
+                          </div>
+                          <p>Only add accurate information. HR may use these details for employment records and verification.</p>
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
+                          <p>Complete the required fields marked with an asterisk.</p>
+                          <p>Your changes are saved to your employee profile and can be reviewed by HR.</p>
+                        </div>
+                      )}
+                    </aside>
+                  </div>
                 </div>
               ) : (
                 <div>
-                  <div className="mb-3 flex items-end justify-between gap-3">
+                  <div className="mb-2 flex items-end justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Details still needed</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Choose a section and add the information you have.</p>
@@ -4305,26 +4762,33 @@ export function EmployeeHomeDashboard() {
                       {pendingItems.length} remaining
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {REQUIRED_ONBOARDING_ITEMS.map((item, itemIndex) => {
-                    const isPending = pendingItems.some(p => p.key === item.key)
+                    const isPending = unfilledItems.some(p => p.key === item.key)
                     if (!isPending) return null
                     return (
                       <button
                         key={item.key}
                         type="button"
                         onClick={() => startFilling(item.key)}
-                        className="group flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition hover:-translate-y-px hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:p-3.5"
+                        className="group flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold tabular-nums text-muted-foreground">
                           {String(itemIndex + 1).padStart(2, "0")}
                         </span>
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                             {item.icon}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold tracking-tight text-foreground">{item.label}</div>
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                            {item.label}
+                            {item.optional ? (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Optional
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">{item.description}</p>
                         </div>
                         <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
                       </button>
@@ -4335,7 +4799,7 @@ export function EmployeeHomeDashboard() {
               )}
             </div>
 
-            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
+            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-3 py-2 backdrop-blur sm:px-5">
               <Button 
                 variant="outline"
                 onClick={handleCloseOnboardingDialog} 
@@ -4343,12 +4807,14 @@ export function EmployeeHomeDashboard() {
               >
                 Finish later
               </Button>
-              <Button 
-                onClick={handleCloseOnboardingDialog} 
-                className="h-9 px-5 text-sm"
-              >
-                {fillingItemKey ? "Close" : "Continue to dashboard"}
-              </Button>
+              {!isStillOnboarding ? (
+                <Button
+                  onClick={handleCloseOnboardingDialog}
+                  className="h-9 px-5 text-sm"
+                >
+                  {fillingItemKey ? "Close" : "Continue to dashboard"}
+                </Button>
+              ) : null}
             </DialogFooter>
         </DialogPopup>
       </Dialog>

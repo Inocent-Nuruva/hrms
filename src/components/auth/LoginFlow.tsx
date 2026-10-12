@@ -2,7 +2,8 @@
 
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { Button, Checkbox, Field, Input, Link, Spinner } from "@fluentui/react-components";
-import { EyeIcon, EyeOffIcon, ShieldCheck } from "lucide-react";
+import { Eye20Regular, EyeOff20Regular } from "@fluentui/react-icons";
+import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { markDashboardFromLogin } from "@/lib/dashboard-login-flag";
@@ -41,6 +42,16 @@ function normalizeTwoFactorCode(value: string) {
 
 function isValidTwoFactorCode(value: string) {
   return /^(\d{6}|[A-Fa-f0-9]{10}|[A-Fa-f0-9]{5}-[A-Fa-f0-9]{5})$/.test(value.trim());
+}
+
+function readableAuthError(error: unknown, fallback: string) {
+  if (error instanceof TypeError && /fetch|network/i.test(error.message)) {
+    return "We couldn’t connect to the sign-in service. Check your connection and try again.";
+  }
+  if (error instanceof Error && /failed to fetch|network request failed/i.test(error.message)) {
+    return "We couldn’t connect to the sign-in service. Check your connection and try again.";
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowProps) {
@@ -197,6 +208,17 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         return;
       }
 
+      if (response.requiresPasswordChange || response.user?.requiresPasswordChange) {
+        await finishLogin(
+          response.tokens.accessToken,
+          normalizedEmail,
+          `${ROUTES.changePassword}?required=1&next=${encodeURIComponent(homePath)}`,
+          response.dashboardType,
+          response.scope,
+        );
+        return;
+      }
+
       await finishLogin(
         response.tokens.accessToken,
         normalizedEmail,
@@ -205,7 +227,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
         response.scope,
       );
     } catch (err) {
-      showCredentialError(err instanceof Error ? err.message : "Login failed. Please try again.");
+      showCredentialError(readableAuthError(err, "We couldn’t sign you in. Please try again."));
     }
   };
 
@@ -235,13 +257,15 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
       await finishLogin(
         response.tokens.accessToken,
         completedEmail,
-        homePath,
+        response.user.requiresPasswordChange
+          ? `${ROUTES.changePassword}?required=1&next=${encodeURIComponent(homePath)}`
+          : homePath,
         response.user.dashboardType,
         response.user.scope,
       );
     } catch (err) {
       setErrorField("code");
-      setLoginError(err instanceof Error ? err.message : "2FA verification failed. Please try again.");
+      setLoginError(readableAuthError(err, "We couldn’t verify your code. Please try again."));
     }
   };
 
@@ -433,7 +457,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
                   appearance="transparent"
                   size="small"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  icon={showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                  icon={showPassword ? <EyeOff20Regular /> : <Eye20Regular />}
                   onClick={() => setShowPassword((current) => !current)}
                 />
               }

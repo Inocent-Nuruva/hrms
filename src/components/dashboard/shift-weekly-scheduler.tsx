@@ -3,25 +3,27 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-  CalendarDaysIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  DownloadIcon,
-  GripVerticalIcon,
-  LockKeyholeIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Settings2Icon,
-  SlidersHorizontalIcon,
-  Trash2Icon,
-  UsersIcon,
-} from "lucide-react"
-import { toast } from "sonner"
+  Add20Regular,
+  ArrowDownload20Regular,
+  ArrowSync20Regular,
+  CalendarClock24Color,
+  CalendarLtr20Regular,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
+  Copy20Regular,
+  Delete16Regular,
+  Filter20Regular,
+  LockClosed16Regular,
+  PeopleTeam24Regular,
+  ReOrderDotsVertical20Regular,
+  Settings20Regular,
+} from "@fluentui/react-icons"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -502,7 +504,7 @@ function ScheduleCell({
                 }}
                 onKeyDown={(event) => event.stopPropagation()}
               >
-                <Trash2Icon className="size-3.5" />
+                <Delete16Regular className="size-3.5" />
               </button>
             ) : null}
           </span>
@@ -524,7 +526,7 @@ function ScheduleCell({
           title="Shifts cannot be assigned to previous days."
           aria-label={`${date} is locked because it is in the past`}
         >
-          <LockKeyholeIcon className="size-3" aria-hidden />
+          <LockClosed16Regular className="size-3" aria-hidden />
         </div>
       )
     }
@@ -551,7 +553,7 @@ function ScheduleCell({
             onCreate({ employeeId, scheduleDate: date })
           }}
         >
-          <PlusIcon className="size-3.5" />
+          <Add20Regular className="size-3.5" />
         </button>
       </div>
     )
@@ -595,10 +597,10 @@ function ScheduleCell({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <Trash2Icon className="size-3.5" />
+            <Delete16Regular className="size-3.5" />
           </button>
         ) : isPastDate ? (
-          <LockKeyholeIcon className="absolute right-2 top-2 size-3 text-muted-foreground/55" aria-hidden />
+          <LockClosed16Regular className="absolute right-2 top-2 size-3 text-muted-foreground/55" aria-hidden />
         ) : null}
       </div>
     )
@@ -639,12 +641,12 @@ function ScheduleCell({
             }}
             onKeyDown={(event) => event.stopPropagation()}
           >
-            <Trash2Icon className="size-3.5" />
+            <Delete16Regular className="size-3.5" />
           </button>
         ) : isPastDate ? (
-          <LockKeyholeIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground/55" aria-hidden />
+          <LockClosed16Regular className="mt-0.5 size-3 shrink-0 text-muted-foreground/55" aria-hidden />
         ) : (
-          <GripVerticalIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+          <ReOrderDotsVertical20Regular className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
         )}
       </div>
       {shift?.startTime || shift?.endTime ? (
@@ -675,8 +677,10 @@ export function ShiftWeeklyScheduler({
   const [viewMode, setViewMode] = React.useState<RosterViewMode>("employee")
   const [departmentFilter, setDepartmentFilter] = React.useState(ALL_DEPARTMENTS_VALUE)
   const [designationFilter, setDesignationFilter] = React.useState(ALL_DESIGNATIONS_VALUE)
+  const [employeeSearch, setEmployeeSearch] = React.useState("")
   const weekDays = React.useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
   const weekEnd = weekDays[6]
+  const isCurrentWeek = dateKey(weekStart) === dateKey(mondayFor(new Date()))
   const employeeViews = React.useMemo(
     () => buildEmployees(employees, rows, departments),
     [departments, employees, rows]
@@ -691,11 +695,23 @@ export function ShiftWeeklyScheduler({
     [employeeViews]
   )
   const filteredEmployeeViews = React.useMemo(
-    () => employeeViews.filter((employee) =>
-      (departmentFilter === ALL_DEPARTMENTS_VALUE || employee.department === departmentFilter)
-      && (designationFilter === ALL_DESIGNATIONS_VALUE || employee.designation === designationFilter)
-    ),
-    [departmentFilter, designationFilter, employeeViews]
+    () => {
+      const query = employeeSearch.trim().toLocaleLowerCase()
+      return employeeViews.filter((employee) => {
+        const matchesSearch = !query || [
+          employee.name,
+          employee.code,
+          employee.department,
+          employee.designation,
+          employee.team,
+        ].some((value) => value.toLocaleLowerCase().includes(query))
+
+        return matchesSearch
+          && (departmentFilter === ALL_DEPARTMENTS_VALUE || employee.department === departmentFilter)
+          && (designationFilter === ALL_DESIGNATIONS_VALUE || employee.designation === designationFilter)
+      })
+    },
+    [departmentFilter, designationFilter, employeeSearch, employeeViews]
   )
   const shiftsById = React.useMemo(() => new Map(shiftViews.map((shift) => [shift.id, shift])), [shiftViews])
   const visibleDateKeys = React.useMemo(() => new Set(weekDays.map(dateKey)), [weekDays])
@@ -756,6 +772,7 @@ export function ShiftWeeklyScheduler({
     }),
     [filteredEmployeeViews, inheritedShiftsByCell, leaveByCell, schedulesByCell, weekDays]
   )
+  const weeklyScheduleCount = schedulesPerDay.reduce((total, count) => total + count, 0)
   const allSelected = filteredEmployeeViews.length > 0
     && filteredEmployeeViews.every((employee) => selectedEmployeeIds.has(employee.id))
   const selectedVisibleEmployeeIds = filteredEmployeeViews
@@ -813,7 +830,7 @@ export function ShiftWeeklyScheduler({
   const copyRoster = async () => {
     try {
       await navigator.clipboard.writeText(buildRosterText("\t"))
-      toast.success("The displayed weekly roster was copied.")
+      toast.success("Roster copied as tab-separated data. In Excel, select cell A1 on a blank sheet and paste (Ctrl+V).")
     } catch {
       toast.error("The roster could not be copied from this browser.")
     }
@@ -829,47 +846,71 @@ export function ShiftWeeklyScheduler({
   }
 
   return (
-    <section className="overflow-hidden border border-border bg-background shadow-sm">
-      <div className="grid gap-2.5 border-b border-border px-3 py-2.5 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center xl:grid-cols-[minmax(180px,1fr)_auto_minmax(230px,1fr)]">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">Shift rostering</h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">Plan and manage weekly assignments</p>
+    <section className="min-w-0 bg-background">
+      <div className="border-b border-border bg-muted/20 px-3 py-2 sm:px-4 sm:py-2.5">
+        <div className="flex flex-col gap-2 sm:gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <CalendarClock24Color aria-hidden="true" className="hidden size-8 shrink-0 sm:block" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h1 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Shift rostering</h1>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                  Weekly planner
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+            <div className="flex h-9 items-center justify-between gap-1 rounded-lg border border-border bg-background p-1 sm:justify-start">
+              <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" aria-label="Previous week" title="Previous week" onClick={() => setWeekStart((current) => addDays(current, -7))}>
+                <ChevronLeft20Regular />
+              </Button>
+              <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1 text-xs font-semibold text-foreground sm:min-w-48">
+                <CalendarLtr20Regular className="hidden size-4 shrink-0 text-primary sm:block" />
+                <span className="truncate">{formatLongRange(weekStart, weekEnd)}</span>
+              </div>
+              <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" aria-label="Next week" title="Next week" onClick={() => setWeekStart((current) => addDays(current, 7))}>
+                <ChevronRight20Regular />
+              </Button>
+            </div>
+            {!isCurrentWeek ? (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => setWeekStart(mondayFor(new Date()))}>This week</Button>
+            ) : null}
+            <ToggleGroup
+              multiple={false}
+              value={[viewMode]}
+              onValueChange={(value) => {
+                const next = value[0] as RosterViewMode | undefined
+                if (next) setViewMode(next)
+              }}
+              variant="outline"
+              size="sm"
+              className="w-full bg-muted/50 p-0.5 text-foreground sm:w-auto [&_[data-slot=toggle-group-item]]:h-8 [&_[data-slot=toggle-group-item]]:flex-1 [&_[data-slot=toggle-group-item]]:border-0 [&_[data-slot=toggle-group-item]]:bg-transparent [&_[data-slot=toggle-group-item]]:px-3 [&_[data-slot=toggle-group-item]]:text-[11px] [&_[data-slot=toggle-group-item]]:text-foreground [&_[data-slot=toggle-group-item]]:aria-pressed:bg-background [&_[data-slot=toggle-group-item]]:aria-pressed:!text-foreground [&_[data-slot=toggle-group-item]]:aria-pressed:shadow-sm [&_[data-slot=toggle-group-item]]:data-[state=on]:bg-background [&_[data-slot=toggle-group-item]]:data-[state=on]:!text-foreground [&_[data-slot=toggle-group-item]]:data-[state=on]:shadow-sm"
+              aria-label="Roster grouping"
+            >
+              <ToggleGroupItem value="employee">Employee</ToggleGroupItem>
+              <ToggleGroupItem value="department">Department</ToggleGroupItem>
+              <ToggleGroupItem value="team">Team</ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </div>
-        <div className="flex items-center justify-start gap-1.5 md:justify-end xl:justify-center">
-          <Button variant="outline" size="icon-sm" aria-label="Previous week" title="Previous week" onClick={() => setWeekStart((current) => addDays(current, -7))}>
-            <ChevronLeftIcon data-icon="inline-start" />
-          </Button>
-          <Button variant="outline" size="sm" className="min-w-47" onClick={() => setWeekStart(mondayFor(new Date()))}>
-            <CalendarDaysIcon data-icon="inline-start" />
-            {formatLongRange(weekStart, weekEnd)}
-          </Button>
-          <Button variant="outline" size="icon-sm" aria-label="Next week" title="Next week" onClick={() => setWeekStart((current) => addDays(current, 7))}>
-            <ChevronRightIcon data-icon="inline-start" />
-          </Button>
-        </div>
-        <ToggleGroup
-          multiple={false}
-          value={[viewMode]}
-          onValueChange={(value) => {
-            const next = value[0] as RosterViewMode | undefined
-            if (next) setViewMode(next)
-          }}
-          variant="outline"
-          size="sm"
-          className="w-full bg-muted/40 p-0.5 text-foreground md:col-span-2 xl:col-span-1 xl:ml-auto xl:w-auto [&_[data-slot=toggle-group-item]]:h-7 [&_[data-slot=toggle-group-item]]:flex-1 [&_[data-slot=toggle-group-item]]:border-0 [&_[data-slot=toggle-group-item]]:bg-background [&_[data-slot=toggle-group-item]]:px-2 [&_[data-slot=toggle-group-item]]:text-[10px] [&_[data-slot=toggle-group-item]]:text-foreground [&_[data-slot=toggle-group-item]]:aria-pressed:bg-primary [&_[data-slot=toggle-group-item]]:aria-pressed:!text-white [&_[data-slot=toggle-group-item]]:data-[state=on]:bg-primary [&_[data-slot=toggle-group-item]]:data-[state=on]:!text-white xl:[&_[data-slot=toggle-group-item]]:min-w-16"
-          aria-label="Roster grouping"
-        >
-          <ToggleGroupItem value="employee">Employee</ToggleGroupItem>
-          <ToggleGroupItem value="department">Department</ToggleGroupItem>
-          <ToggleGroupItem value="team">Team</ToggleGroupItem>
-        </ToggleGroup>
       </div>
 
-      <div className="flex flex-col gap-2 border-b border-border bg-muted/[0.12] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 border-b border-border bg-background px-3 py-2.5 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="hidden items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:flex">
-            <SlidersHorizontalIcon className="size-3" /> Filters
+          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <Filter20Regular className="size-3.5" /> Filters
           </span>
+          <Input
+            type="search"
+            value={employeeSearch}
+            onChange={(event) => setEmployeeSearch(event.target.value)}
+            placeholder="Search employees"
+            className="w-full bg-background sm:w-44"
+            aria-label="Search employees by name, employee number, department, designation, or team"
+          />
           <Select value={designationFilter} onValueChange={(value) => setDesignationFilter(value || ALL_DESIGNATIONS_VALUE)}>
             <SelectTrigger size="sm" className="w-full bg-background sm:w-44" aria-label="Filter by designation">
               <SelectValue placeholder={ALL_DESIGNATIONS_VALUE} />
@@ -899,23 +940,29 @@ export function ShiftWeeklyScheduler({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
           <Button variant="ghost" size="sm" onClick={() => void copyRoster()}>
-            <CopyIcon data-icon="inline-start" />
+            <Copy20Regular data-icon="inline-start" />
             Copy
           </Button>
           <Button variant="outline" size="sm" onClick={exportRoster}>
-            <DownloadIcon data-icon="inline-start" />
+            <ArrowDownload20Regular data-icon="inline-start" />
             Export
           </Button>
           <Button variant="outline" size="icon-sm" disabled={loading} aria-label="Refresh schedules" title="Refresh" onClick={onRefresh}>
-            <RefreshCwIcon data-icon="inline-start" className={cn(loading && "animate-spin")} />
+            <ArrowSync20Regular data-icon="inline-start" className={cn(loading && "animate-spin")} />
           </Button>
           <Button size="sm" onClick={() => onCreate()}>
-            <PlusIcon data-icon="inline-start" />
+            <Add20Regular data-icon="inline-start" />
             Add schedule
           </Button>
         </div>
+      </div>
+
+      <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 bg-background px-3 py-1.5 text-[10px] text-muted-foreground sm:px-4">
+        <span><span className="font-semibold text-foreground">{filteredEmployeeViews.length}</span> {filteredEmployeeViews.length === 1 ? "employee" : "employees"}</span>
+        <span aria-hidden="true" className="text-border">·</span>
+        <span><span className="font-semibold text-foreground">{weeklyScheduleCount}</span> {weeklyScheduleCount === 1 ? "assignment" : "assignments"} this week</span>
       </div>
 
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_205px]">
@@ -967,7 +1014,7 @@ export function ShiftWeeklyScheduler({
               </div>
             ) : groupedEmployees.length === 0 ? (
               <div className="flex min-h-60 flex-col items-center justify-center px-6 text-center">
-                <UsersIcon className="size-8 text-muted-foreground/50" />
+                <PeopleTeam24Regular className="size-8 text-muted-foreground/50" />
                 <p className="mt-3 text-sm font-semibold text-foreground">No employees available</p>
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">Employees will appear here once they are available for shift scheduling.</p>
               </div>
@@ -1029,7 +1076,10 @@ export function ShiftWeeklyScheduler({
           </div>
         </div>
 
-        <aside className="border-t border-border bg-muted/[0.12] xl:border-l xl:border-t-0">
+        <aside className={cn(
+          "border-t border-border bg-muted/[0.12] xl:border-l xl:border-t-0",
+          filteredEmployeeViews.length > 1 && "xl:sticky xl:top-14 xl:z-20 xl:self-start"
+        )}>
           <div className="border-b border-border px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -1042,7 +1092,7 @@ export function ShiftWeeklyScheduler({
                 href="/dashboard/attendance/shifts"
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-primary transition hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Settings2Icon className="size-3" />
+                <Settings20Regular className="size-3" />
                 Manage
               </Link>
             </div>
@@ -1078,7 +1128,7 @@ export function ShiftWeeklyScheduler({
                   ) : null}
                   {!shift.active ? <span className="mt-0.5 block text-[9px] font-medium text-muted-foreground">Inactive</span> : null}
                 </span>
-                <GripVerticalIcon className="size-4 shrink-0 text-muted-foreground" />
+                <ReOrderDotsVertical20Regular className="size-4 shrink-0 text-muted-foreground" />
               </button>
             ))}
           </div>

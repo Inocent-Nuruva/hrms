@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Field, SearchBox } from "@fluentui/react-components"
+import { Field } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
 import { cn } from "@/lib/utils"
 
@@ -98,13 +99,13 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
   return (
     <div
       ref={containerRef}
-      className="relative shrink-0"
+      className="relative min-w-0 shrink sm:shrink-0"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
       }}
     >
       <Field label="Search in HRMS" size="small" className="min-w-0 gap-0 [&_label]:sr-only">
-        <SearchBox
+        <FluentSearchBox
           ref={inputRef}
           size="small"
           value={query}
@@ -136,12 +137,13 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls="header-search-results"
-          className="w-[10.5rem] max-w-full !px-3 !py-1 sm:w-52 sm:pr-14"
+          className="w-full min-w-28 max-w-full !px-3 !py-1.5 sm:w-52 sm:pr-14"
         />
       </Field>
       {!query ? (
-        <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted/60 px-1 py-px text-[9px] font-semibold leading-none text-muted-foreground sm:inline-flex">
-          Ctrl /
+        <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-blue-200 bg-blue-50 px-1 py-px text-[9px] font-semibold leading-none text-blue-700 sm:inline-flex dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
+          <span>Ctrl</span>
+          <span className="text-violet-600 dark:text-violet-400">/</span>
         </kbd>
       ) : null}
 

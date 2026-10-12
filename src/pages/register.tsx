@@ -1,13 +1,21 @@
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import Head from "next/head"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { CheckCircle2Icon, Loader2Icon, UserRoundCheckIcon } from "lucide-react"
-
+import { CheckCircle2Icon, UserRoundCheckIcon } from "lucide-react";
 import {
   acceptEmployeeInvitation,
   getPublicEmployeeInvitation,
   type PublicEmployeeInvitation,
 } from "@/lib/admin-api"
+import {
+  queryWithoutToken,
+  readInvitationToken,
+  registrationCopy,
+  registrationMode,
+  validateRegistration,
+} from "@/lib/invitation-registration"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,14 +45,27 @@ export default function InvitationRegistrationPage() {
   const [complete, setComplete] = React.useState(false)
   const [error, setError] = React.useState("")
 
-  const invitationTokenQuery = router.query.token ?? router.query.invitation_token
-  const token =
-    typeof invitationTokenQuery === "string"
-      ? invitationTokenQuery.trim()
-      : ""
+  // Captured once, then removed from the address bar (see below).
+  const [token, setToken] = React.useState<string | null>(null)
+
+  const mode = invitation ? registrationMode(invitation) : "create"
+  const copy = registrationCopy[mode]
 
   React.useEffect(() => {
-    if (!router.isReady) return
+    if (!router.isReady || token !== null) return
+    const fromLink = readInvitationToken(router.query)
+    setToken(fromLink)
+    if (fromLink) {
+      void router.replace(
+        { pathname: router.pathname, query: queryWithoutToken(router.query) },
+        undefined,
+        { shallow: true },
+      )
+    }
+  }, [router, token])
+
+  React.useEffect(() => {
+    if (token === null) return
     if (!token) {
       setError(
         "This invitation link is incomplete. Ask HR to send a new invitation.",
@@ -73,13 +94,14 @@ export default function InvitationRegistrationPage() {
     return () => {
       active = false
     }
-  }, [router.isReady, token])
+  }, [token])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError("")
-    if (password !== confirmation) {
-      setError("The passwords do not match.")
+    const validationError = validateRegistration(mode, password, confirmation)
+    if (validationError) {
+      setError(validationError)
       return
     }
     if (!token) return
@@ -97,6 +119,10 @@ export default function InvitationRegistrationPage() {
 
   return (
     <>
+      <Head>
+        {/* Never send the registration link (with its token) as a Referer. */}
+        <meta name="referrer" content="no-referrer" />
+      </Head>
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-slate-100 via-white to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
       <div className="fixed right-4 top-4 z-20">
         <ThemeTogglerButton
@@ -134,14 +160,13 @@ export default function InvitationRegistrationPage() {
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2Icon className="size-4 animate-spin" />
+                <FluentLoadingIndicator className="size-4 animate-spin" />
                 Checking invitation
               </div>
             ) : complete ? (
               <div className="space-y-4 text-center">
                 <p className="text-sm text-muted-foreground">
-                  You can now sign in using {invitation?.email} and the password
-                  you created.
+                  You can now sign in using {invitation?.email} {copy.done}.
                 </p>
                 <Button
                   render={
@@ -167,36 +192,45 @@ export default function InvitationRegistrationPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Create password</Label>
+                  <Label htmlFor="password">{copy.passwordLabel}</Label>
                   <Input
                     id="password"
                     type="password"
-                    autoComplete="new-password"
-                    minLength={8}
+                    autoComplete={copy.autoComplete}
+                    minLength={mode === "create" ? 8 : undefined}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     required
                   />
                   <p className="text-xs text-muted-foreground">
-                    Use at least 8 characters with uppercase, lowercase, a
-                    number, and a symbol.
+                    {copy.passwordHint}
                   </p>
+                  {mode === "existing" ? (
+                    <Link
+                      href={`/forgot-password?email=${encodeURIComponent(invitation.email)}`}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      Forgot your password?
+                    </Link>
+                  ) : null}
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password-confirmation">
-                    Confirm password
-                  </Label>
-                  <Input
-                    id="password-confirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    minLength={8}
-                    value={confirmation}
-                    onChange={(event) => setConfirmation(event.target.value)}
-                    required
-                  />
-                </div>
+                {mode === "create" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="password-confirmation">
+                      Confirm password
+                    </Label>
+                    <Input
+                      id="password-confirmation"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={confirmation}
+                      onChange={(event) => setConfirmation(event.target.value)}
+                      required
+                    />
+                  </div>
+                ) : null}
 
                 {error ? (
                   <p
@@ -209,9 +243,9 @@ export default function InvitationRegistrationPage() {
 
                 <Button type="submit" disabled={submitting} className="w-full">
                   {submitting ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
                   ) : null}
-                  {submitting ? "Creating account…" : "Complete registration"}
+                  {submitting ? copy.submitting : copy.submit}
                 </Button>
               </form>
             ) : (

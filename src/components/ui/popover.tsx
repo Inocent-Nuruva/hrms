@@ -20,6 +20,7 @@ function PopoverTrigger({ className, ...props }: PopoverPrimitive.Trigger.Props)
 function PopoverContent({
   className,
   children,
+  portalContainer,
   side = "bottom",
   sideOffset = 8,
   align = "start",
@@ -29,9 +30,11 @@ function PopoverContent({
   Pick<
     PopoverPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  > & {
+    portalContainer?: PopoverPrimitive.Portal.Props["container"]
+  }) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer}>
       <PopoverPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

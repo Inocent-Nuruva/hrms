@@ -315,6 +315,19 @@ async function request<T>(path: string, options: {
 }
 
 export const api = {
+  /** Generic typed transport for the documented performance module endpoints. Paths are relative to /api/performance. */
+  async performanceRequest<T = unknown>(path: string, options: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    body?: unknown;
+    params?: Record<string, unknown>;
+  } = {}) {
+    const normalizedPath = path.replace(/^\/+/, '');
+    const query = options.params ? buildQuery(options.params) : '';
+    return request<T>(`/api/performance/${normalizedPath}${query}`, {
+      method: options.method,
+      body: options.body,
+    });
+  },
   // --- AUTH (user specific) ---
   async login(email: string, password: string) {
     // Exact match for the LoginDto in the OpenAPI spec
@@ -348,6 +361,33 @@ export const api = {
     return request<unknown>('/api/users/me');
   },
 
+  async getMyDashboardCardStyle() {
+    return request<unknown>('/api/users/me/dashboard-card-style');
+  },
+
+  async listMyNotifications(params: Record<string, unknown> = {}) {
+    return request<unknown>(`/api/notifications${buildQuery(params)}`);
+  },
+
+  async markNotificationAsRead(id: string | number) {
+    return request<unknown>(`/api/notifications/${id}/read`, { method: 'PATCH' });
+  },
+
+  async markAllNotificationsAsRead() {
+    return request<unknown>('/api/notifications/read-all', { method: 'PATCH' });
+  },
+
+  async archiveNotification(id: string | number) {
+    return request<unknown>(`/api/notifications/${id}`, { method: 'DELETE' });
+  },
+
+  async updateMyDashboardCardStyle(style: { palette: string; artwork: string }) {
+    return request<unknown>('/api/users/me/dashboard-card-style', {
+      method: 'PATCH',
+      body: style,
+    });
+  },
+
   async getCurrentEmployee() {
     // Primary source for rich employee profile (user side)
     return request<unknown>('/api/employees/me');
@@ -360,39 +400,15 @@ export const api = {
   async getMyProfilePhotoUrl() {
     try {
       const payload = await request<unknown>('/api/me/profile/photo');
-      if (typeof payload === 'string' && payload.trim()) {
-        return payload.trim();
-      }
-      if (!payload || typeof payload !== 'object') {
-        return null;
-      }
-      const root = payload as Record<string, unknown>;
-      const nested =
-        (root.data as Record<string, unknown> | undefined) ||
-        (root.result as Record<string, unknown> | undefined) ||
-        root;
-      const keys = [
-        'profile_photo_url',
-        'photo_url',
-        'url',
-        'avatar_url',
-        'avatar',
-        'image_url',
-        'imageUrl',
-        'signed_url',
-        'public_url',
-      ];
-      for (const key of keys) {
-        const value = nested[key] ?? root[key];
-        if (typeof value === 'string' && value.trim()) {
-          return value.trim();
-        }
-      }
-      return null;
+      const photoUrl = extractProfilePhotoUrl(payload);
+      if (photoUrl) return photoUrl;
+      return await getProfilePhotoFromCurrentUser();
     } catch (error) {
       const status = (error as ApiError)?.status;
       if (status === 404 || status === 204) {
-        return null;
+        // Some backend versions only expose the photo URL through the user
+        // record, so fall back to /api/users/me just like the web client.
+        return await getProfilePhotoFromCurrentUser();
       }
       throw error;
     }
@@ -507,9 +523,27 @@ export const api = {
     });
   },
 
+  async submitMyLeaveRequest(id: string | number) {
+    return request<unknown>(`/api/me/leave/requests/${id}/submit`, {
+      method: 'POST',
+    });
+  },
+
+  async cancelMyLeaveRequest(id: string | number, reason: string) {
+    return request<unknown>(`/api/me/leave/requests/${id}/cancel`, {
+      method: 'POST',
+      body: { reason },
+    });
+  },
+
   async listLeaveTypes(params: Record<string, unknown> = {}) {
     const q = buildQuery(params);
     return request<unknown>(`/api/leave/types${q}`);
+  },
+
+  async listLeavePolicies(params: Record<string, unknown> = {}) {
+    const q = buildQuery(params);
+    return request<unknown>(`/api/leave/policies${q}`);
   },
 
   // --- ATTENDANCE (mobile punches + summaries for user)
@@ -566,7 +600,76 @@ export const api = {
   },
 
   async listMyPerformanceAssignments() {
-    return normalizeList(await request<unknown>('/api/performance/me/assignments'));
+    const payload = await request<unknown>('/api/performance/me/assignments');
+    return normalizeList(payload);
+  },
+
+  async listPerformancePeriods(params: Record<string, unknown> = {}) {
+    const q = buildQuery({ page: 1, limit: 100, ...params });
+    return normalizeList(await request<unknown>(`/api/performance/periods${q}`));
+  },
+
+  async listMyPerformanceKpis(params: Record<string, unknown> = {}) {
+    const q = buildQuery({ page: 1, limit: 100, ...params });
+    return normalizeList(await request<unknown>(`/api/performance/me/kpis${q}`));
+  },
+
+  async getMyPerformanceSummary() {
+    return request<Record<string, unknown>>('/api/performance/me/summary');
+  },
+  async createMyPerformanceKpi(data: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/api/performance/me/kpis', { method: 'POST', body: data });
+  },
+  async getMyPerformanceKpi(id: number | string) {
+    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}`);
+  },
+  async updateMyPerformanceKpi(id: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}`, { method: 'PATCH', body: data });
+  },
+  async deleteMyPerformanceKpi(id: number | string) {
+    return request<unknown>(`/api/performance/me/kpis/${id}`, { method: 'DELETE' });
+  },
+  async updateMyPerformanceKpiActual(id: number | string, actualValue: number) {
+    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}/actual`, { method: 'PATCH', body: { actual_value: actualValue } });
+  },
+  async submitMyPerformanceKpis(periodId: number | string) {
+    return request<unknown>(`/api/performance/me/kpis/periods/${periodId}/submit`, { method: 'POST' });
+  },
+  async listMyPerformanceAchievements() {
+    return normalizeList(await request<unknown>('/api/performance/me/achievements'));
+  },
+  async updateMyPerformanceAchievement(id: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/achievements/${id}`, { method: 'PATCH', body: data });
+  },
+  async listMyPerformanceReviews() {
+    return normalizeList(await request<unknown>('/api/performance/me/reviews'));
+  },
+  async submitMyPerformanceSelfReview(assignmentId: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/reviews/${assignmentId}/self-review`, { method: 'POST', body: data });
+  },
+  async submitMyPerformanceAppeal(reviewId: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/reviews/${reviewId}/appeal`, { method: 'POST', body: data });
+  },
+  async listMyPerformanceFeedback360() {
+    return normalizeList(await request<unknown>('/api/performance/me/feedback-360'));
+  },
+  async submitMyPerformanceFeedback360(id: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/feedback-360/${id}/submit`, { method: 'POST', body: data });
+  },
+  async declineMyPerformanceFeedback360(id: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/feedback-360/${id}/decline`, { method: 'POST', body: data });
+  },
+  async listMyPerformanceImprovementPlans() {
+    return normalizeList(await request<unknown>('/api/performance/me/improvement-plans'));
+  },
+  async acknowledgeMyPerformanceImprovementPlan(id: number | string) {
+    return request<Record<string, unknown>>(`/api/performance/me/improvement-plans/${id}/acknowledge`, { method: 'POST' });
+  },
+  async listMyPerformanceDevelopmentPlans() {
+    return normalizeList(await request<unknown>('/api/performance/me/development-plans'));
+  },
+  async updateMyPerformanceDevelopmentGoal(id: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/performance/me/development-goals/${id}`, { method: 'PATCH', body: data });
   },
 
   async listMyDocuments() {
@@ -574,9 +677,105 @@ export const api = {
   },
 
   async listMyActivities() {
-    return normalizeList(await request<unknown>('/api/me/activities'));
+    return normalizeList(await request<unknown>('/api/me/activities?page=1&limit=50'));
+  },
+
+  async listMyActivityTasks() {
+    return normalizeList(await request<unknown>('/api/me/activities/tasks?page=1&limit=100'));
+  },
+
+  async getMyActivityToday() {
+    return request<Record<string, unknown>>('/api/me/activities/today');
+  },
+
+  async createMyActivityTask(data: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/api/me/activities/tasks', { method: 'POST', body: data });
+  },
+
+  async createMyActivityReport(data: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/api/me/activities/reports', { method: 'POST', body: data });
+  },
+
+  async getMyActivityReport(id: number | string) {
+    return request<Record<string, unknown>>(`/api/me/activities/reports/${id}`);
+  },
+
+  async addMyActivityEntry(reportId: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/activities/reports/${reportId}/entries`, { method: 'POST', body: data });
+  },
+
+  async updateMyActivityEntry(reportId: number | string, entryId: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/activities/reports/${reportId}/entries/${entryId}`, { method: 'PATCH', body: data });
+  },
+
+  async deleteMyActivityEntry(reportId: number | string, entryId: number | string) {
+    return request<unknown>(`/api/me/activities/reports/${reportId}/entries/${entryId}`, { method: 'DELETE' });
+  },
+
+  async submitMyActivityReport(reportId: number | string, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/activities/reports/${reportId}/submit`, { method: 'POST', body: data });
   },
 };
+
+async function getProfilePhotoFromCurrentUser(): Promise<string | null> {
+  try {
+    return extractProfilePhotoUrl(await request<unknown>('/api/users/me'));
+  } catch {
+    return null;
+  }
+}
+
+function extractProfilePhotoUrl(payload: unknown): string | null {
+  if (typeof payload === 'string') return normalizeProfilePhotoUrl(payload);
+  if (!payload || typeof payload !== 'object') return null;
+
+  const root = payload as Record<string, unknown>;
+  const candidates: Array<Record<string, unknown> | null> = [
+    root,
+    asRecord(root.data),
+    asRecord(root.result),
+    asRecord(root.item),
+    asRecord(root.profile),
+    asRecord(root.user),
+    asRecord(root.employee),
+    asRecord(asRecord(root.data)?.user),
+    asRecord(asRecord(root.data)?.employee),
+    asRecord(asRecord(root.result)?.user),
+    asRecord(asRecord(root.result)?.employee),
+    asRecord(asRecord(root.employee)?.company_user),
+    asRecord(asRecord(asRecord(root.employee)?.company_user)?.user),
+  ];
+  const keys = [
+    'profile_photo_url', 'photo_url', 'url', 'avatar_url', 'avatar',
+    'image_url', 'imageUrl', 'signed_url', 'public_url',
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    for (const key of keys) {
+      const value = candidate[key];
+      if (typeof value === 'string' && value.trim()) {
+        return normalizeProfilePhotoUrl(value);
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeProfilePhotoUrl(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (/^(data|blob):/i.test(raw) || /^https?:\/\//i.test(raw)) return raw;
+  const base = API_BASE_URL.replace(/\/api\/?$/i, '').replace(/\/$/, '');
+  if (raw.startsWith('//')) return `http:${raw}`;
+  return `${base}/${raw.replace(/^\/+/, '')}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
 
 function buildQuery(params: Record<string, unknown>): string {
   const sp = new URLSearchParams();

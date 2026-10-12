@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { InfoIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { InfoIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -875,12 +876,12 @@ export function InsightsOperationsView({
             ) : null}
             {activeTab !== "readiness" && activeTab !== "manager" ? (
               <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void onExport()} disabled={exporting}>
-                {exporting ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                {exporting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
                 Export CSV
               </button>
             ) : null}
             <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           </div>
@@ -1077,7 +1078,7 @@ export function InsightsOperationsView({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
             <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Create clock-in rules"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Create clock-in rules"}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>

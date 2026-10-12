@@ -17,6 +17,7 @@ import {
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import {
@@ -478,6 +479,8 @@ export function CompaniesView() {
   )
   const [switchingCompanyId, setSwitchingCompanyId] = React.useState<number | null>(null)
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
+
+  useFluentToastState(successMessage, setSuccessMessage, "success")
 
   const [myCompany, setMyCompany] = React.useState<AdminRecord | null>(null)
   const [onboardingStatus, setOnboardingStatus] = React.useState<AdminRecord | null>(null)
@@ -1378,11 +1381,6 @@ export function CompaniesView() {
             </div>
           </div>
 
-          {successMessage ? (
-            <p className="mb-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
-              {successMessage}
-            </p>
-          ) : null}
           {error ? <p className="mb-3 text-sm text-rose-600">{error}</p> : null}
 
           <ResizableTable

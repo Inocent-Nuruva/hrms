@@ -1,24 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  CheckCircle2,
-  Copy,
-  ImageIcon,
-  InfoIcon,
-  KeyRound,
-  LogOut,
-  Loader2,
-  MailCheck,
-  RefreshCw,
-  ShieldCheck,
-  ShieldOff,
-  Smartphone,
-  Trash2,
-} from "lucide-react"
-import { toast } from "sonner"
+  CheckCircle2, Copy, ImageIcon, InfoIcon, KeyRound, LogOut, MailCheck, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Trash2 } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 import {
   extractDefaultAvatarImageUrl,
   extractBackupCodes,
@@ -37,6 +25,7 @@ import {
 import { setMyProfilePhotoUrl } from "@/lib/my-profile-photo"
 import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import { authService } from "@/services/authService"
 import type { AuthSessionRecord, TwoFactorSetupResponse } from "@/types"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -340,6 +329,8 @@ function AccountSettingsPanelContent({
   const [sessionActionId, setSessionActionId] = React.useState<string | null>(null)
   const [sessionMessage, setSessionMessage] = React.useState<string | null>(null)
   const [sessionError, setSessionError] = React.useState<string | null>(null)
+
+  useFluentToastState(sessionMessage, setSessionMessage, "success")
   const [logoutAllBusy, setLogoutAllBusy] = React.useState(false)
   const [notificationPreferences, setNotificationPreferences] = React.useState<NotificationPreference[]>([])
   const [notificationPreferencesLoading, setNotificationPreferencesLoading] = React.useState(false)
@@ -976,7 +967,7 @@ function AccountSettingsPanelContent({
                 <Label>Default avatars</Label>
                 {defaultAvatarsLoading ? (
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" /> Loading
+                    <FluentLoadingIndicator className="size-3 animate-spin" /> Loading
                   </span>
                 ) : null}
               </div>
@@ -1052,7 +1043,7 @@ function AccountSettingsPanelContent({
               Cancel
             </Button>
             <Button type="button" onClick={() => void saveProfilePicture()} disabled={profilePictureSaving}>
-              {profilePictureSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+              {profilePictureSaving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               Save picture
             </Button>
           </DialogFooter>
@@ -1193,7 +1184,7 @@ function AccountSettingsPanelContent({
                 <div className="space-y-4">
                   <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
                     {securityLoading ? (
-                      <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+                      <FluentLoadingIndicator className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                     ) : twoFactorEnabled ? (
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     ) : (
@@ -1222,7 +1213,7 @@ function AccountSettingsPanelContent({
                       <Button onClick={handleStartTwoFactorSetup} disabled={twoFactorBusy || !token}>
                         {twoFactorBusy ? (
                           <>
-                            <Loader2 className="size-4 animate-spin" />
+                            <FluentLoadingIndicator className="size-4 animate-spin" />
                             Starting setup…
                           </>
                         ) : (
@@ -1301,7 +1292,7 @@ function AccountSettingsPanelContent({
                           >
                             {twoFactorBusy ? (
                               <>
-                                <Loader2 className="size-4 animate-spin" />
+                                <FluentLoadingIndicator className="size-4 animate-spin" />
                                 Verifying…
                               </>
                             ) : (
@@ -1374,7 +1365,7 @@ function AccountSettingsPanelContent({
                         >
                           {regenerateBusy ? (
                             <>
-                              <Loader2 className="size-4 animate-spin" />
+                              <FluentLoadingIndicator className="size-4 animate-spin" />
                               Regenerating…
                             </>
                           ) : (
@@ -1408,7 +1399,7 @@ function AccountSettingsPanelContent({
                       >
                         {twoFactorBusy ? (
                           <>
-                            <Loader2 className="size-4 animate-spin" />
+                            <FluentLoadingIndicator className="size-4 animate-spin" />
                             Disabling…
                           </>
                         ) : (
@@ -1439,7 +1430,7 @@ function AccountSettingsPanelContent({
                         onClick={() => void loadSessions()}
                         disabled={sessionsLoading || !token}
                       >
-                        {sessionsLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                        {sessionsLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                         Refresh
                       </Button>
                       <Button
@@ -1448,17 +1439,12 @@ function AccountSettingsPanelContent({
                         onClick={handleLogoutAllSessions}
                         disabled={logoutAllBusy || !token}
                       >
-                        {logoutAllBusy ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+                        {logoutAllBusy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <LogOut className="size-4" />}
                         Sign out all
                       </Button>
                     </div>
                   </div>
 
-                  {sessionMessage ? (
-                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-                      {sessionMessage}
-                    </div>
-                  ) : null}
                   {sessionError ? (
                     <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
                       {sessionError}
@@ -1467,7 +1453,7 @@ function AccountSettingsPanelContent({
 
                   {sessionsLoading ? (
                     <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
+                      <FluentLoadingIndicator className="size-4 animate-spin" />
                       Loading active sessions...
                     </div>
                   ) : sessionError ? null : sessions.length === 0 ? (
@@ -1516,7 +1502,7 @@ function AccountSettingsPanelContent({
                                 disabled={isActing || logoutAllBusy}
                               >
                                 {isActing ? (
-                                  <Loader2 className="size-4 animate-spin" />
+                                  <FluentLoadingIndicator className="size-4 animate-spin" />
                                 ) : session.isCurrent ? (
                                   <LogOut className="size-4" />
                                 ) : (
@@ -1537,7 +1523,7 @@ function AccountSettingsPanelContent({
                 <div className="space-y-3">
                   <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
                     {securityLoading ? (
-                      <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+                      <FluentLoadingIndicator className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                     ) : emailVerified ? (
                       <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     ) : (
@@ -1574,7 +1560,7 @@ function AccountSettingsPanelContent({
                           onClick={handleResendVerification}
                           disabled={emailBusy || !accountEmail}
                         >
-                          {emailBusy ? <Loader2 className="size-4 animate-spin" /> : <MailCheck className="size-4" />}
+                          {emailBusy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <MailCheck className="size-4" />}
                           Resend verification
                         </Button>
                         <Link
@@ -1627,7 +1613,7 @@ function AccountSettingsPanelContent({
             onClick={() => void loadNotificationPreferences()}
             disabled={notificationPreferencesLoading || !token}
           >
-            {notificationPreferencesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {notificationPreferencesLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             Refresh
           </Button>
         </CardHeader>
@@ -1640,7 +1626,7 @@ function AccountSettingsPanelContent({
 
           {notificationPreferencesLoading ? (
             <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading notification preferences...
             </div>
           ) : (

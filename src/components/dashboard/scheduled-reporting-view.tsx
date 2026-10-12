@@ -1,19 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import {
-  DownloadIcon,
-  Loader2Icon,
-  PencilIcon,
-  PlayIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  SendIcon,
-  Trash2Icon,
-} from "lucide-react"
-import { toast } from "sonner"
+  DownloadIcon, PencilIcon, PlayIcon, PlusIcon, RefreshCwIcon, RotateCcwIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
@@ -1643,7 +1636,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                 disabled={runningTemplateId === getRowId(row)}
               >
                 {runningTemplateId === getRowId(row) ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <PlayIcon className="h-3.5 w-3.5" />
                 )}
@@ -1835,7 +1828,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                 onClick={() => void onDownloadExecution(row)}
               >
                 {downloading ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <DownloadIcon className="h-3.5 w-3.5" />
                 )}
@@ -1849,7 +1842,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                 onClick={() => void onRetryExecution(row)}
               >
                 {retrying ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <RotateCcwIcon className="h-3.5 w-3.5" />
                 )}
@@ -1922,7 +1915,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               disabled={testingSmtpId === getRowId(row)}
             >
               {testingSmtpId === getRowId(row) ? (
-                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <SendIcon className="h-3.5 w-3.5" />
               )}
@@ -2085,14 +2078,14 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
         />
       </Field>
       <Field label="Description" className="md:col-span-2">
-        <textarea
+        <Textarea
           className={textareaClass}
           value={form.description}
           onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
         />
       </Field>
       <Field label="Email body" className="md:col-span-2">
-        <textarea
+        <Textarea
           className={textareaClass}
           value={form.emailBodyTemplate}
           onChange={(e) => setForm((c) => ({ ...c, emailBodyTemplate: e.target.value }))}
@@ -2574,7 +2567,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
             onClick={() => void onTestDraftSmtp()}
           >
             {testingDraftSmtp ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
+              <FluentLoadingIndicator className="size-3.5 animate-spin" />
             ) : (
               <SendIcon className="size-3.5" />
             )}
@@ -3042,7 +3035,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               onClick={() => void onRunTemplate()}
             >
               {runningTemplateId === runTemplateId ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
+                <FluentLoadingIndicator className="size-3.5 animate-spin" />
               ) : (
                 <PlayIcon className="size-3.5" />
               )}
@@ -3092,7 +3085,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
               disabled={testingSmtpId === smtpTestId || !smtpTestRecipient.trim()}
               onClick={() => void onTestSmtp()}
             >
-              {testingSmtpId === smtpTestId ? <Loader2Icon className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
+              {testingSmtpId === smtpTestId ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <SendIcon className="size-3.5" />}
               {testingSmtpId === smtpTestId ? "Testing…" : "Send test"}
             </button>
           </DialogFooter>
@@ -3168,7 +3161,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
           <div className="space-y-3 overflow-y-auto p-4">
             {detailLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2Icon className="size-4 animate-spin text-primary" />
+                <FluentLoadingIndicator className="size-4 animate-spin text-primary" />
                 Loading…
               </div>
             ) : null}
@@ -3428,7 +3421,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
           <div className="space-y-3 overflow-y-auto p-4">
             {executionLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2Icon className="size-4 animate-spin text-primary" />
+                <FluentLoadingIndicator className="size-4 animate-spin text-primary" />
                 Loading…
               </div>
             ) : null}
@@ -3442,7 +3435,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                     onClick={() => void onDownloadExecution(executionDetail)}
                   >
                     {downloadingExecutionId === getRowId(executionDetail) ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       <DownloadIcon className="size-3.5" />
                     )}
@@ -3455,7 +3448,7 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
                     onClick={() => void onRetryExecution(executionDetail)}
                   >
                     {retryingExecutionId === getRowId(executionDetail) ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       <RotateCcwIcon className="size-3.5" />
                     )}

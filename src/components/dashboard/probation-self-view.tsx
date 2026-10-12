@@ -1,8 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { Textarea } from "@/components/ui/textarea"
+import { RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CycleRail,
@@ -168,7 +170,7 @@ export function ProbationSelfView() {
         }
         actions={
           <button type="button" className={heroActionButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
             Refresh
           </button>
         }
@@ -182,7 +184,7 @@ export function ProbationSelfView() {
 
       {loading ? (
         <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" />
+          <FluentLoadingIndicator className="size-4 animate-spin" />
           Loading your probation record...
         </div>
       ) : record ? (
@@ -264,13 +266,13 @@ export function ProbationSelfView() {
                 </p>
               </div>
               <button type="button" className={primaryButtonClass} onClick={() => void onSubmit()} disabled={saving}>
-                {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Submit assessment"}
+                {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Submit assessment"}
               </button>
             </div>
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Overall comment</span>
-                <textarea className={textareaClass} value={comment} onChange={(event) => setComment(event.target.value)} />
+                <Textarea className={textareaClass} value={comment} onChange={(event) => setComment(event.target.value)} />
               </label>
               {ratings.map((item, index) => (
                 <div key={`${item.code}-${index}`} className="grid gap-2 rounded-xl bg-muted/40 p-3 md:grid-cols-[minmax(0,1fr)_120px]">

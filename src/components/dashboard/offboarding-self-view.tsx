@@ -1,10 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { CheckIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -156,25 +156,23 @@ export function OffboardingSelfView() {
     <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
+        variant="dashboard"
         eyebrow="My offboarding"
         title={selected ? readString(selected, ["title", "exit_type", "exitType"], "Your exit checklist") : "No exit in progress"}
         description={
           selected
-            ? "Finish the tasks and clearances assigned to you. Resignation itself lives under My Requests."
-            : "If you need to resign, start from My Requests. Assigned exit tasks will appear here."
+            ? "Complete the tasks and clearances HR assigned after reviewing your resignation request. This checklist tracks the exit process through to completion."
+            : "Offboarding is the clearance checklist HR starts after a resignation is reviewed. Submit a resignation from My Requests; any assigned exit tasks will appear here."
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/me/requests/resignation" className={heroGhostButtonClass}>
-              Resignation
-            </Link>
             <button
               type="button"
               className={heroGhostButtonClass}
               onClick={() => void load()}
               disabled={mounted ? loading : undefined}
             >
-              {mounted && loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
           </div>
@@ -242,7 +240,7 @@ export function OffboardingSelfView() {
             </>
           ) : loading ? (
             <div className={cn("flex items-center justify-center gap-2 border-y border-border bg-card px-4 py-10 text-sm text-muted-foreground sm:border-x", pageBleedClass)}>
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading your offboarding...
             </div>
           ) : (
@@ -322,7 +320,7 @@ function ItemList({
                     disabled={busy === `${prefix}-${id}`}
                     onClick={() => onComplete(row)}
                   >
-                    {busy === `${prefix}-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Complete"}
+                    {busy === `${prefix}-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Complete"}
                   </button>
                 ) : null}
               </li>

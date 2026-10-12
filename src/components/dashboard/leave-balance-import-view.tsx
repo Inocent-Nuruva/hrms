@@ -1,24 +1,11 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  ArrowLeftIcon,
-  CheckCircle2Icon,
-  CircleMinusIcon,
-  CircleXIcon,
-  DownloadIcon,
-  FileSpreadsheetIcon,
-  HistoryIcon,
-  InfoIcon,
-  Loader2Icon,
-  RefreshCcwIcon,
-  TriangleAlertIcon,
-  UploadIcon,
-  XIcon,
-} from "lucide-react"
-
+  ArrowLeftIcon, CheckCircle2Icon, CircleMinusIcon, CircleXIcon, DownloadIcon, FileSpreadsheetIcon, HistoryIcon, InfoIcon, RefreshCcwIcon, TriangleAlertIcon, UploadIcon, XIcon } from "lucide-react";
 import {
   cancelLeaveBalanceImport,
   confirmLeaveBalanceImport,
@@ -742,7 +729,7 @@ export function LeaveBalanceImportView() {
                   </label>
                 </div>
                 <button type="button" className={PRIMARY_BUTTON} disabled={templateBusy} onClick={() => void downloadTemplate()}>
-                  {templateBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <DownloadIcon className="size-3.5" />}
+                  {templateBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <DownloadIcon className="size-3.5" />}
                   {templateBusy ? "Preparing template…" : "Download Leave Balance Template"}
                 </button>
                 <p className="text-[11px] text-muted-foreground">
@@ -837,7 +824,7 @@ export function LeaveBalanceImportView() {
                   </div>
                 ) : null}
                 <button type="button" className={PRIMARY_BUTTON} disabled={!file || uploading} onClick={() => void validateFile()}>
-                  {uploading ? <Loader2Icon className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />}
+                  {uploading ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <UploadIcon className="size-3.5" />}
                   {uploading ? "Validating…" : "Validate file"}
                 </button>
                 {uploading ? (
@@ -865,7 +852,7 @@ export function LeaveBalanceImportView() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" className={BUTTON} disabled={reportBusy} onClick={() => void downloadReport(batch.batch_id)}>
-                  {reportBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <DownloadIcon className="size-3.5" />}
+                  {reportBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <DownloadIcon className="size-3.5" />}
                   {batch.invalid_rows > 0 || batch.failed_rows > 0 ? "Download error report" : "Download report"}
                 </button>
                 {batch.actions.can_cancel ? (
@@ -907,7 +894,7 @@ export function LeaveBalanceImportView() {
             {batch.status === "PROCESSING" ? (
               <div role="status" aria-live="polite" className={cn("space-y-2 rounded-md border px-3 py-2 text-xs", TONE_STYLES.info.panel)}>
                 <p className="flex items-center gap-2 font-medium">
-                  <Loader2Icon className="size-3.5 animate-spin" aria-hidden />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden />
                   Importing in the background · {importProgress(batch).processed} / {importProgress(batch).total} records processed
                 </p>
                 <div
@@ -1140,7 +1127,7 @@ export function LeaveBalanceImportView() {
               {confirmation.reason ? <p className="text-xs text-muted-foreground">{confirmation.reason}</p> : null}
               {confirming ? (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-                  <Loader2Icon className="size-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
                   Submitting {confirmation.importing} balance change(s) for import…
                 </p>
               ) : null}
@@ -1151,7 +1138,7 @@ export function LeaveBalanceImportView() {
               Back to preview
             </button>
             <button type="button" className={PRIMARY_BUTTON} disabled={!confirmation?.allowed || confirming} onClick={() => void confirmImport()}>
-              {confirming ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckCircle2Icon className="size-3.5" />}
+              {confirming ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckCircle2Icon className="size-3.5" />}
               Confirm Import
             </button>
           </AlertDialogFooter>

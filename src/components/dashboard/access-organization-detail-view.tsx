@@ -1,17 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import {
-  ArrowLeftIcon,
-  DownloadIcon,
-  Loader2Icon,
-  PlusIcon,
-  RefreshCwIcon,
-  SearchIcon,
-  Trash2Icon,
-  UploadIcon,
-} from "lucide-react"
+import { ArrowLeftIcon, DownloadIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UploadIcon } from "lucide-react";
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,
@@ -23,6 +16,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   assignAccessOrganizationEmployees,
   getAccessControlResourceById,
@@ -149,6 +143,8 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
   const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [assignEmployeeOpen, setAssignEmployeeOpen] = React.useState(false)
   const [assignEmployeePickerOpen, setAssignEmployeePickerOpen] = React.useState(false)
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState("")
@@ -570,7 +566,6 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
           </button>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">
@@ -651,7 +646,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                     onClick={() => void onSyncFromDevice()}
                     disabled={syncingFromDevice || !syncDeviceId}
                   >
-                    {syncingFromDevice ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <DownloadIcon className="h-4 w-4" />}
+                    {syncingFromDevice ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <DownloadIcon className="h-4 w-4" />}
                     {syncingFromDevice ? "Pulling..." : "Pull from device"}
                   </button>
                   <button
@@ -660,7 +655,7 @@ export function AccessOrganizationDetailView({ organizationId }: { organizationI
                     onClick={() => void onSyncToDevice()}
                     disabled={syncingToDevice || !syncDeviceId}
                   >
-                    {syncingToDevice ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <UploadIcon className="h-4 w-4" />}
+                    {syncingToDevice ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <UploadIcon className="h-4 w-4" />}
                     {syncingToDevice ? "Pushing..." : "Push to device"}
                   </button>
                 </div>

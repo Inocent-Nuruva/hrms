@@ -122,24 +122,34 @@ describe("resolveHomeDashboardKind", () => {
     ).toBe("sales-field")
   })
 
-  it("recognizes a manager from manager permissions when role names are unavailable", () => {
+  it("prefers an explicit company dashboard assignment over manager scope grants", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
         permissionLabels: ["view_company_dashboard", "manager_self_service:read"],
         roleNames: [],
       }),
-    ).toBe("manager")
+    ).toBe("company")
   })
 
-  it("recognizes a department-scoped manager without relying on a role label", () => {
+  it("prefers a company dashboard assignment over department-scoped manager inference", () => {
     expect(
       resolveHomeDashboardKind({
         accessMode: "admin",
         permissionLabels: ["view_company_dashboard", "data_scope:department"],
         roleNames: [],
       }),
-    ).toBe("manager")
+    ).toBe("company")
+  })
+
+  it("lets an explicit company dashboard assignment override a manager role", () => {
+    expect(
+      resolveHomeDashboardKind({
+        accessMode: "admin",
+        permissionLabels: ["view_company_dashboard", "view_manager_dashboard"],
+        roleNames: ["MANAGER"],
+      }),
+    ).toBe("company")
   })
 
   it("reads role names from the user record and JWT-shaped payload", () => {

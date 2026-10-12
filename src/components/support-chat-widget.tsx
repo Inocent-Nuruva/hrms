@@ -1,9 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { HeadphonesIcon, Loader2Icon, SendIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { HeadphonesIcon, SendIcon, XIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { Button } from "@/components/ui/button"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -321,7 +322,7 @@ export function SupportChatWidget() {
             ))}
             {busy ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2Icon className="size-3.5 animate-spin" />
+                <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 Looking that up…
               </div>
             ) : null}
@@ -342,7 +343,7 @@ export function SupportChatWidget() {
                 disabled={busy}
               />
               <Button type="button" size="icon" onClick={() => void sendMessage()} disabled={busy || !input.trim()}>
-                {busy ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                {busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
               </Button>
             </div>
             <Button
@@ -352,7 +353,7 @@ export function SupportChatWidget() {
               onClick={() => void escalate()}
               disabled={escalating}
             >
-              {escalating ? <Loader2Icon className="size-4 animate-spin" /> : <HeadphonesIcon className="size-4" />}
+              {escalating ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <HeadphonesIcon className="size-4" />}
               Escalate to IT support
             </Button>
           </div>

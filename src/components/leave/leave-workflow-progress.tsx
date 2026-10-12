@@ -1,8 +1,7 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { LoaderCircle } from "lucide-react"
-
 import {
  Dialog,
  DialogDescription,
@@ -1301,7 +1300,7 @@ export function LeaveWorkflowDialog({
  <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto py-2">
  {loading ? (
  <div className="flex min-h-28 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
- <LoaderCircle className="h-5 w-5 animate-spin text-primary" />
+ <FluentLoadingIndicator className="h-5 w-5 animate-spin text-primary" />
  Loading network…
  </div>
  ) : null}

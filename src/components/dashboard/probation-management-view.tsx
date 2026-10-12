@@ -1,9 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { DateInput } from "@/components/ui/date-input"
+import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { Loader2Icon, PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react"
+import { PlusIcon, RefreshCwIcon, TrashIcon } from "lucide-react";
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import { SearchToggleField } from "@/components/common/search-toggle-field"
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
@@ -541,7 +544,7 @@ export function ProbationManagementView({
                     void onDeletePolicy(row)
                   }}
                 >
-                  {busyId === `policy-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+                  {busyId === `policy-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
                 </button>
               ) : null}
             </div>
@@ -600,7 +603,7 @@ export function ProbationManagementView({
                   void onDeleteCase(row)
                 }}
               >
-                {busyId === `case-${rowId(row)}` ? <Loader2Icon className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
+                {busyId === `case-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <TrashIcon className="size-4" />}
               </button>
             ) : null}
           </div>
@@ -622,7 +625,7 @@ export function ProbationManagementView({
             description="Open cases, upcoming due dates, and how the confirmation cycle is moving."
             actions={
               <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
                 Refresh
               </button>
             }
@@ -722,7 +725,7 @@ export function ProbationManagementView({
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2Icon className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
               Refresh
             </button>
             {activeTab === "policies" && canCreatePolicy ? (
@@ -800,7 +803,7 @@ export function ProbationManagementView({
           </SheetHeader>
           {caseLoading ? (
             <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading case...
             </div>
           ) : caseDetail ? (
@@ -917,7 +920,7 @@ export function ProbationManagementView({
                   void onDeleteCase(caseDetail)
                 }}
               >
-                {busyId === `case-${rowId(caseDetail)}` ? <Loader2Icon className="size-4 animate-spin" /> : "Delete case"}
+                {busyId === `case-${rowId(caseDetail)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Delete case"}
               </button>
             ) : null}
             {canGenerateLetter ? (
@@ -938,7 +941,7 @@ export function ProbationManagementView({
                     .finally(() => setBusyId(""))
                 }}
               >
-                {busyId === "letter" ? <Loader2Icon className="size-4 animate-spin" /> : "Generate letter"}
+                {busyId === "letter" ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Generate letter"}
               </button>
             ) : null}
           </SheetFooter>
@@ -970,7 +973,7 @@ export function ProbationManagementView({
               <>
                 <Field label="Code"><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></Field>
                 <Field label="Name"><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
                 <Field label="Employment type">
                   <FluentSelect
                     ariaLabel="Employment type"
@@ -986,7 +989,7 @@ export function ProbationManagementView({
                 </Field>
                 <Field label="Probation days"><input className={inputClass} value={form.probation_period_days ?? "90"} onChange={(event) => setForm((current) => ({ ...current, probation_period_days: event.target.value }))} /></Field>
                 <Field label="Minimum score"><input className={inputClass} value={form.minimum_confirmation_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, minimum_confirmation_score: event.target.value }))} /></Field>
-                <Field label="Effective from"><input type="date" className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
+                <Field label="Effective from"><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></Field>
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">Criteria (weights must total 100)</span>
@@ -1069,7 +1072,7 @@ export function ProbationManagementView({
                     options={MANAGER_RECOMMENDATIONS.map((item) => ({ value: item, label: prettify(item) }))}
                   />
                 </Field>
-                <Field label="Comments"><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
+                <Field label="Comments"><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
                 <Field label="Extension days"><input className={inputClass} value={form.recommended_extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, recommended_extension_days: event.target.value }))} /></Field>
               </>
             ) : null}
@@ -1084,15 +1087,15 @@ export function ProbationManagementView({
                     options={HR_DECISIONS.map((item) => ({ value: item, label: prettify(item) }))}
                   />
                 </Field>
-                <Field label="Comments"><textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
-                <Field label="Confirmation date"><input type="date" className={inputClass} value={form.confirmation_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, confirmation_date: event.target.value }))} /></Field>
+                <Field label="Comments"><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
+                <Field label="Confirmation date"><DateInput className={inputClass} value={form.confirmation_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, confirmation_date: event.target.value }))} /></Field>
                 <Field label="Extension days"><input className={inputClass} value={form.extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, extension_days: event.target.value }))} /></Field>
               </>
             ) : null}
             {formMode === "case" ? (
               <>
                 <Field label="Employee ID"><input className={inputClass} value={form.employee_id ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_id: event.target.value }))} /></Field>
-                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
                 <Field label="Policy (optional)">
                   <FluentSelect
                     ariaLabel="Policy"
@@ -1110,8 +1113,8 @@ export function ProbationManagementView({
             ) : null}
             {formMode === "case-edit" ? (
               <>
-                <Field label="Start date"><input type="date" className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
-                <Field label="Due date"><input type="date" className={inputClass} value={form.current_due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, current_due_date: event.target.value }))} /></Field>
+                <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
+                <Field label="Due date"><DateInput className={inputClass} value={form.current_due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, current_due_date: event.target.value }))} /></Field>
                 <Field label="Policy">
                   <FluentSelect
                     ariaLabel="Policy"
@@ -1130,10 +1133,10 @@ export function ProbationManagementView({
             {formMode === "objective" ? (
               <>
                 <Field label="Title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
-                <Field label="Expected result"><textarea className={textareaClass} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} /></Field>
+                <Field label="Expected result"><Textarea className={textareaClass} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} /></Field>
                 <Field label="Weight"><input className={inputClass} value={form.weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight: event.target.value }))} /></Field>
-                <Field label="Due date"><input type="date" className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
-                <Field label="Description"><textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Due date"><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
+                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
@@ -1141,7 +1144,7 @@ export function ProbationManagementView({
           <DialogFooter>
             <button type="button" className={secondaryButtonClass} onClick={() => setFormOpen(false)}>Cancel</button>
             <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2Icon className="size-4 animate-spin" /> : "Save"}
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}
             </button>
           </DialogFooter>
         </DialogPopup>

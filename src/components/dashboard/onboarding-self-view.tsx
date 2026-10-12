@@ -1,10 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { CheckIcon, FileTextIcon, Loader2Icon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
-import { toast } from "sonner"
+import { CheckIcon, FileTextIcon, PaperclipIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
@@ -305,6 +307,7 @@ export function OnboardingSelfView() {
     <section className="w-full min-w-0 space-y-4">
       <TalentDoodleSprites />
       <HeroBand
+        variant="dashboard"
         eyebrow="My onboarding"
         title={
           selected
@@ -324,7 +327,7 @@ export function OnboardingSelfView() {
             disabled={mounted ? loading : undefined}
           >
             {mounted && loading ? (
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
             ) : (
               <RefreshCwIcon className="size-4" />
             )}
@@ -509,7 +512,7 @@ export function OnboardingSelfView() {
                               disabled={busy === `task-${id}`}
                               onClick={() => void completeTask(task)}
                             >
-                              {busy === `task-${id}` ? <Loader2Icon className="size-3.5 animate-spin" /> : "Done"}
+                              {busy === `task-${id}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Done"}
                             </button>
                           ) : null}
                         </li>
@@ -529,7 +532,7 @@ export function OnboardingSelfView() {
                     onClick={() => fileRef.current?.click()}
                   >
                     {busy === "upload" ? (
-                      <Loader2Icon className="size-3.5 animate-spin" />
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
                       <PaperclipIcon className="size-3.5" />
                     )}
@@ -570,7 +573,7 @@ export function OnboardingSelfView() {
               {needsAck(selected) ? (
                 <div className="w-full space-y-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-4">
                   <h2 className="text-sm font-semibold">Acknowledge</h2>
-                  <textarea
+                  <Textarea
                     className={textareaClass}
                     value={ackNote}
                     onChange={(event) => setAckNote(event.target.value)}
@@ -582,14 +585,14 @@ export function OnboardingSelfView() {
                     disabled={busy === "ack" || !ackNote.trim()}
                     onClick={() => void acknowledge()}
                   >
-                    {busy === "ack" ? <Loader2Icon className="size-4 animate-spin" /> : null}I accept
+                    {busy === "ack" ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}I accept
                   </button>
                 </div>
               ) : null}
             </>
           ) : loading ? (
             <div className="flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-border bg-card px-4 py-10 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" />
+              <FluentLoadingIndicator className="size-4 animate-spin" />
               Loading your onboarding...
             </div>
           ) : (

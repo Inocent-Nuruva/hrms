@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ListFilter, Plus, RefreshCw, Search, X } from "lucide-react"
+import { ListFilter, Plus, RefreshCw, X } from "lucide-react"
+import { SearchSparkle20Regular as Search } from "@fluentui/react-icons"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"

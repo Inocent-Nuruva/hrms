@@ -3,21 +3,18 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-  BellIcon,
-  CheckCheckIcon,
-  Clock3Icon,
-  ExpandIcon,
-  MinimizeIcon,
-  RefreshCwIcon,
-  Settings2Icon,
-} from "lucide-react"
+  AlertBadge16Regular,
+  ArrowSync16Regular,
+  CheckmarkCircle20Regular,
+  FullScreenMaximize16Regular,
+  FullScreenMinimize16Regular,
+  Settings16Regular,
+} from "@fluentui/react-icons"
 
 import { AccentColorPicker } from "@/components/accent-color-picker"
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler"
 import {
   Dialog,
-  DialogClose,
-  DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
@@ -32,13 +29,15 @@ import { HeaderUserMenu } from "@/components/nav-user"
 import { NotificationCenter } from "@/components/notification-center"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { useNotifications } from "@/lib/notifications-store"
 import { cn } from "@/lib/utils"
 import type { AuthScope } from "@/types"
 
 const headerActionButtonClass =
-  "relative z-10 rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted"
+  "relative z-10 !size-6 !min-w-6 !p-0 rounded-md bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted [&_svg]:!size-3.5"
+const notificationButtonClass =
+  "relative z-10 !size-9 !min-w-9 !p-0 rounded-md bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary dark:bg-transparent dark:hover:bg-muted [&_svg]:!size-5"
 
 interface SiteHeaderProps {
   onRefresh: () => void | Promise<void>
@@ -60,12 +59,12 @@ function QuickSettingsMenu({
       <PopoverTrigger
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "relative rounded-lg bg-transparent text-foreground shadow-none hover:bg-muted hover:text-primary",
+          headerActionButtonClass,
         )}
         aria-label="Open quick settings"
         title="Quick settings"
       >
-        <Settings2Icon className="size-4" />
+        <Settings16Regular className="size-4 text-violet-600 dark:text-violet-400" />
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-3">
         <div className="flex items-start justify-between gap-3">
@@ -97,7 +96,7 @@ function QuickSettingsMenu({
             title="Refresh page data"
             className={headerActionButtonClass}
           >
-            <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
+            <ArrowSync16Regular className={cn("size-4 text-blue-600 dark:text-blue-400", loading && "animate-spin")} />
           </Button>
         </div>
       </PopoverContent>
@@ -115,24 +114,17 @@ export function SiteHeader({
   scope = null,
   searchItems = [],
 }: SiteHeaderProps) {
+  const { isMobile, state: sidebarState } = useSidebar()
   const [notificationsOpen, setNotificationsOpen] = React.useState(false)
   const [fullscreen, setFullscreen] = React.useState(false)
   const [currentTime, setCurrentTime] = React.useState<Date | null>(null)
   const {
     connectSocket,
-    connected,
     loadNotifications,
     loadUnreadCount,
-    socketConfigured,
     unreadCount: unreadNotificationCount,
   } = useNotifications()
 
-  const liveDotClassName = connected
-    ? "bg-emerald-500"
-    : socketConfigured
-      ? "bg-amber-500 animate-pulse"
-      : "bg-slate-400"
-  const liveStatusLabel = connected ? "Live" : socketConfigured ? "Connecting" : "REST only"
   const clockParts = currentTime
     ? new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
@@ -182,11 +174,16 @@ export function SiteHeader({
       data-slot="site-header"
       className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center border-b border-border bg-card transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
     >
-      <div className="flex w-full min-w-0 items-center gap-1.5 px-2.5 sm:px-3 lg:px-4">
+      <div
+        className={cn(
+          "flex w-full min-w-0 items-center gap-2 px-2.5 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
+          !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
+        )}
+      >
         <HeaderGlobalSearch items={searchItems} />
 
         <SidebarTrigger
-          className={headerActionButtonClass}
+          className={cn(headerActionButtonClass, "md:!hidden")}
           aria-label="Open navigation"
           title="Navigation"
         />
@@ -197,26 +194,22 @@ export function SiteHeader({
           </div>
         ) : null}
 
-        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
           <div
-            className="hidden h-10 items-center gap-2.5 px-2 text-foreground sm:inline-flex"
+            className="hidden h-9 shrink-0 items-center border-r border-border/70 px-2 text-foreground lg:inline-flex"
             aria-label={currentTime ? `Current time ${currentTime.toLocaleTimeString()}` : "Current local time"}
             title={currentTime ? currentTime.toLocaleDateString(undefined, { dateStyle: "full" }) : "Local time"}
           >
-            <span className="inline-flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Clock3Icon className="size-4" aria-hidden="true" />
-            </span>
             <span className="grid gap-0.5 leading-none">
-              <span className="flex items-baseline gap-1 tabular-nums">
-                <time className="text-sm font-bold tracking-tight" dateTime={currentTime?.toISOString()}>
-                  {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}
+              <span className="flex items-baseline gap-1 whitespace-nowrap tabular-nums">
+                <time className="text-[13px] font-semibold tracking-tight" dateTime={currentTime?.toISOString()}>
+                  {clockPart("hour") ?? "--"}:{clockPart("minute") ?? "--"}:{clockPart("second") ?? "--"}
                 </time>
                 {clockPart("dayPeriod") ? (
                   <span className="text-[9px] font-semibold uppercase text-muted-foreground">{clockPart("dayPeriod")}</span>
                 ) : null}
-                <span className="text-[10px] font-medium text-muted-foreground">:{clockPart("second") ?? "--"}</span>
               </span>
-              <span className="text-[10px] font-medium text-muted-foreground">{clockDate ?? "Local time"}</span>
+              <span className="whitespace-nowrap text-[10px] font-medium text-muted-foreground">{clockDate ?? "Local time"}</span>
             </span>
           </div>
 
@@ -229,7 +222,11 @@ export function SiteHeader({
             aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            {fullscreen ? <MinimizeIcon className="size-4" /> : <ExpandIcon className="size-4" />}
+            {fullscreen ? (
+              <FullScreenMinimize16Regular className="size-4 text-sky-600 dark:text-sky-400" />
+            ) : (
+              <FullScreenMaximize16Regular className="size-4 text-sky-600 dark:text-sky-400" />
+            )}
           </Button>
 
           <QuickSettingsMenu onRefresh={onRefresh} loading={loading} />
@@ -245,44 +242,48 @@ export function SiteHeader({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      className={headerActionButtonClass}
+                      className={notificationButtonClass}
                       aria-label={unreadNotificationCount > 0 ? `Notifications, ${unreadNotificationCount} unread` : "Notifications"}
                       title="Notifications"
                     />
                   }
                 >
-                  <BellIcon className="size-4" />
+                  <AlertBadge16Regular className="size-5 text-amber-600 dark:text-amber-400" />
                   <span className="sr-only">Notifications</span>
                 </DialogTrigger>
                 {unreadNotificationCount > 0 ? (
-                  <span className="pointer-events-none absolute right-0.5 top-0.5 z-10 size-2 rounded-full bg-destructive ring-2 ring-background" />
+                  <span className="pointer-events-none absolute -right-1 -top-1 z-10 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-bold leading-none tabular-nums text-white ring-2 ring-background">
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
                 ) : null}
               </div>
               <DialogPopup
                 from="right"
-                showCloseButton
-                className="notification-dialog flex h-full min-h-0 flex-col overflow-hidden p-4 sm:p-5"
+                showCloseButton={false}
+                bodyClassName="!h-full !max-h-none !gap-0 !overflow-hidden"
+                className="notification-dialog flex h-dvh min-h-0 w-[min(34rem,calc(100vw-1rem))] max-w-[34rem] flex-col overflow-hidden p-4 sm:p-5"
               >
                 <DialogHeader className="mb-0 shrink-0 space-y-0 pr-10 pb-1">
-                  <div className="flex flex-col items-start gap-0.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DialogTitle className="flex items-center gap-2 text-lg">
-                        <span
-                          className={cn("size-2 shrink-0 rounded-full", liveDotClassName)}
-                          title={liveStatusLabel}
-                          aria-label={liveStatusLabel}
-                        />
-                        Notifications
-                      </DialogTitle>
+                  <div className="flex items-center gap-3 border-b border-border/70 px-1 py-2">
+                    <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <AlertBadge16Regular className="size-5" />
+                      {unreadNotificationCount > 0 ? <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-background bg-rose-500" /> : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
+                          Notification Center
+                        </DialogTitle>
+                      </div>
                       {unreadNotificationCount > 0 ? (
-                        <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums !text-white">
-                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount} unread
-                        </span>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount} unread notifications
+                        </div>
                       ) : null}
                     </div>
                     {unreadNotificationCount === 0 ? (
-                      <span className="inline-flex items-center gap-1 pl-4 text-xs font-medium tracking-wide text-emerald-600 dark:text-emerald-400">
-                        <CheckCheckIcon className="size-3.5 shrink-0" aria-hidden />
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        <CheckmarkCircle20Regular className="size-4" aria-hidden />
                         All caught up
                       </span>
                     ) : null}
@@ -291,9 +292,6 @@ export function SiteHeader({
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <NotificationCenter open={notificationsOpen} onOpenChange={setNotificationsOpen} />
                 </div>
-                <DialogFooter className="shrink-0 border-t border-border pt-3">
-                  <DialogClose render={<Button variant="outline" size="sm">Close</Button>} />
-                </DialogFooter>
               </DialogPopup>
             </Dialog>
           ) : null}

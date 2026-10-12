@@ -1,8 +1,10 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon, Loader2Icon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
 
 import {
   Dialog,
@@ -14,6 +16,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { TableScrollContainer } from "@/components/common/table-scroll-container"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import {
   assignAccessGroupDevices,
   assignAccessGroupDoors,
@@ -159,6 +162,8 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [loading, setLoading] = React.useState(true)
   const [message, setMessage] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  useFluentToastState(message, setMessage, "success")
   const [assignOpen, setAssignOpen] = React.useState(false)
   const [selectedDoorId, setSelectedDoorId] = React.useState("")
   const [selectedTemplateId, setSelectedTemplateId] = React.useState("")
@@ -883,7 +888,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               disabled={syncingGroup}
             >
-              {syncingGroup ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
+              {syncingGroup ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
               {syncingGroup ? "Syncing..." : "Sync Group"}
             </button>
             <button
@@ -899,7 +904,6 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
           </div>
         </div>
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-        {message ? <p className="mt-3 text-sm text-green-700">{message}</p> : null}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white/80 px-4 py-5 shadow-sm lg:px-6">

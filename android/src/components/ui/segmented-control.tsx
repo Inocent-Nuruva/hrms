@@ -3,6 +3,7 @@ import { Animated, Pressable, StyleSheet, useColorScheme, View } from 'react-nat
 
 import { COLORS } from '../../lib/config';
 import { Text } from './text';
+import { useAppAccent } from '../../hooks/useAppAccent';
 
 type Segment = {
   key: string;
@@ -19,6 +20,7 @@ export function SegmentedControl({
   options: Segment[];
 }) {
   const isDark = useColorScheme() === 'dark';
+  const accent = useAppAccent();
   const [width, setWidth] = React.useState(0);
   const [translateX] = React.useState(() => new Animated.Value(0));
   const activeIndex = Math.max(
@@ -55,7 +57,7 @@ export function SegmentedControl({
             styles.activeSegment,
             {
               width: segmentWidth,
-              backgroundColor: isDark ? '#f4f4f5' : COLORS.primary,
+              backgroundColor: isDark ? '#f4f4f5' : accent,
               transform: [{ translateX }],
             },
           ]}

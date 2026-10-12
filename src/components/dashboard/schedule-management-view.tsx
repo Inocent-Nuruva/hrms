@@ -2,7 +2,37 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Clock3Icon, PencilIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { Clock3Icon, PlusIcon } from "lucide-react"
+import {
+  Add16Regular,
+  ArrowSync20Regular,
+  Delete16Regular,
+  Edit16Regular,
+} from "@fluentui/react-icons"
+import {
+  Avatar,
+  Button,
+  Checkbox,
+  Field,
+  SpinButton,
+  Switch,
+  Tag,
+  TagPicker,
+  TagPickerControl,
+  TagPickerGroup,
+  TagPickerInput,
+  TagPickerList,
+  TagPickerOption,
+  TeachingPopover,
+  TeachingPopoverBody,
+  TeachingPopoverFooter,
+  TeachingPopoverHeader,
+  TeachingPopoverSurface,
+  TeachingPopoverTitle,
+  TeachingPopoverTrigger,
+} from "@fluentui/react-components"
+import { Person20Regular } from "@fluentui/react-icons"
+import { Info20Regular } from "@fluentui/react-icons"
 
 import {
   buildFormDraftStorageKey,
@@ -10,6 +40,7 @@ import {
   persistFormState,
   readPersistedFormState,
   readStoredCompanyName,
+  RecordDetailList,
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import {
@@ -20,12 +51,23 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { TimeInput } from "@/components/ui/time-input"
+import { toast } from "@/components/ui/fluent-toast-store"
 import { ShiftWeeklyScheduler } from "@/components/dashboard/shift-weekly-scheduler"
 import {
   createShiftResource,
@@ -55,6 +97,87 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 
 type ScheduleSectionKey = ShiftResourceKey | TimetableResourceKey
 type ScheduleModuleKey = "shift" | "timetable"
+
+const scheduleSectionGuides: Partial<Record<ScheduleSectionKey, { label: string; title: string; tips: string[] }>> = {
+  shifts: {
+    label: "Shift guide",
+    title: "Create reusable shifts",
+    tips: [
+      "Set the shift name, code, and expected working hours once, then reuse it in schedules and assignments.",
+      "Mark overnight shifts when their end time falls on the following day.",
+      "Use search and status filters to find existing shifts; use the row actions to edit or remove one.",
+    ],
+  },
+  "shift-breaks": {
+    label: "Break guide",
+    title: "Set up a shift break",
+    tips: [
+      "Each break belongs to a shift. Choose the shift, give the break a name and type, then set its start time, end time, and duration.",
+      "Mark it paid or unpaid according to your policy. Use Fixed for a set break time, or Flexible when employees may take the break within the configured window.",
+      "Use search or the break filter to find saved breaks. Select Create to add one, or use the row actions to edit or delete it.",
+    ],
+  },
+  "shift-assignments": {
+    label: "Assignment guide",
+    title: "Assign a shift to an employee",
+    tips: [
+      "Choose one employee and a shift, then set when the assignment starts and, if needed, when it ends.",
+      "Optionally link a rotation group. Mark an assignment Primary when it should take precedence as the employee’s main shift assignment.",
+      "Use search and the status filter to find assignments; use the row actions to update or remove one.",
+    ],
+  },
+  "shift-rotation-groups": {
+    label: "Rotation guide",
+    title: "Set up a rotation cycle",
+    tips: [
+      "Create a named group and set how many days are in its repeating cycle.",
+      "After creating the group, add rotation rules for each cycle day to specify the shift or mark a rest day.",
+      "Use the group’s code to identify it when linking assignments or templates.",
+    ],
+  },
+  "shift-rotation-rules": {
+    label: "Rule guide",
+    title: "Define each day in a rotation",
+    tips: [
+      "Choose a rotation group and enter the day index within its cycle.",
+      "Choose a shift for a working day, or mark the rule as an off day.",
+      "Make sure the group’s rules cover its full cycle so the pattern repeats as intended.",
+    ],
+  },
+}
+
+function ScheduleSectionGuide({ section }: { section: ScheduleSectionKey }) {
+  const guide = scheduleSectionGuides[section]
+  if (!guide) return null
+
+  return (
+    <TeachingPopover appearance="brand" positioning="below-start">
+      <TeachingPopoverTrigger>
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<Info20Regular />}
+          className="!h-7 !min-h-7 shrink-0 !px-1.5"
+          aria-label={guide.label}
+          title={guide.label}
+        >
+          <span className="hidden sm:inline">{guide.label}</span>
+        </Button>
+      </TeachingPopoverTrigger>
+      <TeachingPopoverSurface className="!w-[min(26rem,calc(100vw-1.5rem))] !max-w-[26rem]">
+        <TeachingPopoverHeader>Quick guide</TeachingPopoverHeader>
+        <TeachingPopoverBody>
+          <TeachingPopoverTitle>{guide.title}</TeachingPopoverTitle>
+          <div className="grid gap-2 text-sm leading-relaxed">
+            {guide.tips.map((tip) => <p key={tip}>{tip}</p>)}
+          </div>
+        </TeachingPopoverBody>
+        <TeachingPopoverFooter primary="Got it" />
+      </TeachingPopoverSurface>
+    </TeachingPopover>
+  )
+}
+
 type FieldType =
   | "text"
   | "number"
@@ -105,6 +228,17 @@ type LookupState = {
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
+const SINGLE_COLUMN_SCHEDULE_FORMS = new Set<ScheduleSectionKey>([
+  "shift-breaks",
+  "shift-assignments",
+  "shift-rotation-groups",
+  "timetables",
+  "timetable-holiday-rules",
+  "timetable-rotations",
+  "employee-timetables",
+  "shift-rotation-rules",
+])
+
 const STATUS_OPTIONS = [
   { label: "Active", value: "ACTIVE" },
   { label: "Inactive", value: "INACTIVE" },
@@ -143,10 +277,6 @@ const DAY_OF_WEEK_OPTIONS = DAY_OF_WEEK_LABELS.map((label, index) => ({
   label,
   value: String(index),
 }))
-
-const TIME_HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"))
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"))
-const DURATION_HOUR_OPTIONS = Array.from({ length: 25 }, (_, index) => String(index))
 
 const DAY_OF_WEEK_VALUE_MAP: Record<string, string> = {
   MONDAY: "0",
@@ -579,6 +709,24 @@ function prettifyLabel(value: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function scheduleStatusTextClass(status: string) {
+  const normalizedStatus = status.trim().toUpperCase()
+
+  if (["ACTIVE", "APPROVED", "COMPLETED"].includes(normalizedStatus)) {
+    return "text-emerald-700 dark:text-emerald-400"
+  }
+
+  if (["INACTIVE", "REJECTED", "CANCELLED", "FAILED"].includes(normalizedStatus)) {
+    return "text-rose-700 dark:text-rose-400"
+  }
+
+  if (["PENDING", "DRAFT"].includes(normalizedStatus)) {
+    return "text-amber-700 dark:text-amber-400"
+  }
+
+  return "text-muted-foreground"
+}
+
 function isIsoDateString(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}T/.test(value)
 }
@@ -738,24 +886,6 @@ function durationPartsToMinutes(hoursValue: string, minutesValue: string) {
   }
 
   return String(hours * 60 + minutes)
-}
-
-function timeValueToParts(value: string) {
-  if (!isTimeValue(value)) {
-    return { hours: "", minutes: "" }
-  }
-  const [hours, minutes] = value.split(":")
-  return { hours, minutes }
-}
-
-function timePartsToValue(hoursValue: string, minutesValue: string) {
-  if (!hoursValue && !minutesValue) {
-    return ""
-  }
-  if (!hoursValue || !minutesValue) {
-    return ""
-  }
-  return `${hoursValue.padStart(2, "0")}:${minutesValue.padStart(2, "0")}`
 }
 
 function buildEditValues(fields: FieldConfig[], row: AdminRecord) {
@@ -933,23 +1063,6 @@ function resolveScheduleCellValue(
   return stringifyValue(raw)
 }
 
-function ScheduleDetailField({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-background px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-sm text-foreground">{value}</p>
-    </div>
-  )
-}
-
 function buildScheduleDetailTitle(section: ScheduleSectionKey, row: AdminRecord, lookupMaps: Record<string, Map<string, string>>) {
   const config = SECTION_CONFIG[section]
   const direct =
@@ -1034,40 +1147,34 @@ function ScheduleDetailsContent({
       ? { label: "Effective From", value: String(resolveScheduleCellValue("effective_from", row, lookupMaps)) }
       : null,
   ].filter((entry): entry is { label: string; value: string } => Boolean(entry && entry.value && entry.value !== "-"))
+  const summaryLabels = new Set(summaryFields.map((entry) => entry.label))
+  const detailEntries = entries.filter((entry) => !summaryLabels.has(entry.label))
 
   return (
-    <div className="max-h-[65vh] space-y-4 overflow-auto pr-1">
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {config.moduleTitle}
-            </p>
-            <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
-          </div>
-          {statusValue && statusValue !== "-" ? (
-            <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
-              {statusValue}
-            </div>
-          ) : null}
+    <div className="max-h-[65vh] space-y-7 overflow-auto pr-1">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {config.moduleTitle}
+          </p>
+          <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
         </div>
+        {statusValue && statusValue !== "-" ? (
+          <span className={cn("mr-7 text-sm font-semibold", scheduleStatusTextClass(statusValue))}>
+            {statusValue}
+          </span>
+        ) : null}
       </div>
 
       {summaryFields.length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {summaryFields.map((field) => (
-            <ScheduleDetailField key={field.label} label={field.label} value={field.value} />
-          ))}
-        </div>
+        <RecordDetailList items={summaryFields.map((entry) => ({ ...entry, key: entry.label }))} />
       ) : null}
 
-      {entries.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {entries.map((entry) => (
-            <ScheduleDetailField key={`${entry.label}-${entry.value}`} label={entry.label} value={entry.value} />
-          ))}
-        </div>
+      {detailEntries.length > 0 ? (
+        <RecordDetailList
+          items={detailEntries.map((entry) => ({ ...entry, key: `${entry.label}-${entry.value}` }))}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">No readable details are available for this record.</p>
       )}
@@ -1455,26 +1562,14 @@ function TimeSelectField({
   value: string
   onChange: (value: string) => void
 }) {
-  const parts = React.useMemo(() => timeValueToParts(value), [value])
   return (
-    <DualWheelPickerField
+    <TimeInput
+      aria-label="Select time"
+      className="w-full"
+      increment={5}
+      placeholder="Select time"
       value={value}
-      parts={parts}
-      title="Time Picker"
-      emptyLabel="Select time"
-      emptyHint="24-hour format"
-      preview={parts.hours && parts.minutes ? `${parts.hours}:${parts.minutes}` : "--:--"}
-      displayValue={parts.hours && parts.minutes ? formatDisplayTime(`${parts.hours}:${parts.minutes}`) : ""}
-      displayHint={parts.hours && parts.minutes ? `${parts.hours}:${parts.minutes}` : "24-hour format"}
-      applyLabel="Apply time"
-      firstLabel="Hour"
-      secondLabel="Minute"
-      firstOptions={TIME_HOUR_OPTIONS}
-      secondOptions={MINUTE_OPTIONS}
-      parseValue={timeValueToParts}
-      composeValue={timePartsToValue}
-      formatOption={(option) => option}
-      onChange={onChange}
+      onChange={(event) => onChange(event.target.value)}
     />
   )
 }
@@ -1487,204 +1582,44 @@ function DurationSelectField({
   onChange: (value: string) => void
 }) {
   const parts = React.useMemo(() => minutesToDurationParts(value), [value])
+  const hours = parts.hours ? Number(parts.hours) : null
+  const minutes = parts.minutes ? Number(parts.minutes) : null
 
-  return (
-    <DualWheelPickerField
-      value={value}
-      parts={parts}
-      title="Duration Picker"
-      emptyLabel="Select duration"
-      emptyHint="hours and minutes"
-      preview={parts.hours || parts.minutes ? `${parts.hours || "0"} hr ${parts.minutes || "0"} min` : "-- hr -- min"}
-      displayValue={parts.hours || parts.minutes ? `${parts.hours || "0"} hr` : ""}
-      displayHint={parts.hours || parts.minutes ? `${parts.minutes || "0"} min` : "hours and minutes"}
-      applyLabel="Apply duration"
-      firstLabel="Hours"
-      secondLabel="Minutes"
-      firstOptions={DURATION_HOUR_OPTIONS}
-      secondOptions={MINUTE_OPTIONS}
-      parseValue={minutesToDurationParts}
-      composeValue={durationPartsToMinutes}
-      formatOption={(option, kind) => (kind === "hours" ? `${option} hr` : `${option} min`)}
-      onChange={onChange}
-    />
-  )
-}
-
-function DualWheelPickerField({
-  value,
-  parts,
-  title,
-  emptyLabel,
-  emptyHint,
-  preview,
-  displayValue,
-  displayHint,
-  applyLabel,
-  firstLabel,
-  secondLabel,
-  firstOptions,
-  secondOptions,
-  parseValue,
-  composeValue,
-  formatOption,
-  onChange,
-}: {
-  value: string
-  parts: { hours: string; minutes: string }
-  title: string
-  emptyLabel: string
-  emptyHint: string
-  preview: string
-  displayValue: string
-  displayHint: string
-  applyLabel: string
-  firstLabel: string
-  secondLabel: string
-  firstOptions: string[]
-  secondOptions: string[]
-  parseValue: (value: string) => { hours: string; minutes: string }
-  composeValue: (hoursValue: string, minutesValue: string) => string
-  formatOption: (option: string, kind: "hours" | "minutes") => string
-  onChange: (value: string) => void
-}) {
-  const [open, setOpen] = React.useState(false)
-  const [draft, setDraft] = React.useState(parts)
-
-  React.useEffect(() => {
-    if (!open) {
-      setDraft(parseValue(value))
-    }
-  }, [open, parseValue, value])
-
-  const canApply = Boolean(draft.hours && draft.minutes)
-
-  const updateDraft = (key: "hours" | "minutes", nextValue: string) => {
-    setDraft((current) => ({
-      ...current,
-      [key]: nextValue,
-    }))
-  }
-
-  const handleApply = () => {
-    if (!canApply) {
+  const updateDuration = (nextHours: number | null, nextMinutes: number | null) => {
+    if (nextHours === null && nextMinutes === null) {
+      onChange("")
       return
     }
-    onChange(composeValue(draft.hours, draft.minutes))
-    setOpen(false)
-  }
-
-  const handleClear = () => {
-    setDraft({ hours: "", minutes: "" })
-    onChange("")
-    setOpen(false)
+    onChange(durationPartsToMinutes(String(nextHours ?? 0), String(nextMinutes ?? 0)))
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            className={cn(
-              "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition dark:border-slate-700 dark:bg-slate-950/60",
-              open ? "border-[var(--primary)] shadow-sm" : "border-slate-300",
-              displayValue ? "text-slate-900 dark:text-slate-100" : "text-slate-400 dark:text-slate-500"
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-300">
-                <Clock3Icon className="h-4 w-4" />
-              </span>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate font-medium">{displayValue || emptyLabel}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{displayHint || emptyHint}</span>
-              </span>
-            </span>
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Set</span>
-          </button>
-        }
-      />
-      <PopoverContent className="w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-0 shadow-xl dark:border-slate-800 dark:bg-slate-950">
-        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/80">
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">{title}</p>
-          <div className="mt-2 flex items-end gap-2">
-            <span className="text-3xl font-semibold text-slate-900 dark:text-slate-100">{preview}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-3 p-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{firstLabel}</p>
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-slate-50 p-2 dark:bg-slate-900">
-              {firstOptions.map((option) => {
-                const selected = draft.hours === option
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition",
-                      selected
-                        ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    )}
-                    onClick={() => updateDraft("hours", option)}
-                  >
-                    {formatOption(option, "hours")}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <div className="flex items-center justify-center text-2xl font-semibold text-slate-300 dark:text-slate-700">:</div>
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{secondLabel}</p>
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-slate-50 p-2 dark:bg-slate-900">
-              {secondOptions.map((option) => {
-                const selected = draft.minutes === option
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition",
-                      selected
-                        ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    )}
-                    onClick={() => updateDraft("minutes", option)}
-                  >
-                    {formatOption(option, "minutes")}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 dark:border-slate-800">
-          <button
-            type="button"
-            className="text-sm font-medium text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-            onClick={handleClear}
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded-full px-4 py-2 text-sm font-semibold transition",
-              canApply
-                ? "bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
-                : "cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-            )}
-            onClick={handleApply}
-            disabled={!canApply}
-          >
-            {applyLabel}
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Duration">
+      <Field label="Hours">
+        <SpinButton
+          aria-label="Duration hours"
+          min={0}
+          max={24}
+          step={1}
+          value={hours}
+          displayValue={hours === null ? "" : `${hours} hr`}
+          placeholder="0 hr"
+          onChange={(_event, data) => updateDuration(data.value ?? null, minutes)}
+        />
+      </Field>
+      <Field label="Minutes">
+        <SpinButton
+          aria-label="Duration minutes"
+          min={0}
+          max={59}
+          step={5}
+          value={minutes}
+          displayValue={minutes === null ? "" : `${minutes} min`}
+          placeholder="0 min"
+          onChange={(_event, data) => updateDuration(hours, data.value ?? null)}
+        />
+      </Field>
+    </div>
   )
 }
 
@@ -1700,6 +1635,10 @@ function FormField({
   lookups: LookupState
 }) {
   const options = React.useMemo(() => mapLookupOptions(field, lookups), [field, lookups])
+
+  if (field.key === "employee_ids") {
+    return <EmployeeTagPicker value={value} options={options} onChange={onChange} />
+  }
 
   if (field.type === "select" || options.length > 0) {
     return (
@@ -1750,16 +1689,16 @@ function FormField({
           options.map((option) => {
             const checked = selected.has(option.value)
             return (
-              <label
+              <div
                 key={`${field.key}-${option.value}`}
                 className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-300"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={checked}
-                  onChange={(event) => {
+                  label={option.label}
+                  onChange={(_event, data) => {
                     const next = new Set(selected)
-                    if (event.target.checked) {
+                    if (data.checked === true) {
                       next.add(option.value)
                     } else {
                       next.delete(option.value)
@@ -1767,8 +1706,7 @@ function FormField({
                     onChange(Array.from(next).join(","))
                   }}
                 />
-                <span>{option.label}</span>
-              </label>
+              </div>
             )
           })
         )}
@@ -1800,13 +1738,93 @@ function FormField({
   }
 
   return (
-    <input
-      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+    <Input
+      className="w-full"
       type={field.type}
       placeholder={field.placeholder}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     />
+  )
+}
+
+function EmployeeTagPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  const [query, setQuery] = React.useState("")
+  const selectedOptions = React.useMemo(
+    () => value.split(",").map((entry) => entry.trim()).filter(Boolean),
+    [value],
+  )
+  const labelsByValue = React.useMemo(
+    () => new Map(options.map((option) => [option.value, option.label])),
+    [options],
+  )
+  const filteredOptions = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return options.filter(
+      (option) =>
+        !selectedOptions.includes(option.value) &&
+        (!normalizedQuery || option.label.toLowerCase().includes(normalizedQuery)),
+    )
+  }, [options, query, selectedOptions])
+
+  return (
+    <TagPicker
+      selectedOptions={selectedOptions}
+      onOptionSelect={(_event, data) => {
+        if (data.value === "__no-results") return
+        onChange(data.selectedOptions.join(","))
+        setQuery("")
+      }}
+    >
+      <TagPickerControl className="w-full">
+        <TagPickerGroup aria-label="Selected employees">
+          {selectedOptions.map((employeeId) => {
+            const label = labelsByValue.get(employeeId) ?? `Employee ${employeeId}`
+            return (
+              <Tag
+                key={employeeId}
+                value={employeeId}
+                media={<Avatar name={label} icon={<Person20Regular />} size={20} />}
+              >
+                {label}
+              </Tag>
+            )
+          })}
+        </TagPickerGroup>
+        <TagPickerInput
+          aria-label="Search employees"
+          placeholder={selectedOptions.length > 0 ? "Add another employee" : "Search employees"}
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+      </TagPickerControl>
+      <TagPickerList>
+        {filteredOptions.length > 0 ? (
+          filteredOptions.map((option) => (
+            <TagPickerOption
+              key={option.value}
+              value={option.value}
+              text={option.label}
+              media={<Avatar name={option.label} icon={<Person20Regular />} size={24} />}
+            >
+              {option.label}
+            </TagPickerOption>
+          ))
+        ) : (
+          <TagPickerOption value="__no-results">
+            No employees found
+          </TagPickerOption>
+        )}
+      </TagPickerList>
+    </TagPicker>
   )
 }
 
@@ -1834,6 +1852,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     readPersistedFormState(createDraftKey, initialFormState)
   )
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialFormState)
+  const [scheduleAssignmentMode, setScheduleAssignmentMode] = React.useState<"single" | "bulk">("single")
   const [editingId, setEditingId] = React.useState("")
   const [deletingId, setDeletingId] = React.useState("")
   const [clearingAssignedShift, setClearingAssignedShift] = React.useState<{
@@ -1853,6 +1872,22 @@ export function ScheduleManagementView({ section }: { section: string }) {
   )
 
   React.useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
+
+  React.useEffect(() => {
+    if (message) toast.success(message)
+  }, [message])
+
+  React.useEffect(() => {
+    if (formError) toast.error(formError)
+  }, [formError])
+
+  React.useEffect(() => {
+    if (lookupError) toast.warning(lookupError)
+  }, [lookupError])
+
+  React.useEffect(() => {
     setCreateValues(readPersistedFormState(createDraftKey, initialFormState))
     setEditValues(initialFormState)
     setEditingId("")
@@ -1867,6 +1902,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     setCurrentUserId(null)
     setManagementSearch("")
     setManagementFilter("ALL")
+    setScheduleAssignmentMode("single")
   }, [activeSection, createDraftKey, initialFormState])
 
   React.useEffect(() => {
@@ -2138,7 +2174,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
       return [...scalarValues, ...relationLabels].some((value) => value.toLowerCase().includes(query))
     })
   }, [activeSection, enhancedShiftList, lookupMaps, managementFilter, managementSearch, rows])
-  const activeShiftCount = React.useMemo(
+  const activeStatusCount = React.useMemo(
     () => rows.filter((row) => (readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE") === "ACTIVE").length,
     [rows]
   )
@@ -2191,6 +2227,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
     shiftId?: string
   }) => {
     setFormError(null)
+    setScheduleAssignmentMode(prefill?.employeeIds?.length ? "bulk" : "single")
     setCreateValues((current) => ({
       ...current,
       ...(prefill?.employeeId ? { employee_id: prefill.employeeId, employee_ids: "" } : {}),
@@ -2221,7 +2258,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   void openEdit(rowId)
                 }}
               >
-                <PencilIcon className="h-3.5 w-3.5" />
+                <Edit16Regular className="h-3.5 w-3.5" />
               </button>
               <button
                 className="admin-table-icon-button"
@@ -2234,7 +2271,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
                   setDeleteOpen(true)
                 }}
               >
-                <Trash2Icon className="h-3.5 w-3.5" />
+                <Delete16Regular className="h-3.5 w-3.5" />
               </button>
             </div>
           )
@@ -2339,15 +2376,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
             sortable: true,
             render: (row: AdminRecord) => {
               const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
-              const active = status === "ACTIVE"
               return (
-                <span className={cn(
-                  "inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold",
-                  active
-                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                    : "bg-muted text-muted-foreground"
-                )}>
-                  <span className={cn("size-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/60")} />
+                <span className={cn("text-[10px] font-semibold", scheduleStatusTextClass(status))}>
                   {prettifyLabel(status)}
                 </span>
               )
@@ -2418,12 +2448,12 @@ export function ScheduleManagementView({ section }: { section: string }) {
               const paid = row.is_paid === true || row.isPaid === true
               const flexible = row.is_flexible === true || row.isFlexible === true
               return (
-                <span className="flex flex-wrap gap-1">
-                  <span className={cn(
-                    "px-2 py-1 text-[10px] font-semibold",
-                    paid ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
-                  )}>{paid ? "Paid" : "Unpaid"}</span>
-                  <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{flexible ? "Flexible" : "Fixed"}</span>
+                <span className="inline-flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+                  <span className={paid ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>
+                    {paid ? "Paid" : "Unpaid"}
+                  </span>
+                  <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                  <span className="text-primary">{flexible ? "Flexible" : "Fixed"}</span>
                 </span>
               )
             },
@@ -2488,12 +2518,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
               const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
               const primary = row.is_primary === true || row.isPrimary === true
               return (
-                <span className="flex flex-wrap gap-1">
-                  <span className={cn(
-                    "px-2 py-1 text-[10px] font-semibold",
-                    status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
-                  )}>{prettifyLabel(status)}</span>
-                  <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{primary ? "Primary" : "Secondary"}</span>
+                <span className="inline-flex flex-wrap items-center gap-2 text-[10px] font-semibold">
+                  <span className={scheduleStatusTextClass(status)}>{prettifyLabel(status)}</span>
+                  <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+                  <span className="text-primary">{primary ? "Primary" : "Secondary"}</span>
                 </span>
               )
             },
@@ -2570,11 +2598,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
             render: (row: AdminRecord) => {
               const status = readStringFromRecord(row, ["status"])?.toUpperCase() || "ACTIVE"
               return (
-                <span className={cn(
-                  "inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold",
-                  status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
-                )}>
-                  <span className={cn("size-1.5 rounded-full", status === "ACTIVE" ? "bg-emerald-500" : "bg-muted-foreground/60")} />
+                <span className={cn("text-[10px] font-semibold", scheduleStatusTextClass(status))}>
                   {prettifyLabel(status)}
                 </span>
               )
@@ -2626,8 +2650,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
               const offDay = row.is_off_day === true || row.isOffDay === true
               return (
                 <span className={cn(
-                  "px-2 py-1 text-[10px] font-semibold",
-                  offDay ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                  "text-[10px] font-semibold",
+                  offDay ? "text-amber-700 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"
                 )}>{offDay ? "Off day" : "Working day"}</span>
               )
             },
@@ -2701,6 +2725,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
       setCreateOpen(false)
       clearPersistedFormState(createDraftKey)
       setCreateValues(initialFormState)
+      setScheduleAssignmentMode("single")
       await fetchRows()
       router.refresh()
     } catch (errorObject) {
@@ -2770,18 +2795,56 @@ export function ScheduleManagementView({ section }: { section: string }) {
     values: Record<string, string>,
     onChange: React.Dispatch<React.SetStateAction<Record<string, string>>>,
     mode: "create" | "edit"
-  ) => (
-    <div className="grid gap-4 md:grid-cols-2">
-      {fields.map((field) => (
-        field.hidden || (field.createOnly && mode !== "create") || (field.editOnly && mode !== "edit") ? null : (
-        <label
+  ) => {
+    const isScheduleCreate = activeSection === "shift-schedules" && mode === "create"
+    const usesSingleColumnForm = SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection)
+
+    return (
+      <div className={cn("grid items-start gap-4", !usesSingleColumnForm && "md:grid-cols-2")}>
+        {isScheduleCreate ? (
+          <Field
+            className="md:col-span-2"
+            label="Assignment mode"
+            hint={scheduleAssignmentMode === "bulk"
+              ? "Search for and select everyone who should receive this schedule."
+              : "Choose one employee for this schedule."}
+          >
+            <div className="flex min-h-10 items-center gap-3 border-b border-border pb-3">
+              <Switch
+                checked={scheduleAssignmentMode === "bulk"}
+                label={scheduleAssignmentMode === "bulk" ? "Bulk employees" : "Single employee"}
+                onChange={(_event, data) => {
+                  const nextMode = data.checked ? "bulk" : "single"
+                  setScheduleAssignmentMode(nextMode)
+                  onChange((current) => ({
+                    ...current,
+                    employee_id: nextMode === "bulk" ? "" : current.employee_id,
+                    employee_ids: nextMode === "single" ? "" : current.employee_ids,
+                  }))
+                }}
+              />
+            </div>
+          </Field>
+        ) : null}
+        {fields.map((field) => {
+          if (
+            field.hidden ||
+            (field.createOnly && mode !== "create") ||
+            (field.editOnly && mode !== "edit") ||
+            (isScheduleCreate && field.key === "employee_id" && scheduleAssignmentMode === "bulk") ||
+            (isScheduleCreate && field.key === "employee_ids" && scheduleAssignmentMode === "single")
+          ) {
+            return null
+          }
+
+          return (
+        <Field
           key={field.key}
-          className={`grid gap-1 text-sm ${field.type === "textarea" || field.type === "multiselect" ? "md:col-span-2" : ""}`}
+          className={!usesSingleColumnForm && (field.type === "textarea" || field.type === "multiselect") ? "md:col-span-2" : undefined}
+          label={field.label}
+          required={field.required}
+          hint={field.helpText}
         >
-          <span className="font-medium text-slate-700">
-            {field.label}
-            {field.required ? " *" : ""}
-          </span>
           <FormField
             field={field}
             value={values[field.key] ?? ""}
@@ -2823,65 +2886,47 @@ export function ScheduleManagementView({ section }: { section: string }) {
               })
             }
           />
-          {field.helpText ? <span className="text-xs text-slate-500">{field.helpText}</span> : null}
-        </label>
-        )
-      ))}
-      {lookupLoading ? <p className="md:col-span-2 text-xs text-slate-500">Loading available options…</p> : null}
-      {lookupError ? <p className="md:col-span-2 text-sm text-amber-700">{lookupError}</p> : null}
-      {formError ? <p className="md:col-span-2 text-sm text-red-600">{formError}</p> : null}
-    </div>
-  )
+        </Field>
+          )
+        })}
+        {lookupLoading ? (
+          <p className={cn("text-xs text-slate-500", !usesSingleColumnForm && "md:col-span-2")}>
+            Loading available options…
+          </p>
+        ) : null}
+      </div>
+    )
+  }
 
   const openDetailsDialog = (row: AdminRecord) => {
     setSelectedRow(row)
     setDetailsOpen(true)
   }
 
-  const enhancedListMeta: Partial<Record<ScheduleSectionKey, { title: string; description: string }>> = {
+  const enhancedListMeta: Partial<Record<ScheduleSectionKey, { title: string }>> = {
     shifts: {
       title: "Shift management",
-      description: "Create and maintain reusable working-hour definitions",
     },
     "shift-breaks": {
       title: "Shift breaks",
-      description: "Manage paid, unpaid, fixed, and flexible break windows",
     },
     "shift-assignments": {
       title: "Shift assignments",
-      description: "Track who owns each shift and when the assignment applies",
     },
     "shift-rotation-groups": {
       title: "Rotation groups",
-      description: "Organize repeating shift cycles and their rules",
     },
     "shift-rotation-rules": {
       title: "Rotation rules",
-      description: "Define the working and off days inside each rotation cycle",
     },
   }
   const activeEnhancedListMeta = enhancedListMeta[activeSection]
 
   const sectionTitleBlock = activeEnhancedListMeta ? (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
         <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{activeEnhancedListMeta.title}</h1>
-        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{activeEnhancedListMeta.description}</p>
-      </div>
-      <div className="hidden shrink-0 items-center gap-1.5 xl:flex">
-        <span className="bg-muted px-2 py-1 text-[10px] font-semibold text-foreground">{rows.length} total</span>
-        {activeSection === "shift-breaks" ? (
-          <span className="bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{paidBreakCount} paid</span>
-        ) : activeSection === "shift-rotation-rules" ? (
-          <span className="bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:text-amber-400">{offDayRuleCount} off day</span>
-        ) : (
-          <span className="bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">{activeShiftCount} active</span>
-        )}
-        {activeSection === "shifts" && nightShiftCount > 0 ? (
-          <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{nightShiftCount} night</span>
-        ) : activeSection === "shift-assignments" && primaryAssignmentCount > 0 ? (
-          <span className="bg-primary/8 px-2 py-1 text-[10px] font-semibold text-primary">{primaryAssignmentCount} primary</span>
-        ) : null}
+        <ScheduleSectionGuide section={activeSection} />
       </div>
     </div>
   ) : (
@@ -2895,11 +2940,28 @@ export function ScheduleManagementView({ section }: { section: string }) {
     </div>
   )
 
-  return (
-    <div className="w-full space-y-2">
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="text-sm text-green-700">{message}</p> : null}
+  const enhancedListSummary = enhancedShiftList ? (
+    <>
+      <span><span className="font-semibold text-foreground">{rows.length}</span> total</span>
+      {activeSection === "shifts" ? (
+        <>
+          <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{activeStatusCount}</span> active</span>
+          <span><span className="font-semibold text-primary">{nightShiftCount}</span> night</span>
+        </>
+      ) : activeSection === "shift-breaks" ? (
+        <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{paidBreakCount}</span> paid</span>
+      ) : activeSection === "shift-assignments" ? (
+        <span><span className="font-semibold text-primary">{primaryAssignmentCount}</span> primary</span>
+      ) : activeSection === "shift-rotation-groups" ? (
+        <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{activeStatusCount}</span> active</span>
+      ) : activeSection === "shift-rotation-rules" ? (
+        <span><span className="font-semibold text-amber-700 dark:text-amber-400">{offDayRuleCount}</span> off day</span>
+      ) : null}
+    </>
+  ) : null
 
+  return (
+    <div className="mt-1.5 w-full min-w-0 max-w-none space-y-2">
       {activeSection === "shift-schedules" ? (
         <ShiftWeeklyScheduler
           rows={rows}
@@ -2938,23 +3000,30 @@ export function ScheduleManagementView({ section }: { section: string }) {
         showExport={false}
         storageKey={`schedule-${activeSection}`}
         toolbarStart={sectionTitleBlock}
+        toolbarSummary={enhancedListSummary}
         toolbarActions={
           <>
             {enhancedShiftList ? (
               <>
-                <label className="relative hidden sm:block">
-                  <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input
+                <div className="hidden sm:block">
+                  <Input
                     type="search"
                     value={managementSearch}
                     onChange={(event) => setManagementSearch(event.target.value)}
                     placeholder={`Search ${config.title.toLowerCase()}`}
-                    className="h-8 w-40 border border-border bg-background pl-8 pr-2 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 lg:w-48"
+                    className="w-40 lg:w-48"
                     aria-label={`Search ${config.title.toLowerCase()}`}
                   />
-                </label>
+                </div>
                 <Select value={managementFilter} onValueChange={(value) => setManagementFilter(value || "ALL")}>
-                  <SelectTrigger size="sm" className="w-31 rounded-lg bg-background" aria-label={`Filter ${config.title.toLowerCase()}`}>
+                  <SelectTrigger
+                    className={cn(
+                      "h-8 rounded-lg bg-background text-xs whitespace-nowrap",
+                      activeSection === "shift-rotation-rules" ? "w-40" : "w-31",
+                    )}
+                    controlClassName="!h-8 !min-h-8 !px-2 !text-xs !whitespace-nowrap"
+                    aria-label={`Filter ${config.title.toLowerCase()}`}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2981,8 +3050,10 @@ export function ScheduleManagementView({ section }: { section: string }) {
                 </Select>
               </>
             ) : null}
-            <button
-              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold !text-white shadow-xs transition hover:brightness-95"
+            <Button
+              appearance="primary"
+              size="small"
+              className="!h-8 !min-h-8"
               type="button"
               onClick={() => {
                 openCreate()
@@ -2990,11 +3061,13 @@ export function ScheduleManagementView({ section }: { section: string }) {
               aria-label={`Create ${config.title}`}
               title="Create"
             >
-              <PlusIcon className="h-3.5 w-3.5" />
+              <Add16Regular className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Create</span>
-            </button>
-            <button
-              className="inline-flex h-8 w-8 items-center justify-center border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            </Button>
+            <Button
+              appearance="outline"
+              size="small"
+              className="!h-8 !min-h-8 !w-8 !min-w-8"
               type="button"
               disabled={loading}
               onClick={() => {
@@ -3004,8 +3077,8 @@ export function ScheduleManagementView({ section }: { section: string }) {
               aria-label="Refresh"
               title="Refresh"
             >
-              <RefreshCwIcon className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-            </button>
+              <ArrowSync20Regular className={`h-3.5 w-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+            </Button>
           </>
         }
         onRowSelect={(_, row) => {
@@ -3025,22 +3098,56 @@ export function ScheduleManagementView({ section }: { section: string }) {
         content={<ScheduleDetailsContent section={activeSection} row={selectedRow} lookupMaps={lookupMaps} />}
         resolveLabel={(key) => prettifyLabel(key)}
         resolveValue={(key, row) => resolveScheduleCellValue(key, row, lookupMaps)}
+        footer={selectedRow ? (
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button
+              appearance="secondary"
+              icon={<Edit16Regular className="h-3.5 w-3.5" />}
+              onClick={() => {
+                const rowId = String(resolveRowId(selectedRow, -1))
+                setDetailsOpen(false)
+                void openEdit(rowId)
+              }}
+            >
+              Edit
+            </Button>
+            <Button
+              appearance="primary"
+              className="!bg-red-600 !text-white hover:!bg-red-700"
+              icon={<Delete16Regular className="h-3.5 w-3.5" />}
+              onClick={() => {
+                const rowId = String(resolveRowId(selectedRow, -1))
+                setDetailsOpen(false)
+                setDeletingId(rowId)
+                setDeleteOpen(true)
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        ) : null}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogPopup className="flex max-h-[90vh] w-[min(1100px,96vw)] flex-col overflow-hidden sm:max-w-5xl">
+        <DialogPopup
+          className={cn(
+            "flex w-full flex-col overflow-hidden",
+            SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
+          )}
+          bodyClassName="!h-full !max-h-none !overflow-hidden"
+        >
           <DialogHeader>
             <DialogTitle>Create {config.title.toLowerCase()}</DialogTitle>
             {activeSection === "shift-schedules" ? (
               <DialogDescription>
-                Use Employee for a single schedule, or Bulk Employees to assign the same shift and date to many employees in one action. Shift and Schedule Date are the main required fields.
+                Choose single or bulk assignment, then set the shift and schedule date.
               </DialogDescription>
             ) : null}
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {renderForm(createValues, setCreateValues, "create")}
           </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-background py-3">
             <button
               type="button"
               className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -3060,7 +3167,13 @@ export function ScheduleManagementView({ section }: { section: string }) {
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogPopup className="flex max-h-[90vh] w-[min(1100px,96vw)] flex-col overflow-hidden sm:max-w-5xl">
+        <DialogPopup
+          className={cn(
+            "flex w-full flex-col overflow-hidden",
+            SINGLE_COLUMN_SCHEDULE_FORMS.has(activeSection) ? "sm:max-w-lg" : "sm:max-w-2xl",
+          )}
+          bodyClassName="!h-full !max-h-none !overflow-hidden"
+        >
           <DialogHeader>
             <DialogTitle>Edit {config.title.toLowerCase()}</DialogTitle>
             {activeSection === "shift-schedules" ? (
@@ -3072,7 +3185,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {renderForm(editValues, setEditValues, "edit")}
           </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-border bg-background py-3">
             <button
               type="button"
               className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
@@ -3091,43 +3204,37 @@ export function ScheduleManagementView({ section }: { section: string }) {
         </DialogPopup>
       </Dialog>
 
-      <Dialog
+      <AlertDialog
         open={deleteOpen}
         onOpenChange={(open) => {
           setDeleteOpen(open)
           if (!open) setClearingAssignedShift(null)
         }}
       >
-        <DialogPopup className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{activeSection === "shift-schedules" ? "Remove future schedule?" : `Delete ${config.title.toLowerCase()}`}</DialogTitle>
-            <DialogDescription>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{activeSection === "shift-schedules" ? "Remove future schedule?" : `Delete ${config.title.toLowerCase()}`}</AlertDialogTitle>
+            <AlertDialogDescription>
               {activeSection === "shift-schedules"
                 ? clearingAssignedShift
                   ? "This marks the future date as an off day without changing the employee’s ongoing default shift assignment."
                   : "This removes the selected assignment before it starts. Schedules for today and previous days are locked to preserve attendance history."
                 : "This action removes the selected record from the backend. Continue only if you are sure."}
-            </DialogDescription>
-          </DialogHeader>
-          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-          <DialogFooter>
-            <button
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
               type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              onClick={() => setDeleteOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-11 items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700"
+              appearance="primary"
+              className="min-w-24 !bg-red-600 !text-white hover:!bg-red-700"
               onClick={() => void onDelete()}
             >
               {activeSection === "shift-schedules" ? "Remove" : "Delete"}
-            </button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

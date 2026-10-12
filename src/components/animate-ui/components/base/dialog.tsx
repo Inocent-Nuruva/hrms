@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { DismissRegular } from "@fluentui/react-icons"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -9,10 +9,11 @@ import {
   DialogBody,
   DialogSurface,
   DialogTitle as FluentDialogTitle,
-  DialogTrigger as FluentDialogTrigger,
+  DrawerHeader,
   dialogSurfaceSize,
   FluentDialogCloseButton,
   FluentDialogRoot,
+  FluentDialogTrigger,
 } from "@/components/ui/fluent-dialog"
 
 type PopupFrom = "top" | "bottom" | "left" | "right" | "center"
@@ -85,6 +86,7 @@ function DialogBackdrop() {
 
 export interface DialogPopupProps {
   className?: string
+  bodyClassName?: string
   children?: React.ReactNode
   from?: PopupFrom
   showCloseButton?: boolean
@@ -92,6 +94,7 @@ export interface DialogPopupProps {
 
 function DialogPopup({
   className,
+  bodyClassName,
   children,
   showCloseButton = true,
 }: DialogPopupProps) {
@@ -101,7 +104,8 @@ function DialogPopup({
       <DialogBody
         className={cn(
           "!flex !flex-col gap-3 overflow-y-auto",
-          size === "full" ? "!h-full !max-h-none" : "!max-h-[min(90dvh,48rem)]",
+          size === "full" ? "!h-full !max-h-none" : size === "medium" ? "!max-h-[min(78dvh,42rem)]" : "!max-h-[min(90dvh,48rem)]",
+          bodyClassName,
         )}
       >
         {showCloseButton ? (
@@ -110,7 +114,7 @@ function DialogPopup({
               type="button"
               appearance="subtle"
               aria-label="Close"
-              icon={<XIcon className="size-4" />}
+              icon={<DismissRegular className="size-4" />}
               className="!absolute top-3 right-3 z-10"
             />
           </FluentDialogTrigger>
@@ -123,9 +127,9 @@ function DialogPopup({
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
+    <DrawerHeader
       data-slot="dialog-header"
-      className={cn("mb-4 flex flex-col gap-1.5 pr-9 text-start", className)}
+      className={cn("mb-4 !flex !flex-col gap-1.5 !px-0 !pt-1.5 pr-9 text-start", className)}
       {...props}
     />
   )

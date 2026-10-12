@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
 import {
   canProposeEmployeeKpis,
   collectEmployeeKpiPeriods,
   firstWritableEmployeeKpiPeriod,
   periodRecordFromEmployeeRow,
-} from "./employee-kpi-periods"
+} from "./employee-kpi-periods";
 
 describe("employee KPI periods", () => {
   it("prefers the nested performance period id, not the assignment id", () => {
@@ -25,8 +25,8 @@ describe("employee KPI periods", () => {
         name: "Q1 2026",
         status: "OPEN",
       }),
-    )
-  })
+    );
+  });
 
   it("falls back to performancePeriodId without using assignment or KPI titles", () => {
     expect(
@@ -41,7 +41,7 @@ describe("employee KPI periods", () => {
       id: 3,
       name: "Q1 2026",
       status: "OPEN",
-    })
+    });
 
     expect(
       periodRecordFromEmployeeRow({
@@ -53,8 +53,8 @@ describe("employee KPI periods", () => {
       id: 3,
       name: "",
       status: "",
-    })
-  })
+    });
+  });
 
   it("collects unique periods from assignments first, then KPI rows", () => {
     const periods = collectEmployeeKpiPeriods([
@@ -71,27 +71,27 @@ describe("employee KPI periods", () => {
         id: 8,
         performance_period: { id: 4, name: "Q2 2026", status: "CLOSED" },
       },
-    ])
+    ]);
 
     expect(periods).toEqual([
       expect.objectContaining({ id: 3, name: "Q1 2026", status: "OPEN" }),
       expect.objectContaining({ id: 4, name: "Q2 2026", status: "CLOSED" }),
-    ])
-  })
+    ]);
+  });
 
-  it("keeps New KPI enabled for open or unstated periods, not closed ones", () => {
-    expect(canProposeEmployeeKpis({ id: 3, status: "OPEN" })).toBe(true)
-    expect(canProposeEmployeeKpis({ id: 3, status: "DRAFT" })).toBe(true)
-    expect(canProposeEmployeeKpis({ id: 3, status: "" })).toBe(true)
-    expect(canProposeEmployeeKpis({ id: 3 })).toBe(true)
-    expect(canProposeEmployeeKpis({ id: 4, status: "CLOSED" })).toBe(false)
-    expect(canProposeEmployeeKpis({ id: 4, status: "LOCKED" })).toBe(false)
-    expect(canProposeEmployeeKpis({})).toBe(false)
+  it("allows proposals only while a period is explicitly open", () => {
+    expect(canProposeEmployeeKpis({ id: 3, status: "OPEN" })).toBe(true);
+    expect(canProposeEmployeeKpis({ id: 3, status: "DRAFT" })).toBe(false);
+    expect(canProposeEmployeeKpis({ id: 3, status: "" })).toBe(false);
+    expect(canProposeEmployeeKpis({ id: 3 })).toBe(false);
+    expect(canProposeEmployeeKpis({ id: 4, status: "CLOSED" })).toBe(false);
+    expect(canProposeEmployeeKpis({ id: 4, status: "LOCKED" })).toBe(false);
+    expect(canProposeEmployeeKpis({})).toBe(false);
     expect(
       firstWritableEmployeeKpiPeriod([
         { id: 4, name: "Q2", status: "LOCKED" },
         { id: 3, name: "Q1", status: "OPEN" },
       ]),
-    ).toEqual(expect.objectContaining({ id: 3 }))
-  })
-})
+    ).toEqual(expect.objectContaining({ id: 3 }));
+  });
+});

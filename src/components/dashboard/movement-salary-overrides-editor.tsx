@@ -1,7 +1,8 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react";
-import { Loader2Icon } from "lucide-react";
+
 
 import {
   getEmployeePayrollSalary,
@@ -353,7 +354,7 @@ export function MovementSalaryOverridesEditor({
 
       {salaryState === "loading" || linesState === "loading" ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2Icon className="size-3.5 animate-spin" />
+          <FluentLoadingIndicator className="size-3.5 animate-spin" />
           Loading structure lines…
         </p>
       ) : null}

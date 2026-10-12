@@ -1,8 +1,5 @@
-/**
- * Keep route-level loading empty for post-login navigations.
- * Login already shows the workspace loader; a second skeleton here felt like a double load.
- * Soft in-app navigations still paint quickly via client components.
- */
+import { AccessSkeleton } from "@/components/ui/access-skeleton"
+
 export default function DashboardLoading() {
-  return null
+  return <AccessSkeleton className="min-h-[28rem]" />
 }

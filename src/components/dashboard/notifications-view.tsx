@@ -1,18 +1,12 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  ArchiveIcon,
-  ArrowUpRightIcon,
-  CheckIcon,
-  EyeIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-  RotateCcwIcon,
-  ToggleLeftIcon,
-} from "lucide-react"
-import { toast } from "sonner"
+  ArchiveIcon, ArrowUpRightIcon, CheckIcon, EyeIcon, RefreshCwIcon, RotateCcwIcon, ToggleLeftIcon } from "lucide-react";
+import { toast } from "@/components/ui/fluent-toast-store"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
@@ -1486,7 +1480,7 @@ export function NotificationsView() {
                   onClick={() => void handleMarkSeen(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <EyeIcon className="h-3.5 w-3.5" />
                   )}
@@ -1500,7 +1494,7 @@ export function NotificationsView() {
                   onClick={() => void handleMarkRead(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
                   )}
@@ -1515,7 +1509,7 @@ export function NotificationsView() {
                   onClick={() => void handleArchiveNotification(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <ArchiveIcon className="h-3.5 w-3.5" />
                   )}
@@ -1668,7 +1662,7 @@ export function NotificationsView() {
                   onClick={() => void handleToggleChannelSetting(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
                   )}
@@ -1748,7 +1742,7 @@ export function NotificationsView() {
                   onClick={() => void handleTogglePlatformChannelSetting(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
                   )}
@@ -1829,7 +1823,7 @@ export function NotificationsView() {
                   onClick={() => void handleToggleRegistryItem(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
                   )}
@@ -1910,7 +1904,7 @@ export function NotificationsView() {
                   onClick={() => void handleTogglePlatformRegistryItem(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
                   )}
@@ -1985,7 +1979,7 @@ export function NotificationsView() {
                   onClick={() => void handleToggleTemplate(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <ToggleLeftIcon className="h-3.5 w-3.5" />
                   )}
@@ -2070,7 +2064,7 @@ export function NotificationsView() {
                   onClick={() => void handleToggleRule(row)}
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <ToggleLeftIcon className="h-3.5 w-3.5" />
                   )}
@@ -2161,7 +2155,7 @@ export function NotificationsView() {
                   }
                 >
                   {busy ? (
-                    <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <RotateCcwIcon className="h-3.5 w-3.5" />
                   )}
@@ -2288,11 +2282,13 @@ export function NotificationsView() {
         toolbarActions={
           <>
             {tab !== "settings" && tab !== "platform-settings" ? (
-              <input
-                className={cn(inputClass, "w-36 sm:w-44")}
+              <FluentSearchBox
+                size="small"
+                className="!w-36 sm:!w-44"
                 placeholder="Search…"
+                aria-label={`Search ${sectionTitle.toLowerCase()}`}
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
+                onChange={(_event, data) => setSearchInput(data.value)}
               />
             ) : null}
 
@@ -2475,7 +2471,7 @@ export function NotificationsView() {
                 title={unreadInboxCount > 0 ? "Mark all inbox notifications as read" : "No unread notifications"}
               >
                 {markingAllRead ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
                     <CheckIcon className="mr-1 h-3.5 w-3.5" />
@@ -2498,7 +2494,7 @@ export function NotificationsView() {
                 }
               >
                 {sendingTestNotification ? (
-                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                  <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <>
                     <ArrowUpRightIcon className="mr-1 h-3.5 w-3.5" />
@@ -2575,7 +2571,7 @@ export function NotificationsView() {
           <div className="space-y-4 overflow-y-auto p-4">
             {detailLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2Icon className="size-4 animate-spin text-primary" />
+                <FluentLoadingIndicator className="size-4 animate-spin text-primary" />
                 Loading…
               </div>
             ) : null}
@@ -2591,7 +2587,7 @@ export function NotificationsView() {
                         disabled={selectedBusy || isArchivedNotification(selectedRow) || isSeenNotification(selectedRow)}
                         onClick={() => void handleMarkSeen(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <EyeIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <EyeIcon className="size-3.5" />}
                         Mark seen
                       </button>
                       <button
@@ -2600,7 +2596,7 @@ export function NotificationsView() {
                         disabled={selectedBusy || isArchivedNotification(selectedRow) || !isUnreadNotification(selectedRow)}
                         onClick={() => void handleMarkRead(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         Mark read
                       </button>
                       <button
@@ -2609,7 +2605,7 @@ export function NotificationsView() {
                         disabled={selectedBusy || isArchivedNotification(selectedRow)}
                         onClick={() => void handleArchiveNotification(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <ArchiveIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ArchiveIcon className="size-3.5" />}
                         Archive
                       </button>
                       <button
@@ -2679,7 +2675,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleToggleRegistryItem(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         {channelSettingEnabled(selectedRow) ? "Disable item" : "Enable item"}
                       </button>
                     </div>
@@ -2705,7 +2701,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleTogglePlatformRegistryItem(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         {channelSettingEnabled(selectedRow) ? "Disable item" : "Enable item"}
                       </button>
                     </div>
@@ -2731,7 +2727,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleToggleChannelSetting(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         {channelSettingEnabled(selectedRow) ? "Disable channel" : "Enable channel"}
                       </button>
                     </div>
@@ -2755,7 +2751,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleTogglePlatformChannelSetting(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         {channelSettingEnabled(selectedRow) ? "Disable platform channel" : "Enable platform channel"}
                       </button>
                     </div>
@@ -2779,7 +2775,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleToggleTemplate(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
                         {templateEnabled(selectedRow) ? "Deactivate template" : "Activate template"}
                       </button>
                     </div>
@@ -2828,7 +2824,7 @@ export function NotificationsView() {
                         disabled={selectedBusy}
                         onClick={() => void handleToggleRule(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ToggleLeftIcon className="size-3.5" />}
                         {ruleEnabled(selectedRow) ? "Disable rule" : "Enable rule"}
                       </button>
                     </div>
@@ -2874,7 +2870,7 @@ export function NotificationsView() {
                         disabled={selectedBusy || !canRetryMailLog(selectedRow)}
                         onClick={() => void handleRetryMailLog(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <RotateCcwIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <RotateCcwIcon className="size-3.5" />}
                         Retry mail
                       </button>
                     </div>
@@ -2928,7 +2924,7 @@ export function NotificationsView() {
                         disabled={selectedBusy || !canRetryMailLog(selectedRow)}
                         onClick={() => void handleRetryPlatformMailLog(selectedRow)}
                       >
-                        {selectedBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <RotateCcwIcon className="size-3.5" />}
+                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <RotateCcwIcon className="size-3.5" />}
                         Retry platform mail
                       </button>
                     </div>

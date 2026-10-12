@@ -5,10 +5,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SessionExpiryGuard } from "@/components/auth/session-expiry-guard";
-import { SuccessAlertOverlay } from "@/components/success-alert-overlay";
-import { ErrorAlertOverlay } from "@/components/error-alert-overlay";
 import { PwaProvider } from "@/components/pwa-provider";
 import { AppFluentThemeProvider } from "@/components/fluent-theme-provider";
+import { AppTextScale } from "@/components/app-text-scale";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
@@ -104,11 +103,10 @@ export default function RootLayout({
         <ThemeProvider>
           <AppFluentThemeProvider>
             <PwaProvider />
+            <AppTextScale />
             <SessionExpiryGuard />
             <TooltipProvider>
               {children}
-              <SuccessAlertOverlay />
-              <ErrorAlertOverlay />
               <Toaster />
             </TooltipProvider>
           </AppFluentThemeProvider>

@@ -749,7 +749,30 @@ export interface CreateEmployeeInvitationPayload {
   channels: EmployeeInvitationChannel[];
 }
 
+export interface PositionCapacity {
+  position_id: number;
+  headcount: number;
+  filled: number;
+  pending_invitations: number;
+  available: number;
+  /** True when one more acceptance would exceed the approved headcount. */
+  will_overfill: boolean;
+}
+
+/** Seats taken in a position, counting pending invitations as taken. */
+export async function getEmployeeInvitationPositionCapacity(
+  token: string,
+  positionId: number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-invitations/position-capacity/${positionId}`,
+    { token, dedupe: false },
+  );
+  return normalizeSingle(payload) as unknown as PositionCapacity;
+}
+
 export type EmployeeInvitationResponse = AdminRecord & {
+  capacity?: PositionCapacity | null;
   id?: number;
   status?: string;
   expires_at?: string;
@@ -777,6 +800,8 @@ export interface PublicEmployeeInvitation {
   phone: string;
   company_name: string;
   expires_at: string;
+  /** True when the email already has an account; accept with its current password. */
+  has_existing_account?: boolean;
 }
 
 export interface AcceptEmployeeInvitationResponse {
@@ -10101,10 +10126,11 @@ export async function submitOnboardingRequest(
 export async function submitMyOnboardingDetails(
   token: string,
   id: string | number,
+  options: { not_provided_items?: string[] } = {},
 ) {
   return adminRequest<unknown>(
     `/api/onboarding/requests/${id}/employee-details/submit`,
-    { method: "POST", token },
+    { method: "POST", token, body: options },
   );
 }
 
@@ -12458,6 +12484,41 @@ export async function listPendingEmployeeInvitations(token: string) {
   return normalizeList(payload) as EmployeeInvitationResponse[];
 }
 
+export type EmployeeInvitationHistoryStatus =
+  | "all"
+  | "pending"
+  | "accepted"
+  | "expired"
+  | "cancelled";
+
+export interface EmployeeInvitationHistoryQuery {
+  status?: EmployeeInvitationHistoryStatus;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** All invitations, filtered by effective status (overdue pending = expired). */
+export async function listEmployeeInvitationHistory(
+  token: string,
+  query: EmployeeInvitationHistoryQuery = {},
+) {
+  const params = new URLSearchParams();
+  if (query.status) params.set("status", query.status);
+  if (query.search?.trim()) params.set("search", query.search.trim());
+  if (query.page) params.set("page", String(query.page));
+  if (query.limit) params.set("limit", String(query.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const payload = await adminRequest<{
+    data?: unknown;
+    meta?: { totalItems?: number };
+  }>(`/api/employee-invitations/history${suffix}`, { token, dedupe: false });
+  return {
+    data: normalizeList(payload) as EmployeeInvitationResponse[],
+    totalItems: Number(payload?.meta?.totalItems ?? 0),
+  };
+}
+
 export async function resendEmployeeInvitation(
   token: string,
   invitationId: string | number,
@@ -12472,10 +12533,14 @@ export async function resendEmployeeInvitation(
   return normalizeSingle(payload) as EmployeeInvitationResponse;
 }
 
+// The registration token is sent in the request body, never the URL, so it
+// stays out of proxy and access logs.
 export async function getPublicEmployeeInvitation(token: string) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/lookup",
     {
+      method: "POST",
+      body: { token },
       dedupe: false,
     },
   );
@@ -12487,10 +12552,10 @@ export async function acceptEmployeeInvitation(
   password: string,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/accept/${encodeURIComponent(token)}`,
+    "/api/employee-invitations/accept",
     {
       method: "POST",
-      body: { password },
+      body: { token, password },
       dedupe: false,
     },
   );
@@ -12711,6 +12776,30 @@ export async function getCurrentEmployee(token: string) {
 export async function getMyProfile(token: string) {
   const payload = await adminRequest<unknown>("/api/me/profile", { token });
   return normalizeSingle(payload);
+}
+
+export type DashboardCardStyle = {
+  palette: "ocean" | "forest" | "plum" | "coral" | "midnight" | "berry" | "neutral" | "white"
+  artwork: "none" | "orbit" | "waves" | "confetti" | "arches" | "sprigs"
+}
+
+export async function getMyDashboardCardStyle(token: string) {
+  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
+    token,
+    cacheTtlMs: 0,
+    dedupe: false,
+  })
+}
+
+export async function updateMyDashboardCardStyle(
+  token: string,
+  style: DashboardCardStyle,
+) {
+  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
+    method: "PATCH",
+    token,
+    body: style,
+  })
 }
 
 const PROFILE_PHOTO_URL_KEYS = [
@@ -14820,6 +14909,28 @@ export async function createEmployeeSectionItem(
   });
 }
 
+/** Self-onboarding: adds a section item to the caller's own employee profile. */
+export async function createMyEmployeeSectionItem(
+  token: string,
+  section: EmployeeProfileSection,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employees/me/${section}`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Self-onboarding: attaches a document to the caller's own employee profile. */
+export async function createMyEmployeeDocument(token: string, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/employees/me/documents`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function deleteEmployeeSectionItem(
   token: string,
   employeeId: string | number,
@@ -14886,6 +14997,32 @@ export async function archiveEmployeeProfile(
     method: "DELETE",
     token,
   });
+}
+
+export interface PermanentEmployeeDeletionResponse {
+  message: string;
+  employee_id: number;
+  company_user_removed: boolean;
+  user_account_removed: boolean;
+  files_removed: number;
+}
+
+/**
+ * Permanently delete an employee who is still onboarding, with their records.
+ * The backend refuses (409) once the employee has working history, supervises
+ * others, or has device access; the message explains why.
+ */
+export async function deleteEmployeePermanently(
+  token: string,
+  employeeId: string | number,
+) {
+  return adminRequest<PermanentEmployeeDeletionResponse>(
+    `/api/employees/${employeeId}/permanent`,
+    {
+      method: "DELETE",
+      token,
+    },
+  );
 }
 
 export async function unlinkEmployeeCompanyUser(
@@ -16649,6 +16786,18 @@ export async function closePerformancePeriod(
   });
 }
 
+export async function reopenPerformancePeriod(
+  token: string,
+  periodId: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/reopen`, {
+    method: "POST",
+    token,
+    body: { reason },
+  });
+}
+
 export async function createPerformancePeriodAssignments(
   token: string,
   periodId: string | number,
@@ -16745,6 +16894,10 @@ export async function createPerformanceKpiTemplate(
     token,
     body: data,
   });
+}
+
+export async function applyPerformanceKpiTemplate(token: string, periodId: string, templateId: string, conflictPolicy: 'MERGE' | 'SKIP' | 'REPLACE') {
+  return adminRequest<unknown>(`/api/performance/periods/${periodId}/apply-kpi-template`, { method: 'POST', token, body: { template_id: Number(templateId), conflict_policy: conflictPolicy } });
 }
 
 export async function listPerformanceKpiRules(token: string) {
@@ -17205,6 +17358,28 @@ export async function listMyEmployeeKpis(
   return normalizeList(payload);
 }
 
+export async function listKpiCycleReviews(token: string, mode: 'self' | 'manager', periodId?: string) {
+  const payload = await adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpi-reviews${periodId ? `?period_id=${encodeURIComponent(periodId)}` : ''}`, { token });
+  return normalizeList(payload);
+}
+
+export async function listMyKpiCycleScores(token: string) {
+  const payload = await adminRequest<unknown>('/api/performance/me/kpi-scores', { token });
+  return normalizeList(payload);
+}
+
+export async function submitKpiCycleRating(token: string, mode: 'self' | 'manager', kpiId: string, kind: 'MID' | 'FINAL', rating: number, comment: string) {
+  return adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpis/${kpiId}/reviews/${kind}/${mode === 'self' ? 'self' : 'manager'}`, { method: 'POST', token, body: { rating, comment } });
+}
+
+export async function respondToKpiMidReview(token: string, kpiId: string, decision: 'ACKNOWLEDGE' | 'DISPUTE', comment: string) {
+  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}/reviews/mid/respond`, { method: 'POST', token, body: { decision, comment } });
+}
+
+export async function finalizeKpiCycleReview(token: string, kpiId: string, comment: string) {
+  return adminRequest<unknown>(`/api/performance/manager/kpis/${kpiId}/reviews/final/finalize`, { method: 'POST', token, body: { comment } });
+}
+
 export async function createMyEmployeeKpi(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/performance/me/kpis", {
     method: "POST",
@@ -17266,6 +17441,25 @@ export async function listManagerEmployeeKpis(
     {
       token,
     },
+  );
+  return normalizeList(payload);
+}
+
+export async function createManagerEmployeeKpi(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/performance/manager/kpis", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listManagerKpiAssignees(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/manager/kpi-assignees",
+    { token },
   );
   return normalizeList(payload);
 }
@@ -19340,7 +19534,21 @@ export async function getHrAttendanceSetupStatus(token: string) {
       token,
     },
   );
-  return normalizeSingle(payload) ?? asRecord(payload);
+  const root = asRecord(payload);
+  const candidates = [asRecord(root?.data), asRecord(root?.result), root];
+
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      ("isComplete" in candidate ||
+        "activePolicy" in candidate ||
+        "missing" in candidate)
+    ) {
+      return candidate;
+    }
+  }
+
+  return normalizeSingle(payload) ?? root;
 }
 
 export async function runHrAttendanceSetupWizard(
@@ -20306,4 +20514,110 @@ export function isSelectableDefaultAvatar(
     .toLowerCase();
   if (status && status !== "active") return false;
   return Boolean(extractDefaultAvatarImageUrl(row));
+}
+
+// ---------------------------------------------------------------------------
+// Identity change audit (names / email / phone synced between users and employees)
+// ---------------------------------------------------------------------------
+
+export type IdentityAuditField = "first_name" | "last_name" | "email" | "phone";
+export type IdentityAuditSource = "user_update" | "employee_update" | "rollback";
+
+export interface IdentityAuditEntry {
+  id: number;
+  change_set_id: string;
+  company_id: number;
+  user_id: number | null;
+  employee_id: number | null;
+  affected_employee_ids: number[];
+  subject_name: string | null;
+  field: IdentityAuditField;
+  old_value: string | null;
+  new_value: string | null;
+  source: IdentityAuditSource;
+  rollback_of_change_set_id: string | null;
+  rolled_back_by_change_set_id: string | null;
+  can_rollback: boolean;
+  actor_user_id: number | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface IdentityAuditQuery {
+  page?: number;
+  limit?: number;
+  user_id?: number;
+  employee_id?: number;
+  field?: IdentityAuditField;
+  source?: IdentityAuditSource;
+  search?: string;
+  from?: string;
+  to?: string;
+}
+
+function buildIdentityAuditQuery(params: IdentityAuditQuery) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
+/** GET /api/identity-audit — paginated identity change history. */
+export async function listIdentityAudit(
+  token: string,
+  params: IdentityAuditQuery = {},
+) {
+  return adminRequest<{
+    items: IdentityAuditEntry[];
+    total: number;
+    page: number;
+    limit: number;
+  }>(`/api/identity-audit${buildIdentityAuditQuery(params)}`, { token });
+}
+
+/** GET /api/identity-audit/export — CSV of the filtered history. */
+export async function downloadIdentityAuditCsv(
+  token: string,
+  params: IdentityAuditQuery = {},
+): Promise<Blob> {
+  const { page: _page, limit: _limit, ...filters } = params;
+  void _page;
+  void _limit;
+  const response = await fetch(
+    buildUrl(`/api/identity-audit/export${buildIdentityAuditQuery(filters)}`),
+    {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    try {
+      payload = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      payload = { message: text };
+    }
+    throw new Error(extractMessage(payload, response.status));
+  }
+  return response.blob();
+}
+
+/** POST /api/identity-audit/{changeSetId}/rollback — revert the latest change. */
+export async function rollbackIdentityChange(
+  token: string,
+  changeSetId: string,
+  reason?: string,
+) {
+  return adminRequest<{ changeSetId: string | null; changedFields: string[] }>(
+    `/api/identity-audit/${encodeURIComponent(changeSetId)}/rollback`,
+    { method: "POST", token, body: { reason: reason || undefined } },
+  );
 }

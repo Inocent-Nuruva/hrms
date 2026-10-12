@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CircleHelpIcon, CircleUserRoundIcon, LogOutIcon, SettingsIcon } from "lucide-react"
+import {
+  ArrowExit16Regular,
+  PersonCircle16Regular,
+  QuestionCircle16Regular,
+  Settings16Regular,
+} from "@fluentui/react-icons"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -119,8 +124,8 @@ export function HeaderUserMenu({
           />
         }
       >
-        <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-8" />
-        <span className="pointer-events-none absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+        <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-7" />
+        <span className="pointer-events-none absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-60" side="bottom" align="end" sideOffset={8}>
         <DropdownMenuGroup>
@@ -137,21 +142,21 @@ export function HeaderUserMenu({
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => router.push(accountHref)}>
-            <CircleUserRoundIcon />
+            <PersonCircle16Regular className="text-blue-600 dark:text-blue-400" />
             Account
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
-            <SettingsIcon />
+            <Settings16Regular className="text-violet-600 dark:text-violet-400" />
             Settings
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/dashboard/help")}>
-            <CircleHelpIcon />
+            <QuestionCircle16Regular className="text-amber-600 dark:text-amber-400" />
             Get help
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void handleLogout()} disabled={isLoggingOut} variant="destructive">
-          <LogOutIcon />
+          <ArrowExit16Regular className="text-red-600 dark:text-red-400" />
           {isLoggingOut ? "Logging out…" : "Log out"}
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -1,9 +1,11 @@
 import React from 'react';
-import { StyleSheet, ViewStyle, TextStyle, ActivityIndicator, View, type StyleProp } from 'react-native';
+import { StyleSheet, ViewStyle, TextStyle, View, type StyleProp } from 'react-native';
 import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
 import { TouchableScale } from './touchable-scale';
 import { Text } from './text';
+import { FluentActivityIndicator } from './fluent-activity-indicator';
+import { useAppAccent, useAppAccentForeground } from '../../hooks/useAppAccent';
 
 type Variant = 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 
@@ -31,19 +33,21 @@ export function Button({
   rightIcon,
 }: ButtonProps) {
   const { isDark } = useThemePreference();
+  const accent = useAppAccent();
+  const accentForeground = useAppAccentForeground();
   const baseStyle = styles.base;
   let variantStyle = {};
   let textVariantStyle = {};
-  let spinnerColor = '#fff';
+  let spinnerColor = accentForeground;
 
   if (variant === 'default') {
-    variantStyle = { backgroundColor: COLORS.primary || '#18181b' };
-    textVariantStyle = { color: '#fff' };
-    spinnerColor = '#fff';
+    variantStyle = { backgroundColor: accent || '#18181b' };
+    textVariantStyle = { color: accentForeground };
+    spinnerColor = accentForeground;
   } else if (variant === 'secondary') {
-    variantStyle = { backgroundColor: COLORS.accent };
-    textVariantStyle = { color: COLORS.onAccent };
-    spinnerColor = COLORS.onAccent;
+    variantStyle = { backgroundColor: accent };
+    textVariantStyle = { color: accentForeground };
+    spinnerColor = accentForeground;
   } else if (variant === 'outline') {
     variantStyle = {
       borderWidth: 1,
@@ -69,7 +73,7 @@ export function Button({
       style={[baseStyle, variantStyle, disabled && styles.disabled, style]}
       pressedScale={0.98}
     >
-      {loading ? <ActivityIndicator size="small" color={spinnerColor} /> : null}
+      {loading ? <FluentActivityIndicator size="small" color={spinnerColor} /> : null}
       {!loading && leftIcon ? <View style={styles.iconWrap}>{leftIcon}</View> : null}
       {!loading ? (
         <Text style={[styles.text, textVariantStyle, textStyle]}>

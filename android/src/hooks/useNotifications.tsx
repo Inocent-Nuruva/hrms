@@ -1,279 +1,146 @@
-import {
-  createContext,
-  createElement,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
-import { useQuery } from '@tanstack/react-query';
-
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { Platform } from 'react-native';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api, normalizeList } from '../lib/api';
-import {
-  ensureNotificationChannelsAsync,
-  ensureNotificationPermissionsAsync,
-  presentHrmsNotification,
-} from '../lib/notification-settings';
-import * as SecureStore from '../lib/secure-store';
 import { useAuth } from './useAuth';
+import { ensureNotificationPermissionsAsync, presentHrmsNotification } from '../lib/notification-settings';
 
-type NotificationRoute = '/(tabs)/leave';
-
-export interface AppNotification {
-  id: string;
-  type: 'leave-status';
-  title: string;
-  body: string;
-  createdAt: string;
-  read: boolean;
-  route: NotificationRoute;
-  requestId: string;
-  status: string;
-}
+export type AppNotification = Record<string, unknown> & {
+  id: string | number;
+  title?: string;
+  message?: string;
+  status?: string;
+};
 
 interface NotificationContextValue {
   notifications: AppNotification[];
   unreadCount: number;
+  loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  refresh: () => Promise<void>;
+  loadMore: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
+  markManyAsRead: (ids: string[]) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  archive: (id: string) => Promise<void>;
+  archiveMany: (ids: string[]) => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
+const QUERY_KEY = ['mobileNotifications'];
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
-  const userId = String(auth.user?.id ?? '');
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [bootstrappedUserId, setBootstrappedUserId] = useState<string | null>(null);
-
-  const notificationStorageKey = userId ? `hrms.notifications.${userId}` : '';
-  const snapshotStorageKey = userId ? `hrms.notificationSnapshot.${userId}` : '';
-
-  const leaveRequestsQuery = useQuery({
-    queryKey: ['mobileNotificationLeaveRequests', userId],
-    queryFn: async () => normalizeList(await api.listMyLeaveRequests({ limit: 50 })),
-    enabled: auth.isAuthenticated && !!userId,
-    refetchInterval: 1000 * 30,
+  const queryClient = useQueryClient();
+  const query = useInfiniteQuery({
+    queryKey: QUERY_KEY,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const payload = await api.listMyNotifications({
+        page: pageParam, limit: 50, sortBy: 'created_at', sortOrder: 'DESC',
+      });
+      const rows = await normalizeList(payload) as AppNotification[];
+      const result = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+      const meta = result.meta && typeof result.meta === 'object' ? result.meta as Record<string, unknown> : {};
+      const totalPages = Number(meta.total_pages ?? meta.totalPages ?? pageParam);
+      return { rows, nextPage: pageParam < totalPages ? pageParam + 1 : undefined };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: auth.isAuthenticated,
+    refetchInterval: 30_000,
   });
+  const seenNotificationIds = useRef<Set<string> | null>(null);
+  const latestRows = query.data?.pages[0]?.rows;
 
   useEffect(() => {
-    if (!auth.isAuthenticated) return;
-
-    let cancelled = false;
-
-    async function prepareNativeNotifications() {
-      try {
-        await ensureNotificationChannelsAsync();
-        if (!cancelled) {
-          await ensureNotificationPermissionsAsync();
-        }
-      } catch {
-        // Keep in-app notifications working even if native notifications fail.
-      }
-    }
-
-    void prepareNativeNotifications();
-
-    return () => {
-      cancelled = true;
-    };
+    if (!auth.isAuthenticated || Platform.OS !== 'android') return;
+    void ensureNotificationPermissionsAsync().catch((error) => {
+      console.warn('Could not enable Android notifications', error);
+    });
   }, [auth.isAuthenticated]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadStoredNotifications() {
-      if (!userId) {
-        if (!cancelled) {
-          setNotifications([]);
-          setBootstrappedUserId(null);
-        }
-        return;
-      }
-
-      const stored = await SecureStore.getItemAsync(notificationStorageKey);
-      if (cancelled) return;
-
-      if (!stored) {
-        setNotifications([]);
-        setBootstrappedUserId(userId);
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(stored) as AppNotification[];
-        setNotifications(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setNotifications([]);
-      }
-      setBootstrappedUserId(userId);
+    if (!latestRows) return;
+    const currentIds = new Set(latestRows.map((item) => String(item.id)));
+    if (seenNotificationIds.current === null) {
+      seenNotificationIds.current = currentIds;
+      return;
     }
 
-    void loadStoredNotifications();
-    return () => {
-      cancelled = true;
-    };
-  }, [notificationStorageKey, userId]);
-
-  useEffect(() => {
-    if (!userId || bootstrappedUserId !== userId) return;
-    void SecureStore.setItemAsync(notificationStorageKey, JSON.stringify(notifications));
-  }, [bootstrappedUserId, notificationStorageKey, notifications, userId]);
-
-  useEffect(() => {
-    if (!auth.isAuthenticated || !userId || bootstrappedUserId !== userId) return;
-    if (!leaveRequestsQuery.data) return;
-
-    let cancelled = false;
-
-    async function reconcileNotifications() {
-      const currentSnapshot = buildLeaveSnapshot(leaveRequestsQuery.data);
-      const storedSnapshotRaw = await SecureStore.getItemAsync(snapshotStorageKey);
-      if (cancelled) return;
-
-      if (!storedSnapshotRaw) {
-        await SecureStore.setItemAsync(snapshotStorageKey, JSON.stringify(currentSnapshot));
-        return;
-      }
-
-      let previousSnapshot: Record<string, { status: string; leaveType: string; startDate: string; endDate: string }> = {};
-      try {
-        previousSnapshot = JSON.parse(storedSnapshotRaw) as typeof previousSnapshot;
-      } catch {
-        previousSnapshot = {};
-      }
-
-      const freshNotifications: AppNotification[] = [];
-
-      Object.entries(currentSnapshot).forEach(([requestId, current]) => {
-        const previous = previousSnapshot[requestId];
-        if (!previous) return;
-        if (previous.status === current.status) return;
-
-        freshNotifications.push({
-          id: `leave-status:${requestId}:${current.status}`,
-          type: 'leave-status',
-          title: `${capitalizeStatus(current.status)} leave request`,
-          body: `${current.leaveType || 'Your leave request'} is now ${humanizeStatus(current.status)}.`,
-          createdAt: new Date().toISOString(),
-          read: false,
-          route: '/(tabs)/leave',
-          requestId,
-          status: current.status,
-        });
+    const newItems = latestRows.filter((item) => !seenNotificationIds.current?.has(String(item.id)));
+    currentIds.forEach((id) => seenNotificationIds.current?.add(id));
+    newItems.forEach((item) => {
+      const title = firstNotificationText(item, ['title', 'subject', 'event_title']) || 'HRMS notification';
+      const body = firstNotificationText(item, ['message', 'body', 'description', 'content']);
+      void presentHrmsNotification({
+        title,
+        body: body || 'You have a new notification.',
+        data: { notificationId: item.id },
+      }).catch((error) => {
+        console.warn('Could not show Android notification', error);
       });
+    });
+  }, [latestRows]);
 
-      const unseenNotifications = freshNotifications.filter(
-        (item) => !notifications.some((existing) => existing.id === item.id)
-      );
+  useEffect(() => {
+    if (!auth.isAuthenticated) seenNotificationIds.current = null;
+  }, [auth.isAuthenticated]);
 
-      if (unseenNotifications.length) {
-        setNotifications((existing) => {
-          const seenIds = new Set(existing.map((item) => item.id));
-          const merged = [...unseenNotifications.filter((item) => !seenIds.has(item.id)), ...existing];
-          return merged.slice(0, 50);
-        });
-
-        await Promise.allSettled(
-          unseenNotifications.map((item) =>
-            presentHrmsNotification({
-              title: item.title,
-              body: item.body,
-              data: {
-                route: item.route,
-                requestId: item.requestId,
-                status: item.status,
-                type: item.type,
-              },
-            })
-          )
-        );
-      }
-
-      await SecureStore.setItemAsync(snapshotStorageKey, JSON.stringify(currentSnapshot));
-    }
-
-    void reconcileNotifications();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [auth.isAuthenticated, bootstrappedUserId, leaveRequestsQuery.data, notifications, snapshotStorageKey, userId]);
-
+  const notifications = query.data?.pages.flatMap((page) => page.rows) ?? [];
   const markAsRead = useCallback(async (id: string) => {
-    setNotifications((current) =>
-      current.map((item) => (item.id === id ? { ...item, read: true } : item))
-    );
-  }, []);
-
+    await api.markNotificationAsRead(id);
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  }, [queryClient]);
+  const markManyAsRead = useCallback(async (ids: string[]) => {
+    await Promise.all(ids.map((id) => api.markNotificationAsRead(id)));
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  }, [queryClient]);
   const markAllAsRead = useCallback(async () => {
-    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
-  }, []);
-
-  const value = useMemo<NotificationContextValue>(
-    () => ({
-      notifications,
-      unreadCount: notifications.filter((item) => !item.read).length,
-      markAsRead,
-      markAllAsRead,
-    }),
-    [markAllAsRead, markAsRead, notifications]
-  );
-
+    await api.markAllNotificationsAsRead();
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  }, [queryClient]);
+  const refresh = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+  const loadMore = useCallback(async () => {
+    if (query.hasNextPage && !query.isFetchingNextPage) await query.fetchNextPage();
+  }, [query]);
+  const archive = useCallback(async (id: string) => {
+    await api.archiveNotification(id);
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  }, [queryClient]);
+  const archiveMany = useCallback(async (ids: string[]) => {
+    await Promise.all(ids.map((id) => api.archiveNotification(id)));
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  }, [queryClient]);
+  const value = useMemo<NotificationContextValue>(() => ({
+    notifications,
+    unreadCount: notifications.filter((item) => String(item.status ?? '').toUpperCase() === 'UNREAD').length,
+    loading: query.isLoading,
+    loadingMore: query.isFetchingNextPage,
+    hasMore: Boolean(query.hasNextPage),
+    refresh,
+    loadMore,
+    markAsRead,
+    markManyAsRead,
+    markAllAsRead,
+    archive,
+    archiveMany,
+  }), [archive, archiveMany, loadMore, markAllAsRead, markAsRead, markManyAsRead, notifications, query.hasNextPage, query.isFetchingNextPage, query.isLoading, refresh]);
   return createElement(NotificationContext.Provider, { value }, children);
 }
 
-export function useNotifications() {
-  const context = useContext(NotificationContext);
-  if (!context) {
-    throw new Error('useNotifications must be used within NotificationsProvider');
-  }
-  return context;
-}
-
-function buildLeaveSnapshot(items: Record<string, unknown>[] | undefined) {
-  return (items || []).reduce<Record<string, { status: string; leaveType: string; startDate: string; endDate: string }>>(
-    (snapshot, item) => {
-      const requestId = String(item.id ?? '');
-      if (!requestId) return snapshot;
-      const leaveType =
-        readString(asRecord(item.leave_type), ['name']) ||
-        readString(item, ['leave_type_name']) ||
-        'Leave request';
-
-      snapshot[requestId] = {
-        status: readString(item, ['status']) || 'pending',
-        leaveType,
-        startDate: readString(item, ['start_date']),
-        endDate: readString(item, ['end_date']),
-      };
-      return snapshot;
-    },
-    {}
-  );
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-}
-
-function readString(value: unknown, keys: string[]) {
-  const record = asRecord(value);
-  if (!record) return '';
+function firstNotificationText(item: AppNotification, keys: string[]) {
   for (const key of keys) {
-    const candidate = record[key];
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
 }
 
-function humanizeStatus(value: string) {
-  return value.replaceAll('_', ' ');
-}
-
-function capitalizeStatus(value: string) {
-  const cleaned = humanizeStatus(value);
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+export function useNotifications() {
+  const context = useContext(NotificationContext);
+  if (!context) throw new Error('useNotifications must be used within NotificationsProvider');
+  return context;
 }

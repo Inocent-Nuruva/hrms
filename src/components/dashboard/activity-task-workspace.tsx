@@ -1,29 +1,14 @@
 "use client"
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { Input as FluentInput } from "@fluentui/react-components"
 import * as React from "react"
+import Link from "next/link"
+import { Textarea } from "@/components/ui/textarea"
 import {
-  CalendarDaysIcon,
-  CheckCircle2Icon,
-  CircleDotIcon,
-  Clock3Icon,
-  ClipboardListIcon,
-  Columns3Icon,
-  FileTextIcon,
-  GripVerticalIcon,
-  HistoryIcon,
-  InboxIcon,
-  ListIcon,
-  Loader2Icon,
-  MessageSquareIcon,
-  MoreHorizontalIcon,
-  PlusIcon,
-  SearchIcon,
-  SendIcon,
-  SlidersHorizontalIcon,
-  SparklesIcon,
-  XIcon,
-} from "lucide-react"
-import { toast } from "sonner"
+  CalendarDaysIcon, CheckCircle2Icon, CircleDotIcon, Clock3Icon, ClipboardListIcon, Columns3Icon, FileTextIcon, GripVerticalIcon, HistoryIcon, InboxIcon, ListIcon, MessageSquareIcon, MoreHorizontalIcon, PlusIcon, SendIcon, SlidersHorizontalIcon, SparklesIcon, XIcon } from "lucide-react";
+import { Info20Regular, Search20Regular as SearchIcon } from "@fluentui/react-icons"
+import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   asRecord,
@@ -99,13 +84,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type WorkspaceMode = "self" | "manager"
 type ListTab = "today" | "upcoming" | "history" | "assigned" | "tasks"
 type WorkspaceView = "timeline" | "board" | "list"
+type TimelineDragMode = "move" | "resize-start" | "resize-end"
 type TimelineDrag = {
   key: string
   task: AdminRecord
+  mode: TimelineDragMode
   originX: number
   trackWidth: number
   originalStart: number
@@ -472,7 +460,13 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (params.get("create") === "1") setCreateOpen(true)
-  }, [])
+    if (mode === "self" && params.get("tab") === "tasks") setTab("tasks")
+    if (["PLANNED", "IN_PROGRESS", "COMPLETED"].includes(params.get("status") ?? "")) {
+      setStatusFilter(params.get("status") ?? "ALL")
+    }
+    const linkedKpiId = params.get("kpi")
+    if (linkedKpiId) setForm((current) => ({ ...current, employee_kpi_id: linkedKpiId }))
+  }, [mode])
 
   const day = today()
   const groupedTasks = React.useMemo(() => partitionActivityTasks(tasks, day), [day, tasks])
@@ -856,9 +850,12 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     if (!track) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
+    const handle = (event.target as HTMLElement).closest<HTMLElement>("[data-timeline-resize]")
+    const mode = (handle?.dataset.timelineResize as TimelineDragMode | undefined) ?? "move"
     const next: TimelineDrag = {
       key: entryIdOf(task) || rowId(task),
       task,
+      mode,
       originX: event.clientX,
       trackWidth: track.getBoundingClientRect().width,
       originalStart: startMinute,
@@ -876,12 +873,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     if (!current || current.trackWidth <= 0) return
     const delta = ((event.clientX - current.originX) / current.trackWidth) * timeline.totalMinutes
     const snappedDelta = Math.round(delta / 15) * 15
-    const duration = current.originalEnd - current.originalStart
     const minimum = timeline.startHour * 60
-    const maximum = timeline.endHour * 60 - duration
-    const nextStart = Math.max(minimum, Math.min(maximum, current.originalStart + snappedDelta))
-    const next = { ...current, previewStart: nextStart, previewEnd: nextStart + duration }
-    if (nextStart !== current.originalStart) timelineMovedRef.current = true
+    const maximum = timeline.endHour * 60
+    const minDuration = 15
+    let previewStart = current.originalStart
+    let previewEnd = current.originalEnd
+    if (current.mode === "move") {
+      const duration = current.originalEnd - current.originalStart
+      previewStart = Math.max(minimum, Math.min(maximum - duration, current.originalStart + snappedDelta))
+      previewEnd = previewStart + duration
+    } else if (current.mode === "resize-start") {
+      previewStart = Math.max(minimum, Math.min(current.originalEnd - minDuration, current.originalStart + snappedDelta))
+    } else {
+      previewEnd = Math.min(maximum, Math.max(current.originalStart + minDuration, current.originalEnd + snappedDelta))
+    }
+    const next = { ...current, previewStart, previewEnd }
+    if (previewStart !== current.originalStart || previewEnd !== current.originalEnd) timelineMovedRef.current = true
     timelineDragRef.current = next
     setTimelineDrag(next)
   }
@@ -912,7 +919,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         current.previewStart,
         current.previewEnd,
       )
-      toast.success(`Moved to ${timeFromMinutes(current.previewStart)}–${timeFromMinutes(current.previewEnd)}.`)
+      toast.success(`${current.mode === "move" ? "Moved" : "Resized"} to ${timeFromMinutes(current.previewStart)}–${timeFromMinutes(current.previewEnd)}.`)
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not move the task.")
@@ -1092,6 +1099,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   const tabs: Array<{ value: ListTab; label: string; count: number; icon: React.ReactNode }> = mode === "self"
     ? [
         { value: "today", label: "Today", count: groupedTasks.today.length, icon: <CalendarDaysIcon className="size-3.5" /> },
+        { value: "tasks", label: "All work", count: tasks.length, icon: <ClipboardListIcon className="size-3.5" /> },
         { value: "assigned", label: "Assigned to me", count: assignedCount, icon: <InboxIcon className="size-3.5" /> },
         { value: "upcoming", label: "Upcoming", count: groupedTasks.upcoming.length, icon: <Clock3Icon className="size-3.5" /> },
         { value: "history", label: "History", count: historyReports.length, icon: <HistoryIcon className="size-3.5" /> },
@@ -1119,34 +1127,40 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           : `${formatDate(day)} · nothing on today's report yet`
 
   return (
-    <section className="min-w-0 space-y-4">
+    <section className="min-w-0 space-y-5">
       <header className="flex flex-col gap-3 border-b border-border px-1 pb-4 pt-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {mode === "manager" ? "Team activities" : "My activities"}
-          </p>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
-            {mode === "manager" ? "All team work" : tab === "upcoming" ? "Upcoming work" : tab === "assigned" ? "Assigned to me" : tab === "history" ? "Activity history" : "All tasks"}
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{heroDescription}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{heroDescription}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {mode === "self" ? <Tooltip>
+            <TooltipTrigger render={<button type="button" className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-primary" aria-label="Activity guidance" />}>
+              <Info20Regular className="size-5" />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end" className="max-w-[min(22rem,calc(100vw-2rem))] whitespace-normal text-left leading-5">
+              Record daily work here. You can link related work to an approved KPI when useful, then close the day when your report is ready for review.
+            </TooltipContent>
+          </Tooltip> : null}
           {mode === "self" && tab === "today" ? (
             <button type="button" className={secondaryButtonClass} onClick={() => void closeOnScreenDay()} disabled={submitting || todayClosed}>
-              {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+              {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
               {todayClosed ? "Today closed" : "Close today"}
             </button>
           ) : null}
           <button type="button" className={secondaryButtonClass} onClick={() => void load()}>
-            <Loader2Icon className={loading ? "size-4 animate-spin" : "hidden"} />
+            <FluentLoadingIndicator className={loading ? "size-4 animate-spin" : "hidden"} />
             <CircleDotIcon className={loading ? "hidden" : "size-4"} /> Refresh
           </button>
         </div>
       </header>
 
-      <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-card p-2.5 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/45 p-1">
-          {tabs.map(({ value, label, count, icon }) => {
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 border-b border-border">
+            {tabs.map(({ value, label, count, icon }) => {
             const active = tab === value
             return (
               <button
@@ -1154,30 +1168,24 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 type="button"
                 onClick={() => setTab(value)}
                 className={cn(
-                  "group inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold transition",
+                  "group relative inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium transition",
                   active
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-background hover:text-foreground",
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <span className={cn(
-                  "inline-flex size-6 items-center justify-center rounded-md transition",
-                  active ? "bg-primary-foreground/15" : "bg-background text-muted-foreground group-hover:text-primary",
-                )}>
-                  {icon}
-                </span>
+                <span className="inline-flex items-center justify-center">{icon}</span>
                 <span>{label}</span>
                 <span className={cn(
                   "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
-                  active ? "bg-primary-foreground/15 text-primary-foreground" : "bg-background text-muted-foreground",
+                  active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
                 )}>
                   {count}
                 </span>
               </button>
             )
-          })}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+            })}
+          </div>
           {tab !== "history" ? (
             <div className="flex shrink-0 items-center rounded-lg border border-border bg-muted/50 p-1">
               {(["timeline", "board", "list"] as const).map((view) => (
@@ -1198,10 +1206,16 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               ))}
             </div>
           ) : null}
-          <div className="relative min-w-44 flex-1 xl:w-56 xl:flex-none">
-            <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-xs text-foreground outline-none transition focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "history" ? "Search days..." : "Search work..."} />
-          </div>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+          <FluentInput
+            className="min-w-44 flex-1 xl:w-56 xl:flex-none"
+            contentBefore={<SearchIcon className="size-4" aria-hidden="true" />}
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder={tab === "history" ? "Search days..." : "Search work..."}
+            aria-label={tab === "history" ? "Search activity history" : "Search work"}
+          />
           {showTaskFilters ? (
             <Popover>
               <PopoverTrigger className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/30 hover:text-primary">
@@ -1306,11 +1320,16 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
       {tab !== "history" && workspaceView === "timeline" ? (
-        <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Work timeline</h2>
-              <p className="text-xs text-muted-foreground">Hours follow today&apos;s shift or timetable. Work appears at its planned time.</p>
+        <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-border bg-gradient-to-r from-muted/50 via-card to-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Clock3Icon className="size-[18px]" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">Work timeline</h2>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Drag a block to move it. Resize either edge in 15-minute steps; the assigned time updates automatically.</p>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {timeline.unscheduled.length ? (
@@ -1357,36 +1376,37 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   </PopoverContent>
                 </Popover>
               ) : null}
-              <span className="inline-flex h-8 w-fit items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 text-[11px] font-semibold text-primary">
-                <Clock3Icon className="size-3.5" /> {timeline.rows.length} scheduled
+              <span className="inline-flex h-8 w-fit items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-semibold text-foreground shadow-xs">
+                <span className="size-1.5 rounded-full bg-primary" /> {timeline.rows.length} scheduled
               </span>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <div className="min-w-[820px]">
-              <div className="grid grid-cols-[180px_minmax(640px,1fr)] border-b border-border bg-muted/30">
+          <div className="overflow-x-auto p-3 sm:p-4">
+            <div className="min-w-[860px] overflow-hidden rounded-xl border border-border/80 bg-background">
+              <div className="grid grid-cols-[200px_minmax(640px,1fr)] border-b border-border bg-muted/35">
                 <div className="flex items-center px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Task details
+                  Work item
                 </div>
-                <div className="relative h-12 border-l border-border">
+                <div className="relative h-12 border-l border-border/80 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px)]" style={{ backgroundSize: `${100 / Math.max(1, timeline.endHour - timeline.startHour)}% 100%` }}>
                   {timeline.hours.map((hour) => {
                     const left = ((hour - timeline.startHour) * 60 / timeline.totalMinutes) * 100
                     return (
                       <span
                         key={hour}
-                        className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-medium tabular-nums text-muted-foreground"
-                        style={{ left: `${left}%` }}
+                        className="absolute inset-y-0 flex items-center text-[10px] font-semibold tabular-nums text-muted-foreground"
+                        style={{ left: `${left}%`, transform: hour === timeline.startHour ? "translateX(8px)" : hour === timeline.endHour ? "translateX(-100%)" : "translateX(-50%)" }}
                       >
                         {new Date(2000, 0, 1, hour).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        <span className="absolute bottom-0 left-1/2 h-2 w-px -translate-x-1/2 bg-border" />
                       </span>
                     )
                   })}
                   {showCurrentTime ? (
                     <span
-                      className="absolute inset-y-0 z-10 w-px bg-primary/70"
+                      className="absolute inset-y-0 z-10 w-0.5 bg-primary/70 shadow-[0_0_8px_rgba(37,99,235,0.28)]"
                       style={{ left: `${currentTimeLeft}%` }}
                     >
-                      <span className="absolute left-1/2 top-1 -translate-x-1/2 rounded-full bg-primary px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm">
+                      <span className="absolute left-1/2 top-1 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm">
                         Now
                       </span>
                     </span>
@@ -1402,21 +1422,30 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 const width = Math.max(3, Math.min(100 - left, ((endMinute - startMinute) / timeline.totalMinutes) * 100))
                 const who = mode === "manager" ? personName(task.employee) : assignedBy(task)
                 const priority = taskPriority(task)
+                const isComplete = ["COMPLETED", "APPROVED", "CLOSED"].includes(taskStatus(task))
+                const blockTone = isComplete
+                  ? "border-emerald-400/70 bg-gradient-to-r from-emerald-100 to-emerald-50 text-emerald-950 dark:from-emerald-950/70 dark:to-emerald-900/30 dark:text-emerald-100"
+                  : priority === "URGENT" || priority === "HIGH"
+                    ? "border-rose-400/70 bg-gradient-to-r from-rose-100 to-rose-50 text-rose-950 dark:from-rose-950/70 dark:to-rose-900/30 dark:text-rose-100"
+                    : priority === "MEDIUM"
+                      ? "border-sky-400/70 bg-gradient-to-r from-sky-100 to-sky-50 text-sky-950 dark:from-sky-950/70 dark:to-sky-900/30 dark:text-sky-100"
+                      : "border-violet-400/70 bg-gradient-to-r from-violet-100 to-violet-50 text-violet-950 dark:from-violet-950/70 dark:to-violet-900/30 dark:text-violet-100"
                 const editable = canScheduleTask(task)
                 const savingPosition = timelineSavingId === entryIdOf(task)
                 return (
                   <div
                     key={key}
-                    className="grid min-h-16 grid-cols-[180px_minmax(640px,1fr)] border-b border-border last:border-b-0"
+                    className="group/row grid min-h-[84px] grid-cols-[200px_minmax(640px,1fr)] border-b border-border/70 last:border-b-0"
                   >
-                    <button type="button" className="min-w-0 px-4 py-2.5 text-left transition hover:bg-muted/40" onClick={() => void openTask(task)}>
-                      <span className="block truncate text-xs font-semibold text-foreground">{readString(task, ["title"], "Untitled task")}</span>
-                      <span className="mt-1 block truncate text-[10px] text-muted-foreground">
-                        {who} · {formatDate(reportDateOf(task) || taskDate(task))}
+                    <button type="button" className="group min-w-0 border-r border-border/60 px-4 py-3 text-left transition hover:bg-primary/[0.035]" onClick={() => void openTask(task)}>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className={cn("size-2 shrink-0 rounded-full", priority === "URGENT" || priority === "HIGH" ? "bg-rose-500" : priority === "MEDIUM" ? "bg-amber-400" : "bg-emerald-500")} />
+                        <span className="truncate text-xs font-semibold text-foreground group-hover:text-primary">{readString(task, ["title"], "Untitled task")}</span>
                       </span>
+                      <span className="mt-1.5 block truncate pl-4 text-[10px] text-muted-foreground">{who} · {statusLabel[taskStatus(task)] ?? taskStatus(task)}</span>
                     </button>
                     <div
-                      className="relative border-l border-border bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px)]"
+                      className="relative border-l border-border/80 bg-muted/15 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px)] group-hover/row:bg-muted/30"
                       style={{ backgroundSize: `${100 / Math.max(1, timeline.endHour - timeline.startHour)}% 100%` }}
                     >
                       {showCurrentTime ? (
@@ -1425,8 +1454,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                       <button
                         type="button"
                         className={cn(
-                          "absolute top-2.5 flex h-11 min-w-20 touch-none items-center gap-1.5 overflow-hidden rounded-lg border border-primary/25 bg-primary/10 px-2 text-left text-primary shadow-xs transition-[border-color,background-color,box-shadow] hover:border-primary/50 hover:bg-primary/15",
-                          editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                          "group absolute top-4 flex h-12 min-w-20 touch-none items-center gap-2 overflow-hidden rounded-xl border px-3 text-left shadow-sm transition-[border-color,background-color,box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md",
+                          blockTone,
+                          editable ? (activeDrag?.mode === "resize-start" || activeDrag?.mode === "resize-end" ? "cursor-ew-resize" : "cursor-grab active:cursor-grabbing") : "cursor-pointer",
                           activeDrag && "z-10 border-primary bg-primary/20 shadow-lg ring-2 ring-primary/20",
                         )}
                         style={{ left: `${left}%`, width: `${width}%` }}
@@ -1447,11 +1477,19 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                         }}
                         title={editable ? "Drag to change the scheduled time" : "Open task"}
                       >
+                        {editable ? <>
+                          <span data-timeline-resize="resize-start" aria-label="Resize task start" title="Drag to change start time" className="absolute inset-y-0 left-0 z-10 flex w-2.5 cursor-ew-resize items-center justify-center bg-primary/15 opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100">
+                            <span className="h-4 w-0.5 rounded-full bg-primary/70" />
+                          </span>
+                          <span data-timeline-resize="resize-end" aria-label="Resize task end" title="Drag to change end time" className="absolute inset-y-0 right-0 z-10 flex w-2.5 cursor-ew-resize items-center justify-center bg-primary/15 opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100">
+                            <span className="h-4 w-0.5 rounded-full bg-primary/70" />
+                          </span>
+                        </> : null}
                         <span className={cn("h-6 w-1 shrink-0 rounded-full", priority === "URGENT" || priority === "HIGH" ? "bg-rose-500" : priority === "MEDIUM" ? "bg-amber-500" : "bg-primary")} />
                         {editable ? <GripVerticalIcon className="size-3.5 shrink-0 opacity-55" /> : null}
                         <span className="min-w-0">
-                          <span className="block truncate text-[11px] font-semibold">{readString(task, ["title"], "Untitled task")}</span>
-                          <span className="block truncate text-[9px] text-foreground/60">
+                          <span className="block truncate text-xs font-semibold">{readString(task, ["title"], "Untitled task")}</span>
+                          <span className="block truncate text-[10px] font-medium text-foreground/65">
                             {savingPosition ? "Saving…" : `${timeFromMinutes(startMinute)} – ${timeFromMinutes(endMinute)}`}
                           </span>
                         </span>
@@ -1471,140 +1509,111 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
           </div>
         </section>
       ) : tab !== "history" && workspaceView === "board" ? (
-        <div className="overflow-x-auto pb-2">
-          <div className="grid min-w-[980px] grid-cols-4 items-start gap-3">
-            {boardColumns.map((column) => (
-              <section key={column.id} className="min-w-0 rounded-xl border border-border bg-muted/25 p-2.5">
-                <div className="flex items-center justify-between gap-2 px-1 pb-2.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <CircleDotIcon className={cn("size-4 shrink-0", column.tone)} />
-                    <h2 className="truncate text-sm font-semibold text-foreground">{column.label}</h2>
-                    <span className="text-xs tabular-nums text-muted-foreground">({column.rows.length})</span>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
-                      aria-label={`${column.label} column actions`}
-                    >
-                      <MoreHorizontalIcon className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-40">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setStatusFilter(column.id === "progress" ? "IN_PROGRESS" : column.id === "complete" ? "COMPLETED" : column.id === "todo" ? "PLANNED" : "ALL")
-                          setReviewFilter(column.id === "review" ? "PENDING" : "ALL")
-                        }}
-                      >
-                        <SparklesIcon className="size-3.5" /> Show only this column
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setStatusFilter("ALL")
-                          setReviewFilter("ALL")
-                        }}
-                      >
-                        <Columns3Icon className="size-3.5" /> Show all columns
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <div className="space-y-2.5">
-                  {column.rows.map((task) => {
-                    const status = taskStatus(task)
-                    const priority = taskPriority(task)
-                    const due = dueMeta(plannedDueDateOf(task) || taskDate(task))
-                    const assigned = isManagerAssigned(task)
-                    const who = mode === "manager" ? personName(task.employee) : assignedBy(task)
-                    const progress = checklistProgress(task)
-                    const editable = canEditTask(task)
-                    const scheduled = Boolean(plannedDateTimeOf(task, "start") && plannedDateTimeOf(task, "end"))
-                    const taskKey = entryIdOf(task) || reportIdOf(task) || `${readString(task, ["title"])}-${String(taskDate(task))}`
-                    return (
-                      <article key={taskKey} className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:border-primary/30 hover:shadow-md">
-                        <div className="absolute right-2.5 top-2.5 z-10">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              className="inline-flex size-7 items-center justify-center rounded-md bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                              aria-label="Task actions"
-                            >
-                              <MoreHorizontalIcon className="size-4" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="min-w-40">
-                              <DropdownMenuItem onClick={() => void openTask(task)}>
-                                <FileTextIcon className="size-3.5" /> View details
-                              </DropdownMenuItem>
-                              {!scheduled ? (
-                                <DropdownMenuItem
-                                  disabled={!canScheduleTask(task)}
-                                  onClick={() => openScheduleTask(task)}
-                                >
-                                  <Clock3Icon className="size-3.5" /> Add to timeline
-                                </DropdownMenuItem>
-                              ) : null}
-                              <DropdownMenuItem
-                                disabled={!editable || updatingTaskId === entryIdOf(task)}
-                                onClick={(event) => void toggleRowComplete(task, event)}
-                              >
-                                <CheckCircle2Icon className="size-3.5" />
-                                {status === "COMPLETED" ? "Reopen task" : "Mark complete"}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+        <section className="space-y-4">
+          <div className="w-full">
+            <div className="grid w-full grid-cols-1 items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {boardColumns.map((column) => {
+                const theme = {
+                  todo: { rail: "bg-border", icon: "bg-muted text-muted-foreground", shell: "from-muted/20", subtitle: "Ready to begin", iconNode: <ListIcon className="size-4" /> },
+                  progress: { rail: "bg-border", icon: "bg-muted text-muted-foreground", shell: "from-muted/20", subtitle: "Moving forward", iconNode: <Clock3Icon className="size-4" /> },
+                  review: { rail: "bg-border", icon: "bg-muted text-muted-foreground", shell: "from-muted/20", subtitle: "Needs attention", iconNode: <MessageSquareIcon className="size-4" /> },
+                  complete: { rail: "bg-border", icon: "bg-muted text-muted-foreground", shell: "from-muted/20", subtitle: "Finished work", iconNode: <CheckCircle2Icon className="size-4" /> },
+                }[column.id] ?? { rail: "bg-border", icon: "bg-muted text-muted-foreground", shell: "from-muted/20", subtitle: "Work items", iconNode: <CircleDotIcon className="size-4" /> }
+                const share = visibleRows.length ? Math.round((column.rows.length / visibleRows.length) * 100) : 0
+                return (
+                  <section key={column.id} className={cn("min-w-0 overflow-hidden rounded-2xl border border-border bg-gradient-to-b to-card", theme.shell)}>
+                    <header className="border-b border-border/70 px-3.5 pb-3 pt-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-xl", theme.icon)}>{theme.iconNode}</span>
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-foreground">{column.label}</h3>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{theme.subtitle}</p>
+                          </div>
                         </div>
-                        <button type="button" className="block w-full p-3.5 pr-11 text-left" onClick={() => void openTask(task)}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold capitalize",
-                              priority === "URGENT" || priority === "HIGH"
-                                ? "bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                                : priority === "MEDIUM"
-                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                  : "bg-slate-500/10 text-slate-600 dark:text-slate-300",
-                            )}>
-                              <PriorityDot priority={priority} /> {priority.toLowerCase()}
-                            </span>
-                            {progress ? <span className="mr-1 text-[10px] text-muted-foreground">Checklist {progress.label}</span> : null}
-                          </div>
-                          <h3 className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-foreground">
-                            {readString(task, ["title"], "Untitled task")}
-                          </h3>
-                          <p className="mt-1.5 line-clamp-3 min-h-12 text-xs leading-4 text-muted-foreground">
-                            {readString(task, ["description", "expectedResult", "expected_result"], "No additional instructions.")}
-                          </p>
-                        </button>
-                        <div className="mx-3.5 flex items-center justify-between gap-2 border-t border-border py-2.5">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Avatar name={who} photoUrl={photoForAssignee(task, who)} className="size-6 text-[9px]" />
-                            <span className="truncate text-[10px] text-muted-foreground">{who}</span>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className={cn("inline-flex items-center gap-1 text-[10px]", due.tone === "danger" ? "text-rose-600" : due.tone === "warn" ? "text-amber-600" : "text-muted-foreground")}>
-                              <CalendarDaysIcon className="size-3" /> {due.label}
-                            </span>
-                            <button
-                              type="button"
-                              className="inline-flex size-6 items-center justify-center rounded-md border border-border text-primary transition hover:bg-primary/10 disabled:opacity-50"
-                              aria-label={status === "COMPLETED" ? "Mark not started" : "Mark complete"}
-                              disabled={!editable || updatingTaskId === entryIdOf(task)}
-                              onClick={(event) => void toggleRowComplete(task, event)}
-                            >
-                              {updatingTaskId === entryIdOf(task) ? <Loader2Icon className="size-3 animate-spin" /> : <CheckCircle2Icon className="size-3" />}
+                        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-xs font-bold tabular-nums text-foreground">{column.rows.length}</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-background hover:text-foreground" aria-label={`${column.label} column actions`}>
+                            <MoreHorizontalIcon className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="min-w-40">
+                            <DropdownMenuItem onClick={() => {
+                              setStatusFilter(column.id === "progress" ? "IN_PROGRESS" : column.id === "complete" ? "COMPLETED" : column.id === "todo" ? "PLANNED" : "ALL")
+                              setReviewFilter(column.id === "review" ? "PENDING" : "ALL")
+                            }}><SparklesIcon className="size-3.5" /> Show only this column</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setStatusFilter("ALL"); setReviewFilter("ALL") }}><Columns3Icon className="size-3.5" /> Show all columns</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/80">
+                        <div className={cn("h-full rounded-full transition-all", theme.rail)} style={{ width: `${share}%` }} />
+                      </div>
+                    </header>
+                    <div className="min-h-64 space-y-3 p-3">
+                      {column.rows.map((task) => {
+                        const status = taskStatus(task)
+                        const priority = taskPriority(task)
+                        const due = dueMeta(plannedDueDateOf(task) || taskDate(task))
+                        const assigned = isManagerAssigned(task)
+                        const who = mode === "manager" ? personName(task.employee) : assignedBy(task)
+                        const progress = checklistProgress(task)
+                        const editable = canEditTask(task)
+                        const scheduled = Boolean(plannedDateTimeOf(task, "start") && plannedDateTimeOf(task, "end"))
+                        const taskKey = entryIdOf(task) || reportIdOf(task) || `${readString(task, ["title"])}-${String(taskDate(task))}`
+                        const priorityStyle = "border-border bg-muted/60 text-muted-foreground"
+                        return (
+                          <article key={taskKey} className="group relative overflow-hidden rounded-xl border border-border bg-card transition-colors duration-200 hover:border-border/80">
+                            <div className="flex items-center justify-between gap-2 pl-3.5 pr-2.5 pt-2.5">
+                              <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold capitalize", priorityStyle)}>{priority.toLowerCase()}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="inline-flex rounded-full bg-muted px-2 py-1 text-[10px] font-medium leading-4 text-muted-foreground">{statusLabel[status] ?? status.replaceAll("_", " ")}</span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground opacity-70 transition hover:bg-muted hover:text-foreground group-hover:opacity-100" aria-label="Task actions"><MoreHorizontalIcon className="size-4" /></DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="min-w-40">
+                                    <DropdownMenuItem onClick={() => void openTask(task)}><FileTextIcon className="size-3.5" /> View details</DropdownMenuItem>
+                                    {!scheduled ? <DropdownMenuItem disabled={!canScheduleTask(task)} onClick={() => openScheduleTask(task)}><Clock3Icon className="size-3.5" /> Add to timeline</DropdownMenuItem> : null}
+                                    <DropdownMenuItem disabled={!editable || updatingTaskId === entryIdOf(task)} onClick={(event) => void toggleRowComplete(task, event)}><CheckCircle2Icon className="size-3.5" />{status === "COMPLETED" ? "Reopen task" : "Mark complete"}</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                            <button type="button" className="block w-full px-3.5 pb-3 pt-2 text-left" onClick={() => void openTask(task)}>
+                              <h4 className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-foreground transition-colors group-hover:text-primary">{readString(task, ["title"], "Untitled task")}</h4>
+                              <p className="mt-1.5 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">{readString(task, ["description", "expectedResult", "expected_result"], "No additional instructions.")}</p>
+                              {progress ? <div className="mt-3">
+                                <div className="mb-1.5 flex items-center justify-between text-[10px]"><span className="font-medium text-muted-foreground">Checklist</span><span className="font-semibold tabular-nums text-foreground">{progress.label}</span></div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground/50 transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div>
+                              </div> : null}
                             </button>
-                          </div>
+                            <footer className="flex items-center justify-between gap-2 border-t border-border/70 bg-muted/20 px-3 py-2.5">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Avatar name={who} photoUrl={photoForAssignee(task, who)} className="size-7 text-[9px] ring-2 ring-background" />
+                                <span className="truncate text-[10px] font-medium text-muted-foreground">{assigned ? (mode === "manager" ? "Assigned to" : "Assigned by") : "My work"} · {who}</span>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-1 text-[10px] font-semibold text-muted-foreground"><CalendarDaysIcon className="size-3" />{due.label}</span>
+                                <button type="button" className="inline-flex size-7 items-center justify-center rounded-lg border border-border bg-background text-primary transition hover:border-primary/40 hover:bg-primary/10 disabled:opacity-50" aria-label={status === "COMPLETED" ? "Mark not started" : "Mark complete"} disabled={!editable || updatingTaskId === entryIdOf(task)} onClick={(event) => void toggleRowComplete(task, event)}>
+                                  {updatingTaskId === entryIdOf(task) ? <FluentLoadingIndicator className="size-3 animate-spin" /> : <CheckCircle2Icon className="size-3.5" />}
+                                </button>
+                              </div>
+                            </footer>
+                          </article>
+                        )
+                      })}
+                      {!loading && column.rows.length === 0 ? (
+                        <div className="flex min-h-44 flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-background/65 px-4 text-center">
+                          <span className={cn("inline-flex size-9 items-center justify-center rounded-xl", theme.icon)}>{theme.iconNode}</span>
+                          <p className="mt-3 text-xs font-semibold text-foreground">Nothing here yet</p>
+                          <p className="mt-1 max-w-40 text-[10px] leading-4 text-muted-foreground">{column.id === "todo" ? "New work will appear here when it is ready to start." : column.id === "progress" ? "Work moves here once someone starts it." : column.id === "review" ? "Completed work waiting for review appears here." : "Finished work will collect here."}</p>
                         </div>
-                      </article>
-                    )
-                  })}
-                  {!loading && column.rows.length === 0 ? (
-                    <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-border bg-background/50 px-3 text-center text-xs text-muted-foreground">
-                      No tasks in {column.label.toLowerCase()}.
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </section>
-            ))}
+                  </section>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </section>
       ) : (
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-border dark:bg-card">
         {tab === "history" ? (
@@ -1626,7 +1635,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         )}
         {loading ? (
           <div className="flex items-center justify-center gap-2 px-4 py-14 text-sm text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" /> Loading activities...
+            <FluentLoadingIndicator className="size-4 animate-spin" /> Loading activities...
           </div>
         ) : visibleRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
@@ -1641,7 +1650,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     ? "When a manager assigns you work, it will show up here."
                   : mode === "manager"
                     ? "Assign work to your team to see it here. Personal daily work stays in My activities."
-                    : "Add work for today, or wait for a manager to assign something."}
+                    : tab === "today"
+                      ? "Select Add work to record today’s activity. When your report is ready, select Close today to send it for review."
+                      : "Add work for today, or wait for a manager to assign something."}
             </p>
           </div>
         ) : (
@@ -1686,7 +1697,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     disabled={!editable || updatingTaskId === entryIdOf(task)}
                     onClick={(event) => void toggleRowComplete(task, event)}
                   >
-                    {updatingTaskId === entryIdOf(task) ? <Loader2Icon className="size-3 animate-spin" /> : <CheckCircle2Icon className={status === "COMPLETED" ? "size-3" : "hidden"} />}
+                    {updatingTaskId === entryIdOf(task) ? <FluentLoadingIndicator className="size-3 animate-spin" /> : <CheckCircle2Icon className={status === "COMPLETED" ? "size-3" : "hidden"} />}
                   </button>
                   <button type="button" className="min-w-0 text-left" onClick={() => void openTask(task)}>
                     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1779,7 +1790,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
               <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setScheduleTarget(null)}>Cancel</button>
               <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveSchedule()} disabled={scheduleSaving}>
-                {scheduleSaving ? <Loader2Icon className="size-4 animate-spin" /> : <Clock3Icon className="size-4" />}
+                {scheduleSaving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <Clock3Icon className="size-4" />}
                 Add to timeline
               </button>
             </div>
@@ -1942,11 +1953,11 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Notes</span>
-                <textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
+                <Textarea className={`${inputClass} min-h-24 py-2`} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="What should be delivered?" />
               </label>
               <label className="grid gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Expected result <span className="font-normal text-slate-500">(optional)</span></span>
-                <textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
+                <Textarea className={`${inputClass} min-h-20 py-2`} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} placeholder="Describe the result that will count as complete." />
               </label>
               <div className="grid content-start gap-1.5 text-sm sm:col-span-2">
                 <span className="font-medium">Checklist <span className="font-normal text-slate-500">(optional)</span></span>
@@ -1982,7 +1993,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
             <div className="flex flex-col-reverse gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
               <button type="button" className={`${secondaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => setCreateOpen(false)}>Cancel</button>
               <button type="button" className={`${primaryButtonClass} w-full justify-center sm:w-auto`} onClick={() => void saveTask()} disabled={saving}>
-                {saving ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                 {audience === "employee" ? (employeeIds.length > 1 ? `Assign to ${employeeIds.length} people` : "Assign task") : "Create task"}
               </button>
             </div>
@@ -2057,7 +2068,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               </div>
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Summary for your manager</span>
-                <textarea className={`${inputClass} min-h-20 py-2`} value={previewSummary} onChange={(event) => setPreviewSummary(event.target.value)} placeholder="What should your manager know about this day?" />
+                <Textarea className={`${inputClass} min-h-20 py-2`} value={previewSummary} onChange={(event) => setPreviewSummary(event.target.value)} placeholder="What should your manager know about this day?" />
               </label>
               {issues.length ? (
                 <ul className="space-y-1 text-sm text-rose-700">
@@ -2073,7 +2084,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 </button>
               ) : (
                 <button type="button" className={primaryButtonClass} onClick={() => void submitReport(previewReport)} disabled={submitting || issues.length > 0}>
-                  {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                  {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                   Close {formatDate(closeDate)}
                 </button>
               )}
@@ -2139,7 +2150,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   )}
                   {mode === "self" && canCloseReport(selected) ? (
                     <button type="button" className={`${primaryButtonClass} mt-4`} onClick={() => openReportPreview(selected)} disabled={submitting}>
-                      {submitting ? <Loader2Icon className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
+                      {submitting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <FileTextIcon className="size-4" />}
                       Close {formatDate(reportDateOf(selected))}
                     </button>
                   ) : null}
@@ -2220,7 +2231,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <div className="space-y-3">
                       <label className="grid gap-1.5 text-sm">
                         <span className="font-medium">Outcome / actual result</span>
-                        <textarea className={`${inputClass} min-h-20 py-2`} value={taskOutcome} onChange={(event) => setTaskOutcome(event.target.value)} placeholder="Describe what was delivered, especially before marking the activity complete." />
+                        <Textarea className={`${inputClass} min-h-20 py-2`} value={taskOutcome} onChange={(event) => setTaskOutcome(event.target.value)} placeholder="Describe what was delivered, especially before marking the activity complete." />
                       </label>
                       <button type="button" className={secondaryButtonClass} onClick={() => void updateTaskStatus()}>Save progress</button>
                     </div>
@@ -2250,7 +2261,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                                 <CheckCircle2Icon className={item.completed ? "size-4 text-emerald-600" : "size-4 text-slate-300"} />
                               )}
                               <span className={item.completed ? "text-slate-400 line-through" : "text-slate-800"}>{readString(item, ["title"], "Checklist item")}</span>
-                              {updatingChecklistId === itemKey ? <Loader2Icon className="ml-auto size-4 animate-spin text-sky-700" /> : null}
+                              {updatingChecklistId === itemKey ? <FluentLoadingIndicator className="ml-auto size-4 animate-spin text-sky-700" /> : null}
                             </label>
                           )
                         })}
@@ -2301,7 +2312,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                     <div className="mt-3 flex gap-2">
                       <input className={inputClass} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a comment..." />
                       <button type="button" className={primaryButtonClass} onClick={() => void addComment()} disabled={commenting || !comment.trim()}>
-                        {commenting ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                        {commenting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
                       </button>
                     </div>
                   </div>

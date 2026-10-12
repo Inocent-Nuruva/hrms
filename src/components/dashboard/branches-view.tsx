@@ -12,13 +12,13 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
-  SearchBox,
   createTableColumn,
   useTableFeatures,
   useTableSort,
   type TableColumnDefinition,
   type TableColumnId,
 } from "@fluentui/react-components"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Textarea } from "@/components/ui/textarea"
@@ -739,14 +739,14 @@ export function BranchesView() {
   ]
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 pt-3">
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <div className="overflow-hidden border border-border bg-background shadow-sm">
         <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-sm font-semibold tracking-tight">Branches</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <SearchBox
+            <FluentSearchBox
               size="medium"
               placeholder="Search branch"
               aria-label="Search branches"
@@ -757,22 +757,23 @@ export function BranchesView() {
                 setQuery((previous) => ({ ...previous, search: data.value }))
               }}
             />
-            <FluentSelect
-              ariaLabel="Filter branch status"
-              size="medium"
-              className="!w-44 shrink-0"
-              value={query.status || "all"}
-              placeholder="All statuses"
-              onChange={(value) => {
-                setPage(1)
-                setQuery((previous) => ({ ...previous, status: value === "all" ? "" : value }))
-              }}
-              options={[
-                { value: "all", label: "All statuses" },
-                { value: "active", label: "active" },
-                { value: "inactive", label: "inactive" },
-              ]}
-            />
+            <div className="w-44 shrink-0 self-center">
+              <FluentSelect
+                ariaLabel="Filter branch status"
+                size="medium"
+                value={query.status || "all"}
+                placeholder="All statuses"
+                onChange={(value) => {
+                  setPage(1)
+                  setQuery((previous) => ({ ...previous, status: value === "all" ? "" : value }))
+                }}
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "active", label: "active" },
+                  { value: "inactive", label: "inactive" },
+                ]}
+              />
+            </div>
             {canCreateBranches ? (
               <button
                 type="button"
