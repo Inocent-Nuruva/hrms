@@ -79,7 +79,7 @@ import {
   listBranches,
   listDepartments,
   listEmployees,
-  listPendingEmployeeInvitations,
+  listEmployeeInvitationHistory,
   listMyOnboardingRequests,
   listOnboardingDocuments,
   listOnboardingRequests,
@@ -99,8 +99,14 @@ import {
   uploadOnboardingDocument,
   verifyOnboardingDocument,
   type AdminRecord,
+  type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
 } from "@/lib/admin-api"
+import {
+  INVITATION_STATUS_FILTERS,
+  canResendInvitation,
+  invitationEffectiveStatus,
+} from "@/lib/employee-invitation-status"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
@@ -1286,6 +1292,8 @@ export function OnboardingView() {
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
   const [invitationSearch, setInvitationSearch] = React.useState("")
+  const [invitationStatusFilter, setInvitationStatusFilter] =
+    React.useState<EmployeeInvitationHistoryStatus>("pending")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("")
@@ -1818,7 +1826,7 @@ export function OnboardingView() {
 
       const fetchKey =
         targetTab === "invitations"
-          ? "invitations:pending"
+          ? `invitations:${invitationStatusFilter}`
           : targetTab === "requests"
             ? `requests:${JSON.stringify(requestQuery)}`
             : `workflows:${JSON.stringify(workflowQuery)}`
@@ -1839,7 +1847,10 @@ export function OnboardingView() {
       setError(null)
       try {
         if (targetTab === "invitations") {
-          const invitationRows = await listPendingEmployeeInvitations(token)
+          const { data: invitationRows } = await listEmployeeInvitationHistory(
+            token,
+            { status: invitationStatusFilter, limit: 100 },
+          )
           setInvitations(invitationRows)
           invitationsFetchKeyRef.current = fetchKey
         } else if (targetTab === "requests") {
@@ -1962,6 +1973,7 @@ export function OnboardingView() {
       requestEmployeeFilter,
       requestStatusFilter,
       workflowStatusFilter,
+      invitationStatusFilter,
     ]
   )
 
@@ -1996,6 +2008,7 @@ export function OnboardingView() {
     requestEmployeeFilter,
     requestStatusFilter,
     workflowStatusFilter,
+    invitationStatusFilter,
     reloadAll,
   ])
 
@@ -4278,6 +4291,21 @@ export function OnboardingView() {
       render: (row) => readString(row, ["phone"]),
     },
     {
+      key: "status",
+      label: "Status",
+      defaultWidth: 105,
+      render: (row) => {
+        const status = invitationEffectiveStatus(row)
+        return (
+          <span
+            className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(status))}
+          >
+            {toTitleCaseWords(status || "-")}
+          </span>
+        )
+      },
+    },
+    {
       key: "delivery",
       label: "Delivery",
       defaultWidth: 170,
@@ -4320,6 +4348,9 @@ export function OnboardingView() {
         const resending = invitationId !== null && resendingInvitationId === invitationId
         if (!canResendPendingInvitations) {
           return <span className="text-[11px] text-muted-foreground">View only</span>
+        }
+        if (!canResendInvitation(row)) {
+          return <span className="text-[11px] text-muted-foreground">-</span>
         }
         return (
           <Button
@@ -4567,7 +4598,7 @@ export function OnboardingView() {
       {activeTab === "invitations" && canViewPendingInvitations ? (
         <div className="space-y-2">
           <ResizableTable
-            title="Pending Employee Invitations"
+            title="Employee Invitations"
             data={filteredInvitations}
             columns={invitationColumns}
             loading={loading}
@@ -4581,14 +4612,26 @@ export function OnboardingView() {
             getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
             onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
-              <FluentSearchBox
-                size="small"
-                aria-label="Search pending invitations"
-                className="!w-[14rem] max-w-full shrink-0"
-                placeholder="Search name, email or phone"
-                value={invitationSearch}
-                onChange={(_event, data) => setInvitationSearch(data.value)}
-              />
+              <>
+                <FluentSearchBox
+                  size="small"
+                  aria-label="Search invitations"
+                  className="!w-[14rem] max-w-full shrink-0"
+                  placeholder="Search name, email or phone"
+                  value={invitationSearch}
+                  onChange={(_event, data) => setInvitationSearch(data.value)}
+                />
+                <FluentSelect
+                  ariaLabel="Filter invitation status"
+                  size="small"
+                  className="min-w-[8.5rem]"
+                  value={invitationStatusFilter}
+                  onChange={(value) =>
+                    setInvitationStatusFilter(value as EmployeeInvitationHistoryStatus)
+                  }
+                  options={INVITATION_STATUS_FILTERS}
+                />
+              </>
             }
             toolbarActions={
               <button
@@ -4624,7 +4667,7 @@ export function OnboardingView() {
                 <div className="space-y-5 px-4 pb-6">
                   <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
                     {[
-                      ["Status", toTitleCaseWords(readString(selectedInvitation, ["status"]))],
+                      ["Status", toTitleCaseWords(invitationEffectiveStatus(selectedInvitation) || "-")],
                       ["Email", readString(selectedInvitation, ["email"])],
                       ["Phone", readString(selectedInvitation, ["phone"])],
                       ["Employment type", toTitleCaseWords(readString(selectedInvitation, ["employment_type"]))],
