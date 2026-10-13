@@ -369,6 +369,24 @@ export const api = {
     return request<unknown>(`/api/notifications${buildQuery(params)}`);
   },
 
+  async registerMyPushDevice(input: {
+    expo_push_token: string;
+    platform: 'ios' | 'android';
+    device_name?: string;
+  }) {
+    return request<unknown>('/api/notifications/push-devices', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  async unregisterMyPushDevice(expoPushToken: string) {
+    return request<unknown>('/api/notifications/push-devices', {
+      method: 'DELETE',
+      body: { expo_push_token: expoPushToken },
+    });
+  },
+
   async markNotificationAsRead(id: string | number) {
     return request<unknown>(`/api/notifications/${id}/read`, { method: 'PATCH' });
   },

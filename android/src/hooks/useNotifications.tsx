@@ -1,15 +1,18 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Platform } from 'react-native';
+import * as DeviceNotifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api, normalizeList } from '../lib/api';
 import { useAuth } from './useAuth';
-import { ensureNotificationPermissionsAsync, presentHrmsNotification } from '../lib/notification-settings';
+import { registerRemotePushDeviceAsync, presentHrmsNotification } from '../lib/notification-settings';
 
 export type AppNotification = Record<string, unknown> & {
   id: string | number;
   title?: string;
   message?: string;
   status?: string;
+  delivery_channels?: Array<{ channel?: string; status?: string }>;
 };
 
 interface NotificationContextValue {
@@ -32,6 +35,7 @@ const QUERY_KEY = ['mobileNotifications'];
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const query = useInfiniteQuery({
     queryKey: QUERY_KEY,
@@ -51,14 +55,23 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     refetchInterval: 30_000,
   });
   const seenNotificationIds = useRef<Set<string> | null>(null);
+  const locallyPresentedNotificationIds = useRef<Set<string>>(new Set());
   const latestRows = query.data?.pages[0]?.rows;
 
   useEffect(() => {
-    if (!auth.isAuthenticated || Platform.OS !== 'android') return;
-    void ensureNotificationPermissionsAsync().catch((error) => {
-      console.warn('Could not enable Android notifications', error);
+    if (!auth.isAuthenticated || (Platform.OS !== 'android' && Platform.OS !== 'ios')) return;
+    void registerRemotePushDeviceAsync().catch((error) => {
+      console.warn('Could not register this device for push notifications', error);
     });
   }, [auth.isAuthenticated]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+    const subscription = DeviceNotifications.addNotificationResponseReceivedListener(
+      () => router.push('/notifications' as never),
+    );
+    return () => subscription.remove();
+  }, [router]);
 
   useEffect(() => {
     if (!latestRows) return;
@@ -69,8 +82,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
 
     const newItems = latestRows.filter((item) => !seenNotificationIds.current?.has(String(item.id)));
+    const failedPushItems = latestRows.filter((item) =>
+      item.delivery_channels?.some(
+        (delivery) => delivery.channel === 'PUSH' && delivery.status === 'FAILED',
+      ),
+    );
     currentIds.forEach((id) => seenNotificationIds.current?.add(id));
-    newItems.forEach((item) => {
+    [...new Map([...newItems, ...failedPushItems].map((item) => [String(item.id), item])).values()].forEach((item) => {
+      if (locallyPresentedNotificationIds.current.has(String(item.id))) return;
+      const pushIsPendingOrAccepted = item.delivery_channels?.some(
+        (delivery) =>
+          delivery.channel === 'PUSH' &&
+          ['PENDING', 'DELIVERED'].includes(String(delivery.status)),
+      );
+      if (pushIsPendingOrAccepted) return;
+      locallyPresentedNotificationIds.current.add(String(item.id));
       const title = firstNotificationText(item, ['title', 'subject', 'event_title']) || 'HRMS notification';
       const body = firstNotificationText(item, ['message', 'body', 'description', 'content']);
       void presentHrmsNotification({

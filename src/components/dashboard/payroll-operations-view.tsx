@@ -42,6 +42,9 @@ import {
   listPayrollSalaryStructureEmployees,
   retirePayrollSalaryStructure,
   updatePayrollSalaryStructure,
+  updatePayrollCalendar,
+  updatePayrollPeriodDates,
+  updatePayrollSecurityPolicy,
   createPayrollSource,
   generatePayrollSources,
   createPayrollStatutoryRule,
@@ -59,6 +62,7 @@ import {
   getPayrollNotificationCatalog,
   getPayrollReadiness,
   getPayrollRun,
+  getPayrollSecurityPolicy,
   getPayrollSalaryStructure,
   importPayrollBankStatement,
   importPayrollSources,
@@ -132,7 +136,8 @@ type PayrollConfigTab =
   | "assignments"
   | "overtime"
   | "bonus"
-  | "leaveRules";
+  | "leaveRules"
+  | "security";
 
 type CreateDialogMode =
   | "run"
@@ -177,6 +182,7 @@ const CONFIG_TABS: Array<{ id: PayrollConfigTab; label: string }> = [
   { id: "overtime", label: "Overtime" },
   { id: "bonus", label: "Bonus" },
   { id: "leaveRules", label: "Leave rules" },
+  { id: "security", label: "Security & approvals" },
 ];
 
 const RUN_TYPES = [
@@ -729,6 +735,7 @@ function emptyCalendarForm() {
     timezone: "Africa/Dar_es_Salaam",
     currency: "TZS",
     isDefault: "false",
+    reason: "",
   };
 }
 
@@ -1007,6 +1014,8 @@ function PayrollDetailsContent({
       currency,
     );
     const payslips = asRecordArray(row.payslips);
+    const runApprovals = asRecordArray(row.approvals);
+    const currentCalculationHash = readString(row, ["calculation_hash", "calculationHash"]);
     const employeeCount =
       readNumber(row, [
         "employee_count",
@@ -1108,6 +1117,32 @@ function PayrollDetailsContent({
               />
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground">Approval workflow</h3>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {["HR", "FINANCE", "MANAGEMENT"].map((stage) => {
+              const approval = runApprovals.find((item) =>
+                readString(item, ["stage"]).toUpperCase() === stage,
+              );
+              const current = Boolean(
+                approval &&
+                  readString(approval, ["decision"]).toUpperCase() === "APPROVED" &&
+                  readString(approval, ["calculationHash", "calculation_hash"]) === currentCalculationHash,
+              );
+              return (
+                <div key={stage} className="rounded-lg border border-border/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{prettify(stage)}</span>
+                    <Badge variant="outline" className={cn("capitalize", current ? statusTone("APPROVED") : "")}>{current ? "Approved" : "Pending"}</Badge>
+                  </div>
+                  {current ? <p className="mt-1 text-xs text-muted-foreground">Approver #{readString(approval!, ["approvedByCompanyUserId", "approved_by_company_user_id"])}</p> : null}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Approvals apply only to the current calculation hash; all approvers must be different users and separate from the payroll creator.</p>
         </div>
 
         {payslips.length > 0 ? (
@@ -1826,6 +1861,22 @@ export function PayrollOperationsView() {
   const [periodForm, setPeriodForm] = React.useState(emptyPeriodForm);
   const [componentForm, setComponentForm] = React.useState(emptyComponentForm);
   const [calendarForm, setCalendarForm] = React.useState(emptyCalendarForm);
+  const [securityPolicy, setSecurityPolicy] = React.useState<AdminRecord>({
+    allow_verified_login: false,
+    allow_fresh_authenticator: true,
+  });
+  const [securityPolicyReason, setSecurityPolicyReason] = React.useState("");
+  const [securityPolicyLoading, setSecurityPolicyLoading] = React.useState(false);
+  const [securityPolicySaving, setSecurityPolicySaving] = React.useState(false);
+  const [editingCalendar, setEditingCalendar] =
+    React.useState<AdminRecord | null>(null);
+  const [periodDatesTarget, setPeriodDatesTarget] =
+    React.useState<AdminRecord | null>(null);
+  const [periodDatesForm, setPeriodDatesForm] = React.useState({
+    cutoffDate: "",
+    paymentDate: "",
+    reason: "",
+  });
   const [structureForm, setStructureForm] = React.useState(emptyStructureForm);
   const [editingStructure, setEditingStructure] =
     React.useState<AdminRecord | null>(null);
@@ -1847,6 +1898,8 @@ export function PayrollOperationsView() {
   const [approveForm, setApproveForm] = React.useState(emptyApproveRunForm);
 
   const [processingRunId, setProcessingRunId] = React.useState("");
+  const [processTarget, setProcessTarget] = React.useState<AdminRecord | null>(null);
+  const [processAuthenticatorCode, setProcessAuthenticatorCode] = React.useState("");
   const [lockingRunId, setLockingRunId] = React.useState("");
   const [validatingRunId, setValidatingRunId] = React.useState("");
   const [paidRunId, setPaidRunId] = React.useState("");
@@ -2115,7 +2168,9 @@ export function PayrollOperationsView() {
                           ? lookups.bonusSchemes
                           : configTab === "assignments"
                             ? lookups.groupAssignments
-                            : lookups.leaveRules;
+                            : configTab === "leaveRules"
+                              ? lookups.leaveRules
+                              : [];
 
         const query = search.trim().toLowerCase();
         const filtered = configRows.filter((row) => {
@@ -2155,6 +2210,29 @@ export function PayrollOperationsView() {
   }, [loadRows]);
 
   React.useEffect(() => {
+    if (tab !== "configuration" || configTab !== "security") return;
+    const token = readStoredToken();
+    if (!token) return;
+    let active = true;
+    setSecurityPolicyLoading(true);
+    void getPayrollSecurityPolicy(token)
+      .then((payload) => {
+        if (active && payload && typeof payload === "object") {
+          setSecurityPolicy(payload as AdminRecord);
+        }
+      })
+      .catch((errorObject) => {
+        if (active) {
+          toast.error(errorObject instanceof Error ? errorObject.message : "Could not load payroll security settings.");
+        }
+      })
+      .finally(() => {
+        if (active) setSecurityPolicyLoading(false);
+      });
+    return () => { active = false; };
+  }, [configTab, tab]);
+
+  React.useEffect(() => {
     setSearch("");
     setStatusFilter("");
     setPeriodFilter("");
@@ -2168,6 +2246,10 @@ export function PayrollOperationsView() {
   const openCreate = (mode: CreateDialogMode) => {
     setFormError(null);
     setCreateMode(mode);
+    if (mode === "calendar" && editingCalendar) {
+      setEditingCalendar(null);
+      setCalendarForm(emptyCalendarForm());
+    }
     if (
       [
         "group",
@@ -2188,6 +2270,33 @@ export function PayrollOperationsView() {
       setStructureForm(emptyStructureForm());
     }
     setCreateOpen(true);
+  };
+
+  const openEditCalendar = (row: AdminRecord) => {
+    setEditingCalendar(row);
+    setCalendarForm({
+      code: readString(row, ["code"]),
+      name: readString(row, ["name"]),
+      cutoffDay: readString(row, ["cutoffDay", "cutoff_day"], "20"),
+      paymentDay: readString(row, ["paymentDay", "payment_day"], "28"),
+      timezone: readString(row, ["timezone"], "Africa/Dar_es_Salaam"),
+      currency: readString(row, ["currency"], "TZS"),
+      isDefault: readBoolean(row, ["isDefault", "is_default"]) ? "true" : "false",
+      reason: "",
+    });
+    setFormError(null);
+    setCreateMode("calendar");
+    setCreateOpen(true);
+  };
+
+  const openEditPeriodDates = (row: AdminRecord) => {
+    setPeriodDatesTarget(row);
+    setPeriodDatesForm({
+      cutoffDate: readString(row, ["cutoffDate", "cutoff_date"]),
+      paymentDate: readString(row, ["paymentDate", "payment_date"]),
+      reason: "",
+    });
+    setFormError(null);
   };
 
   const openEditStructure = async (row: AdminRecord) => {
@@ -2514,7 +2623,8 @@ export function PayrollOperationsView() {
                     disabled={processingRunId === id}
                     onClick={(event) => {
                       event.stopPropagation();
-                      void onProcessRun(row);
+                      setProcessTarget(row);
+                      setProcessAuthenticatorCode("");
                     }}
                   >
                     {processingRunId === id ? (
@@ -3119,6 +3229,18 @@ export function PayrollOperationsView() {
           ),
         },
         {
+          key: "payroll_dates",
+          label: "Cut-off / Payment",
+          render: (row) => (
+            <div className="space-y-0.5 text-xs">
+              <p>Cut-off: {formatAdminValue(row.cutoff_date ?? row.cutoffDate)}</p>
+              <p className="text-muted-foreground">
+                Payment: {formatAdminValue(row.payment_date ?? row.paymentDate)}
+              </p>
+            </div>
+          ),
+        },
+        {
           key: "status",
           label: "Status",
           render: (row) => {
@@ -3131,6 +3253,27 @@ export function PayrollOperationsView() {
                 {prettify(status)}
               </Badge>
             );
+          },
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const status = readStatus(row).toUpperCase();
+            const editable = !["LOCKED", "PAID", "CLOSED", "CANCELLED"].includes(status)
+              && !readBoolean(row, ["lockedAt", "locked_at"]);
+            return canMutatePayroll && editable ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openEditPeriodDates(row);
+                }}
+              >
+                Edit dates
+              </button>
+            ) : "—";
           },
         },
       ];
@@ -3218,6 +3361,22 @@ export function PayrollOperationsView() {
           label: "Default",
           render: (row) =>
             readBoolean(row, ["is_default", "isDefault"]) ? "Yes" : "No",
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => canMutatePayroll ? (
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={(event) => {
+                event.stopPropagation();
+                openEditCalendar(row);
+              }}
+            >
+              Edit
+            </button>
+          ) : "—",
         },
       ];
     }
@@ -3611,6 +3770,7 @@ export function PayrollOperationsView() {
     payslipRunId,
     canApprovePayroll,
     canMutatePayroll,
+    editingCalendar,
     processingRunId,
     sourceActionId,
     structureActionId,
@@ -3663,14 +3823,20 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onProcessRun(row: AdminRecord) {
+  async function onProcessRun(row: AdminRecord, authenticatorCode?: string) {
     const token = readStoredToken();
     const id = rowId(row);
     if (!token || !id) return;
     setProcessingRunId(id);
     try {
-      await processPayrollRun(token, id);
+      await processPayrollRun(
+        token,
+        id,
+        authenticatorCode ? { authenticator_code: authenticatorCode } : undefined,
+      );
       toast.success("Payroll run queued for processing.");
+      setProcessTarget(null);
+      setProcessAuthenticatorCode("");
       await loadRows({ refreshLookups: true });
     } catch (errorObject) {
       toast.error(
@@ -4469,18 +4635,33 @@ export function PayrollOperationsView() {
           calculation_order: Number(componentForm.calculationOrder) || 1,
         });
       } else if (createMode === "calendar") {
-        if (!calendarForm.code.trim() || !calendarForm.name.trim()) {
-          throw new Error("Code and name are required.");
+        if (editingCalendar) {
+          if (!calendarForm.name.trim() || !calendarForm.reason?.trim()) {
+            throw new Error("Calendar name and change reason are required.");
+          }
+          await updatePayrollCalendar(token, rowId(editingCalendar), {
+            name: calendarForm.name.trim(),
+            cutoff_day: Number(calendarForm.cutoffDay),
+            payment_day: Number(calendarForm.paymentDay),
+            timezone: calendarForm.timezone.trim(),
+            currency: calendarForm.currency.trim(),
+            is_default: calendarForm.isDefault === "true",
+            reason: calendarForm.reason.trim(),
+          });
+        } else {
+          if (!calendarForm.code.trim() || !calendarForm.name.trim()) {
+            throw new Error("Code and name are required.");
+          }
+          await createPayrollCalendar(token, {
+            code: calendarForm.code.trim(),
+            name: calendarForm.name.trim(),
+            cutoff_day: Number(calendarForm.cutoffDay) || undefined,
+            payment_day: Number(calendarForm.paymentDay) || undefined,
+            timezone: calendarForm.timezone.trim() || undefined,
+            currency: calendarForm.currency.trim() || undefined,
+            is_default: calendarForm.isDefault === "true",
+          });
         }
-        await createPayrollCalendar(token, {
-          code: calendarForm.code.trim(),
-          name: calendarForm.name.trim(),
-          cutoff_day: Number(calendarForm.cutoffDay) || undefined,
-          payment_day: Number(calendarForm.paymentDay) || undefined,
-          timezone: calendarForm.timezone.trim() || undefined,
-          currency: calendarForm.currency.trim() || undefined,
-          is_default: calendarForm.isDefault === "true",
-        });
       } else if (createMode === "structure") {
         const lines = structureForm.components
           .filter((line) => line.componentId)
@@ -4756,6 +4937,7 @@ export function PayrollOperationsView() {
         createMode === "profile" ? "Payroll profile saved." : "Saved.",
       );
       setCreateOpen(false);
+      setEditingCalendar(null);
       setRunForm(emptyRunForm());
       setInputForm(emptyInputForm());
       setProfileForm(emptyProfileForm());
@@ -4775,6 +4957,68 @@ export function PayrollOperationsView() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onSavePeriodDates() {
+    const token = readStoredToken();
+    const id = rowId(periodDatesTarget);
+    if (!token || !id) {
+      setFormError("Authentication or payroll period is missing.");
+      return;
+    }
+    if (!periodDatesForm.cutoffDate || !periodDatesForm.paymentDate || !periodDatesForm.reason.trim()) {
+      setFormError("Cut-off date, payment date, and reason are required.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await updatePayrollPeriodDates(token, id, {
+        cutoff_date: periodDatesForm.cutoffDate,
+        payment_date: periodDatesForm.paymentDate,
+        reason: periodDatesForm.reason.trim(),
+      });
+      toast.success("Payroll period dates updated.");
+      setPeriodDatesTarget(null);
+      setPeriodDatesForm({ cutoffDate: "", paymentDate: "", reason: "" });
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Could not update payroll period dates.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveSecurityPolicy() {
+    const token = readStoredToken();
+    if (!token) return toast.error("Authentication required.");
+    const loginAllowed = readBoolean(securityPolicy, ["allow_verified_login"]);
+    const freshAllowed = readBoolean(securityPolicy, ["allow_fresh_authenticator"]);
+    if (!loginAllowed && !freshAllowed) {
+      toast.error("Enable at least one payroll generation 2FA method.");
+      return;
+    }
+    if (!securityPolicyReason.trim()) {
+      toast.error("Provide a reason for changing payroll security settings.");
+      return;
+    }
+    setSecurityPolicySaving(true);
+    try {
+      const payload = await updatePayrollSecurityPolicy(token, {
+        allow_verified_login: loginAllowed,
+        allow_fresh_authenticator: freshAllowed,
+        reason: securityPolicyReason.trim(),
+      });
+      if (payload && typeof payload === "object") {
+        setSecurityPolicy(payload as AdminRecord);
+      }
+      setSecurityPolicyReason("");
+      toast.success("Payroll security policy updated.");
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not save payroll security policy.");
+    } finally {
+      setSecurityPolicySaving(false);
     }
   }
 
@@ -6570,7 +6814,7 @@ export function PayrollOperationsView() {
     if (createMode === "calendar") {
       return (
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Code">
+          {!editingCalendar ? <Field label="Code">
             <input
               className={inputClass}
               value={calendarForm.code}
@@ -6581,7 +6825,7 @@ export function PayrollOperationsView() {
                 }))
               }
             />
-          </Field>
+          </Field> : null}
           <Field label="Name">
             <input
               className={inputClass}
@@ -6659,6 +6903,20 @@ export function PayrollOperationsView() {
               ]}
             />
           </Field>
+          {editingCalendar ? (
+            <Field label="Reason for change" className="md:col-span-2">
+              <Textarea
+                className={textareaClass}
+                value={calendarForm.reason}
+                onChange={(event) => setCalendarForm((current) => ({ ...current, reason: event.target.value }))}
+              />
+            </Field>
+          ) : null}
+          {editingCalendar ? (
+            <p className="text-xs text-muted-foreground md:col-span-2">
+              Calendar defaults apply to periods generated in the future. Existing periods keep their saved dates.
+            </p>
+          ) : null}
         </div>
       );
     }
@@ -9091,6 +9349,67 @@ export function PayrollOperationsView() {
             </div>
           ) : null}
         </div>
+      ) : tab === "configuration" && configTab === "security" ? (
+        <section className="space-y-5 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div>
+            <h2 className="text-base font-semibold">Payroll generation security</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Enable at least one method. Operators can generate payroll with a 2FA verified login or a fresh authenticator code, based on the methods you allow.
+            </p>
+          </div>
+          {securityPolicyLoading ? (
+            <p className="text-sm text-muted-foreground">Loading payroll security policy…</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
+                <input
+                  type="checkbox"
+                  checked={readBoolean(securityPolicy, ["allow_verified_login"])}
+                  disabled={!canMutatePayroll || securityPolicySaving}
+                  onChange={(event) => setSecurityPolicy((current) => ({ ...current, allow_verified_login: event.target.checked }))}
+                />
+                <span>
+                  <span className="block text-sm font-medium">Verified 2FA login</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Allow generation from a session that completed authenticator verification during sign-in.</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
+                <input
+                  type="checkbox"
+                  checked={readBoolean(securityPolicy, ["allow_fresh_authenticator"])}
+                  disabled={!canMutatePayroll || securityPolicySaving}
+                  onChange={(event) => setSecurityPolicy((current) => ({ ...current, allow_fresh_authenticator: event.target.checked }))}
+                />
+                <span>
+                  <span className="block text-sm font-medium">Fresh authenticator code</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Require a new six-digit code when payroll is generated. Codes are single-use for payroll generation.</span>
+                </span>
+              </label>
+            </div>
+          )}
+          <Field label="Reason for policy change">
+            <Textarea
+              className={textareaClass}
+              value={securityPolicyReason}
+              disabled={!canMutatePayroll || securityPolicySaving}
+              onChange={(event) => setSecurityPolicyReason(event.target.value)}
+            />
+          </Field>
+          <div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+            <h3 className="text-sm font-semibold">Mandatory payroll approvals</h3>
+            <p className="mt-1 text-xs text-muted-foreground">All three stages are required in order. The run creator cannot approve; each stage must be approved by a different user, using the same calculation hash.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {["HR", "Finance", "Management"].map((stage) => <Badge key={stage} variant="outline">{stage} required</Badge>)}
+            </div>
+          </div>
+          {canMutatePayroll ? (
+            <div className="flex justify-end">
+              <button type="button" className={primaryButtonClass} disabled={securityPolicySaving || securityPolicyLoading} onClick={() => void onSaveSecurityPolicy()}>
+                {securityPolicySaving ? "Saving…" : "Save security policy"}
+              </button>
+            </div>
+          ) : null}
+        </section>
       ) : (
         <ResizableTable
           title={sectionTitle}
@@ -9447,10 +9766,13 @@ export function PayrollOperationsView() {
         }
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => {
+        setCreateOpen(open);
+        if (!open) setEditingCalendar(null);
+      }}>
         <DialogPopup className="flex max-h-[90vh] w-[min(980px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{createButtonLabel}</DialogTitle>
+            <DialogTitle>{editingCalendar ? "Edit payroll calendar" : createButtonLabel}</DialogTitle>
             <DialogDescription>
               {createMode === "profile"
                 ? "Create or update an employee payroll profile."
@@ -9482,11 +9804,107 @@ export function PayrollOperationsView() {
               >
                 {saving
                   ? "Saving…"
-                  : createMode === "period"
+                  : editingCalendar
+                    ? "Save changes"
+                    : createMode === "period"
                     ? "Generate"
                     : "Create"}
               </button>
             </div>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(processTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProcessTarget(null);
+            setProcessAuthenticatorCode("");
+          }
+        }}
+      >
+        <DialogPopup className="w-[min(520px,96vw)]">
+          <DialogHeader>
+            <DialogTitle>Generate payroll run</DialogTitle>
+            <DialogDescription>
+              {`Run ${readString(processTarget, ["runNo", "run_no"], rowId(processTarget))} will be calculated and sent through HR, Finance, and Management approval.`}
+              {" "}If your current login completed 2FA, you may continue without a code. Otherwise enter a fresh authenticator code if that method is enabled.
+            </DialogDescription>
+          </DialogHeader>
+          <Field label="Fresh six-digit authenticator code (optional for verified login)">
+            <input
+              className={inputClass}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={processAuthenticatorCode}
+              onChange={(event) => setProcessAuthenticatorCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+          </Field>
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setProcessTarget(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={processingRunId === rowId(processTarget) || (processAuthenticatorCode.length > 0 && processAuthenticatorCode.length !== 6)}
+              onClick={() => processTarget && void onProcessRun(processTarget, processAuthenticatorCode || undefined)}
+            >
+              {processingRunId === rowId(processTarget) ? "Processing…" : "Generate payroll"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(periodDatesTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPeriodDatesTarget(null);
+            setFormError(null);
+          }
+        }}
+      >
+        <DialogPopup className="w-[min(560px,96vw)]">
+          <DialogHeader>
+            <DialogTitle>Edit payroll period dates</DialogTitle>
+            <DialogDescription>
+              Edit before payroll processing. Locked, paid, closed, or cancelled periods cannot be changed. Each change is audited.
+            </DialogDescription>
+          </DialogHeader>
+          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          <div className="grid gap-3">
+            <Field label="Cut-off date">
+              <DateInput
+                className={inputClass}
+                value={periodDatesForm.cutoffDate}
+                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, cutoffDate: event.target.value }))}
+              />
+            </Field>
+            <Field label="Payment date">
+              <DateInput
+                className={inputClass}
+                value={periodDatesForm.paymentDate}
+                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, paymentDate: event.target.value }))}
+              />
+            </Field>
+            <Field label="Reason for change">
+              <Textarea
+                className={textareaClass}
+                value={periodDatesForm.reason}
+                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, reason: event.target.value }))}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setPeriodDatesTarget(null)}>
+              Cancel
+            </button>
+            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onSavePeriodDates()}>
+              {saving ? "Saving…" : "Save dates"}
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

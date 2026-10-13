@@ -15910,12 +15910,17 @@ export async function createPayrollRun(token: string, data: AdminRecord) {
   });
 }
 
-export async function processPayrollRun(token: string, id: string | number) {
+export async function processPayrollRun(
+  token: string,
+  id: string | number,
+  data?: AdminRecord,
+) {
   const payload = await adminRequest<unknown>(
     `/api/payroll/runs/${id}/process`,
     {
       method: "POST",
       token,
+      body: data,
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
@@ -16180,6 +16185,35 @@ export async function generatePayrollPeriod(token: string, data: AdminRecord) {
   });
 }
 
+export async function updatePayrollPeriodDates(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/payroll/configuration/periods/${id}/dates`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function getPayrollSecurityPolicy(token: string) {
+  return adminRequest<unknown>("/api/payroll/configuration/security-policy", {
+    token,
+  });
+}
+
+export async function updatePayrollSecurityPolicy(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/payroll/configuration/security-policy", {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
 export async function listPayrollComponents(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/payroll/configuration/components",
@@ -16211,6 +16245,18 @@ export async function listPayrollCalendars(token: string) {
 export async function createPayrollCalendar(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/configuration/calendars", {
     method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function updatePayrollCalendar(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/payroll/configuration/calendars/${id}`, {
+    method: "PATCH",
     token,
     body: data,
   });

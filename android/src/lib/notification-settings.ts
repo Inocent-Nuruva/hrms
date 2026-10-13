@@ -1,7 +1,10 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 
 import * as SecureStore from './secure-store';
+import { api } from './api';
 
 export type NotificationSoundPreference = 'hrms-default' | 'device-default';
 
@@ -18,6 +21,7 @@ export const NOTIFICATION_SOUND_OPTIONS: Array<{
 ];
 
 const STORAGE_KEY = 'hrms.notificationSoundPreference';
+const PUSH_TOKEN_KEY = 'hrms.expoPushToken';
 
 const CHANNEL_IDS: Record<NotificationSoundPreference, string> = {
   'hrms-default': 'hrms-alerts-hrms-default',
@@ -61,6 +65,34 @@ export async function ensureNotificationPermissionsAsync() {
   }
 
   return status === 'granted';
+}
+
+export async function registerRemotePushDeviceAsync() {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
+  const granted = await ensureNotificationPermissionsAsync();
+  if (!granted || !Device.isDevice) return;
+
+  const projectId =
+    Constants.easConfig?.projectId ??
+    Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) {
+    console.warn('Expo push registration is unavailable until the EAS project ID is configured.');
+    return;
+  }
+  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+  await api.registerMyPushDevice({
+    expo_push_token: token,
+    platform: Platform.OS,
+    device_name: Device.deviceName ?? undefined,
+  });
+  await SecureStore.setItemAsync(PUSH_TOKEN_KEY, token);
+}
+
+export async function unregisterRemotePushDeviceAsync() {
+  const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+  if (!token) return;
+  await api.unregisterMyPushDevice(token);
+  await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(() => {});
 }
 
 export async function presentHrmsNotification(input: {
