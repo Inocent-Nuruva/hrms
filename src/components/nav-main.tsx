@@ -15,7 +15,6 @@ import {
 } from "@fluentui/react-components"
 import {
   Home24Regular,
-  Home24Color,
   type FluentIcon,
 } from "@fluentui/react-icons"
 
@@ -39,7 +38,30 @@ type NavMainItem = NavMainNode & {
 
 const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
 const Home = Home24Regular
-const ActiveHome = Home24Color
+
+const sidebarIconColors: Record<string, string> = {
+  "Access Control": tokens.colorPalettePurpleForeground2,
+  Attendance: tokens.colorPaletteTealForeground2,
+  Branches: tokens.colorPaletteRoyalBlueForeground2,
+  Companies: tokens.colorPaletteRoyalBlueForeground2,
+  Departments: tokens.colorPaletteSeafoamForeground2,
+  Employees: tokens.colorPaletteTealForeground2,
+  Promotion: tokens.colorPaletteGreenForeground2,
+  "Leave Management": tokens.colorPaletteMarigoldForeground2,
+  "Performance & Activities": tokens.colorPalettePurpleForeground2,
+  Probation: tokens.colorPaletteMarigoldForeground2,
+  Field: tokens.colorPaletteTealForeground2,
+  Finance: tokens.colorPaletteGreenForeground2,
+  Movements: tokens.colorPalettePeachForeground2,
+  Positions: tokens.colorPaletteRoyalBlueForeground2,
+  Structure: tokens.colorPalettePurpleForeground2,
+  "Invite & register": tokens.colorPaletteTealForeground2,
+  Payroll: tokens.colorPaletteGreenForeground2,
+  "Reports & Analytics": tokens.colorPaletteRoyalBlueForeground2,
+  Notifications: tokens.colorPaletteMarigoldForeground2,
+  SMS: tokens.colorPaletteTealForeground2,
+  Insights: tokens.colorPalettePurpleForeground2,
+}
 
 const useStyles = makeStyles({
   nav: {
@@ -48,6 +70,7 @@ const useStyles = makeStyles({
     fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
   },
   iconBadge: {
+    color: tokens.colorBrandForeground1,
     display: "inline-flex",
     width: "24px",
     height: "24px",
@@ -317,7 +340,7 @@ export function NavMain({
     >
       <NavItem
         value="/dashboard"
-        icon={<span className={styles.iconBadge} aria-hidden="true">{normalizedPath(currentPath) === "/dashboard" ? <ActiveHome /> : <Home />}</span>}
+        icon={<span className={styles.iconBadge} aria-hidden="true"><Home /></span>}
         className={styles.item}
       >
         <AttentionLabel
@@ -329,7 +352,7 @@ export function NavMain({
 
       {items.map((item) => {
         const isActive = nodeContainsCurrentPath(item, currentPath)
-        const Icon = isActive ? item.activeIcon ?? item.icon : item.icon
+        const Icon = item.icon
 
         if (item.items?.length) {
           const value = categoryValue(item)
@@ -337,7 +360,7 @@ export function NavMain({
           return (
             <NavCategory key={value} value={value}>
               <NavCategoryItem
-                icon={Icon ? <span className={styles.iconBadge} aria-hidden="true"><Icon /></span> : undefined}
+                icon={Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined}
                 className={styles.item}
                 data-active-category={isActiveCategory ? "true" : undefined}
               >
@@ -365,7 +388,7 @@ export function NavMain({
           <NavItem
             key={`${item.title}-${item.url}`}
             value={item.url}
-            icon={Icon ? <span className={styles.iconBadge} aria-hidden="true"><Icon /></span> : undefined}
+            icon={Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined}
             disabled={item.disabled}
             className={styles.item}
           >

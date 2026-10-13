@@ -13,7 +13,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles } from 'lucide-react-native';
+import { CalendarDays, Sparkles, X } from 'lucide-react-native';
 import { api, normalizeList } from '../lib/api';
 import { COLORS } from '../lib/config';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
@@ -33,7 +33,7 @@ type MobileRecord = Record<string, unknown>;
 
 interface Props {
   auth: UseAuthReturn;
-  onTabChange?: (tab: 'attendance' | 'leave' | 'profile') => void;
+  onTabChange?: (tab: 'attendance' | 'leave' | 'calendar' | 'profile') => void;
 }
 
 export function HomeScreen({ auth, onTabChange }: Props) {
@@ -43,6 +43,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const [failedProfilePhotoUri, setFailedProfilePhotoUri] = React.useState<string | null>(null);
   const [loadedProfilePhotoUri, setLoadedProfilePhotoUri] = React.useState<string | null>(null);
+  const [isOnboardingNoticeDismissed, setIsOnboardingNoticeDismissed] = React.useState(false);
   const [now, setNow] = React.useState(() => new Date());
   const compactLayout = viewportWidth <= 640 || viewportHeight <= 880;
   const employee = asRecord(auth.employee) || {};
@@ -56,6 +57,23 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     queryFn: async () => normalizeList(await api.listMyLeaveBalances({ limit: 20 })),
     enabled: auth.isAuthenticated,
   });
+
+  const holidaysQuery = useQuery({
+    queryKey: ['mobileHomeHolidays'],
+    queryFn: async () => await normalizeList(await api.listHolidays({ limit: 50 })) as MobileRecord[],
+    enabled: auth.isAuthenticated,
+  });
+
+  const leaveRequestsQuery = useQuery({
+    queryKey: ['mobileHomeLeaveRequests'],
+    queryFn: async () => await normalizeList(await api.listMyLeaveRequests({ limit: 50 })) as MobileRecord[],
+    enabled: auth.isAuthenticated,
+  });
+
+  const upcomingItems = React.useMemo(
+    () => buildUpcomingItems(holidaysQuery.data ?? [], leaveRequestsQuery.data ?? [], now),
+    [holidaysQuery.data, leaveRequestsQuery.data, now],
+  );
 
   const punchesQuery = useQuery({
     queryKey: ['mobileHomePunches'],
@@ -91,6 +109,10 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   }, []));
 
   React.useEffect(() => {
+    if (!auth.isAuthenticated) setIsOnboardingNoticeDismissed(false);
+  }, [auth.isAuthenticated]);
+
+  React.useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(id);
   }, []);
@@ -120,12 +142,14 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     await Promise.all([
       auth.refreshProfile(),
       balancesQuery.refetch(),
+      holidaysQuery.refetch(),
+      leaveRequestsQuery.refetch(),
       punchesQuery.refetch(),
       todayAttendanceQuery.refetch(),
       profilePhotoQuery.refetch(),
       weeklyAttendanceQuery.refetch(),
     ]);
-  }, [auth, balancesQuery, profilePhotoQuery, punchesQuery, todayAttendanceQuery, weeklyAttendanceQuery]);
+  }, [auth, balancesQuery, holidaysQuery, leaveRequestsQuery, profilePhotoQuery, punchesQuery, todayAttendanceQuery, weeklyAttendanceQuery]);
 
   const fullName =
     [readString(employee, ['first_name']), readString(employee, ['last_name'])].filter(Boolean).join(' ') ||
@@ -141,7 +165,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     readString(employee, ['department_name']) || readNestedName(employee, ['department', 'primary_department']) || 'Not assigned';
   const branch =
     readString(employee, ['branch_name']) || readNestedName(employee, ['branch', 'primary_branch']) || 'Not assigned';
-  const joined = formatDate(readUnknown(employee, ['hire_date', 'joining_date', 'date_joined']));
 
   const todayCheckIn =
     readString(todayAttendanceQuery.data, ['checkInAt', 'check_in_at', 'firstCheckInAt', 'first_check_in_at']) ||
@@ -155,6 +178,8 @@ export function HomeScreen({ auth, onTabChange }: Props) {
   const profilePhotoUri = profilePhotoQuery.data || null;
   const isRefreshing =
     balancesQuery.isFetching ||
+    holidaysQuery.isFetching ||
+    leaveRequestsQuery.isFetching ||
     punchesQuery.isFetching ||
     todayAttendanceQuery.isFetching ||
     profilePhotoQuery.isFetching ||
@@ -190,7 +215,7 @@ export function HomeScreen({ auth, onTabChange }: Props) {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor }]} edges={[]}>
-      <MobileTopBar auth={auth} title="Dashboard" variant="centered" titleWeight="700" />
+      <MobileTopBar auth={auth} title="Dashboard" variant="centered" titleWeight="700" hideDivider />
       <ScrollView
         style={[styles.scroll, { backgroundColor }]}
         contentContainerStyle={[
@@ -220,44 +245,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
                 ))}
               </View>
               <View style={styles.profileCardBody}>
-                <View style={styles.heroHeaderBand}>
-                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                    <ProfileCardDoodles artwork={profileCardStyle.artwork} onLight vivid />
-                  </View>
-                  <Text style={styles.dateLabel}>{formatHeaderDate(now)}</Text>
-                  <View style={styles.heroGreetingRow}>
-                    <Text style={styles.heroGreeting}>{getGreeting(now)},</Text>
-                    <AnimatedGreetingName name={preferredName} color={profileCardAccent} />
-                  </View>
-                </View>
-                <View style={styles.heroStats}>
-                  {snapshots.map((snapshot, index) => (
-                    <React.Fragment key={snapshot.label}>
-                      {index > 0 ? <View style={[styles.heroStatDivider, { backgroundColor: profileCardIsLight ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)' }]} /> : null}
-                      <TouchableScale
-                        accessibilityRole="button"
-                        accessibilityLabel={`${snapshot.label} ${snapshot.value}`}
-                        onPress={() => onTabChange?.(snapshot.icon === 'leave' ? 'leave' : 'attendance')}
-                        style={styles.heroStatTile}
-                      >
-                        {snapshot.icon === 'leave' ? <View style={styles.snapshotIconPlaceholder} /> : <FluentSystemIcon name={snapshot.icon} size={16} color={profileCardAccent} />}
-                        <Text style={[styles.snapshotLabel, { color: profileCardMutedColor }]}>{snapshot.label}</Text>
-                        <Text numberOfLines={1} style={[styles.snapshotValue, { color: profileCardTextColor }]}>{snapshot.value}</Text>
-                      </TouchableScale>
-                    </React.Fragment>
-                  ))}
-                </View>
-                {onClock || dayLine !== 'No check-in yet today.' ? (
-                  <View style={styles.heroStatusRow}>
-                    <View style={[styles.heroStatusDot, { backgroundColor: onClock ? '#168A63' : profileCardMutedColor }]} />
-                    <Text numberOfLines={2} style={[styles.heroStatus, { color: profileCardMutedColor }]}>
-                      {onClock ? `On the clock · ${dayLine}` : dayLine}
-                    </Text>
-                  </View>
-                ) : null}
-                <View style={styles.heroIdentityLabel}>
-                  <Text style={[styles.heroIdentityCaption, { color: profileCardMutedColor }]}>YOUR PROFILE</Text>
-                </View>
                 <View style={styles.identityRow}>
                   <View style={[styles.avatarShell, compactLayout && styles.avatarShellCompact, { borderColor: profileCardIsLight ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.92)' }]}>
                     <NativeText style={[styles.avatarInitials, { color: profileCardIsLight ? profileCardAccent : '#FFFFFF' }]}>{initials}</NativeText>
@@ -273,13 +260,19 @@ export function HomeScreen({ auth, onTabChange }: Props) {
                     ) : null}
                   </View>
                   <View style={styles.identityCopy}>
-                    <Text numberOfLines={1} style={[styles.employeeName, { color: profileCardTextColor }]}>{fullName}</Text>
+                    <View style={styles.identityGreetingRow}>
+                      <Text style={[styles.identityGreetingLead, { color: profileCardTextColor }]}>{getGreeting(now)},</Text>
+                      <AnimatedGreetingName name={preferredName} color={profileCardTextColor} size={22} />
+                    </View>
                     <View style={styles.metaRow}>
                       <View style={[styles.employeeStatusPill, { backgroundColor: profileCardIsLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.2)' }]}>
                         <Text style={[styles.employeeStatus, { color: profileCardTextColor }]}>
                           {formatTitle(employmentStatus)}
                         </Text>
                       </View>
+                      <Text style={[styles.dateTimeLabel, { color: profileCardMutedColor }]}>
+                        {formatHeaderDate(now)} · {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                      </Text>
                     </View>
                   </View>
                   <TouchableScale
@@ -298,13 +291,12 @@ export function HomeScreen({ auth, onTabChange }: Props) {
                   <ProfileField label="Position" value={position} textColor={profileCardTextColor} mutedColor={profileCardMutedColor} />
                   <ProfileField label="Department" value={department} textColor={profileCardTextColor} mutedColor={profileCardMutedColor} />
                   <ProfileField label="Branch" value={branch} textColor={profileCardTextColor} mutedColor={profileCardMutedColor} />
-                  <ProfileField label="Joined" value={joined} textColor={profileCardTextColor} mutedColor={profileCardMutedColor} />
                 </View>
               </View>
             </View>
           </View>
 
-          {isOnboarding ? (
+          {isOnboarding && !isOnboardingNoticeDismissed ? (
             <View
               style={[
                 styles.onboardingBanner,
@@ -325,8 +317,44 @@ export function HomeScreen({ auth, onTabChange }: Props) {
               >
                 Finish onboarding
               </Button>
+              <TouchableScale
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss onboarding notice"
+                onPress={() => setIsOnboardingNoticeDismissed(true)}
+                style={styles.onboardingDismissButton}
+              >
+                <X size={16} color={isDark ? '#FDE68A' : '#92400E'} />
+              </TouchableScale>
             </View>
           ) : null}
+
+          <View style={styles.heroStatsSection}>
+            <View style={styles.heroStats}>
+              {snapshots.map((snapshot, index) => (
+                <React.Fragment key={snapshot.label}>
+                  {index > 0 ? <View style={[styles.heroStatDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.12)' }]} /> : null}
+                  <TouchableScale
+                    accessibilityRole="button"
+                    accessibilityLabel={`${snapshot.label} ${snapshot.value}`}
+                    onPress={() => onTabChange?.(snapshot.icon === 'leave' ? 'leave' : 'attendance')}
+                    style={styles.heroStatTile}
+                  >
+                    <FluentSystemIcon name={snapshot.icon} size={16} color={mutedColor} />
+                    <Text style={[styles.snapshotLabel, { color: isDark ? '#596579' : '#526273' }]}>{snapshot.label}</Text>
+                    <Text numberOfLines={1} style={[styles.snapshotValue, { color: textColor }]}>{snapshot.value}</Text>
+                  </TouchableScale>
+                </React.Fragment>
+              ))}
+            </View>
+            {onClock || dayLine !== 'No check-in yet today.' ? (
+              <View style={styles.heroStatusRow}>
+                <View style={[styles.heroStatusDot, { backgroundColor: onClock ? '#168A63' : mutedColor }]} />
+                <Text numberOfLines={2} style={[styles.heroStatus, { color: mutedColor }]}>
+                  {onClock ? `On the clock · ${dayLine}` : dayLine}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
           <Text style={[styles.sectionHeading, { color: textColor }]}>Shortcuts</Text>
           <View style={[styles.shortcutCard, { backgroundColor: isDark ? '#252B32' : '#FFFFFF', borderColor: isDark ? '#3A4654' : '#E5E7EB' }]}>
@@ -446,6 +474,45 @@ export function HomeScreen({ auth, onTabChange }: Props) {
               })}
             </View>
           </Card>
+
+          <Card variant="default" style={styles.comingUpCard}>
+            <View style={styles.comingUpHeader}>
+              <Text style={[styles.attendanceTitle, { color: textColor }]}>Coming up</Text>
+              <TouchableScale
+                accessibilityRole="button"
+                accessibilityLabel="Open leave and holiday calendar"
+                onPress={() => onTabChange?.('calendar')}
+                style={styles.comingUpLink}
+              >
+                <Text style={[styles.comingUpLinkText, { color: profileCardAccent }]}>View calendar</Text>
+              </TouchableScale>
+            </View>
+            {upcomingItems.length ? upcomingItems.map((item, index) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.comingUpRow,
+                  index > 0 && { borderTopColor: isDark ? '#344250' : '#E7EDF2', borderTopWidth: StyleSheet.hairlineWidth },
+                ]}
+              >
+                <View style={[styles.comingUpIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F2F8FC' }]}>
+                  <CalendarDays size={17} color={item.kind === 'leave' ? '#168A63' : profileCardAccent} strokeWidth={1.9} />
+                </View>
+                <View style={styles.comingUpCopy}>
+                  <Text numberOfLines={1} style={[styles.comingUpTitle, { color: textColor }]}>{item.title}</Text>
+                  <Text numberOfLines={1} style={[styles.comingUpDate, { color: mutedColor }]}>{item.detail}</Text>
+                </View>
+              </View>
+            )) : (
+              <Text style={[styles.comingUpEmpty, { color: mutedColor }]}>
+                {holidaysQuery.isLoading || leaveRequestsQuery.isLoading
+                  ? 'Checking upcoming dates…'
+                  : holidaysQuery.isError && leaveRequestsQuery.isError
+                    ? 'Upcoming dates are unavailable right now.'
+                    : 'Nothing scheduled soon.'}
+              </Text>
+            )}
+          </Card>
         </ScreenTransition>
       </ScrollView>
     </SafeAreaView>
@@ -461,17 +528,62 @@ function ProfileField({ label, value, textColor, mutedColor }: { label: string; 
   );
 }
 
-function asRecord(value: unknown): MobileRecord | null {
-  return value && typeof value === 'object' ? (value as MobileRecord) : null;
+type UpcomingItem = { id: string; title: string; detail: string; date: Date; kind: 'holiday' | 'leave' };
+
+function buildUpcomingItems(holidays: MobileRecord[], leaveRequests: MobileRecord[], now: Date): UpcomingItem[] {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const items: UpcomingItem[] = [];
+
+  holidays.forEach((row, index) => {
+    const dateValue = readString(row, ['date', 'holiday_date', 'holidayDate']);
+    const date = parseLocalDate(dateValue);
+    if (!date || date < today) return;
+    items.push({
+      id: `holiday-${String(row.id ?? dateValue)}-${index}`,
+      title: readString(row, ['name', 'holiday_name', 'title']) || 'Public holiday',
+      detail: formatUpcomingDate(date),
+      date,
+      kind: 'holiday',
+    });
+  });
+
+  leaveRequests.forEach((row, index) => {
+    const status = readString(row, ['status', 'approval_status', 'approvalStatus']).toLowerCase();
+    if (!status.includes('approved')) return;
+    const start = parseLocalDate(readString(row, ['start_date', 'startDate']));
+    const end = parseLocalDate(readString(row, ['end_date', 'endDate'])) || start;
+    if (!end || end < today) return;
+    const leaveType = asRecord(row.leave_type) || asRecord(row.leaveType) || asRecord(row.type);
+    const leaveName = readString(leaveType, ['name', 'display_name']) || readString(row, ['leave_type_name', 'type_name']) || 'Leave';
+    const effectiveDate = start && start >= today ? start : today;
+    items.push({
+      id: `leave-${String(row.id ?? `${leaveName}-${index}`)}`,
+      title: `Approved leave · ${leaveName}`,
+      detail: start && end && start.getTime() !== end.getTime()
+        ? `${formatUpcomingDate(start)} – ${formatUpcomingDate(end)}`
+        : formatUpcomingDate(effectiveDate),
+      date: effectiveDate,
+      kind: 'leave',
+    });
+  });
+
+  return items.sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 3);
 }
 
-function readUnknown(value: unknown, keys: string[]) {
-  const record = asRecord(value);
-  if (!record) return undefined;
-  for (const key of keys) {
-    if (record[key] !== null && record[key] !== undefined) return record[key];
-  }
-  return undefined;
+function parseLocalDate(value: string) {
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatUpcomingDate(date: Date) {
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function asRecord(value: unknown): MobileRecord | null {
+  return value && typeof value === 'object' ? (value as MobileRecord) : null;
 }
 
 function readString(value: unknown, keys: string[]) {
@@ -527,13 +639,6 @@ function formatTime(value: string) {
   }
   const timeMatch = value.match(/\b(\d{1,2}:\d{2})\b/);
   return timeMatch?.[1] || value;
-}
-
-function formatDate(value: unknown) {
-  if (!value) return '—';
-  const parsed = new Date(String(value));
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function formatHeaderDate(value: Date) {
@@ -721,7 +826,7 @@ function AnimatedAttendanceHours({ minutes, color }: { minutes: number; color: s
   return <Text style={[styles.attendanceHours, { color }]}>{formatChartHours(displayMinutes)}</Text>;
 }
 
-function AnimatedGreetingName({ name, color }: { name: string; color: string }) {
+function AnimatedGreetingName({ name, color, size = 23 }: { name: string; color: string; size?: number }) {
   const [sparkleValues] = React.useState(() => [
     new Animated.Value(0),
     new Animated.Value(0),
@@ -744,7 +849,7 @@ function AnimatedGreetingName({ name, color }: { name: string; color: string }) 
 
   return (
     <View style={styles.greetingNameWrap}>
-      <Text style={[styles.greetingName, { color }]}>{name}</Text>
+      <Text style={[styles.greetingName, size === 23 ? null : { fontSize: size, lineHeight: size + 7 }, { color }]}>{name}</Text>
       {sparkleValues.map((value, index) => (
         <Animated.View
           key={index}
@@ -755,7 +860,7 @@ function AnimatedGreetingName({ name, color }: { name: string; color: string }) 
             { opacity: value, transform: [{ scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }] },
           ]}
         >
-          <Sparkles size={index === 2 ? 8 : 10} color={color} strokeWidth={2.5} />
+          <Sparkles size={index === 2 ? 10 : 12} color={color} strokeWidth={2.5} />
         </Animated.View>
       ))}
     </View>
@@ -790,22 +895,21 @@ const styles = StyleSheet.create({
   onboardingAccent: { width: 4, alignSelf: 'stretch', borderRadius: 4 },
   onboardingText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' },
   onboardingButton: { minHeight: 34, paddingHorizontal: 12 },
-  heroHeaderBand: { position: 'relative', overflow: 'hidden', marginHorizontal: -16, marginTop: -8, marginBottom: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 0, backgroundColor: '#FFFFFF' },
-  dateLabel: { fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 0.8, color: '#64748B' },
-  heroGreetingRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, marginTop: 2 },
-  heroGreeting: { fontSize: 23, lineHeight: 30, fontWeight: '500', letterSpacing: -0.3, color: '#243447' },
+  onboardingDismissButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 15 },
+  identityGreetingRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 4 },
+  identityGreetingLead: { fontSize: 18, lineHeight: 27, fontWeight: '500', letterSpacing: -0.2, flexShrink: 0 },
+  dateTimeLabel: { fontSize: 10, lineHeight: 14, fontWeight: '500' },
   greetingNameWrap: { position: 'relative' },
   greetingName: { fontSize: 23, lineHeight: 30, fontWeight: '700', letterSpacing: -0.4 },
   greetingSparkle: { position: 'absolute' },
   heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 0 },
   heroStatusDot: { width: 7, height: 7, borderRadius: 4 },
   heroStatus: { flex: 1, fontSize: 11, lineHeight: 16, fontWeight: '500' },
+  heroStatsSection: { marginHorizontal: 16, marginTop: 8 },
   heroStats: { flexDirection: 'row', alignItems: 'stretch', marginTop: 4, paddingTop: 4, paddingBottom: 0, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128,150,170,0.2)', borderBottomColor: 'rgba(128,150,170,0.2)' },
   heroStatTile: { flex: 1, minWidth: 0, justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 2 },
   heroStatDivider: { width: StyleSheet.hairlineWidth, marginVertical: 3 },
   snapshotIconPlaceholder: { height: 16 },
-  heroIdentityLabel: { marginBottom: 7 },
-  heroIdentityCaption: { fontSize: 9, lineHeight: 12, fontWeight: '700', letterSpacing: 0.8 },
   snapshotLabel: { marginTop: 5, fontSize: 8, lineHeight: 11, fontWeight: '700', letterSpacing: 0.3 },
   snapshotValue: { marginTop: 1, fontSize: 13, lineHeight: 17, fontWeight: '700', letterSpacing: -0.1 },
   profileCardShadow: {
@@ -856,7 +960,7 @@ const styles = StyleSheet.create({
   profileWave4: { bottom: -34, transform: [{ rotate: '-1deg' }] },
   profileCardBody: {
     paddingHorizontal: 16,
-    paddingTop: 0,
+    paddingTop: 8,
     paddingBottom: 16,
     zIndex: 1,
   },
@@ -876,8 +980,7 @@ const styles = StyleSheet.create({
   avatarImage: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   avatarInitials: { fontFamily: 'Comfortaa_600SemiBold', fontSize: 18, fontWeight: '600' },
   identityCopy: { flex: 1, minWidth: 0 },
-  employeeName: { fontSize: 18, lineHeight: 23, fontWeight: '700', letterSpacing: -0.3 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 4 },
   employeeStatusPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   employeeStatus: { fontSize: 11, lineHeight: 14, fontWeight: '600' },
   profileArrow: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
@@ -906,6 +1009,16 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderRadius: 12,
   },
+  comingUpCard: { marginHorizontal: 16, marginTop: 12, paddingHorizontal: 13, paddingTop: 12, paddingBottom: 6, borderRadius: 12 },
+  comingUpHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  comingUpLink: { paddingHorizontal: 6, paddingVertical: 5 },
+  comingUpLinkText: { fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  comingUpRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },
+  comingUpIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+  comingUpCopy: { flex: 1, minWidth: 0 },
+  comingUpTitle: { fontSize: 12, lineHeight: 17, fontWeight: '700' },
+  comingUpDate: { marginTop: 2, fontSize: 10, lineHeight: 14, fontWeight: '500' },
+  comingUpEmpty: { paddingTop: 5, paddingBottom: 9, fontSize: 11, lineHeight: 16 },
   attendanceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   attendanceHeaderCopy: { flex: 1 },
   attendanceTitle: { fontSize: 14, lineHeight: 19, fontWeight: '700', letterSpacing: -0.1 },

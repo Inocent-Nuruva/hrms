@@ -209,7 +209,9 @@ export function SupportChatWidget() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMessages,
+          messages: nextMessages.slice(-12).map(({ role, content }) => ({
+            role, content: content.slice(0, 4_000),
+          })),
           accessMode: actor.accessMode,
         }),
       })

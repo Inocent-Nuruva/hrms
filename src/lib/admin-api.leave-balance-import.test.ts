@@ -8,6 +8,66 @@ import {
   uploadLeaveBalanceImport,
 } from "./admin-api"
 
+const importBatchFixture = {
+  "batch_id": "LBI-1",
+  "status": "COMPLETED",
+  "import_mode": null,
+  "fiscal_year": "",
+  "original_file_name": "",
+  "file_size": 0,
+  "template_generated_at": null,
+  "default_reason": null,
+  "total_rows": 0,
+  "valid_rows": 0,
+  "warning_rows": 0,
+  "invalid_rows": 0,
+  "no_change_rows": 0,
+  "changed_rows": 0,
+  "imported_rows": 0,
+  "skipped_rows": 0,
+  "failed_rows": 0,
+  "processed_rows": 0,
+  "total_employees": 0,
+  "employees_affected": 0,
+  "failure_reason": null,
+  "uploaded_at": "",
+  "uploaded_by": null,
+  "confirmed_at": null,
+  "confirmed_by": null,
+  "completed_at": null,
+  "cancelled_at": null,
+  "summary": {},
+  "actions": {
+    "can_confirm_strict": false,
+    "can_confirm_valid_rows_only": false,
+    "can_cancel": false,
+    "requires_warning_acknowledgement": false
+  }
+}
+const importRowFixture = {
+  "id": 2,
+  "row_number": 1,
+  "employee_no": null,
+  "employee_name": null,
+  "branch_name": null,
+  "department_name": null,
+  "leave_type_code": null,
+  "leave_type_name": null,
+  "uploaded_current_balance": null,
+  "db_current_balance": null,
+  "new_balance": null,
+  "adjustment_days": null,
+  "reason": null,
+  "validation_status": "VALID",
+  "result_status": null,
+  "error_code": null,
+  "message": null,
+  "issues": [],
+  "previous_balance_at_import": null,
+  "new_balance_at_import": null,
+  "processed_at": null
+}
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -45,7 +105,7 @@ describe("leave balance bulk import API", () => {
   })
 
   it("uploads the workbook with the default reason for validation only", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ batch_id: "LBI-1", status: "READY_FOR_IMPORT" }))
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ...importBatchFixture, status: "READY_FOR_IMPORT" }))
     vi.stubGlobal("fetch", fetchMock)
     const file = new File(["xlsx"], "balances.xlsx")
 
@@ -81,7 +141,7 @@ describe("leave balance bulk import API", () => {
   it("pages rows with filters and reads the pagination meta", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
-        data: [{ id: 1, row_number: 2 }],
+        data: [{ ...importRowFixture, id: 1, row_number: 2 }],
         meta: { totalItems: 120, itemCount: 1, itemsPerPage: 50, totalPages: 3, currentPage: 2 },
       }),
     )
@@ -106,7 +166,7 @@ describe("leave balance bulk import API", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [], meta: { totalItems: 0, itemsPerPage: 50, totalPages: 1, currentPage: 1 } }))
-      .mockResolvedValueOnce(jsonResponse({ batch_id: "LBI-1", status: "COMPLETED" }))
+      .mockResolvedValueOnce(jsonResponse(importBatchFixture))
     vi.stubGlobal("fetch", fetchMock)
 
     await listLeaveBalanceImportRows("token", "LBI-1", { status: "ALL" })

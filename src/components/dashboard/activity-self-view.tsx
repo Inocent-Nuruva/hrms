@@ -1,11 +1,18 @@
-"use client"
+"use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
-import * as React from "react"
+import { ActivityEvidencePicker } from "@/components/dashboard/activity-evidence-picker";
+import { WorkflowGuide } from "@/components/dashboard/workflow-guide";
+import { ValidatedWorkflowForm } from "@/components/dashboard/validated-workflow-form";
+import { activityFormSchema } from "@/lib/workflow-schemas";
+import { workflowFailure } from "@/lib/workflow-error";
+import { useWorkflowRequest } from "@/hooks/use-workflow-request";
+
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
+import { Textarea } from "@/components/ui/textarea";
+import * as React from "react";
 import { PlusIcon, RefreshCwIcon } from "lucide-react";
-import { toast } from "@/components/ui/fluent-toast-store"
+import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   CompactStatStrip,
@@ -24,7 +31,7 @@ import {
   rowId,
   secondaryButtonClass,
   textareaClass,
-} from "@/components/dashboard/talent-visuals"
+} from "@/components/dashboard/talent-visuals";
 import {
   Dialog,
   DialogDescription,
@@ -32,7 +39,7 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
+} from "@/components/animate-ui/components/base/dialog";
 import {
   addMyActivityEntry,
   createMyActivityReport,
@@ -43,126 +50,196 @@ import {
   listMyActivities,
   submitMyActivityReport,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
-import { readStoredSessionTokens } from "@/lib/session-client"
+} from "@/lib/admin-api";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { readStoredSessionTokens } from "@/lib/session-client";
 
-export type ActivitySelfTab = "today" | "reports"
+export type ActivitySelfTab = "today" | "reports";
 
-const ENTRY_STATUSES = ["PLANNED", "IN_PROGRESS", "COMPLETED", "DEFERRED", "CANCELLED"] as const
+const ENTRY_STATUSES = [
+  "PLANNED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "DEFERRED",
+  "CANCELLED",
+] as const;
 
 function readStoredToken() {
-  return readStoredSessionTokens().accessToken.trim()
+  return readStoredSessionTokens().accessToken.trim();
 }
 
 function newRequestId() {
-  return globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}`
+  return globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}`;
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toISOString().slice(0, 10);
 }
 
 function reportEntries(report: AdminRecord | null) {
-  if (!report) return []
-  return asRecordArray(report.entries ?? report.items ?? report.activities)
+  if (!report) return [];
+  return asRecordArray(report.entries ?? report.items ?? report.activities);
 }
 
 function resolveTodayReport(record: AdminRecord | null) {
-  if (!record) return null
-  const nested = asRecord(record.report) ?? asRecord(record.data) ?? record
-  if (!nested) return null
+  if (!record) return null;
+  const nested = asRecord(record.report) ?? asRecord(record.data) ?? record;
+  if (!nested) return null;
   const hasIdentity =
     Boolean(rowId(nested)) ||
     Boolean(nested.activityDate) ||
     Boolean(nested.activity_date) ||
     Boolean(readString(nested, ["status"])) ||
-    reportEntries(nested).length > 0
-  return hasIdentity ? nested : null
+    reportEntries(nested).length > 0;
+  return hasIdentity ? nested : null;
 }
 
-export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) {
-  const leaveIfForbidden = useLeaveIfForbidden()
-  const [today, setToday] = React.useState<AdminRecord | null>(null)
-  const [reports, setReports] = React.useState<AdminRecord[]>([])
-  const [categories, setCategories] = React.useState<AdminRecord[]>([])
-  const [selected, setSelected] = React.useState<AdminRecord | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [mounted, setMounted] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"report" | "entry" | "submit">("report")
-  const [form, setForm] = React.useState<Record<string, string>>({})
-  const [formError, setFormError] = React.useState<string | null>(null)
-  const [saving, setSaving] = React.useState(false)
-  const [busyId, setBusyId] = React.useState("")
+export function ActivitySelfView({
+  activeTab,
+}: {
+  activeTab: ActivitySelfTab;
+}) {
+  const [today, setToday] = React.useState<AdminRecord | null>(null);
+  const [reports, setReports] = React.useState<AdminRecord[]>([]);
+  const [categories, setCategories] = React.useState<AdminRecord[]>([]);
+  const [selected, setSelected] = React.useState<AdminRecord | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [mounted, setMounted] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [createMode, setCreateMode] = React.useState<
+    "report" | "entry" | "submit"
+  >("report");
+  const [form, setForm] = React.useState<Record<string, string>>({});
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [busyId, setBusyId] = React.useState("");
+
+  const { begin, invalidate, credential } = useWorkflowRequest(activeTab);
 
   const load = React.useCallback(async () => {
-    const token = readStoredToken()
+    const { commit, current } = begin();
+    void current;
+    const token = credential?.trim() || readStoredToken();
     if (!token) {
-      setError("Authentication required. Please log in again.")
-      setLoading(false)
-      return
+      commit(() => setError("Authentication required. Please log in again."));
+      commit(() => setLoading(false));
+      return;
     }
-    setLoading(true)
-    setError(null)
+    commit(() => setLoading(true));
+    commit(() => setError(null));
     const results = await Promise.allSettled([
       getMyActivitiesToday(token).then((record) => {
-        const report = resolveTodayReport(record)
-        setToday(report)
-        if (activeTab === "today") setSelected(report)
+        const report = resolveTodayReport(record);
+        commit(() => setToday(report));
+        if (activeTab === "today") commit(() => setSelected(report));
       }),
-      listMyActivities(token, { limit: 50 }).then(setReports),
-      listActivityCategories(token).then(setCategories).catch(() => setCategories([])),
-    ])
-    const first = results.find((result) => result.status === "rejected")
+      listMyActivities(token, { limit: 50 }).then((value) =>
+        commit(() => setReports(value)),
+      ),
+      listActivityCategories(token).then((value) =>
+        commit(() => setCategories(value)),
+      ),
+    ]);
+    const first = results.find((result) => result.status === "rejected");
     if (first && first.status === "rejected") {
-      if (leaveIfForbidden(first.reason)) {
-        setLoading(false)
-        return
-      }
-      setError(first.reason instanceof Error ? first.reason.message : "Could not load your activities.")
+      commit(() =>
+        setError(
+          workflowFailure(first.reason, "Could not load your activities."),
+        ),
+      );
     }
-    setLoading(false)
-  }, [activeTab, leaveIfForbidden])
+    commit(() => setLoading(false));
+  }, [begin, credential, activeTab]);
 
   React.useEffect(() => {
-    setMounted(true)
-    void load()
-  }, [load])
+    setMounted(true);
+    void load();
+    return invalidate;
+  }, [load, invalidate]);
+
+  const { begin: beginReportDetail } = useWorkflowRequest(
+    `${activeTab}:report-detail`,
+  );
 
   async function openReport(row: AdminRecord) {
-    const token = readStoredToken()
-    const id = rowId(row)
+    const { current } = beginReportDetail();
+    const token = readStoredToken();
+    const id = rowId(row);
     if (!token || !id) {
-      setSelected(row)
-      return
+      setSelected(row);
+      return;
     }
     try {
-      const detail = await getMyActivityReport(token, id)
-      setSelected(detail ?? row)
-    } catch {
-      setSelected(row)
+      const detail = await getMyActivityReport(token, id);
+      if (current()) setSelected(detail ?? row);
+    } catch (cause) {
+      if (current())
+        setError(
+          workflowFailure(
+            cause,
+            "Could not load this report. Reload before continuing.",
+          ),
+        );
     }
   }
 
+  const selectedCategory = categories.find(
+    (category) => rowId(category) === form.activity_category_id,
+  );
+  const activityFormInput = {
+    ...form,
+    requires_time:
+      selectedCategory?.requiresTime === true ||
+      selectedCategory?.requires_time === true,
+    requires_outcome:
+      selectedCategory?.requiresOutcome === true ||
+      selectedCategory?.requires_outcome === true,
+  };
+
+  const { begin: beginMutation } = useWorkflowRequest(
+    `${activeTab}:${JSON.stringify(activityFormInput)}`,
+  );
+  React.useEffect(() => {
+    setSaving(false);
+  }, [credential, activeTab, beginMutation]);
+
   async function onSave() {
-    const token = readStoredToken()
-    if (!token) return
-    setSaving(true)
-    setFormError(null)
+    const validationResult =
+      activityFormSchema(createMode).safeParse(activityFormInput);
+    if (!validationResult.success) {
+      setFormError(
+        validationResult.error.issues
+          .map(
+            (issue) => issue.path.map(String).join(".") + ": " + issue.message,
+          )
+          .join("; "),
+      );
+      return;
+    }
+    if (saving) return;
+    const token = readStoredToken();
+    if (!token) return;
+    const { current: isMutationCurrent } = beginMutation();
+    setSaving(true);
+    setFormError(null);
     try {
       if (createMode === "report") {
-        if (!form.activity_date) throw new Error("Activity date is required.")
+        if (!form.activity_date) throw new Error("Activity date is required.");
         await createMyActivityReport(token, {
           activity_date: form.activity_date,
           client_request_id: newRequestId(),
           source: "WEB",
-        })
+        });
+        if (!isMutationCurrent()) return;
       } else if (createMode === "entry") {
-        if (!form.id || !form.activity_category_id || !form.title || !form.description) {
-          throw new Error("Category, title, and description are required.")
+        if (
+          !form.id ||
+          !form.activity_category_id ||
+          !form.title ||
+          !form.description
+        ) {
+          throw new Error("Category, title, and description are required.");
         }
         await addMyActivityEntry(token, form.id, {
           activity_category_id: Number(form.activity_category_id),
@@ -170,45 +247,105 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           description: form.description,
           status: form.status || "PLANNED",
           outcome: form.outcome || undefined,
+          defer_reason: form.defer_reason || undefined,
+          planned_start_time: form.planned_start_time
+            ? new Date(form.planned_start_time).toISOString()
+            : undefined,
+          planned_end_time: form.planned_end_time
+            ? new Date(form.planned_end_time).toISOString()
+            : undefined,
           client_request_id: newRequestId(),
-        })
+        });
+        if (!isMutationCurrent()) return;
       } else {
-        if (!form.id || !form.employee_summary) throw new Error("A summary is required to submit.")
+        if (!form.id || !form.employee_summary)
+          throw new Error("A summary is required to submit.");
         await submitMyActivityReport(token, form.id, {
           employee_summary: form.employee_summary,
           overall_remarks: form.overall_remarks || undefined,
           client_request_id: newRequestId(),
-        })
+        });
+        if (!isMutationCurrent()) return;
       }
-      toast.success("Saved.")
-      setCreateOpen(false)
-      await load()
+      toast.success("Saved.");
+      setCreateOpen(false);
+      await load();
+      if (!isMutationCurrent()) return;
     } catch (errorObject) {
-      setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
+      if (!isMutationCurrent()) return;
+      setFormError(
+        errorObject instanceof Error ? errorObject.message : "Could not save.",
+      );
     } finally {
-      setSaving(false)
+      if (isMutationCurrent()) setSaving(false);
     }
   }
 
   const listedToday =
     reports.find((row) => {
-      const date = String(row.activityDate ?? row.activity_date ?? "").slice(0, 10)
-      return date === todayDate()
-    }) ?? today
-  const todayReport = today ?? listedToday
-  const activeReport = activeTab === "today" ? todayReport : selected
-  const entries = reportEntries(activeReport)
+      const date = String(row.activityDate ?? row.activity_date ?? "").slice(
+        0,
+        10,
+      );
+      return date === todayDate();
+    }) ?? today;
+  const todayReport = today ?? listedToday;
+  const activeReport = activeTab === "today" ? todayReport : selected;
+  const entries = reportEntries(activeReport);
   const todayDateLabel = (() => {
-    if (!todayReport) return "Today"
-    const dated = formatDate(todayReport.activityDate ?? todayReport.activity_date)
-    return dated === "—" ? "Today" : dated
-  })()
+    if (!todayReport) return "Today";
+    const dated = formatDate(
+      todayReport.activityDate ?? todayReport.activity_date,
+    );
+    return dated === "—" ? "Today" : dated;
+  })();
   const todayStatus = listedToday
     ? prettify(readString(listedToday, ["status"], "DRAFT"))
-    : "None"
+    : "None";
+
+  if (loading && !createOpen)
+    return (
+      <section aria-busy="true" className="flex flex-col gap-3">
+        <FluentLoadingIndicator />
+        <p role="status">
+          Loading this workflow and checking its available actions…
+        </p>
+      </section>
+    );
+
+  if (error && !loading && !createOpen)
+    return (
+      <section className="flex flex-col gap-4">
+        <WorkflowGuide
+          title="This workflow needs attention"
+          unavailable={error}
+          steps={[
+            "Resolve the permission, setup, or network issue described above.",
+            "Reload this view before continuing.",
+          ]}
+        />
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => void load()}
+        >
+          Reload workflow
+        </button>
+      </section>
+    );
 
   return (
     <section className="space-y-4">
+      <WorkflowGuide
+        title="Your daily activity report"
+        steps={[
+          "Create a draft for the correct day.",
+          "Add activities and record their outcomes.",
+          "Review the summary and submit for manager review.",
+          "If returned, correct the draft and resubmit.",
+        ]}
+        unavailable={error}
+      />
       <TalentDoodleSprites />
       <HeroBand
         eyebrow="My activities"
@@ -221,7 +358,11 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
             onClick={() => void load()}
             disabled={mounted ? loading : undefined}
           >
-            {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            {mounted && loading ? (
+              <FluentLoadingIndicator className="size-4 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-4" />
+            )}
             Refresh
           </button>
         }
@@ -235,7 +376,10 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
         items={[
           { label: "Reports", value: loading ? "…" : String(reports.length) },
           { label: "Today", value: loading ? "…" : todayStatus },
-          { label: "Entries today", value: loading ? "…" : String(reportEntries(todayReport).length) },
+          {
+            label: "Entries today",
+            value: loading ? "…" : String(reportEntries(todayReport).length),
+          },
         ]}
       />
       <div className="flex justify-end">
@@ -244,17 +388,19 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           className={primaryButtonClass}
           onClick={() => {
             if (activeTab === "today" && todayReport) {
-              setCreateMode("entry")
-              setForm({ id: rowId(todayReport), status: "COMPLETED" })
+              setCreateMode("entry");
+              setForm({ id: rowId(todayReport), status: "COMPLETED" });
             } else {
-              setCreateMode("report")
-              setForm({ activity_date: todayDate() })
+              setCreateMode("report");
+              setForm({ activity_date: todayDate() });
             }
-            setCreateOpen(true)
+            setCreateOpen(true);
           }}
         >
           <PlusIcon className="size-4" />
-          {activeTab === "today" && todayReport ? "Add work item" : "New report"}
+          {activeTab === "today" && todayReport
+            ? "Add work item"
+            : "New report"}
         </button>
       </div>
 
@@ -270,8 +416,12 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
               <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground">{todayDateLabel}</p>
-                    <StatusChip value={readString(todayReport, ["status"], "DRAFT")} />
+                    <p className="text-sm font-semibold text-foreground">
+                      {todayDateLabel}
+                    </p>
+                    <StatusChip
+                      value={readString(todayReport, ["status"], "DRAFT")}
+                    />
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {entries.length === 0
@@ -284,9 +434,9 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                     type="button"
                     className={actionButtonClass}
                     onClick={() => {
-                      setCreateMode("entry")
-                      setForm({ id: rowId(todayReport), status: "COMPLETED" })
-                      setCreateOpen(true)
+                      setCreateMode("entry");
+                      setForm({ id: rowId(todayReport), status: "COMPLETED" });
+                      setCreateOpen(true);
                     }}
                   >
                     Add entry
@@ -295,9 +445,9 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                     type="button"
                     className={actionButtonClass}
                     onClick={() => {
-                      setCreateMode("submit")
-                      setForm({ id: rowId(todayReport), employee_summary: "" })
-                      setCreateOpen(true)
+                      setCreateMode("submit");
+                      setForm({ id: rowId(todayReport), employee_summary: "" });
+                      setCreateOpen(true);
                     }}
                   >
                     Submit
@@ -307,51 +457,87 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
               {entries.length > 0 ? (
                 <ul className="divide-y divide-border/70 border-t border-border/70">
                   {entries.map((entry) => {
-                    const id = rowId(entry)
-                    const managerAssigned =
-                      readString(entry, ["taskReference", "task_reference", "externalReferenceType", "external_reference_type"])
-                        .toUpperCase()
-                        .includes("MANAGER")
+                    const id = rowId(entry);
+                    const managerAssigned = readString(entry, [
+                      "taskReference",
+                      "task_reference",
+                      "externalReferenceType",
+                      "external_reference_type",
+                    ])
+                      .toUpperCase()
+                      .includes("MANAGER");
                     return (
-                      <li key={id || readString(entry, ["title"])} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
+                      <li
+                        key={id || readString(entry, ["title"])}
+                        className="flex flex-wrap items-start justify-between gap-2 px-4 py-3"
+                      >
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium text-foreground">{readString(entry, ["title"], "Work item")}</p>
+                            <p className="text-sm font-medium text-foreground">
+                              {readString(entry, ["title"], "Work item")}
+                            </p>
                             <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
-                              {managerAssigned ? "Assigned by manager" : "My work"}
+                              {managerAssigned
+                                ? "Assigned by manager"
+                                : "My work"}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground">{readString(entry, ["description"], "")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {readString(entry, ["description"], "")}
+                          </p>
                         </div>
+                        {id &&
+                        ["DRAFT", "RETURNED_FOR_CORRECTION"].includes(
+                          readString(todayReport ?? {}, [
+                            "status",
+                          ]).toUpperCase(),
+                        ) ? (
+                          <ActivityEvidencePicker
+                            entryId={id}
+                            onAttached={load}
+                          />
+                        ) : null}
                         <div className="flex items-center gap-2">
-                          <StatusChip value={readString(entry, ["status"], "PLANNED")} />
+                          <StatusChip
+                            value={readString(entry, ["status"], "PLANNED")}
+                          />
                           <button
                             type="button"
                             className={actionButtonClass}
                             disabled={busyId === `del-${id}`}
                             onClick={() => {
-                              const token = readStoredToken()
-                              const reportId = rowId(todayReport)
-                              if (!token || !reportId || !id) return
-                              setBusyId(`del-${id}`)
+                              const token = readStoredToken();
+                              const reportId = rowId(todayReport);
+                              if (!token || !reportId || !id) return;
+                              setBusyId(`del-${id}`);
                               void deleteMyActivityEntry(token, reportId, id)
-                                .then(() => { toast.success("Entry removed."); return load() })
-                                .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete."))
-                                .finally(() => setBusyId(""))
+                                .then(() => {
+                                  toast.success("Entry removed.");
+                                  return load();
+                                })
+                                .catch((errorObject) =>
+                                  toast.error(
+                                    errorObject instanceof Error
+                                      ? errorObject.message
+                                      : "Could not delete.",
+                                  ),
+                                )
+                                .finally(() => setBusyId(""));
                             }}
                           >
                             Remove
                           </button>
                         </div>
                       </li>
-                    )
+                    );
                   })}
                 </ul>
               ) : null}
             </>
           ) : (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Today&apos;s report could not be loaded. Refresh the page to try again.
+              Today&apos;s report could not be loaded. Refresh the page to try
+              again.
             </div>
           )}
         </div>
@@ -369,12 +555,20 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
           ) : (
             <div className="divide-y divide-border/70">
               {reports.map((row) => {
-                const id = rowId(row)
-                const isSelected = Boolean(id && rowId(selected) === id)
-                const summary = readString(row, ["employeeSummary", "employee_summary"], "")
-                const rowEntries = isSelected ? entries : []
+                const id = rowId(row);
+                const isSelected = Boolean(id && rowId(selected) === id);
+                const summary = readString(
+                  row,
+                  ["employeeSummary", "employee_summary"],
+                  "",
+                );
+                const rowEntries = isSelected ? entries : [];
                 return (
-                  <div key={id || readString(row, ["activity_date", "activityDate"])}>
+                  <div
+                    key={
+                      id || readString(row, ["activity_date", "activityDate"])
+                    }
+                  >
                     <div className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
                       <button
                         type="button"
@@ -385,7 +579,9 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                           <p className="text-sm font-semibold text-foreground">
                             {formatDate(row.activityDate ?? row.activity_date)}
                           </p>
-                          <StatusChip value={readString(row, ["status"], "DRAFT")} />
+                          <StatusChip
+                            value={readString(row, ["status"], "DRAFT")}
+                          />
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {summary || "No summary yet."}
@@ -396,9 +592,9 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                           type="button"
                           className={actionButtonClass}
                           onClick={() => {
-                            setCreateMode("entry")
-                            setForm({ id, status: "COMPLETED" })
-                            setCreateOpen(true)
+                            setCreateMode("entry");
+                            setForm({ id, status: "COMPLETED" });
+                            setCreateOpen(true);
                           }}
                         >
                           Add entry
@@ -407,9 +603,9 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                           type="button"
                           className={actionButtonClass}
                           onClick={() => {
-                            setCreateMode("submit")
-                            setForm({ id, employee_summary: summary })
-                            setCreateOpen(true)
+                            setCreateMode("submit");
+                            setForm({ id, employee_summary: summary });
+                            setCreateOpen(true);
                           }}
                         >
                           Submit
@@ -426,26 +622,39 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                             <p className="text-sm font-medium text-foreground">
                               {readString(entry, ["title"], "Entry")}
                             </p>
-                            <StatusChip value={readString(entry, ["status"], "PLANNED")} />
+                            <StatusChip
+                              value={readString(entry, ["status"], "PLANNED")}
+                            />
                           </li>
                         ))}
                       </ul>
                     ) : null}
                   </div>
-                )
+                );
               })}
             </div>
           )}
         </div>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          if (!saving) setCreateOpen(next);
+        }}
+      >
         <DialogPopup
           from="bottom"
           className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(90dvh,42rem)] sm:w-[calc(100%-2rem)]"
         >
           <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-5">
-            <DialogTitle>{createMode === "report" ? "Start a daily report" : createMode === "entry" ? "Add a work item" : "Submit report"}</DialogTitle>
+            <DialogTitle>
+              {createMode === "report"
+                ? "Start a daily report"
+                : createMode === "entry"
+                  ? "Add a work item"
+                  : "Submit report"}
+            </DialogTitle>
             <DialogDescription>
               {createMode === "report"
                 ? "Choose the work date. The report stays private to you and your authorized reviewers."
@@ -454,59 +663,218 @@ export function ActivitySelfView({ activeTab }: { activeTab: ActivitySelfTab }) 
                   : "Summarize the day and send it to your manager for review."}
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-            <div className="grid gap-3">
-              {createMode === "report" ? (
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Activity date</span>
-                  <DateInput className={inputClass} value={form.activity_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, activity_date: event.target.value }))} />
-                </label>
-              ) : null}
-              {createMode === "entry" ? (
-                <>
+          <ValidatedWorkflowForm
+            key={createMode}
+            saving={saving}
+            submitError={formError}
+            onSubmit={onSave}
+            validation={{
+              schema: activityFormSchema(createMode),
+              input: activityFormInput,
+            }}
+            description="Create a draft, record your work, then submit the report for manager review."
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <div className="grid gap-3">
+                {createMode === "report" ? (
                   <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Category</span>
-                    <FluentSelect
-                      ariaLabel="Category"
-                      className="w-full"
-                      value={form.activity_category_id ?? ""}
-                      onChange={(value) => setForm((current) => ({ ...current, activity_category_id: value }))}
-                      placeholder="Select category"
-                      options={[
-                        { value: "", label: "Select category" },
-                        ...categories.map((category) => ({ value: rowId(category), label: optionLabel(category) })),
-                      ]}
+                    <span className="font-medium">Activity date</span>
+                    <DateInput
+                      className={inputClass}
+                      value={form.activity_date ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          activity_date: event.target.value,
+                        }))
+                      }
                     />
                   </label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Status</span>
-                    <FluentSelect
-                      ariaLabel="Status"
-                      className="w-full"
-                      value={form.status ?? "COMPLETED"}
-                      onChange={(value) => setForm((current) => ({ ...current, status: value }))}
-                      options={ENTRY_STATUSES.map((status) => ({ value: status, label: prettify(status) }))}
-                    />
-                  </label>
-                </>
-              ) : null}
-              {createMode === "submit" ? (
-                <>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Summary</span><Textarea className={textareaClass} value={form.employee_summary ?? ""} onChange={(event) => setForm((current) => ({ ...current, employee_summary: event.target.value }))} /></label>
-                  <label className="grid gap-1.5 text-sm"><span className="font-medium">Remarks</span><Textarea className={textareaClass} value={form.overall_remarks ?? ""} onChange={(event) => setForm((current) => ({ ...current, overall_remarks: event.target.value }))} /></label>
-                </>
-              ) : null}
-              {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+                ) : null}
+                {createMode === "entry" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Category</span>
+                      <FluentSelect
+                        ariaLabel="Category"
+                        className="w-full"
+                        value={form.activity_category_id ?? ""}
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            activity_category_id: value,
+                          }))
+                        }
+                        placeholder="Select category"
+                        options={[
+                          { value: "", label: "Select category" },
+                          ...categories.map((category) => ({
+                            value: rowId(category),
+                            label: optionLabel(category),
+                          })),
+                        ]}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Title</span>
+                      <input
+                        className={inputClass}
+                        value={form.title ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Description</span>
+                      <Textarea
+                        className={textareaClass}
+                        value={form.description ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Status</span>
+                      <FluentSelect
+                        ariaLabel="Status"
+                        className="w-full"
+                        value={form.status ?? "COMPLETED"}
+                        onChange={(value) =>
+                          setForm((current) => ({ ...current, status: value }))
+                        }
+                        options={ENTRY_STATUSES.map((status) => ({
+                          value: status,
+                          label: prettify(status),
+                        }))}
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {createMode === "entry" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">
+                        Planned start{" "}
+                        {activityFormInput.requires_time
+                          ? "(required for this category)"
+                          : "(optional)"}
+                      </span>
+                      <input
+                        type="datetime-local"
+                        className={inputClass}
+                        value={form.planned_start_time ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            planned_start_time: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Planned end</span>
+                      <input
+                        type="datetime-local"
+                        className={inputClass}
+                        value={form.planned_end_time ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            planned_end_time: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">
+                        Outcome{" "}
+                        {activityFormInput.requires_outcome &&
+                        form.status === "COMPLETED"
+                          ? "(required)"
+                          : "(optional)"}
+                      </span>
+                      <Textarea
+                        value={form.outcome ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            outcome: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    {form.status === "DEFERRED" ? (
+                      <label className="grid gap-1.5 text-sm">
+                        <span className="font-medium">Reason for deferral</span>
+                        <Textarea
+                          value={form.defer_reason ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              defer_reason: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    ) : null}
+                  </>
+                ) : null}
+                {createMode === "submit" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Summary</span>
+                      <Textarea
+                        className={textareaClass}
+                        value={form.employee_summary ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            employee_summary: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Remarks</span>
+                      <Textarea
+                        className={textareaClass}
+                        value={form.overall_remarks ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            overall_remarks: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {formError ? (
+                  <p className="text-sm text-rose-600">{formError}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
+          </ValidatedWorkflowForm>
           <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
-            <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              disabled={saving}
+              onClick={() => setCreateOpen(false)}
+            >
+              Cancel
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
     </section>
-  )
+  );
 }

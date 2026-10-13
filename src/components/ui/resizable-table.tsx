@@ -88,12 +88,7 @@ const SORT_FIELD_ALIASES: Record<string, string[]> = {
     "jobTitle",
     "job_title",
   ],
-  status: [
-    "employmentStatus",
-    "employment_status",
-    "status",
-    "state",
-  ],
+  status: ["employmentStatus", "employment_status", "status", "state"],
   hiredate: [
     "hireDate",
     "hire_date",
@@ -107,9 +102,29 @@ const SORT_FIELD_ALIASES: Record<string, string[]> = {
     "createdAt",
   ],
   email: ["email", "workEmail", "work_email", "userEmail", "user_email"],
-  phone: ["phone", "mobile", "phoneNumber", "phone_number", "mobileNumber", "mobile_number"],
-  branch: ["branchName", "branch_name", "branch", "location", "locationName", "location_name"],
-  manager: ["managerName", "manager_name", "manager", "reportsTo", "reports_to"],
+  phone: [
+    "phone",
+    "mobile",
+    "phoneNumber",
+    "phone_number",
+    "mobileNumber",
+    "mobile_number",
+  ],
+  branch: [
+    "branchName",
+    "branch_name",
+    "branch",
+    "location",
+    "locationName",
+    "location_name",
+  ],
+  manager: [
+    "managerName",
+    "manager_name",
+    "manager",
+    "reportsTo",
+    "reports_to",
+  ],
 };
 
 function snakeToCamel(value: string) {
@@ -121,7 +136,13 @@ function camelToSnake(value: string) {
 }
 
 function isEmptySortValue(value: unknown): boolean {
-  return value === null || value === undefined || value === "" || value === "-" || value === "—";
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    value === "-" ||
+    value === "—"
+  );
 }
 
 function readNestedRecordName(value: unknown): string | null {
@@ -187,7 +208,8 @@ function buildSortCandidateKeys(columnKey: string): string[] {
   push(camelToSnake(columnKey));
 
   const lower = columnKey.toLowerCase().replace(/[-_\s]/g, "");
-  const aliases = SORT_FIELD_ALIASES[columnKey] ?? SORT_FIELD_ALIASES[lower] ?? [];
+  const aliases =
+    SORT_FIELD_ALIASES[columnKey] ?? SORT_FIELD_ALIASES[lower] ?? [];
   for (const alias of aliases) {
     push(alias);
     push(snakeToCamel(alias));
@@ -197,7 +219,10 @@ function buildSortCandidateKeys(columnKey: string): string[] {
   return keys;
 }
 
-function readRecordField(record: Record<string, unknown>, keys: string[]): unknown {
+function readRecordField(
+  record: Record<string, unknown>,
+  keys: string[],
+): unknown {
   for (const key of keys) {
     if (!(key in record)) continue;
     const value = record[key];
@@ -209,22 +234,35 @@ function readRecordField(record: Record<string, unknown>, keys: string[]): unkno
 }
 
 function composePersonName(record: Record<string, unknown>): string | null {
-  const first = record.firstName ?? record.first_name ?? record.preferredName ?? record.preferred_name;
+  const first =
+    record.firstName ??
+    record.first_name ??
+    record.preferredName ??
+    record.preferred_name;
   const middle = record.middleName ?? record.middle_name;
   const last = record.lastName ?? record.last_name;
   const parts = [first, middle, last]
-    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .filter(
+      (part): part is string =>
+        typeof part === "string" && part.trim().length > 0,
+    )
     .map((part) => part.trim());
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
-function resolveSortValue<T>(item: T, column: Column<T> | undefined, columnKey: string): unknown {
+function resolveSortValue<T>(
+  item: T,
+  column: Column<T> | undefined,
+  columnKey: string,
+): unknown {
   if (column?.sortValue) {
     return column.sortValue(item);
   }
 
   const record =
-    typeof item === "object" && item !== null ? (item as Record<string, unknown>) : null;
+    typeof item === "object" && item !== null
+      ? (item as Record<string, unknown>)
+      : null;
   if (!record) {
     return null;
   }
@@ -264,7 +302,11 @@ function resolveSortValue<T>(item: T, column: Column<T> | undefined, columnKey: 
     }
   }
 
-  if (lowerKey === "name" || lowerKey.endsWith("_name") || lowerKey.endsWith("name")) {
+  if (
+    lowerKey === "name" ||
+    lowerKey.endsWith("_name") ||
+    lowerKey.endsWith("name")
+  ) {
     const composed = composePersonName(record);
     if (composed) return composed;
   }
@@ -288,7 +330,10 @@ function resolveSortValue<T>(item: T, column: Column<T> | undefined, columnKey: 
   return null;
 }
 
-function normalizeComparable(value: unknown, columnKey: string): string | number | null {
+function normalizeComparable(
+  value: unknown,
+  columnKey: string,
+): string | number | null {
   if (isEmptySortValue(value)) {
     return null;
   }
@@ -323,7 +368,11 @@ function normalizeComparable(value: unknown, columnKey: string): string | number
     const trimmed = value.trim();
     // Numeric strings (ids, codes with leading zeros kept as strings for natural-ish compare)
     const asNumber = Number(trimmed);
-    if (trimmed !== "" && Number.isFinite(asNumber) && /^-?\d+(\.\d+)?$/.test(trimmed)) {
+    if (
+      trimmed !== "" &&
+      Number.isFinite(asNumber) &&
+      /^-?\d+(\.\d+)?$/.test(trimmed)
+    ) {
       // Prefer numeric compare for pure numbers, but keep employee codes with letters as text.
       if (!/[a-z]/i.test(trimmed)) {
         return asNumber;
@@ -349,7 +398,12 @@ function isMeaningfulTableValue(value: React.ReactNode): boolean {
 
   if (typeof value === "string") {
     const normalized = value.trim();
-    return normalized !== "" && normalized !== "-" && normalized !== "—" && normalized.toLowerCase() !== "null";
+    return (
+      normalized !== "" &&
+      normalized !== "-" &&
+      normalized !== "—" &&
+      normalized.toLowerCase() !== "null"
+    );
   }
 
   if (typeof value === "number") {
@@ -375,7 +429,10 @@ function areStringArraysEqual(left: string[], right: string[]): boolean {
   return left.every((value, index) => value === right[index]);
 }
 
-function areWidthMapsEqual(left: Record<string, number>, right: Record<string, number>): boolean {
+function areWidthMapsEqual(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
   if (leftKeys.length !== rightKeys.length) {
@@ -437,19 +494,29 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   storageKey?: string;
   /** Render the data surface with Fluent UI table primitives. */
   fluent?: boolean;
+  /** Use a borderless Fluent icon button for the standalone Sort action. */
+  sortIconOnly?: boolean;
 }
 
 type SortOrder = "asc" | "desc";
 
-function buildInitialColumnWidths<T>(columns: Column<T>[], showCheckboxes: boolean): Record<string, number> {
-  const initial: Record<string, number> = showCheckboxes ? { checkbox: 36 } : {};
+function buildInitialColumnWidths<T>(
+  columns: Column<T>[],
+  showCheckboxes: boolean,
+): Record<string, number> {
+  const initial: Record<string, number> = showCheckboxes
+    ? { checkbox: 36 }
+    : {};
   columns.forEach((col) => {
     initial[col.key] = col.defaultWidth ?? 105;
   });
   return initial;
 }
 
-function mergePersistedColumnWidths(base: Record<string, number>, storageKey: string): Record<string, number> {
+function mergePersistedColumnWidths(
+  base: Record<string, number>,
+  storageKey: string,
+): Record<string, number> {
   try {
     const saved = localStorage.getItem(storageKey);
     if (!saved) return base;
@@ -458,11 +525,13 @@ function mergePersistedColumnWidths(base: Record<string, number>, storageKey: st
     if (!parsed || typeof parsed !== "object") return base;
 
     const next = { ...base };
-    Object.entries(parsed as Record<string, unknown>).forEach(([key, value]) => {
-      if (typeof value === "number" && next[key] !== undefined) {
-        next[key] = Math.max(60, Math.min(500, value));
-      }
-    });
+    Object.entries(parsed as Record<string, unknown>).forEach(
+      ([key, value]) => {
+        if (typeof value === "number" && next[key] !== undefined) {
+          next[key] = Math.max(60, Math.min(500, value));
+        }
+      },
+    );
     return next;
   } catch {
     return base;
@@ -504,6 +573,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   hiddenColumnKeys = [],
   storageKey,
   fluent = true,
+  sortIconOnly = false,
 }: ResizableTableProps<T> = {}) {
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const selectedIds = controlledSelectedRowIds ?? internalSelectedIds;
@@ -512,7 +582,8 @@ export function ResizableTable<T = Record<string, unknown>>({
   const isServerPagination = typeof onPageChange === "function";
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>(hiddenColumnKeys);
+  const [hiddenColumns, setHiddenColumns] =
+    useState<string[]>(hiddenColumnKeys);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -525,7 +596,11 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   useRenderDiagnostics("ResizableTable", {
     title,
-    rows: Array.isArray(data) ? data.length : Array.isArray(employees) ? employees.length : 0,
+    rows: Array.isArray(data)
+      ? data.length
+      : Array.isArray(employees)
+        ? employees.length
+        : 0,
     loading,
   });
 
@@ -545,31 +620,74 @@ export function ResizableTable<T = Record<string, unknown>>({
     }
     // Legacy / auto detection
     const sample = (tableData[0] || {}) as Record<string, unknown>;
-    const hasEmployeeShape = !!(sample.name || sample.email || sample.department);
+    const hasEmployeeShape = !!(
+      sample.name ||
+      sample.email ||
+      sample.department
+    );
 
     if (hasEmployeeShape || employees) {
       return [
-        { key: "name", label: title || "Name", defaultWidth: 140, sortable: true },
+        {
+          key: "name",
+          label: title || "Name",
+          defaultWidth: 140,
+          sortable: true,
+        },
         { key: "email", label: "Email", defaultWidth: 160, sortable: true },
-        { key: "department", label: "Department", defaultWidth: 100, sortable: true },
-        { key: "position", label: "Position", defaultWidth: 130, sortable: true },
-        { key: "hireDate", label: "Hire Date", defaultWidth: 85, sortable: true },
+        {
+          key: "department",
+          label: "Department",
+          defaultWidth: 100,
+          sortable: true,
+        },
+        {
+          key: "position",
+          label: "Position",
+          defaultWidth: 130,
+          sortable: true,
+        },
+        {
+          key: "hireDate",
+          label: "Hire Date",
+          defaultWidth: 85,
+          sortable: true,
+        },
         { key: "status", label: "Status", defaultWidth: 75, sortable: true },
       ];
     }
 
     // Generic fallback from first item's keys — skip internal fields to avoid "extra columns"
-    const skip = new Set(["id", "_id", "avatar", "created_at", "updated_at", "createdAt", "updatedAt", "deleted_at", "salary", "base_salary", "compensation"]);
-    const keys = Object.keys(sample).filter((k) => !skip.has(k) && !k.startsWith("_"));
-    return keys.filter(k => !['id','employee_id','user_id','created_by'].includes(k)).slice(0, 6).map((key) => ({
-      key,
-      label: key
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, (s) => s.toUpperCase())
-        .trim(),
-      defaultWidth: 105,
-      sortable: true,
-    }));
+    const skip = new Set([
+      "id",
+      "_id",
+      "avatar",
+      "created_at",
+      "updated_at",
+      "createdAt",
+      "updatedAt",
+      "deleted_at",
+      "salary",
+      "base_salary",
+      "compensation",
+    ]);
+    const keys = Object.keys(sample).filter(
+      (k) => !skip.has(k) && !k.startsWith("_"),
+    );
+    return keys
+      .filter(
+        (k) => !["id", "employee_id", "user_id", "created_by"].includes(k),
+      )
+      .slice(0, 6)
+      .map((key) => ({
+        key,
+        label: key
+          .replace(/([A-Z])/g, " $1")
+          .replace(/^./, (s) => s.toUpperCase())
+          .trim(),
+        defaultWidth: 105,
+        sortable: true,
+      }));
   }, [columns, tableData, employees, title]);
 
   const candidateTableColumns: Column<T>[] = useMemo(() => {
@@ -587,7 +705,9 @@ export function ResizableTable<T = Record<string, unknown>>({
       }
 
       return tableData.some((item) => {
-        const value = col.render ? col.render(item) : (item as Record<string, unknown>)?.[col.key];
+        const value = col.render
+          ? col.render(item)
+          : (item as Record<string, unknown>)?.[col.key];
         return isMeaningfulTableValue(value as React.ReactNode);
       });
     });
@@ -598,7 +718,9 @@ export function ResizableTable<T = Record<string, unknown>>({
       return candidateTableColumns;
     }
 
-    const nextColumns = candidateTableColumns.filter((col) => !hiddenColumns.includes(col.key));
+    const nextColumns = candidateTableColumns.filter(
+      (col) => !hiddenColumns.includes(col.key),
+    );
     return nextColumns.length > 0 ? nextColumns : candidateTableColumns;
   }, [candidateTableColumns, enableColumnVisibility, hiddenColumns]);
 
@@ -608,13 +730,20 @@ export function ResizableTable<T = Record<string, unknown>>({
       showCheckboxes
         ? ["checkbox", ...visibleTableColumns.map((c) => c.key)]
         : visibleTableColumns.map((c) => c.key),
-    [showCheckboxes, visibleTableColumns]
+    [showCheckboxes, visibleTableColumns],
   );
 
   // Column widths state - initialize from columns
-  const effectiveStorageKey = storageKey || (title ? `resizable-table:${title.toLowerCase().replace(/\s+/g, '-')}` : 'resizable-table:default');
+  const effectiveStorageKey =
+    storageKey ||
+    (title
+      ? `resizable-table:${title.toLowerCase().replace(/\s+/g, "-")}`
+      : "resizable-table:default");
   const hiddenColumnsStorageKey = `${effectiveStorageKey}:hidden-columns`;
-  const tableColumnKeys = useMemo(() => tableColumns.map((column) => column.key), [tableColumns]);
+  const tableColumnKeys = useMemo(
+    () => tableColumns.map((column) => column.key),
+    [tableColumns],
+  );
   const defaultHiddenColumnsKey = hiddenColumnKeys.join("|");
 
   useEffect(() => {
@@ -632,17 +761,26 @@ export function ResizableTable<T = Record<string, unknown>>({
         if (Array.isArray(parsed)) {
           const allowedKeys = new Set(tableColumnKeys);
           nextHiddenColumns = parsed.filter(
-            (key): key is string => typeof key === "string" && allowedKeys.has(key)
+            (key): key is string =>
+              typeof key === "string" && allowedKeys.has(key),
           );
         }
       }
     } catch {}
 
-    setHiddenColumns((prev) => (areStringArraysEqual(prev, nextHiddenColumns) ? prev : nextHiddenColumns));
-  }, [defaultHiddenColumnsKey, enableColumnVisibility, hiddenColumnKeys, hiddenColumnsStorageKey, tableColumnKeys]);
+    setHiddenColumns((prev) =>
+      areStringArraysEqual(prev, nextHiddenColumns) ? prev : nextHiddenColumns,
+    );
+  }, [
+    defaultHiddenColumnsKey,
+    enableColumnVisibility,
+    hiddenColumnKeys,
+    hiddenColumnsStorageKey,
+    tableColumnKeys,
+  ]);
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() =>
-    buildInitialColumnWidths(visibleTableColumns, showCheckboxes)
+    buildInitialColumnWidths(visibleTableColumns, showCheckboxes),
   );
 
   // Compute display widths: start from base/persisted, then proportionally expand
@@ -651,7 +789,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   // and cell sizes identical per column.
   const displayWidths = useMemo(() => {
     const res: Record<string, number> = {};
-    const cbW = showCheckboxes ? (columnWidths.checkbox || 36) : 0;
+    const cbW = showCheckboxes ? columnWidths.checkbox || 36 : 0;
     res.checkbox = cbW;
     let baseSum = cbW;
     visibleTableColumns.forEach((col) => {
@@ -674,12 +812,18 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   // Unified display widths for both headers and content cells (ensures they match exactly per column)
   const getColumnWidth = (col: Column<T> | string) => {
-    const key = typeof col === 'string' ? col : col.key;
-    return displayWidths[key] ?? columnWidths[key] ?? (typeof col === 'string' ? 36 : col.defaultWidth ?? 105);
+    const key = typeof col === "string" ? col : col.key;
+    return (
+      displayWidths[key] ??
+      columnWidths[key] ??
+      (typeof col === "string" ? 36 : (col.defaultWidth ?? 105))
+    );
   };
 
   const tableContentWidth = useMemo(() => {
-    const checkboxWidth = showCheckboxes ? (displayWidths.checkbox ?? columnWidths.checkbox ?? 36) : 0;
+    const checkboxWidth = showCheckboxes
+      ? (displayWidths.checkbox ?? columnWidths.checkbox ?? 36)
+      : 0;
     const columnsWidth = visibleTableColumns.reduce(
       (total, column) =>
         total +
@@ -697,7 +841,7 @@ export function ResizableTable<T = Record<string, unknown>>({
       `${showCheckboxes ? "cb|" : ""}${visibleTableColumns
         .map((col) => `${col.key}:${col.defaultWidth ?? 105}`)
         .join("|")}`,
-    [showCheckboxes, visibleTableColumns]
+    [showCheckboxes, visibleTableColumns],
   );
 
   // Restore saved widths after hydration, and when the visible column set actually changes.
@@ -705,7 +849,12 @@ export function ResizableTable<T = Record<string, unknown>>({
     const base = buildInitialColumnWidths(visibleTableColumns, showCheckboxes);
     const next = mergePersistedColumnWidths(base, effectiveStorageKey);
     setColumnWidths((prev) => (areWidthMapsEqual(prev, next) ? prev : next));
-  }, [effectiveStorageKey, showCheckboxes, visibleColumnSignature, visibleTableColumns]);
+  }, [
+    effectiveStorageKey,
+    showCheckboxes,
+    visibleColumnSignature,
+    visibleTableColumns,
+  ]);
 
   useEffect(() => {
     setMounted(true);
@@ -723,20 +872,29 @@ export function ResizableTable<T = Record<string, unknown>>({
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    window.addEventListener('resize', update);
+    window.addEventListener("resize", update);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', update);
+      window.removeEventListener("resize", update);
     };
   }, []);
 
-  const getRowIdentifier = useCallback((item: T, index: number): string => {
-    if (getRowId) return getRowId(item, index);
-    const record = item as Record<string, unknown>;
-    return String(
-      record?.id ?? record?.employee_id ?? record?.user_id ?? record?.employeeNo ?? record?.no ?? record?.key ?? index
-    );
-  }, [getRowId]);
+  const getRowIdentifier = useCallback(
+    (item: T, index: number): string => {
+      if (getRowId) return getRowId(item, index);
+      const record = item as Record<string, unknown>;
+      return String(
+        record?.id ??
+          record?.employee_id ??
+          record?.user_id ??
+          record?.employeeNo ??
+          record?.no ??
+          record?.key ??
+          index,
+      );
+    },
+    [getRowId],
+  );
 
   const handleSelectionToggle = (rowId: string) => {
     const next = selectedIds.includes(rowId)
@@ -758,15 +916,14 @@ export function ResizableTable<T = Record<string, unknown>>({
   };
 
   const handleSelectAll = () => {
-    const pageIds = paginatedData.map((item, idx) => getRowIdentifier(item, idx));
+    const pageIds = paginatedData.map((item, idx) =>
+      getRowIdentifier(item, idx),
+    );
     const allPageRowsSelected =
       pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
     const next = allPageRowsSelected
       ? selectedIds.filter((id) => !pageIds.includes(id))
-      : [
-          ...selectedIds.filter((id) => !pageIds.includes(id)),
-          ...pageIds,
-        ];
+      : [...selectedIds.filter((id) => !pageIds.includes(id)), ...pageIds];
     if (controlledSelectedRowIds === undefined) {
       setInternalSelectedIds(next);
     }
@@ -800,8 +957,12 @@ export function ResizableTable<T = Record<string, unknown>>({
 
     setHiddenColumns((prev) => {
       const isHidden = prev.includes(columnKey);
-      const next = isHidden ? prev.filter((key) => key !== columnKey) : [...prev, columnKey];
-      const visibleCount = candidateTableColumns.filter((col) => !next.includes(col.key)).length;
+      const next = isHidden
+        ? prev.filter((key) => key !== columnKey)
+        : [...prev, columnKey];
+      const visibleCount = candidateTableColumns.filter(
+        (col) => !next.includes(col.key),
+      ).length;
       if (visibleCount === 0) {
         return prev;
       }
@@ -820,8 +981,14 @@ export function ResizableTable<T = Record<string, unknown>>({
     const sortColumn = tableColumns.find((col) => col.key === sortField);
 
     return [...tableData].sort((a, b) => {
-      const aVal = normalizeComparable(resolveSortValue(a, sortColumn, sortField), sortField);
-      const bVal = normalizeComparable(resolveSortValue(b, sortColumn, sortField), sortField);
+      const aVal = normalizeComparable(
+        resolveSortValue(a, sortColumn, sortField),
+        sortField,
+      );
+      const bVal = normalizeComparable(
+        resolveSortValue(b, sortColumn, sortField),
+        sortField,
+      );
 
       if (aVal == null && bVal == null) return 0;
       if (aVal == null) return 1;
@@ -844,36 +1011,33 @@ export function ResizableTable<T = Record<string, unknown>>({
   }, [tableData, sortField, sortOrder, tableColumns]);
 
   const clientPageCount =
-    itemsPerPage > 0 ? Math.max(1, Math.ceil(sortedData.length / itemsPerPage)) : 1;
+    itemsPerPage > 0
+      ? Math.max(1, Math.ceil(sortedData.length / itemsPerPage))
+      : 1;
 
   React.useEffect(() => {
     if (isServerPagination) {
-      return
+      return;
     }
     setCurrentPage((page) => {
-      const next = Math.min(Math.max(1, page), clientPageCount)
-      return next === page ? page : next
-    })
-  }, [clientPageCount, isServerPagination, storageKey, title])
+      const next = Math.min(Math.max(1, page), clientPageCount);
+      return next === page ? page : next;
+    });
+  }, [clientPageCount, isServerPagination, storageKey, title]);
 
   const activePage = isServerPagination
     ? Math.max(1, controlledPage ?? 1)
     : Math.min(Math.max(1, currentPage), clientPageCount);
 
-  const paginatedData = useMemo(() => {
-    // Server already returned one page of rows — do not re-slice client-side.
-    if (isServerPagination) {
-      return sortedData;
-    }
-    if (sortedData.length === 0 || itemsPerPage <= 0) {
-      return [];
-    }
-    const startIdx = (activePage - 1) * itemsPerPage;
-    return sortedData.slice(startIdx, startIdx + itemsPerPage);
-    // itemsPerPage / isServerPagination intentionally omitted: including them
-    // breaks the React Compiler's preserve-manual-memoization check.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedData, activePage, isServerPagination]);
+  // Server pagination already supplies one page; client pagination uses live sizing.
+  const paginatedData = isServerPagination
+    ? sortedData
+    : itemsPerPage > 0
+      ? sortedData.slice(
+          (activePage - 1) * itemsPerPage,
+          activePage * itemsPerPage,
+        )
+      : [];
 
   const totalPages = isServerPagination
     ? Math.max(
@@ -881,12 +1045,12 @@ export function ResizableTable<T = Record<string, unknown>>({
         controlledTotalPages ??
           (controlledTotalItems != null && itemsPerPage > 0
             ? Math.ceil(controlledTotalItems / itemsPerPage)
-            : 1)
+            : 1),
       )
     : Math.ceil(sortedData.length / itemsPerPage);
 
   const totalCountLabel = isServerPagination
-    ? controlledTotalItems ?? sortedData.length
+    ? (controlledTotalItems ?? sortedData.length)
     : sortedData.length;
 
   const goToPage = (nextPage: number) => {
@@ -903,11 +1067,13 @@ export function ResizableTable<T = Record<string, unknown>>({
       Array.from({
         length: Math.min(itemsPerPage, 6),
       }),
-    [itemsPerPage]
+    [itemsPerPage],
   );
 
   const getStatusColor = (status: string) => {
-    const normalized = String(status || "").toLowerCase().replace(/\s+/g, "-");
+    const normalized = String(status || "")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
     if (!mounted) {
       return {
         textColor: "text-emerald-500",
@@ -968,15 +1134,19 @@ export function ResizableTable<T = Record<string, unknown>>({
     }
   };
 
-  const handleResize = (columnKey: string, { size }: { size: { width: number } }) => {
+  const handleResize = (
+    columnKey: string,
+    { size }: { size: { width: number } },
+  ) => {
     const newDisplayW = Math.max(60, Math.min(500, size.width));
     // Compute current scale from base to map the drag delta back to intrinsic size
-    const cbW = showCheckboxes ? (columnWidths.checkbox || 36) : 0;
+    const cbW = showCheckboxes ? columnWidths.checkbox || 36 : 0;
     let baseSum = cbW;
     visibleTableColumns.forEach((c) => {
       baseSum += columnWidths[c.key] ?? c.defaultWidth ?? 105;
     });
-    const curScale = (containerWidth > 0 && baseSum > 0) ? (containerWidth / baseSum) : 1;
+    const curScale =
+      containerWidth > 0 && baseSum > 0 ? containerWidth / baseSum : 1;
     let newIntrinsic = newDisplayW;
     if (curScale > 1) {
       newIntrinsic = newDisplayW / curScale;
@@ -988,7 +1158,7 @@ export function ResizableTable<T = Record<string, unknown>>({
         [columnKey]: clamped,
       };
       // Persist the intrinsic (user's preferred) widths
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         try {
           localStorage.setItem(effectiveStorageKey, JSON.stringify(next));
         } catch {}
@@ -1019,10 +1189,13 @@ export function ResizableTable<T = Record<string, unknown>>({
       visibleTableColumns.map((col) => {
         const cell = getExportValue(item, col);
         return `"${String(cell).replace(/"/g, '""')}"`;
-      })
+      }),
     );
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((r) => r.join(",")),
+    ].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -1032,14 +1205,16 @@ export function ResizableTable<T = Record<string, unknown>>({
 
   const exportToJSON = () => {
     const jsonContent = JSON.stringify(sortedData, null, 2);
-    const blob = new Blob([jsonContent], { type: "application/json;charset=utf-8;" });
+    const blob = new Blob([jsonContent], {
+      type: "application/json;charset=utf-8;",
+    });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `${(title || "data").toLowerCase()}-${new Date().toISOString().split("T")[0]}.json`;
     link.click();
   };
 
-  void enableAnimations
+  void enableAnimations;
 
   // Cell renderer helper
   const renderCell = (col: Column<T>, item: T) => {
@@ -1049,7 +1224,11 @@ export function ResizableTable<T = Record<string, unknown>>({
     const raw = (item as Record<string, unknown>)?.[col.key];
     const keyLower = col.key.toLowerCase();
 
-    if (col.key === "status" || keyLower === "status" || keyLower.includes("status")) {
+    if (
+      col.key === "status" ||
+      keyLower === "status" ||
+      keyLower.includes("status")
+    ) {
       const statusRaw = String(raw ?? "").trim();
       const { textColor, dotColor } = getStatusColor(statusRaw || "unknown");
       const display = (statusRaw || "Unknown")
@@ -1066,12 +1245,31 @@ export function ResizableTable<T = Record<string, unknown>>({
       );
     }
 
-    if (typeof raw === "number" && (keyLower.includes("amount") || keyLower.includes("pay") || keyLower.includes("price"))) {
-      return <span className="font-semibold text-foreground/90 text-xs">{formatCurrency(raw)}</span>;
+    if (
+      typeof raw === "number" &&
+      (keyLower.includes("amount") ||
+        keyLower.includes("pay") ||
+        keyLower.includes("price"))
+    ) {
+      return (
+        <span className="font-semibold text-foreground/90 text-xs">
+          {formatCurrency(raw)}
+        </span>
+      );
     }
 
-    if (raw && (keyLower.includes("date") || keyLower.includes("time") || keyLower.includes("hired") || keyLower.includes("join"))) {
-      return <span className="text-foreground/80 text-xs">{formatDate(String(raw))}</span>;
+    if (
+      raw &&
+      (keyLower.includes("date") ||
+        keyLower.includes("time") ||
+        keyLower.includes("hired") ||
+        keyLower.includes("join"))
+    ) {
+      return (
+        <span className="text-foreground/80 text-xs">
+          {formatDate(String(raw))}
+        </span>
+      );
     }
 
     if (keyLower.includes("email") && raw) {
@@ -1086,10 +1284,16 @@ export function ResizableTable<T = Record<string, unknown>>({
       );
     }
 
-    return <span className="text-foreground/80 truncate text-xs">{raw != null ? String(raw) : "—"}</span>;
+    return (
+      <span className="text-foreground/80 truncate text-xs">
+        {raw != null ? String(raw) : "—"}
+      </span>
+    );
   };
 
-  const sortableColumns = visibleTableColumns.filter((c) => c.sortable !== false);
+  const sortableColumns = visibleTableColumns.filter(
+    (c) => c.sortable !== false,
+  );
 
   return (
     <div className={`w-full min-w-0 max-w-full ${className}`}>
@@ -1128,12 +1332,16 @@ export function ResizableTable<T = Record<string, unknown>>({
                   className="grid w-[min(36rem,calc(100vw-1.5rem))] grid-cols-1 gap-0 overflow-hidden p-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.82fr)]"
                 >
                   <div className="flex min-w-0 flex-col gap-3 p-3">
-                    <div className="text-sm font-semibold text-foreground">Filters</div>
+                    <div className="text-sm font-semibold text-foreground">
+                      Filters
+                    </div>
                     {filterContent}
                   </div>
                   {showSort ? (
                     <div className="flex min-w-0 flex-col items-center justify-center gap-x-px gap-y-[3px] border-t border-border p-3 text-[10px] sm:border-l sm:border-t-0">
-                      <div className="text-[10px] font-semibold text-foreground">Sort by</div>
+                      <div className="text-[10px] font-semibold text-foreground">
+                        Sort by
+                      </div>
                       <Button
                         type="button"
                         onClick={clearSort}
@@ -1149,7 +1357,9 @@ export function ResizableTable<T = Record<string, unknown>>({
                           key={col.key}
                           type="button"
                           onClick={() => handleSort(col.key)}
-                          appearance={sortField === col.key ? "secondary" : "subtle"}
+                          appearance={
+                            sortField === col.key ? "secondary" : "subtle"
+                          }
                           size="small"
                           className="w-full justify-center !text-[10px]"
                           aria-pressed={sortField === col.key}
@@ -1177,7 +1387,9 @@ export function ResizableTable<T = Record<string, unknown>>({
                                 >
                                   <Checkbox
                                     checked={checked}
-                                    onCheckedChange={() => toggleColumnVisibility(col.key)}
+                                    onCheckedChange={() =>
+                                      toggleColumnVisibility(col.key)
+                                    }
                                   />
                                   <span className="truncate">{col.label}</span>
                                 </label>
@@ -1202,14 +1414,19 @@ export function ResizableTable<T = Record<string, unknown>>({
                 <Button
                   type="button"
                   onClick={() => setShowSortMenu(!showSortMenu)}
-                  appearance="outline"
+                  appearance={sortIconOnly ? "subtle" : "outline"}
+                  icon={sortIconOnly ? <ArrowSort16Filled /> : undefined}
                   size="small"
                   className="!h-8 !min-h-8"
                   aria-label="Sort"
                   title="Sort"
                 >
-                  <ArrowSort16Filled className="size-3.5 text-primary" />
-                  <span className="hidden sm:inline">Sort</span>
+                  {!sortIconOnly ? (
+                    <>
+                      <ArrowSort16Filled className="size-3.5 text-primary" />
+                      <span className="hidden sm:inline">Sort</span>
+                    </>
+                  ) : null}
                   {sortField ? (
                     <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold !text-white">
                       1
@@ -1219,7 +1436,10 @@ export function ResizableTable<T = Record<string, unknown>>({
 
                 {showSortMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowSortMenu(false)}
+                    />
                     <div className="absolute right-0 mt-1 w-40 bg-background border border-border/50 shadow-lg rounded-md z-20 py-0.5 max-h-72 overflow-auto text-xs">
                       <Button
                         type="button"
@@ -1238,16 +1458,22 @@ export function ResizableTable<T = Record<string, unknown>>({
                               key={col.key}
                               type="button"
                               onClick={() => handleSort(col.key)}
-                              appearance={sortField === col.key ? "secondary" : "subtle"}
+                              appearance={
+                                sortField === col.key ? "secondary" : "subtle"
+                              }
                               size="small"
                               className="w-full justify-start"
                             >
-                              {col.label} {sortField === col.key && `(${sortOrder === "asc" ? "↑" : "↓"})`}
+                              {col.label}{" "}
+                              {sortField === col.key &&
+                                `(${sortOrder === "asc" ? "↑" : "↓"})`}
                             </Button>
                           ))}
                         </>
                       ) : (
-                        <div className="px-2 py-1 text-muted-foreground">No sortable columns</div>
+                        <div className="px-2 py-1 text-muted-foreground">
+                          No sortable columns
+                        </div>
                       )}
                     </div>
                   </>
@@ -1271,7 +1497,10 @@ export function ResizableTable<T = Record<string, unknown>>({
 
                 {showExportMenu && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowExportMenu(false)}
+                    />
                     <div className="absolute right-0 mt-1 w-28 bg-background border border-border/50 shadow-lg rounded-md z-20 text-xs">
                       <Button
                         type="button"
@@ -1337,7 +1566,8 @@ export function ResizableTable<T = Record<string, unknown>>({
                   {showCheckboxes ? (
                     <TableHeaderCell
                       className={cn(
-                        compact && "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                        compact &&
+                          "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
                       )}
                       style={{ width: getColumnWidth("checkbox") || 36 }}
                     >
@@ -1355,15 +1585,17 @@ export function ResizableTable<T = Record<string, unknown>>({
                   ) : null}
 
                   {visibleTableColumns.map((col) => {
-                    const isActions = col.key === "actions" || col.key === "act"
-                    const canSort = !isActions && col.sortable !== false
-                    const isActiveSort = sortField === col.key
+                    const isActions =
+                      col.key === "actions" || col.key === "act";
+                    const canSort = !isActions && col.sortable !== false;
+                    const isActiveSort = sortField === col.key;
                     return (
                       <TableHeaderCell
                         key={col.key}
                         className={cn(
                           isActions && "text-right",
-                          compact && "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                          compact &&
+                            "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
                         )}
                         style={{ width: getColumnWidth(col) }}
                         sortDirection={
@@ -1373,19 +1605,21 @@ export function ResizableTable<T = Record<string, unknown>>({
                               : "descending"
                             : undefined
                         }
-                        onClick={canSort ? () => handleSort(col.key) : undefined}
+                        onClick={
+                          canSort ? () => handleSort(col.key) : undefined
+                        }
                       >
                         {col.label}
                       </TableHeaderCell>
-                    )
+                    );
                   })}
                 </TableRow>
               </TableHeader>
 
               <TableBody>
                 {paginatedData.map((item, index) => {
-                  const rowId = getRowIdentifier(item, index)
-                  const isSelected = selectedIds.includes(rowId)
+                  const rowId = getRowIdentifier(item, index);
+                  const isSelected = selectedIds.includes(rowId);
                   return (
                     <TableRow
                       key={rowId}
@@ -1398,230 +1632,280 @@ export function ResizableTable<T = Record<string, unknown>>({
                     >
                       {showCheckboxes ? (
                         <TableCell
-                          className={cn(compact && "!h-9 !px-2 !py-1 !text-[11px] !leading-4")}
+                          className={cn(
+                            compact &&
+                              "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
+                          )}
                           style={{ width: getColumnWidth("checkbox") || 36 }}
                         >
                           <FluentCheckbox
                             aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
                             checked={isSelected}
                             onChange={(event) => {
-                              event.stopPropagation()
-                              handleSelectionToggle(rowId)
+                              event.stopPropagation();
+                              handleSelectionToggle(rowId);
                             }}
                           />
                         </TableCell>
                       ) : null}
 
                       {visibleTableColumns.map((col) => {
-                        const isActions = col.key === "actions" || col.key === "act"
+                        const isActions =
+                          col.key === "actions" || col.key === "act";
                         return (
                           <TableCell
                             key={col.key}
                             className={cn(
                               "min-w-0",
-                              compact && "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
+                              compact &&
+                                "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
                               isActions && "overflow-visible text-right",
                             )}
                             style={{ width: getColumnWidth(col) }}
                             onClick={(event) => {
-                              if ((event.target as HTMLElement).closest("a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']")) {
-                                event.stopPropagation()
+                              if (
+                                (event.target as HTMLElement).closest(
+                                  "a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']",
+                                )
+                              ) {
+                                event.stopPropagation();
                               }
                             }}
                           >
                             {renderCell(col, item)}
                           </TableCell>
-                        )
+                        );
                       })}
                     </TableRow>
-                  )
+                  );
                 })}
 
-                {loading && tableData.length === 0
-                  ? loadingSkeletonRows.map((_, index) => (
-                      <TableRow
-                        key={`skeleton-row-${index}`}
-                      >
-                        {showCheckboxes ? (
-                          <TableCell
-                            className={cn(compact && "!h-9 !px-2 !py-1")}
-                            style={{ width: getColumnWidth("checkbox") || 36 }}
-                          >
-                            <div className="h-4 animate-pulse rounded bg-muted/70" />
-                          </TableCell>
-                        ) : null}
-                        {visibleTableColumns.map((column) => (
-                          <TableCell
-                            key={`${column.key}-${index}`}
-                            className={cn(compact && "!h-9 !px-2 !py-1")}
-                            style={{ width: getColumnWidth(column) }}
-                          >
-                            <div className="h-4 animate-pulse rounded bg-muted/70" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  : sortedData.length === 0
-                    ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={visibleTableColumns.length + (showCheckboxes ? 1 : 0)}
-                            className="py-4 text-center text-xs text-muted-foreground"
-                          >
-                            No records found.
-                          </TableCell>
-                        </TableRow>
-                      )
-                    : null}
+                {loading && tableData.length === 0 ? (
+                  loadingSkeletonRows.map((_, index) => (
+                    <TableRow key={`skeleton-row-${index}`}>
+                      {showCheckboxes ? (
+                        <TableCell
+                          className={cn(compact && "!h-9 !px-2 !py-1")}
+                          style={{ width: getColumnWidth("checkbox") || 36 }}
+                        >
+                          <div className="h-4 animate-pulse rounded bg-muted/70" />
+                        </TableCell>
+                      ) : null}
+                      {visibleTableColumns.map((column) => (
+                        <TableCell
+                          key={`${column.key}-${index}`}
+                          className={cn(compact && "!h-9 !px-2 !py-1")}
+                          style={{ width: getColumnWidth(column) }}
+                        >
+                          <div className="h-4 animate-pulse rounded bg-muted/70" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : sortedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={
+                        visibleTableColumns.length + (showCheckboxes ? 1 : 0)
+                      }
+                      className="py-4 text-center text-xs text-muted-foreground"
+                    >
+                      No records found.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
               </TableBody>
             </Table>
           </div>
         ) : (
-        <div
-          className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
-          ref={overflowRef}
-        >
           <div
-            className="min-w-full align-top"
-            style={{ width: tableContentWidth > 0 ? tableContentWidth : undefined }}
+            className="max-w-full overflow-x-auto overflow-y-clip overscroll-x-contain"
+            ref={overflowRef}
           >
-            {/* Header */}
             <div
-              className={cn(
-                "flex w-full border-b border-border bg-muted/5 py-1 text-base font-bold text-foreground",
-                compact && "min-h-9 bg-muted/20 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em]",
-              )}
+              className="min-w-full align-top"
+              style={{
+                width: tableContentWidth > 0 ? tableContentWidth : undefined,
+              }}
             >
-              {showCheckboxes && (
-                <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select all ${title.toLowerCase()} on this page`}
-                    className="w-4 h-4 rounded border-border/40 cursor-pointer"
-                    style={mounted ? { accentColor: isDark ? "rgb(113, 113, 122)" : "rgb(161, 161, 170)" } : {}}
-                    checked={
-                      paginatedData.length > 0 &&
-                      paginatedData.every((item, index) =>
-                        selectedIds.includes(getRowIdentifier(item, index)),
-                      )
-                    }
-                    onChange={handleSelectAll}
-                  />
-                </div>
-              )}
-
-              {visibleTableColumns.map((col) => {
-                const isActions = col.key === "actions" || col.key === "act"
-                const canSort = !isActions && col.sortable !== false
-                const isActiveSort = sortField === col.key
-                return (
-                <Resizable
-                  key={col.key}
-                  width={getColumnWidth(col)}
-                  height={0}
-                  onResize={(e, data) => handleResize(col.key, data)}
-                  minConstraints={[isActions ? 44 : 60, 0]}
-                  maxConstraints={[isActions ? 280 : 500, 0]}
-                  handle={<div className="absolute right-0 top-0 bottom-0 w-1 hover:w-1.5 cursor-col-resize bg-transparent hover:bg-primary/40 transition-all" />}
-                >
+              {/* Header */}
+              <div
+                className={cn(
+                  "flex w-full border-b border-border bg-muted/5 py-1 text-base font-bold text-foreground",
+                  compact &&
+                    "min-h-9 bg-muted/20 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em]",
+                )}
+              >
+                {showCheckboxes && (
                   <div
-                    className={cn(
-                      "relative flex flex-shrink-0 items-center border-r border-border px-1.5",
-                      compact ? "text-[11px]" : "text-base",
-                      isActions ? "justify-end overflow-visible" : "overflow-hidden",
-                      canSort && "cursor-pointer select-none hover:text-foreground"
-                    )}
-                    style={{ width: getColumnWidth(col) }}
-                    onClick={canSort ? () => handleSort(col.key) : undefined}
-                    onKeyDown={
-                      canSort
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              handleSort(col.key)
-                            }
-                          }
-                        : undefined
-                    }
-                    role={canSort ? "button" : undefined}
-                    tabIndex={canSort ? 0 : undefined}
-                    title={canSort ? `Sort by ${col.label}` : undefined}
+                    className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0"
+                    style={{ width: getColumnWidth("checkbox") || 36 }}
                   >
-                    <span className="truncate">{col.label}</span>
-                    {isActiveSort ? (
-                      <span className="ml-1 shrink-0 text-[10px] text-primary" aria-hidden>
-                        {sortOrder === "asc" ? "↑" : "↓"}
-                      </span>
-                    ) : null}
+                    <input
+                      type="checkbox"
+                      aria-label={`Select all ${title.toLowerCase()} on this page`}
+                      className="w-4 h-4 rounded border-border/40 cursor-pointer"
+                      style={
+                        mounted
+                          ? {
+                              accentColor: isDark
+                                ? "rgb(113, 113, 122)"
+                                : "rgb(161, 161, 170)",
+                            }
+                          : {}
+                      }
+                      checked={
+                        paginatedData.length > 0 &&
+                        paginatedData.every((item, index) =>
+                          selectedIds.includes(getRowIdentifier(item, index)),
+                        )
+                      }
+                      onChange={handleSelectAll}
+                    />
                   </div>
-                </Resizable>
-                )
-              })}
-            </div>
+                )}
 
-            {/* Rows */}
-            <div className="overflow-hidden">
+                {visibleTableColumns.map((col) => {
+                  const isActions = col.key === "actions" || col.key === "act";
+                  const canSort = !isActions && col.sortable !== false;
+                  const isActiveSort = sortField === col.key;
+                  return (
+                    <Resizable
+                      key={col.key}
+                      width={getColumnWidth(col)}
+                      height={0}
+                      onResize={(e, data) => handleResize(col.key, data)}
+                      minConstraints={[isActions ? 44 : 60, 0]}
+                      maxConstraints={[isActions ? 280 : 500, 0]}
+                      handle={
+                        <div className="absolute right-0 top-0 bottom-0 w-1 hover:w-1.5 cursor-col-resize bg-transparent hover:bg-primary/40 transition-all" />
+                      }
+                    >
+                      <div
+                        className={cn(
+                          "relative flex flex-shrink-0 items-center border-r border-border px-1.5",
+                          compact ? "text-[11px]" : "text-base",
+                          isActions
+                            ? "justify-end overflow-visible"
+                            : "overflow-hidden",
+                          canSort &&
+                            "cursor-pointer select-none hover:text-foreground",
+                        )}
+                        style={{ width: getColumnWidth(col) }}
+                        onClick={
+                          canSort ? () => handleSort(col.key) : undefined
+                        }
+                        onKeyDown={
+                          canSort
+                            ? (event) => {
+                                if (
+                                  event.key === "Enter" ||
+                                  event.key === " "
+                                ) {
+                                  event.preventDefault();
+                                  handleSort(col.key);
+                                }
+                              }
+                            : undefined
+                        }
+                        role={canSort ? "button" : undefined}
+                        tabIndex={canSort ? 0 : undefined}
+                        title={canSort ? `Sort by ${col.label}` : undefined}
+                      >
+                        <span className="truncate">{col.label}</span>
+                        {isActiveSort ? (
+                          <span
+                            className="ml-1 shrink-0 text-[10px] text-primary"
+                            aria-hidden
+                          >
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : null}
+                      </div>
+                    </Resizable>
+                  );
+                })}
+              </div>
+
+              {/* Rows */}
+              <div className="overflow-hidden">
                 {paginatedData.map((item, index) => {
                   const rowId = getRowIdentifier(item, index);
                   const isSelected = selectedIds.includes(rowId);
 
                   return (
-                      <div
-                        key={rowId}
-                        className={cn(
-                          "group relative flex w-full cursor-pointer border-b border-border",
-                          compact ? "min-h-11 py-0.5" : "py-1",
-                          isSelected
-                            ? "bg-muted/30"
-                            : index % 2 === 1
-                              ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
-                              : "bg-background hover:bg-muted/20"
-                        )}
-                        onClick={() => handleRowSelect(rowId, item)}
-                      >
-                        {/* Checkbox */}
-                        {showCheckboxes && (
-                          <div className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0" style={{ width: getColumnWidth('checkbox') || 36 }}>
-                            <input
-                              type="checkbox"
-                              aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
-                              className="w-4 h-4 rounded border-border/40 cursor-pointer"
-                              style={mounted ? { accentColor: isDark ? "rgb(113, 113, 122)" : "rgb(161, 161, 170)" } : {}}
-                              checked={isSelected}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                handleSelectionToggle(rowId);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        )}
+                    <div
+                      key={rowId}
+                      className={cn(
+                        "group relative flex w-full cursor-pointer border-b border-border",
+                        compact ? "min-h-11 py-0.5" : "py-1",
+                        isSelected
+                          ? "bg-muted/30"
+                          : index % 2 === 1
+                            ? "bg-primary/[0.08] hover:bg-primary/[0.13]"
+                            : "bg-background hover:bg-muted/20",
+                      )}
+                      onClick={() => handleRowSelect(rowId, item)}
+                    >
+                      {/* Checkbox */}
+                      {showCheckboxes && (
+                        <div
+                          className="flex items-center justify-center border-r border-border pr-1.5 flex-shrink-0"
+                          style={{ width: getColumnWidth("checkbox") || 36 }}
+                        >
+                          <input
+                            type="checkbox"
+                            aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
+                            className="w-4 h-4 rounded border-border/40 cursor-pointer"
+                            style={
+                              mounted
+                                ? {
+                                    accentColor: isDark
+                                      ? "rgb(113, 113, 122)"
+                                      : "rgb(161, 161, 170)",
+                                  }
+                                : {}
+                            }
+                            checked={isSelected}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleSelectionToggle(rowId);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      )}
 
-                        {/* Data columns */}
-                        {visibleTableColumns.map((col) => {
-                          const isActions = col.key === "actions" || col.key === "act"
-                          return (
+                      {/* Data columns */}
+                      {visibleTableColumns.map((col) => {
+                        const isActions =
+                          col.key === "actions" || col.key === "act";
+                        return (
                           <div
                             key={col.key}
                             className={cn(
                               "flex min-w-0 flex-shrink-0 items-center border-r border-border px-1.5 text-xs",
                               isActions
                                 ? "justify-end overflow-visible"
-                                : "overflow-hidden"
+                                : "overflow-hidden",
                             )}
                             style={{ width: getColumnWidth(col) }}
                             onClick={(e) => {
                               // allow inner links/buttons to work
-                              if ((e.target as HTMLElement).closest("a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']")) {
+                              if (
+                                (e.target as HTMLElement).closest(
+                                  "a,button,[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']",
+                                )
+                              ) {
                                 e.stopPropagation();
                               }
                             }}
                           >
                             {renderCell(col, item)}
                           </div>
-                          )
-                        })}
-                      </div>
+                        );
+                      })}
+                    </div>
                   );
                 })}
 
@@ -1632,14 +1916,21 @@ export function ResizableTable<T = Record<string, unknown>>({
                         key={`skeleton-row-${index}`}
                         className={cn(
                           "flex w-full border-b border-border/60 px-1.5 py-2 last:border-b-0",
-                          index % 2 === 1 ? "bg-primary/[0.08]" : "bg-background"
+                          index % 2 === 1
+                            ? "bg-primary/[0.08]"
+                            : "bg-background",
                         )}
                       >
                         {allColumnKeys.map((columnKey) => (
                           <div
                             key={`${columnKey}-${index}`}
                             className="flex-shrink-0 px-1.5"
-                            style={{ width: columnKey === "checkbox" ? getColumnWidth("checkbox") || 36 : getColumnWidth(columnKey) }}
+                            style={{
+                              width:
+                                columnKey === "checkbox"
+                                  ? getColumnWidth("checkbox") || 36
+                                  : getColumnWidth(columnKey),
+                            }}
                           >
                             <div className="h-4 animate-pulse rounded bg-muted/70" />
                           </div>
@@ -1652,16 +1943,17 @@ export function ResizableTable<T = Record<string, unknown>>({
                     No records found.
                   </div>
                 ) : null}
+              </div>
             </div>
           </div>
-        </div>
         )}
       </div>
 
       {totalPages > 1 && (
         <div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-1 text-xs">
           <div className="min-w-0 text-muted-foreground/70">
-            Page {activePage} of {totalPages} • {totalCountLabel} {title.toLowerCase()}
+            Page {activePage} of {totalPages} • {totalCountLabel}{" "}
+            {title.toLowerCase()}
             {totalCountLabel === 1 ? "" : "s"}
           </div>
 

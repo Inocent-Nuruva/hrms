@@ -3,25 +3,19 @@ import type { NextConfig } from "next";
 
 export function resolveBackendOrigin() {
   const configuredOrigin =
-    process.env.NEXT_PUBLIC_BACKEND_ORIGIN?.trim() ||
-    process.env.BACKEND_ORIGIN?.trim();
-  const rawValue =
-    configuredOrigin ||
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-
-  if (rawValue === "" || rawValue === "/api") {
-    const appEnv = process.env.APP_ENV?.trim().toLowerCase();
-    return appEnv === "uat"
-      ? "http://127.0.0.1:9999"
-      : "http://localhost:8888";
+    process.env.INTERNAL_BACKEND_URL?.trim() ||
+    process.env.BACKEND_ORIGIN?.trim() ||
+    process.env.NEXT_PUBLIC_BACKEND_ORIGIN?.trim();
+  const rawValue = configuredOrigin || process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const fallback = process.env.APP_ENV?.trim().toLowerCase() === "uat"
+    ? "http://127.0.0.1:9999" : "http://localhost:8888";
+  const url = new URL(!rawValue || rawValue === "/api" ? fallback : rawValue);
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password ||
+      url.search || url.hash || !["/", "/api", "/api/"].includes(url.pathname)) {
+    throw new Error("The backend rewrite target must be an absolute HTTP(S) origin.");
   }
-
-  return (rawValue || "http://localhost:8888")
-    .replace(/\/api\/?$/i, "")
-    .replace(/\/$/, "");
+  return url.origin;
 }
-
-const backendOrigin = resolveBackendOrigin();
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -53,24 +47,33 @@ const nextConfig: NextConfig = {
     root: path.resolve(process.cwd()),
   },
   async rewrites() {
-    if (!backendOrigin) {
-      return [];
-    }
-
-    return [
-      {
-        source: "/socket.io",
-        destination: `${backendOrigin}/socket.io`,
-      },
-      {
-        source: "/socket.io/:path*",
-        destination: `${backendOrigin}/socket.io/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${backendOrigin}/api/:path*`,
-      },
-    ];
+    const backendOrigin = resolveBackendOrigin();
+    return {
+      // Backend owns uploads; stale frontend public files must not shadow them.
+      // Only this app's /uploads paths match. External media URLs stay external.
+      beforeFiles: [
+        {
+          source: "/uploads/:path*",
+          destination: `${backendOrigin}/uploads/:path*`,
+        },
+      ],
+      // Preserve locally implemented App Router API handlers before the API proxy.
+      afterFiles: [
+        {
+          source: "/socket.io",
+          destination: `${backendOrigin}/socket.io`,
+        },
+        {
+          source: "/socket.io/:path*",
+          destination: `${backendOrigin}/socket.io/:path*`,
+        },
+        {
+          source: "/api/:path*",
+          destination: `${backendOrigin}/api/:path*`,
+        },
+      ],
+      fallback: [],
+    };
   },
 };
 

@@ -13,6 +13,7 @@ type SearchToggleFieldProps = {
   placeholder: string
   label?: string
   className?: string
+  size?: "small" | "medium" | "large"
   active?: boolean
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
 }
@@ -24,6 +25,7 @@ export function SearchToggleField({
   label = "Search",
   className,
   active,
+  size = "small",
   onKeyDown,
 }: SearchToggleFieldProps) {
   const [isOpen, setIsOpen] = React.useState(Boolean(value))
@@ -79,7 +81,7 @@ export function SearchToggleField({
     >
       <FluentSearchBox
         ref={inputRef}
-        size="small"
+        size={size}
         aria-label={label}
         placeholder={placeholder}
         value={value}

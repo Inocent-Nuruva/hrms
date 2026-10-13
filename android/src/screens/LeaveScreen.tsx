@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -92,6 +92,11 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
   const [activeTab, setActiveTab] = useState<LeaveTab>(() =>
     LEAVE_TABS.some((tab) => tab.key === initialTab) ? (initialTab as LeaveTab) : 'balances',
   );
+  useEffect(() => {
+    if (LEAVE_TABS.some((tab) => tab.key === initialTab)) {
+      setActiveTab(initialTab as LeaveTab);
+    }
+  }, [initialTab]);
   const [selectedRequestId, setSelectedRequestId] = useState('');
   const [requestDetailVisible, setRequestDetailVisible] = useState(false);
   const [showApplyForm, setShowApplyForm] = useState(false);

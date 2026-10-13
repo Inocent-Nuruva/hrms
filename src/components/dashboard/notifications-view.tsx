@@ -4,7 +4,7 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  ArchiveIcon, ArrowUpRightIcon, CheckIcon, EyeIcon, RefreshCwIcon, RotateCcwIcon, ToggleLeftIcon } from "lucide-react";
+  ArchiveIcon, ArrowUpRightIcon, CheckIcon, RefreshCwIcon, RotateCcwIcon, ToggleLeftIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
@@ -933,14 +933,20 @@ export function NotificationsView() {
     async (row: AdminRecord) => {
       const token = readStoredToken()
       const id = readNotificationId(row)
-      if (!token || id === null || isArchivedNotification(row) || !isUnreadNotification(row)) {
+      const unread = isUnreadNotification(row)
+      const unseen = !isSeenNotification(row)
+      if (!token || id === null || isArchivedNotification(row) || (!unread && !unseen)) {
         return
       }
 
       const key = rowIdentity("inbox", row)
       markBusy(key, true)
       try {
-        const updated = await markNotificationAsRead(token, id)
+        const [readUpdated, seenUpdated] = await Promise.all([
+          unread ? markNotificationAsRead(token, id) : Promise.resolve(null),
+          unseen ? markNotificationAsSeen(token, id) : Promise.resolve(null),
+        ])
+        const updated = seenUpdated ?? readUpdated
         updateRow(
           "inbox",
           key,
@@ -948,6 +954,8 @@ export function NotificationsView() {
             ...row,
             status: "READ",
             read_at: new Date().toISOString(),
+            seen: true,
+            seen_at: new Date().toISOString(),
           },
         )
         syncUnreadCount()
@@ -1027,41 +1035,6 @@ export function NotificationsView() {
     }
   }, [loadRows, syncUnreadCount])
 
-  const handleMarkSeen = React.useCallback(
-    async (row: AdminRecord) => {
-      const token = readStoredToken()
-      const id = readNotificationId(row)
-      if (!token || id === null || isArchivedNotification(row) || isSeenNotification(row)) {
-        return
-      }
-
-      const key = rowIdentity("inbox", row)
-      markBusy(key, true)
-      try {
-        const updated = await markNotificationAsSeen(token, id)
-        updateRow(
-          "inbox",
-          key,
-          (updated as NotificationItem | null) ?? {
-            ...row,
-            seen: true,
-            seen_at: new Date().toISOString(),
-          },
-        )
-        toast.success("Notification marked as seen.")
-      } catch (errorObject) {
-        toast.error(
-          errorObject instanceof Error
-            ? errorObject.message
-            : "Failed to mark notification as seen.",
-        )
-      } finally {
-        markBusy(key, false)
-      }
-    },
-    [markBusy, updateRow],
-  )
-
   const handleArchiveNotification = React.useCallback(
     async (row: AdminRecord) => {
       const token = readStoredToken()
@@ -1091,15 +1064,12 @@ export function NotificationsView() {
   const handleOpenTarget = React.useCallback(
     async (row: AdminRecord) => {
       if (!isArchivedNotification(row)) {
-        await Promise.allSettled([
-          isUnreadNotification(row) ? handleMarkRead(row) : Promise.resolve(),
-          !isSeenNotification(row) ? handleMarkSeen(row) : Promise.resolve(),
-        ])
+        await handleMarkRead(row)
       }
       setDetailOpen(false)
       router.push(resolveNotificationUrl(row))
     },
-    [handleMarkRead, handleMarkSeen, router],
+    [handleMarkRead, router],
   )
 
   const handleToggleChannelSetting = React.useCallback(
@@ -1474,23 +1444,9 @@ export function NotificationsView() {
                 <button
                   type="button"
                   className="admin-table-icon-button"
-                  title="Mark as seen"
-                  aria-label="Mark as seen"
-                  disabled={busy || isArchivedNotification(row) || isSeenNotification(row)}
-                  onClick={() => void handleMarkSeen(row)}
-                >
-                  {busy ? (
-                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <EyeIcon className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="admin-table-icon-button"
                   title="Mark as read"
                   aria-label="Mark as read"
-                  disabled={busy || isArchivedNotification(row) || !isUnreadNotification(row)}
+                  disabled={busy || isArchivedNotification(row) || (!isUnreadNotification(row) && isSeenNotification(row))}
                   onClick={() => void handleMarkRead(row)}
                 >
                   {busy ? (
@@ -2169,7 +2125,6 @@ export function NotificationsView() {
     busyKeys,
     handleArchiveNotification,
     handleMarkRead,
-    handleMarkSeen,
     handleRetryPlatformMailLog,
     handleRetryMailLog,
     handleToggleTemplate,
@@ -2584,16 +2539,7 @@ export function NotificationsView() {
                       <button
                         type="button"
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
-                        disabled={selectedBusy || isArchivedNotification(selectedRow) || isSeenNotification(selectedRow)}
-                        onClick={() => void handleMarkSeen(selectedRow)}
-                      >
-                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <EyeIcon className="size-3.5" />}
-                        Mark seen
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium disabled:opacity-60"
-                        disabled={selectedBusy || isArchivedNotification(selectedRow) || !isUnreadNotification(selectedRow)}
+                        disabled={selectedBusy || isArchivedNotification(selectedRow) || (!isUnreadNotification(selectedRow) && isSeenNotification(selectedRow))}
                         onClick={() => void handleMarkRead(selectedRow)}
                       >
                         {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}

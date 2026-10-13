@@ -55,9 +55,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth.isAuthenticated || Platform.OS !== 'android') return;
-    void ensureNotificationPermissionsAsync().catch((error) => {
+    let active = true;
+    void ensureNotificationPermissionsAsync().then((granted) => {
+      if (active && !granted) {
+        console.warn('Android notification permission is not enabled. Allow notifications for HRMS in system settings.');
+      }
+    }).catch((error) => {
       console.warn('Could not enable Android notifications', error);
     });
+    return () => { active = false; };
   }, [auth.isAuthenticated]);
 
   useEffect(() => {

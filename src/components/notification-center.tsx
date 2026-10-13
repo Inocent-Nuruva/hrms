@@ -15,7 +15,6 @@ import {
   ArrowUpRight20Regular as ArrowUpRight,
   Checkmark20Regular as Check,
   Clock20Regular as Clock,
-  Eye20Regular as Eye,
   People20Regular as People,
 } from "@fluentui/react-icons"
 import { Button } from "@/components/ui/button"
@@ -425,9 +424,15 @@ export function NotificationCenter({
     async (row: AdminRecord) => {
       const id = readNotificationId(row)
       if (id === null) return
+      const unread = isUnreadNotification(row)
+      const unseen = !isSeenNotification(row)
+      if (!unread && !unseen) return
       markBusy(id, true)
       try {
-        await markAsRead(id)
+        await Promise.all([
+          unread ? markAsRead(id) : Promise.resolve(null),
+          unseen ? markAsSeen(id) : Promise.resolve(null),
+        ])
       } catch (errorObject) {
         showErrorAlert(
           errorObject instanceof Error ? errorObject.message : "Failed to mark as read."
@@ -436,25 +441,7 @@ export function NotificationCenter({
         markBusy(id, false)
       }
     },
-    [markAsRead, markBusy]
-  )
-
-  const handleMarkSeen = React.useCallback(
-    async (row: AdminRecord) => {
-      const id = readNotificationId(row)
-      if (id === null) return
-      markBusy(id, true)
-      try {
-        await markAsSeen(id)
-      } catch (errorObject) {
-        showErrorAlert(
-          errorObject instanceof Error ? errorObject.message : "Failed to mark as seen."
-        )
-      } finally {
-        markBusy(id, false)
-      }
-    },
-    [markAsSeen, markBusy]
+    [markAsRead, markAsSeen, markBusy]
   )
 
   const handleArchive = React.useCallback(
@@ -767,20 +754,6 @@ export function NotificationCenter({
                             onClick={() => void handleMarkRead(row)}
                           >
                             <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                          </Button>
-                        ) : null}
-                        {!archived && !seen ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="!size-10 !min-w-10 !p-0 rounded-md text-primary hover:bg-primary/10 hover:text-primary"
-                            disabled={busy}
-                            title="Mark seen"
-                            aria-label={`Mark ${title} as seen`}
-                            onClick={() => void handleMarkSeen(row)}
-                          >
-                            <Eye className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                           </Button>
                         ) : null}
                         {!archived ? (

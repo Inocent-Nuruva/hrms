@@ -199,7 +199,7 @@ function AnimateIcon({
     setCurrentAnimation(typeof animate === 'string' ? animate : animation);
     if (animate) startAnimation(animate as TriggerProp);
     else stopAnimation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only an explicit animate trigger change starts a new run; changing delay or animation configuration must not replay it.
   }, [animate]);
 
   React.useEffect(() => {
@@ -358,7 +358,7 @@ function AnimateIcon({
         loopDelayRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Each run snapshots its configuration; status updates produced by startAnim must not cancel and restart that same run.
   }, [localAnimate, controls]);
 
   const childProps = (

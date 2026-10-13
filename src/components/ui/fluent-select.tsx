@@ -1,12 +1,14 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
+import { Info16Regular } from "@fluentui/react-icons";
 import {
   Dropdown,
   Option,
+  Tooltip,
   makeStyles,
   useId,
-} from "@fluentui/react-components"
+} from "@fluentui/react-components";
 
 const useStyles = makeStyles({
   root: {
@@ -21,13 +23,14 @@ const useStyles = makeStyles({
     fontSize: "12px",
     fontWeight: 600,
   },
-})
+});
 
 export type FluentSelectOption = {
-  value: string
-  label: string
-  disabled?: boolean
-}
+  value: string;
+  label: string;
+  disabled?: boolean;
+  description?: string;
+};
 
 export function FluentSelect({
   label,
@@ -41,21 +44,21 @@ export function FluentSelect({
   className,
   size = "medium",
 }: {
-  label?: string
-  value: string
-  onChange: (value: string) => void
-  options: FluentSelectOption[]
-  placeholder?: string
-  disabled?: boolean
-  id?: string
-  ariaLabel?: string
-  className?: string
-  size?: "small" | "medium" | "large"
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: FluentSelectOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  id?: string;
+  ariaLabel?: string;
+  className?: string;
+  size?: "small" | "medium" | "large";
 }) {
-  const styles = useStyles()
-  const generatedId = useId("dropdown")
-  const dropdownId = id ?? generatedId
-  const selected = options.find((option) => option.value === value)
+  const styles = useStyles();
+  const generatedId = useId("dropdown");
+  const dropdownId = id ?? generatedId;
+  const selected = options.find((option) => option.value === value);
 
   return (
     <div className={`${styles.root} ${className ?? ""}`.trim()}>
@@ -76,11 +79,31 @@ export function FluentSelect({
         onOptionSelect={(_event, data) => onChange(data.optionValue ?? "")}
       >
         {options.map((option) => (
-          <Option key={option.value || option.label} value={option.value} text={option.label} disabled={option.disabled}>
-            {option.label}
+          <Option
+            key={option.value || option.label}
+            value={option.value}
+            text={option.label}
+            disabled={option.disabled}
+          >
+            <span className="flex w-full items-center justify-between gap-2">
+              <span>{option.label}</span>
+              {option.description ? (
+                <Tooltip
+                  content={option.description}
+                  relationship="description"
+                >
+                  <span
+                    aria-label={option.description}
+                    className="inline-flex shrink-0"
+                  >
+                    <Info16Regular />
+                  </span>
+                </Tooltip>
+              ) : null}
+            </span>
           </Option>
         ))}
       </Dropdown>
     </div>
-  )
+  );
 }

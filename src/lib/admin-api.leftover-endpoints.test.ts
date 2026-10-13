@@ -33,7 +33,10 @@ describe("leftover documented API helpers", () => {
   })
 
   it("covers self-service extras and the new profile-change API", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ data: { id: 1 } }))
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 1 }] }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 1 }] }))
+      .mockImplementation(() => jsonResponse({ data: { id: 1 } }))
     vi.stubGlobal("fetch", fetchMock)
 
     await listMyActionItems("token", { limit: 20 })

@@ -36,6 +36,7 @@ interface Props {
   onBackPress?: () => void;
   menuPresentation?: 'drawer' | 'dropdown';
   neutralBackground?: boolean;
+  hideDivider?: boolean;
 }
 
 export function MobileTopBar({
@@ -48,6 +49,7 @@ export function MobileTopBar({
   onBackPress,
   menuPresentation = 'drawer',
   neutralBackground = false,
+  hideDivider = false,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -149,8 +151,8 @@ export function MobileTopBar({
         edges={['top']}
         style={{
           backgroundColor: topBarBackground,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: neutralBackground
+          borderBottomWidth: hideDivider ? 0 : StyleSheet.hairlineWidth,
+          borderBottomColor: hideDivider || neutralBackground
             ? 'transparent'
             : lightPalette ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.2)',
         }}
