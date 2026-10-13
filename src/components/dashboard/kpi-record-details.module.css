@@ -1,0 +1,8 @@
+.sections { display: flex; flex-direction: column; gap: 24px; min-width: 0; font-family: inherit; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 12px 0 0; }
+.fields dt { color: var(--colorNeutralForeground2); font-size: 12px; margin-bottom: 4px; }
+.fields dd { margin: 0; overflow-wrap: anywhere; }
+.description { margin: 8px 0 12px; color: var(--colorNeutralForeground2); overflow-wrap: anywhere; }
+.current { border-block: 1px solid var(--colorNeutralStroke2); padding-block: 20px; }
+.current > div { margin-top: 16px; }
+@media (max-width: 480px) { .fields { grid-template-columns: 1fr; } }

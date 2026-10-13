@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api, normalizeList } from '../lib/api';
 import { useAuth } from './useAuth';
-import { registerRemotePushDeviceAsync, presentHrmsNotification } from '../lib/notification-settings';
+import { ensureNotificationPermissionsAsync, registerRemotePushDeviceAsync, presentHrmsNotification } from '../lib/notification-settings';
 
 export type AppNotification = Record<string, unknown> & {
   id: string | number;
@@ -60,9 +60,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth.isAuthenticated || (Platform.OS !== 'android' && Platform.OS !== 'ios')) return;
-    void registerRemotePushDeviceAsync().catch((error) => {
+    let active = true;
+    void ensureNotificationPermissionsAsync().then(async (granted) => {
+      if (!active) return;
+      if (!granted) {
+        if (Platform.OS === 'android') {
+          console.warn('Android notification permission is not enabled. Allow notifications for HRMS in system settings.');
+        }
+        return;
+      }
+      await registerRemotePushDeviceAsync();
+    }).catch((error) => {
       console.warn('Could not register this device for push notifications', error);
     });
+    return () => { active = false; };
   }, [auth.isAuthenticated]);
 
   useEffect(() => {

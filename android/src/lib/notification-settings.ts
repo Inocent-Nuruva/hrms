@@ -56,6 +56,9 @@ export async function ensureNotificationChannelsAsync() {
 export async function ensureNotificationPermissionsAsync() {
   if (Platform.OS === 'web') return false;
 
+  // Android requires the channel to exist before the permission prompt is shown.
+  await ensureNotificationChannelsAsync();
+
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
 
@@ -103,6 +106,8 @@ export async function presentHrmsNotification(input: {
   if (Platform.OS === 'web') return;
 
   await ensureNotificationChannelsAsync();
+  const hasPermission = await ensureNotificationPermissionsAsync();
+  if (!hasPermission) return;
   await getNotificationSoundPreference();
   await Notifications.scheduleNotificationAsync({
     content: {

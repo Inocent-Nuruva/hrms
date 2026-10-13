@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
-import * as React from "react"
+import { WorkflowGuide } from "@/components/dashboard/workflow-guide";
+import { ValidatedWorkflowForm } from "@/components/dashboard/validated-workflow-form";
+import { activityFormSchema } from "@/lib/workflow-schemas";
+import { workflowFailure } from "@/lib/workflow-error";
+import { useWorkflowRequest } from "@/hooks/use-workflow-request";
+
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
+import { Textarea } from "@/components/ui/textarea";
+import * as React from "react";
 import { PlusIcon, RefreshCwIcon } from "lucide-react";
-import { toast } from "@/components/ui/fluent-toast-store"
+import { toast } from "@/components/ui/fluent-toast-store";
 
-import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
+import { SearchToggleField } from "@/components/common/search-toggle-field";
+import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
 import {
   HeroBand,
   MetricTile,
@@ -28,7 +34,7 @@ import {
   secondaryButtonClass,
   statusChartItems,
   textareaClass,
-} from "@/components/dashboard/talent-visuals"
+} from "@/components/dashboard/talent-visuals";
 import {
   Dialog,
   DialogDescription,
@@ -36,8 +42,8 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+} from "@/components/animate-ui/components/base/dialog";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   createActivityCategory,
   createActivityPolicy,
@@ -54,108 +60,151 @@ import {
   listManagerTeamActivities,
   reviewManagerActivityReport,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
-import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
-import { readStoredSessionTokens } from "@/lib/session-client"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+} from "@/lib/admin-api";
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
+import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
-export type ActivityOpsTab = "overview" | "reports" | "reviews" | "exceptions" | "setup"
+export type ActivityOpsTab =
+  | "overview"
+  | "reports"
+  | "reviews"
+  | "exceptions"
+  | "setup";
 
 function readStoredToken() {
-  return readStoredSessionTokens().accessToken.trim()
+  return readStoredSessionTokens().accessToken.trim();
 }
 
-export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTab }) {
-  const actor = useDashboardActor()
+export function ActivityOperationsView({
+  activeTab,
+}: {
+  activeTab: ActivityOpsTab;
+}) {
+  const actor = useDashboardActor();
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute("/dashboard/activities/overview", actor.permissionLabels, actor.accessMode)
-  const leaveIfForbidden = useLeaveIfForbidden()
-  useForbiddenRouteGuard(canAccess)
+    canAccessDashboardRoute(
+      `/dashboard/activities/${activeTab}`,
+      actor.permissionLabels,
+      actor.accessMode,
+    );
+  useForbiddenRouteGuard(canAccess);
 
-  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
-  const [reports, setReports] = React.useState<AdminRecord[]>([])
-  const [teamReports, setTeamReports] = React.useState<AdminRecord[]>([])
-  const [pending, setPending] = React.useState<AdminRecord[]>([])
-  const [exceptions, setExceptions] = React.useState<AdminRecord[]>([])
-  const [categories, setCategories] = React.useState<AdminRecord[]>([])
-  const [policies, setPolicies] = React.useState<AdminRecord[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [detail, setDetail] = React.useState<AdminRecord | null>(null)
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"review" | "category" | "policy">("review")
-  const [form, setForm] = React.useState<Record<string, string>>({})
-  const [formError, setFormError] = React.useState<string | null>(null)
-  const [saving, setSaving] = React.useState(false)
-  const [setupKind, setSetupKind] = React.useState<"categories" | "policies">("categories")
+  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null);
+  const [reports, setReports] = React.useState<AdminRecord[]>([]);
+  const [teamReports, setTeamReports] = React.useState<AdminRecord[]>([]);
+  const [pending, setPending] = React.useState<AdminRecord[]>([]);
+  const [exceptions, setExceptions] = React.useState<AdminRecord[]>([]);
+  const [categories, setCategories] = React.useState<AdminRecord[]>([]);
+  const [policies, setPolicies] = React.useState<AdminRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
+  const [detail, setDetail] = React.useState<AdminRecord | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [createMode, setCreateMode] = React.useState<
+    "review" | "category" | "policy"
+  >("review");
+  const [form, setForm] = React.useState<Record<string, string>>({});
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [setupKind, setSetupKind] = React.useState<"categories" | "policies">(
+    "categories",
+  );
+
+  const { begin, invalidate, credential } = useWorkflowRequest(activeTab);
 
   const load = React.useCallback(async () => {
-    const token = readStoredToken()
+    const { commit, current } = begin();
+    void current;
+    const token = credential?.trim() || readStoredToken();
     if (!token) {
-      setError("Authentication required. Please log in again.")
-      setLoading(false)
-      return
+      commit(() => setError("Authentication required. Please log in again."));
+      commit(() => setLoading(false));
+      return;
     }
-    setLoading(true)
-    setError(null)
-    const tasks: Array<Promise<unknown>> = []
+    commit(() => setLoading(true));
+    commit(() => setError(null));
+    const tasks: Array<Promise<unknown>> = [];
     if (activeTab === "overview") {
       tasks.push(
-        getManagerActivitiesDashboard(token).then(setDashboard).catch(() => setDashboard(null)),
-        listHrActivities(token, { limit: 50 }).then(setReports).catch(() => setReports([])),
-        listManagerPendingActivityReviews(token, { limit: 20 }).then(setPending).catch(() => setPending([])),
-      )
+        getManagerActivitiesDashboard(token).then((value) =>
+          commit(() => setDashboard(value)),
+        ),
+        listHrActivities(token, { limit: 50 }).then((value) =>
+          commit(() => setReports(value)),
+        ),
+        listManagerPendingActivityReviews(token, { limit: 20 }).then((value) =>
+          commit(() => setPending(value)),
+        ),
+      );
     }
     if (activeTab === "reports") {
       tasks.push(
-        listHrActivities(token, { limit: 50 }).then(setReports).catch(() => setReports([])),
-        listManagerTeamActivities(token, { limit: 50 }).then(setTeamReports).catch(() => setTeamReports([])),
-      )
+        listHrActivities(token, { limit: 50 }).then((value) =>
+          commit(() => setReports(value)),
+        ),
+        listManagerTeamActivities(token, { limit: 50 }).then((value) =>
+          commit(() => setTeamReports(value)),
+        ),
+      );
     }
     if (activeTab === "reviews") {
       tasks.push(
-        listManagerPendingActivityReviews(token, { limit: 50 }).then(setPending).catch((errorObject) => {
-          setPending([])
-          throw errorObject
-        }),
-      )
+        listManagerPendingActivityReviews(token, { limit: 50 })
+          .then((value) => commit(() => setPending(value)))
+          .catch((errorObject) => {
+            commit(() => setPending([]));
+            throw errorObject;
+          }),
+      );
     }
     if (activeTab === "exceptions") {
       tasks.push(
-        listHrActivityExceptions(token, { limit: 50 }).then(setExceptions).catch((errorObject) => {
-          setExceptions([])
-          throw errorObject
-        }),
-      )
+        listHrActivityExceptions(token, { limit: 50 })
+          .then((value) => commit(() => setExceptions(value)))
+          .catch((errorObject) => {
+            commit(() => setExceptions([]));
+            throw errorObject;
+          }),
+      );
     }
     if (activeTab === "setup") {
       tasks.push(
-        listActivityCategories(token).then(setCategories).catch(() => setCategories([])),
-        listActivityPolicies(token).then(setPolicies).catch(() => setPolicies([])),
-      )
+        listActivityCategories(token).then((value) =>
+          commit(() => setCategories(value)),
+        ),
+        listActivityPolicies(token).then((value) =>
+          commit(() => setPolicies(value)),
+        ),
+      );
     }
-    const results = await Promise.allSettled(tasks)
-    const first = results.find((result) => result.status === "rejected")
+    const results = await Promise.allSettled(tasks);
+    const first = results.find((result) => result.status === "rejected");
     if (first && first.status === "rejected") {
-      if (leaveIfForbidden(first.reason)) {
-        setLoading(false)
-        return
-      }
-      setError(first.reason instanceof Error ? first.reason.message : "Could not load activity data.")
+      commit(() =>
+        setError(
+          workflowFailure(first.reason, "Could not load activity data."),
+        ),
+      );
     }
-    setLoading(false)
-  }, [activeTab, leaveIfForbidden])
+    commit(() => setLoading(false));
+  }, [begin, credential, activeTab]);
 
   React.useEffect(() => {
-    if (!canAccess) return
-    void load()
-  }, [canAccess, load])
+    if (!canAccess) return;
+    void load();
+    return invalidate;
+  }, [canAccess, load, invalidate]);
 
-  const reportRows = reports.length > 0 ? reports : teamReports
+  const reportRows = [
+    ...new Map(
+      [...reports, ...teamReports].map((report) => [rowId(report), report]),
+    ).values(),
+  ];
   const rows =
     activeTab === "reviews"
       ? pending
@@ -165,24 +214,51 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
           ? setupKind === "policies"
             ? policies
             : categories
-          : reportRows
-  const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+          : reportRows;
+  const visible = rows.filter(
+    (row) =>
+      !search ||
+      JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const { begin: beginMutation } = useWorkflowRequest(
+    `${activeTab}:${JSON.stringify(form)}`,
+  );
+  React.useEffect(() => {
+    setSaving(false);
+  }, [credential, activeTab, beginMutation]);
 
   async function onSave() {
-    const token = readStoredToken()
-    if (!token) return
-    setSaving(true)
-    setFormError(null)
+    const validationResult = activityFormSchema(createMode).safeParse(form);
+    if (!validationResult.success) {
+      setFormError(
+        validationResult.error.issues
+          .map(
+            (issue) => issue.path.map(String).join(".") + ": " + issue.message,
+          )
+          .join("; "),
+      );
+      return;
+    }
+    if (saving) return;
+    const token = readStoredToken();
+    if (!token) return;
+    const { current: isMutationCurrent } = beginMutation();
+    setSaving(true);
+    setFormError(null);
     try {
       if (createMode === "review") {
-        if (!form.id || !form.decision || !form.comments) throw new Error("Decision and comments are required.")
+        if (!form.id || !form.decision || !form.comments)
+          throw new Error("Decision and comments are required.");
         await reviewManagerActivityReport(token, form.id, {
           decision: form.decision,
           comments: form.comments,
           rating: form.rating || undefined,
-        })
+        });
+        if (!isMutationCurrent()) return;
       } else if (createMode === "category") {
-        if (!form.code || !form.name) throw new Error("Code and name are required.")
+        if (!form.code || !form.name)
+          throw new Error("Code and name are required.");
         const payload = {
           code: form.code,
           name: form.name,
@@ -190,27 +266,38 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
           requires_time: form.requires_time === "true",
           requires_outcome: form.requires_outcome === "true",
           is_field_activity: form.is_field_activity === "true",
-        }
-        if (form.id) await updateActivityCategory(token, form.id, payload)
-        else await createActivityCategory(token, payload)
+        };
+        if (form.id) await updateActivityCategory(token, form.id, payload);
+        if (!isMutationCurrent()) return;
+        else await createActivityCategory(token, payload);
+        if (!isMutationCurrent()) return;
       } else {
-        if (!form.effective_from && !form.id) throw new Error("Effective from is required.")
+        if (!form.effective_from && !form.id)
+          throw new Error("Effective from is required.");
         const payload = {
           effective_from: form.effective_from || undefined,
           daily_submission_required: form.daily_submission_required !== "false",
           manager_review_required: form.manager_review_required !== "false",
-          minimum_activity_count: form.minimum_activity_count ? Number(form.minimum_activity_count) : undefined,
-        }
-        if (form.id) await updateActivityPolicy(token, form.id, payload)
-        else await createActivityPolicy(token, payload)
+          minimum_activity_count: form.minimum_activity_count
+            ? Number(form.minimum_activity_count)
+            : undefined,
+        };
+        if (form.id) await updateActivityPolicy(token, form.id, payload);
+        if (!isMutationCurrent()) return;
+        else await createActivityPolicy(token, payload);
+        if (!isMutationCurrent()) return;
       }
-      toast.success("Saved.")
-      setCreateOpen(false)
-      await load()
+      toast.success("Saved.");
+      setCreateOpen(false);
+      await load();
+      if (!isMutationCurrent()) return;
     } catch (errorObject) {
-      setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
+      if (!isMutationCurrent()) return;
+      setFormError(
+        errorObject instanceof Error ? errorObject.message : "Could not save.",
+      );
     } finally {
-      setSaving(false)
+      if (isMutationCurrent()) setSaving(false);
     }
   }
 
@@ -218,48 +305,108 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
     if (activeTab === "setup") {
       return [
         { key: "name", label: "Name", render: (row) => optionLabel(row) },
-        { key: "code", label: "Code", render: (row) => readString(row, ["code"], "—") },
-        { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "ACTIVE")} /> },
+        {
+          key: "code",
+          label: "Code",
+          render: (row) => readString(row, ["code"], "—"),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => (
+            <StatusChip value={readString(row, ["status"], "ACTIVE")} />
+          ),
+        },
         {
           key: "actions",
           label: "Actions",
           render: (row) => (
             <div className="flex flex-wrap gap-1">
-              <button type="button" className={actionButtonClass} onClick={(event) => {
-                event.stopPropagation()
-                setCreateMode(setupKind === "policies" ? "policy" : "category")
-                setForm({
-                  id: rowId(row),
-                  code: readString(row, ["code"]),
-                  name: readString(row, ["name"]),
-                  description: readString(row, ["description"]),
-                  effective_from: readString(row, ["effectiveFrom", "effective_from"]),
-                })
-                setCreateOpen(true)
-              }}>Edit</button>
+              <button
+                type="button"
+                className={actionButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCreateMode(
+                    setupKind === "policies" ? "policy" : "category",
+                  );
+                  setForm({
+                    id: rowId(row),
+                    code: readString(row, ["code"]),
+                    name: readString(row, ["name"]),
+                    description: readString(row, ["description"]),
+                    effective_from: readString(row, [
+                      "effectiveFrom",
+                      "effective_from",
+                    ]),
+                  });
+                  setCreateOpen(true);
+                }}
+              >
+                Edit
+              </button>
               {setupKind === "categories" ? (
-                <button type="button" className={actionButtonClass} onClick={(event) => {
-                  event.stopPropagation()
-                  const token = readStoredToken()
-                  const id = rowId(row)
-                  if (!token || !id) return
-                  void deactivateActivityCategory(token, id)
-                    .then(() => { toast.success("Deactivated."); return load() })
-                    .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Could not deactivate."))
-                }}>Deactivate</button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const token = readStoredToken();
+                    const id = rowId(row);
+                    if (!token || !id) return;
+                    void deactivateActivityCategory(token, id)
+                      .then(() => {
+                        toast.success("Deactivated.");
+                        return load();
+                      })
+                      .catch((errorObject) =>
+                        toast.error(
+                          errorObject instanceof Error
+                            ? errorObject.message
+                            : "Could not deactivate.",
+                        ),
+                      );
+                  }}
+                >
+                  Deactivate
+                </button>
               ) : null}
             </div>
           ),
         },
-      ]
+      ];
     }
     if (activeTab === "exceptions") {
       return [
-        { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
-        { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} /> },
-        { key: "date", label: "Date", render: (row) => formatDate(row.activityDate ?? row.activity_date ?? row.date) },
-        { key: "reason", label: "Reason", render: (row) => readString(row, ["reason", "exceptionType", "exception_type", "message"], "—") },
-      ]
+        {
+          key: "employee",
+          label: "Employee",
+          render: (row) => employeeLabel(row),
+        },
+        {
+          key: "status",
+          label: "Status",
+          render: (row) => (
+            <StatusChip value={readString(row, ["status"], "OPEN")} />
+          ),
+        },
+        {
+          key: "date",
+          label: "Date",
+          render: (row) =>
+            formatDate(row.activityDate ?? row.activity_date ?? row.date),
+        },
+        {
+          key: "reason",
+          label: "Reason",
+          render: (row) =>
+            readString(
+              row,
+              ["reason", "exceptionType", "exception_type", "message"],
+              "—",
+            ),
+        },
+      ];
     }
     return [
       {
@@ -268,12 +415,28 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
         render: (row) => (
           <div className="space-y-0.5">
             <p className="font-medium">{employeeLabel(row)}</p>
-            <p className="text-xs text-muted-foreground">{formatDate(row.activityDate ?? row.activity_date)}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatDate(row.activityDate ?? row.activity_date)}
+            </p>
           </div>
         ),
       },
-      { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "DRAFT")} /> },
-      { key: "entries", label: "Entries", render: (row) => String(readNumber(row, ["entryCount", "entry_count", "entries_count"]) ?? "—") },
+      {
+        key: "status",
+        label: "Status",
+        render: (row) => (
+          <StatusChip value={readString(row, ["status"], "DRAFT")} />
+        ),
+      },
+      {
+        key: "entries",
+        label: "Entries",
+        render: (row) =>
+          String(
+            readNumber(row, ["entryCount", "entry_count", "entries_count"]) ??
+              "—",
+          ),
+      },
       {
         key: "actions",
         label: "Actions",
@@ -282,23 +445,75 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
             type="button"
             className={actionButtonClass}
             onClick={(event) => {
-              event.stopPropagation()
-              setCreateMode("review")
-              setForm({ id: rowId(row), decision: "APPROVE", comments: "" })
-              setCreateOpen(true)
+              event.stopPropagation();
+              setCreateMode("review");
+              setForm({ id: rowId(row), decision: "APPROVE", comments: "" });
+              setCreateOpen(true);
             }}
           >
             Review
           </button>
         ),
       },
-    ]
-  }, [activeTab, load, setupKind])
+    ];
+  }, [activeTab, load, setupKind]);
 
-  if (!canAccess) return null
+  if (!canAccess)
+    return (
+      <WorkflowGuide
+        title="Activities management"
+        steps={[]}
+        unavailable={
+          actor.ready
+            ? "Your account does not have access to this workflow. Ask your administrator for the required module permissions."
+            : "Preparing your access permissions…"
+        }
+      />
+    );
+
+  if (loading && !createOpen)
+    return (
+      <section aria-busy="true" className="flex flex-col gap-3">
+        <FluentLoadingIndicator />
+        <p role="status">
+          Loading this workflow and checking its available actions…
+        </p>
+      </section>
+    );
+
+  if (error && !loading && !createOpen)
+    return (
+      <section className="flex flex-col gap-4">
+        <WorkflowGuide
+          title="This workflow needs attention"
+          unavailable={error}
+          steps={[
+            "Resolve the permission, setup, or network issue described above.",
+            "Reload this view before continuing.",
+          ]}
+        />
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => void load()}
+        >
+          Reload workflow
+        </button>
+      </section>
+    );
 
   return (
     <section className="space-y-4">
+      <WorkflowGuide
+        title="Activities management"
+        steps={[
+          "Configure activity categories and policies in Setup.",
+          "Employees create work and submit their daily reports.",
+          "Managers approve, return for correction, or reject submitted reports.",
+          "Use Exceptions to resolve processing issues.",
+        ]}
+        unavailable={error}
+      />
       <TalentDoodleSprites />
       {activeTab === "overview" ? (
         <>
@@ -307,22 +522,61 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
             title="Daily activity operations"
             description="Team reports, pending manager reviews, and exceptions — shown only if you have the grant."
             actions={
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-4" />
+                )}
                 Refresh
               </button>
             }
           />
-          {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile label="Reports" value={readNumber(dashboard, ["reports", "total", "count"]) ?? reports.length} />
-            <MetricTile label="Pending reviews" value={readNumber(dashboard, ["pending_reviews", "pendingReviews"]) ?? pending.length} />
-            <MetricTile label="Submitted" value={readNumber(dashboard, ["submitted", "submittedCount"]) ?? "—"} />
-            <MetricTile label="Exceptions" value={readNumber(dashboard, ["exceptions", "exceptionCount"]) ?? "—"} />
+            <MetricTile
+              label="Reports"
+              value={
+                readNumber(dashboard, ["reports", "total", "count"]) ??
+                reports.length
+              }
+            />
+            <MetricTile
+              label="Pending reviews"
+              value={
+                readNumber(dashboard, ["pending_reviews", "pendingReviews"]) ??
+                pending.length
+              }
+            />
+            <MetricTile
+              label="Submitted"
+              value={
+                readNumber(dashboard, ["submitted", "submittedCount"]) ?? "—"
+              }
+            />
+            <MetricTile
+              label="Exceptions"
+              value={
+                readNumber(dashboard, ["exceptions", "exceptionCount"]) ?? "—"
+              }
+            />
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold">Report mix</h2>
-            <div className="mt-4"><StatusStack items={statusChartItems(reports.length > 0 ? reports : pending)} /></div>
+            <div className="mt-4">
+              <StatusStack
+                items={statusChartItems(reports.length > 0 ? reports : pending)}
+              />
+            </div>
           </div>
         </>
       ) : (
@@ -344,8 +598,17 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              {loading ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : (
+                <RefreshCwIcon className="size-4" />
+              )}
               Refresh
             </button>
             {activeTab === "setup" ? (
@@ -353,9 +616,11 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
                 type="button"
                 className={primaryButtonClass}
                 onClick={() => {
-                  setCreateMode(setupKind === "policies" ? "policy" : "category")
-                  setForm({})
-                  setCreateOpen(true)
+                  setCreateMode(
+                    setupKind === "policies" ? "policy" : "category",
+                  );
+                  setForm({});
+                  setCreateOpen(true);
                 }}
               >
                 <PlusIcon className="size-4" /> New
@@ -372,7 +637,11 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
               key={kind}
               type="button"
               onClick={() => setSetupKind(kind)}
-              className={setupKind === kind ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold !text-white" : "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium"}
+              className={
+                setupKind === kind
+                  ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold !text-white"
+                  : "rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium"
+              }
             >
               {prettify(kind)}
             </button>
@@ -382,8 +651,16 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
 
       {activeTab !== "overview" ? (
         <div className="space-y-3">
-          <SearchToggleField value={search} onChange={setSearch} placeholder="Search" />
-          {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+          <SearchToggleField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search"
+          />
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
               title="Activity records"
@@ -394,14 +671,18 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
               showExport={false}
               storageKey={`activities-${activeTab}-${setupKind}`}
               onRowSelect={(_, row) => {
-                if (!row) return
-                setDetail(row)
-                const token = readStoredToken()
-                const id = rowId(row)
-                if (token && id && (activeTab === "reports" || activeTab === "reviews")) {
+                if (!row) return;
+                setDetail(row);
+                const token = readStoredToken();
+                const id = rowId(row);
+                if (
+                  token &&
+                  id &&
+                  (activeTab === "reports" || activeTab === "reviews")
+                ) {
                   void getManagerActivityReport(token, id)
                     .then((record) => record && setDetail(record))
-                    .catch(() => undefined)
+                    .catch(() => undefined);
                 }
               }}
             />
@@ -409,66 +690,185 @@ export function ActivityOperationsView({ activeTab }: { activeTab: ActivityOpsTa
         </div>
       ) : null}
 
-      <RecordDetailsDialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} title={optionLabel(detail) || employeeLabel(detail)} row={detail} />
+      <RecordDetailsDialog
+        open={Boolean(detail)}
+        onOpenChange={(open) => !open && setDetail(null)}
+        title={optionLabel(detail) || employeeLabel(detail)}
+        row={detail}
+      />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          if (!saving) setCreateOpen(next);
+        }}
+      >
         <DialogPopup
           from="bottom"
           className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(90dvh,42rem)] sm:w-[calc(100%-2rem)]"
         >
           <DialogHeader className="m-0 shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-5">
-            <DialogTitle>{createMode === "review" ? "Review report" : createMode === "policy" ? "Activity policy" : "Activity category"}</DialogTitle>
-            <DialogDescription>Save this activity setup item.</DialogDescription>
+            <DialogTitle>
+              {createMode === "review"
+                ? "Review report"
+                : createMode === "policy"
+                  ? "Activity policy"
+                  : "Activity category"}
+            </DialogTitle>
+            <DialogDescription>
+              Save this activity setup item.
+            </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-            <div className="grid gap-3">
-            {createMode === "review" ? (
-              <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Decision</span>
-                  <FluentSelect
-                    ariaLabel="Decision"
-                    value={form.decision ?? "APPROVE"}
-                    onChange={(value) => setForm((current) => ({ ...current, decision: value }))}
-                    options={[
-                      { value: "APPROVE", label: "Approve" },
-                      { value: "RETURN", label: "Return" },
-                      { value: "REJECT", label: "Reject" },
-                    ]}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Rating</span>
-                  <input className={inputClass} value={form.rating ?? ""} onChange={(event) => setForm((current) => ({ ...current, rating: event.target.value }))} />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Comments</span>
-                  <Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} />
-                </label>
-              </>
-            ) : null}
-            {createMode === "category" ? (
-              <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Code</span><input className={inputClass} value={form.code ?? ""} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Name</span><input className={inputClass} value={form.name ?? ""} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
-              </>
-            ) : null}
-            {createMode === "policy" ? (
-              <>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Effective from</span><DateInput className={inputClass} value={form.effective_from ?? ""} onChange={(event) => setForm((current) => ({ ...current, effective_from: event.target.value }))} /></label>
-                <label className="grid gap-1.5 text-sm"><span className="font-medium">Minimum activities</span><input type="number" className={inputClass} value={form.minimum_activity_count ?? ""} onChange={(event) => setForm((current) => ({ ...current, minimum_activity_count: event.target.value }))} /></label>
-              </>
-            ) : null}
-            {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          <ValidatedWorkflowForm
+            key={createMode}
+            saving={saving}
+            submitError={formError}
+            onSubmit={onSave}
+            validation={{ schema: activityFormSchema(createMode), input: form }}
+            description="Saving categories or policies configures future work. Reviewing a report moves it to the chosen decision."
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <div className="grid gap-3">
+                {createMode === "review" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Decision</span>
+                      <FluentSelect
+                        ariaLabel="Decision"
+                        value={form.decision ?? "APPROVE"}
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            decision: value,
+                          }))
+                        }
+                        options={[
+                          { value: "APPROVE", label: "Approve" },
+                          { value: "RETURN", label: "Return" },
+                          { value: "REJECT", label: "Reject" },
+                        ]}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Rating</span>
+                      <input
+                        className={inputClass}
+                        value={form.rating ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            rating: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Comments</span>
+                      <Textarea
+                        className={textareaClass}
+                        value={form.comments ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            comments: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {createMode === "category" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Code</span>
+                      <input
+                        className={inputClass}
+                        value={form.code ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            code: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Name</span>
+                      <input
+                        className={inputClass}
+                        value={form.name ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Description</span>
+                      <Textarea
+                        className={textareaClass}
+                        value={form.description ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {createMode === "policy" ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Effective from</span>
+                      <DateInput
+                        className={inputClass}
+                        value={form.effective_from ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            effective_from: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Minimum activities</span>
+                      <input
+                        type="number"
+                        className={inputClass}
+                        value={form.minimum_activity_count ?? ""}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            minimum_activity_count: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {formError ? (
+                  <p className="text-sm text-rose-600">{formError}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
+          </ValidatedWorkflowForm>
           <DialogFooter className="m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
-            <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>{saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}</button>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              disabled={saving}
+              onClick={() => setCreateOpen(false)}
+            >
+              Cancel
+            </button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
     </section>
-  )
+  );
 }

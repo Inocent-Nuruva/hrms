@@ -36,6 +36,7 @@ const DO_NOT_REMEMBER = new Set([
   "/dashboard/performance",
   "/dashboard/performance/overview",
   "/dashboard/performance/setup",
+  "/dashboard/performance/categories",
   "/dashboard/performance/plans",
   "/dashboard/performance/reviews",
   "/dashboard/performance/improvement",

@@ -1,5 +1,6 @@
 import { extractBackupCodes } from "@/lib/backup-codes";
 import { env } from "@/lib/env";
+import { z } from "zod";
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
 import {
   employeeOwnsEmail,
@@ -33,6 +34,7 @@ type CachedAdminResponse = {
 
 const adminResponseCache = new Map<string, CachedAdminResponse>();
 const inflightAdminRequests = new Map<string, Promise<unknown>>();
+export const ADMIN_CACHE_INVALIDATED_EVENT = "hrms:admin-cache-invalidated";
 
 function getAdminRequestKey(
   path: string,
@@ -52,8 +54,11 @@ function createAbortError() {
   return new DOMException("The operation was aborted.", "AbortError");
 }
 
-function invalidateAdminGetCache() {
+export function invalidateAdminGetCache() {
   adminResponseCache.clear();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(ADMIN_CACHE_INVALIDATED_EVENT));
+  }
 }
 
 export interface AdminStats {
@@ -2937,10 +2942,24 @@ function extractMessage(payload: unknown, status: number) {
   return `Request failed with status ${status}`;
 }
 
+export function adminRequest<T>(
+  path: string,
+  options?: AdminRequestOptions,
+): Promise<T>;
+export function adminRequest<S extends z.ZodType>(
+  path: string,
+  schema: S,
+  options?: AdminRequestOptions,
+): Promise<z.output<S>>;
 export async function adminRequest<T>(
   path: string,
-  options: AdminRequestOptions = {},
+  schemaOrOptions: z.ZodType | AdminRequestOptions = {},
+  schemaOptions: AdminRequestOptions = {},
 ): Promise<T> {
+  const schema = schemaOrOptions instanceof z.ZodType ? schemaOrOptions : null;
+  const options: AdminRequestOptions = schema
+    ? schemaOptions
+    : schemaOrOptions as AdminRequestOptions;
   const {
     method = "GET",
     token,
@@ -3031,7 +3050,7 @@ export async function adminRequest<T>(
         });
       }
 
-      return payload as T;
+      return (schema ? schema.parse(payload) : payload) as T;
     }
   })();
 
@@ -3044,6 +3063,67 @@ export async function adminRequest<T>(
   } finally {
     inflightAdminRequests.delete(requestKey);
   }
+}
+
+export type PerformanceKpiCategory = {
+  id: number;
+  name: string;
+  description?: string | null;
+};
+
+function unwrapPerformanceKpiCategory(value: unknown): PerformanceKpiCategory {
+  const record = value && typeof value === "object" ? value as AdminRecord : {};
+  const item = record.data ?? record.result ?? record.item ?? record;
+  return item as PerformanceKpiCategory;
+}
+
+export async function listPerformanceKpiCategories(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpi-categories", { token });
+  const record = payload && typeof payload === "object" ? payload as AdminRecord : {};
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record.data)
+      ? record.data
+      : Array.isArray(record.result)
+        ? record.result
+        : Array.isArray(record.items)
+          ? record.items
+          : [];
+  return items.map(unwrapPerformanceKpiCategory);
+}
+
+export async function createPerformanceKpiCategory(
+  token: string,
+  data: Pick<PerformanceKpiCategory, "name" | "description">,
+) {
+  return unwrapPerformanceKpiCategory(
+    await adminRequest<unknown>("/api/performance/kpi-categories", {
+      method: "POST",
+      token,
+      body: data,
+    }),
+  );
+}
+
+export async function updatePerformanceKpiCategory(
+  token: string,
+  id: number,
+  data: Pick<PerformanceKpiCategory, "name" | "description">,
+) {
+  return unwrapPerformanceKpiCategory(
+    await adminRequest<unknown>(`/api/performance/kpi-categories/${id}`, {
+      method: "PATCH",
+      token,
+      body: data,
+    }),
+  );
+}
+
+export async function deletePerformanceKpiCategory(token: string, id: number) {
+  return adminRequest<unknown>(`/api/performance/kpi-categories/${id}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export interface ListRequestOptions {

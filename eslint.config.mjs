@@ -12,13 +12,6 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["android/src/**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-unused-vars": "off",
-      "react-hooks/exhaustive-deps": "off",
-    },
-  },
-  {
     files: [
       "src/components/animate-ui/icons/icon.tsx",
       "src/components/animate-ui/primitives/animate/slot.tsx",
@@ -26,17 +19,6 @@ const eslintConfig = defineConfig([
     rules: {
       "react-hooks/refs": "off",
       "react-hooks/static-components": "off",
-    },
-  },
-  {
-    files: [
-      "src/components/dashboard/**/*.tsx",
-      "src/components/data-table.tsx",
-      "src/app/dashboard/attendance/[view]/page.tsx",
-    ],
-    rules: {
-      "@typescript-eslint/no-unused-vars": "off",
-      "react-hooks/exhaustive-deps": "off",
     },
   },
   {
@@ -48,21 +30,6 @@ const eslintConfig = defineConfig([
     files: ["android/scripts/**/*.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
-    },
-  },
-  // Allow intentionally-unused function params (kept for signature compatibility)
-  // to be silenced with a leading underscore, e.g. `(_action: string) => {}`.
-  {
-    files: ["android/**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_",
-        },
-      ],
     },
   },
   // CommonJS script/config files (.cjs) legitimately use require().
