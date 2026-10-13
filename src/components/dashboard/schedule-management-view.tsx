@@ -88,6 +88,9 @@ import {
   listTimetableResources,
   patchShiftResourceById,
   patchTimetableResourceById,
+  publishGeneratedSchedule,
+  unpublishGeneratedSchedule,
+  createGeneratedSchedulesBulk,
   type AdminRecord,
   type ShiftResourceKey,
   type TimetableResourceKey,
@@ -223,6 +226,7 @@ type LookupState = {
   holidayGroups: AdminRecord[]
   rotationGroups: AdminRecord[]
   timetableDays: AdminRecord[]
+  timetableShiftOptions: AdminRecord[]
   timetableRotations: AdminRecord[]
 }
 
@@ -294,13 +298,6 @@ const HOLIDAY_ACTION_OPTIONS = [
   { label: "Working Holiday", value: "WORKING_HOLIDAY" },
 ]
 
-const TEMPLATE_TYPE_OPTIONS = [
-  { label: "Fixed", value: "FIXED" },
-  { label: "Rotational", value: "ROTATIONAL" },
-  { label: "Flexible", value: "FLEXIBLE" },
-  { label: "Custom", value: "CUSTOM" },
-]
-
 const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
   shifts: {
     module: "shift",
@@ -322,8 +319,16 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "grace_in_minutes", label: "Grace In", type: "duration" },
       { key: "grace_out_minutes", label: "Grace Out", type: "duration" },
       { key: "late_after_minutes", label: "Late After", type: "duration" },
+      { key: "half_day_after_minutes", label: "Half Day After", type: "duration" },
+      { key: "absent_after_minutes", label: "Absent After", type: "duration" },
       { key: "early_leave_after_minutes", label: "Early Leave After", type: "duration" },
       { key: "max_overtime_minutes", label: "Max Overtime", type: "duration" },
+      { key: "overtime_start_after_minutes", label: "Overtime Starts After", type: "duration" },
+      { key: "overtime_rate_multiplier", label: "Overtime Multiplier", type: "number" },
+      { key: "weekend_multiplier", label: "Weekend Multiplier", type: "number" },
+      { key: "holiday_multiplier", label: "Holiday Multiplier", type: "number" },
+      { key: "overtime_requires_approval", label: "Overtime Requires Approval", type: "boolean" },
+      { key: "overtime_auto_calculate", label: "Calculate Overtime Automatically", type: "boolean" },
       { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
       { key: "is_night_shift", label: "Night Shift", type: "boolean" },
       { key: "crosses_midnight", label: "Crosses Midnight", type: "boolean" },
@@ -331,6 +336,12 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "requires_checkout", label: "Requires Checkout", type: "boolean" },
       { key: "allow_early_checkin", label: "Allow Early Check-In", type: "boolean" },
       { key: "allow_late_checkout", label: "Allow Late Checkout", type: "boolean" },
+      { key: "allow_multiple_checkin", label: "Allow Multiple Check-Ins", type: "boolean" },
+      { key: "auto_mark_absent", label: "Mark Absent Automatically", type: "boolean" },
+      { key: "allow_mobile_attendance", label: "Allow Mobile Attendance", type: "boolean" },
+      { key: "allow_remote_attendance", label: "Allow Remote Attendance", type: "boolean" },
+      { key: "require_geofence", label: "Require Geofence", type: "boolean" },
+      { key: "require_biometric", label: "Require Biometric", type: "boolean" },
     ],
   },
   "shift-breaks": {
@@ -347,40 +358,6 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "duration_minutes", label: "Break Duration", type: "duration", required: true },
       { key: "is_paid", label: "Paid Break", type: "boolean" },
       { key: "is_flexible", label: "Flexible Break", type: "boolean" },
-    ],
-  },
-  "shift-attendance-rules": {
-    module: "shift",
-    title: "Shift Attendance Rules",
-    moduleTitle: "Shift Management",
-    description: "Manage late, absent, and validation rules that apply to a shift.",
-    fields: [
-      { key: "shift_id", label: "Shift", type: "select", required: true },
-      { key: "late_after_minutes", label: "Late After", type: "duration", required: true },
-      { key: "absent_after_minutes", label: "Absent After", type: "duration", required: true },
-      { key: "half_day_after_minutes", label: "Half Day After", type: "duration", required: true },
-      { key: "allow_multiple_checkin", label: "Allow Multiple Check-Ins", type: "boolean" },
-      { key: "auto_mark_absent", label: "Auto Mark Absent", type: "boolean" },
-      { key: "allow_mobile_attendance", label: "Allow Mobile Attendance", type: "boolean" },
-      { key: "allow_remote_attendance", label: "Allow Remote Attendance", type: "boolean" },
-      { key: "require_geofence", label: "Require Geofence", type: "boolean" },
-      { key: "require_biometric", label: "Require Biometric", type: "boolean" },
-    ],
-  },
-  "shift-overtime-rules": {
-    module: "shift",
-    title: "Shift Overtime Rules",
-    moduleTitle: "Shift Management",
-    description: "Manage overtime qualification and calculation rules for a shift.",
-    fields: [
-      { key: "shift_id", label: "Shift", type: "select", required: true },
-      { key: "overtime_start_after_minutes", label: "Start Overtime After", type: "duration", required: true },
-      { key: "max_daily_overtime_minutes", label: "Max Daily Overtime", type: "duration", required: true },
-      { key: "overtime_rate_multiplier", label: "Overtime Rate Multiplier", type: "number", required: true },
-      { key: "weekend_multiplier", label: "Weekend Multiplier", type: "number", required: true },
-      { key: "holiday_multiplier", label: "Holiday Multiplier", type: "number", required: true },
-      { key: "requires_approval", label: "Requires Approval", type: "boolean" },
-      { key: "auto_calculate", label: "Auto Calculate", type: "boolean" },
     ],
   },
   "shift-assignments": {
@@ -429,41 +406,6 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "is_off_day", label: "Off Day", type: "boolean", helpText: "Set Yes when the selected date should be treated as an off day." },
     ],
   },
-  "shift-templates": {
-    module: "shift",
-    title: "Shift Templates",
-    moduleTitle: "Shift Management",
-    description: "Manage reusable shift setup templates.",
-    fields: [
-      { key: "name", label: "Template Name", type: "text", required: true },
-      { key: "template_type", label: "Template Type", type: "select", required: true, options: TEMPLATE_TYPE_OPTIONS },
-      {
-        key: "configuration_shift_ids",
-        label: "Included Shifts",
-        type: "multiselect",
-        helpText: "Choose one or more shifts to include in this template.",
-      },
-      {
-        key: "configuration_default_shift_id",
-        label: "Default Shift",
-        type: "select",
-        helpText: "Pick the main shift used by this template when one default should apply.",
-      },
-      {
-        key: "configuration_rotation_group_id",
-        label: "Rotation Group",
-        type: "select",
-        helpText: "Use this for rotational templates that should follow an existing rotation group.",
-      },
-      {
-        key: "configuration_notes",
-        label: "Notes",
-        type: "textarea",
-        helpText: "Optional notes to help other admins understand how this template is meant to be used.",
-      },
-      { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
-    ],
-  },
   "shift-rotation-groups": {
     module: "shift",
     title: "Rotation Groups",
@@ -489,31 +431,6 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "is_off_day", label: "Off Day", type: "boolean" },
     ],
   },
-  "shift-change-requests": {
-    module: "shift",
-    title: "Shift Change Requests",
-    moduleTitle: "Shift Management",
-    description: "Review and manage submitted requests to change shifts.",
-    fields: [
-      { key: "employee_id", label: "Employee", type: "select", required: true },
-      { key: "current_shift_id", label: "Current Shift", type: "select", required: true },
-      { key: "requested_shift_id", label: "Requested Shift", type: "select", required: true },
-      { key: "request_date", label: "Request Date", type: "date", required: true },
-      { key: "reason", label: "Reason", type: "textarea", required: true },
-      { key: "approved_by", label: "Approved By User Id", type: "number" },
-      { key: "approved_at", label: "Approved At", type: "text", placeholder: "2026-06-12T10:30:00Z" },
-      {
-        key: "status",
-        label: "Status",
-        type: "select",
-        options: [
-          { label: "Pending", value: "PENDING" },
-          { label: "Approved", value: "APPROVED" },
-          { label: "Rejected", value: "REJECTED" },
-        ],
-      },
-    ],
-  },
   timetables: {
     module: "timetable",
     title: "Timetables",
@@ -528,6 +445,13 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "branch_id", label: "Branch", type: "select" },
       { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
       { key: "is_default", label: "Default Timetable", type: "boolean" },
+      { key: "late_after_minutes", label: "Late After", type: "duration" },
+      { key: "half_day_after_minutes", label: "Half Day After", type: "duration" },
+      { key: "absent_after_minutes", label: "Absent After", type: "duration" },
+      { key: "max_overtime_minutes", label: "Max Overtime", type: "duration" },
+      { key: "allow_early_checkin", label: "Allow Early Check-In", type: "boolean" },
+      { key: "allow_late_checkout", label: "Allow Late Checkout", type: "boolean" },
+      { key: "auto_absent_if_no_checkin", label: "Mark Absent When No Check-In", type: "boolean" },
     ],
   },
   "timetable-days": {
@@ -560,7 +484,7 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "timetable_day_id", label: "Timetable Day", type: "select", required: true },
       { key: "shift_id", label: "Shift", type: "select", required: true },
       { key: "priority_order", label: "Priority Order", type: "number" },
-      { key: "max_employees", label: "Max Employees", type: "number" },
+      { key: "max_employees", label: "Max Employees (blank = unlimited)", type: "number" },
       { key: "is_primary", label: "Primary Shift Rule", type: "boolean" },
     ],
   },
@@ -575,22 +499,6 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
       { key: "action_type", label: "Action Type", type: "select", required: true, options: HOLIDAY_ACTION_OPTIONS },
       { key: "apply_overtime_rules", label: "Apply Overtime Rules", type: "boolean" },
       { key: "auto_mark_offday", label: "Auto Mark Off Day", type: "boolean" },
-    ],
-  },
-  "timetable-attendance-rules": {
-    module: "timetable",
-    title: "Timetable Attendance Rules",
-    moduleTitle: "Timetable Management",
-    description: "Manage timetable-level attendance validation and tolerance rules.",
-    fields: [
-      { key: "timetable_id", label: "Timetable", type: "select", required: true },
-      { key: "late_after_minutes", label: "Late After", type: "duration", required: true },
-      { key: "half_day_after_minutes", label: "Half Day After", type: "duration", required: true },
-      { key: "absent_after_minutes", label: "Absent After", type: "duration", required: true },
-      { key: "max_overtime_minutes", label: "Max Overtime", type: "duration", required: true },
-      { key: "allow_early_checkin", label: "Allow Early Check-In", type: "boolean" },
-      { key: "allow_late_checkout", label: "Allow Late Checkout", type: "boolean" },
-      { key: "auto_absent_if_no_checkin", label: "Auto Absent If No Check-In", type: "boolean" },
     ],
   },
   "timetable-rotations": {
@@ -639,13 +547,13 @@ const SECTION_CONFIG: Record<ScheduleSectionKey, SectionConfig> = {
     description: "Manage schedules generated from timetables for specific dates and employees.",
     fields: [
       { key: "employee_id", label: "Employee", type: "select", required: true },
-      { key: "timetable_id", label: "Timetable", type: "select", required: true },
-      { key: "shift_id", label: "Shift", type: "select" },
+      { key: "employee_ids", label: "Bulk Employees", type: "multiselect", createOnly: true, helpText: "Assign this shift/date to several employees in one atomic batch." },
       { key: "schedule_date", label: "Schedule Date", type: "date", required: true },
-      { key: "holiday_id", label: "Holiday", type: "select" },
-      { key: "source_rule", label: "Source Rule", type: "text" },
-      { key: "generated_from_rotation", label: "Generated From Rotation", type: "boolean" },
+      { key: "timetable_day_shift_option_id", label: "Timetable Shift Option", type: "select", helpText: "Choose a shift option configured for this weekday." },
+      { key: "shift_id", label: "Shift", type: "select", helpText: "Used when assigning a shift outside a timetable option." },
+      { key: "timetable_id", label: "Timetable", type: "select", helpText: "Optional when a timetable shift option is selected." },
       { key: "is_off_day", label: "Off Day", type: "boolean" },
+      { key: "remarks", label: "Remarks", type: "textarea" },
     ],
   },
 }
@@ -662,6 +570,7 @@ const EMPTY_LOOKUPS: LookupState = {
   holidayGroups: [],
   rotationGroups: [],
   timetableDays: [],
+  timetableShiftOptions: [],
   timetableRotations: [],
 }
 
@@ -976,23 +885,18 @@ function resolveVisibleColumns(section: ScheduleSectionKey, rows: AdminRecord[])
   const preferredBySection: Partial<Record<ScheduleSectionKey, string[]>> = {
     shifts: ["name", "status", "start_time", "end_time"],
     "shift-breaks": ["name", "shift_id", "start_time", "end_time"],
-    "shift-attendance-rules": ["shift_id", "late_after_minutes", "absent_after_minutes", "half_day_after_minutes"],
-    "shift-overtime-rules": ["shift_id", "overtime_start_after_minutes", "max_daily_overtime_minutes", "requires_approval"],
     "shift-assignments": ["employee_id", "shift_id", "effective_from", "status"],
     "shift-schedules": ["employee_id", "shift_id", "schedule_date", "is_off_day"],
-    "shift-templates": ["name", "template_type", "status"],
     "shift-rotation-groups": ["name", "code", "cycle_days", "status"],
     "shift-rotation-rules": ["rotation_group_id", "shift_id", "day_index", "is_off_day"],
-    "shift-change-requests": ["employee_id", "current_shift_id", "requested_shift_id", "status"],
     timetables: ["name", "status", "timetable_type"],
-    "timetable-days": ["timetable_id", "day_of_week", "shift_id", "is_off_day"],
-    "timetable-shift-rules": ["timetable_id", "shift_id", "effective_from", "effective_to"],
+    "timetable-days": ["timetable_id", "day_of_week", "default_shift_id", "is_working_day"],
+    "timetable-shift-rules": ["timetable_day_id", "shift_id", "priority_order", "max_employees", "is_primary"],
     "timetable-holiday-rules": ["timetable_id", "holiday_group_id", "action", "is_paid"],
-    "timetable-attendance-rules": ["timetable_id", "late_after_minutes", "absent_after_minutes", "half_day_after_minutes"],
     "timetable-rotations": ["name", "rotation_group_id", "status"],
     "timetable-rotation-rules": ["rotation_id", "shift_id", "day_index", "is_off_day"],
     "employee-timetables": ["employee_id", "timetable_id", "effective_from", "status"],
-    "timetable-generated-schedules": ["employee_id", "timetable_id", "schedule_date", "generated_from_rotation"],
+    "timetable-generated-schedules": ["employee_id", "schedule_date", "shift_id", "status"],
   }
 
   const preferred = preferredBySection[section] ?? ["name", "status", "created_at"]
@@ -1545,6 +1449,13 @@ function mapLookupOptions(field: FieldConfig, lookups: LookupState) {
         const day = readStringFromRecord(row, ["day_of_week", "dayOfWeek"])
         return day ? `${prettifyLabel(day)} (${id})` : `Timetable Day ${id}`
       })
+    case "timetable_day_shift_option_id":
+      return withLabel(lookups.timetableShiftOptions, ["id", "timetable_day_shift_option_id"], (row, id) => {
+        const shift = readNestedRecord(row, ["shift"])
+        const name = shift ? readStringFromRecord(shift, ["name", "code"]) : null
+        const day = readStringFromRecord(row, ["timetable_day_id", "timetableDayId"])
+        return `${name || `Shift option ${id}`}${day ? ` · Day ${day}` : ""}`
+      })
     case "rotation_id":
       return withLabel(lookups.timetableRotations, ["id", "rotation_id", "rotationId"], (row, id) => {
         const name = readStringFromRecord(row, ["name", "rotation_name", "rotationName"])
@@ -1975,6 +1886,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
           holidayGroupsResult,
           rotationGroupsResult,
           timetableDaysResult,
+          timetableShiftOptionsResult,
           timetableRotationsResult,
         ] = await Promise.allSettled([
           needed.has("branch_id")
@@ -2044,6 +1956,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
               sortOrder: "DESC",
             })
             : Promise.resolve({ rows: [] }),
+          needed.has("timetable_day_shift_option_id")
+            ? listTimetableResources(token, "timetable-shift-rules", { page: 1, limit: 500 })
+            : Promise.resolve({ rows: [] }),
           needed.has("rotation_id")
             ? listTimetableResources(token, "timetable-rotations", {
               page: 1,
@@ -2077,6 +1992,7 @@ export function ScheduleManagementView({ section }: { section: string }) {
           holidayGroups: resolveRows(holidayGroupsResult, "holiday groups"),
           rotationGroups: resolveRows(rotationGroupsResult, "rotation groups"),
           timetableDays: resolveRows(timetableDaysResult, "timetable days"),
+          timetableShiftOptions: resolveRows(timetableShiftOptionsResult, "timetable shift options"),
           timetableRotations: resolveRows(timetableRotationsResult, "timetable rotations"),
         })
 
@@ -2247,6 +2163,9 @@ export function ScheduleManagementView({ section }: { section: string }) {
         sortable: false,
         render: (row: AdminRecord) => {
           const rowId = String(resolveRowId(row, -1))
+          if (activeSection === "timetable-generated-schedules" && readStringFromRecord(row, ["status"]) === "PUBLISHED") {
+            return <span className="text-[10px] font-semibold uppercase text-emerald-700 dark:text-emerald-400">Published</span>
+          }
           return (
             <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
               <button
@@ -2717,6 +2636,19 @@ export function ScheduleManagementView({ section }: { section: string }) {
             ? `Created ${targetEmployeeIds.length} shift schedules successfully.`
             : "Created successfully."
         )
+      } else if (activeSection === "timetable-generated-schedules") {
+        const bulkEmployeeIds = Array.isArray(payload.employee_ids)
+          ? payload.employee_ids.map((entry) => String(entry).trim()).filter(Boolean)
+          : []
+        if (bulkEmployeeIds.length > 0) {
+          const basePayload = { ...payload }
+          delete basePayload.employee_ids
+          await createGeneratedSchedulesBulk(token, bulkEmployeeIds.map((employeeId) => ({ ...basePayload, employee_id: employeeId })))
+          setMessage(`Created ${bulkEmployeeIds.length} schedule drafts successfully.`)
+        } else {
+          await createScheduleRow(token, activeSection, payload)
+          setMessage("Schedule draft created successfully.")
+        }
       } else {
         await createScheduleRow(token, activeSection, payload)
         setMessage("Created successfully.")
@@ -3003,6 +2935,49 @@ export function ScheduleManagementView({ section }: { section: string }) {
         toolbarSummary={enhancedListSummary}
         toolbarActions={
           <>
+            {activeSection === "timetable-generated-schedules" && rows.some((row) => readStringFromRecord(row, ["status"]) === "DRAFT") ? (
+              <Button
+                appearance="outline"
+                size="small"
+                className="!h-8 !min-h-8"
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  const token = readStoredToken()
+                  const drafts = rows.filter((row) => readStringFromRecord(row, ["status"]) === "DRAFT")
+                  void Promise.allSettled(drafts.map((row) => publishGeneratedSchedule(token, String(row.id))))
+                    .then((results) => {
+                      const published = results.filter((result) => result.status === "fulfilled").length
+                      const failed = results.length - published
+                      setMessage(`Published ${published} schedule${published === 1 ? "" : "s"}${failed ? `; ${failed} failed` : ""}.`)
+                      void fetchRows()
+                    })
+                }}
+              >
+                Publish drafts ({rows.filter((row) => readStringFromRecord(row, ["status"]) === "DRAFT").length})
+              </Button>
+            ) : null}
+            {activeSection === "timetable-generated-schedules" && rows.some((row) => readStringFromRecord(row, ["status"]) === "PUBLISHED") ? (
+              <Button
+                appearance="outline"
+                size="small"
+                className="!h-8 !min-h-8"
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  const token = readStoredToken()
+                  const publishedRows = rows.filter((row) => readStringFromRecord(row, ["status"]) === "PUBLISHED")
+                  void Promise.allSettled(publishedRows.map((row) => unpublishGeneratedSchedule(token, String(row.id))))
+                    .then((results) => {
+                      const count = results.filter((result) => result.status === "fulfilled").length
+                      setMessage(`Unpublished ${count} schedule${count === 1 ? "" : "s"}.`)
+                      void fetchRows()
+                    })
+                }}
+              >
+                Unpublish published ({rows.filter((row) => readStringFromRecord(row, ["status"]) === "PUBLISHED").length})
+              </Button>
+            ) : null}
             {enhancedShiftList ? (
               <>
                 <div className="hidden sm:block">

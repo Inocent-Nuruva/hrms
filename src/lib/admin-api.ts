@@ -530,19 +530,14 @@ export type AttendanceResourceKey =
 
 export type ShiftResourceKey =
   | "shift-assignments"
-  | "shift-attendance-rules"
   | "shift-breaks"
-  | "shift-change-requests"
-  | "shift-overtime-rules"
   | "shift-rotation-groups"
   | "shift-rotation-rules"
   | "shift-schedules"
-  | "shift-templates"
   | "shifts";
 
 export type TimetableResourceKey =
   | "employee-timetables"
-  | "timetable-attendance-rules"
   | "timetable-days"
   | "timetable-generated-schedules"
   | "timetable-holiday-rules"
@@ -5134,6 +5129,29 @@ export async function listAttendanceCheckpoints(
   );
 }
 
+export type AttendanceCheckpointQrTokenResponse = {
+  token: string;
+  qr_image_data_url: string;
+  checkpoint_id: number;
+  expires_at: string;
+  valid_for_seconds: number;
+};
+
+export async function issueAttendanceCheckpointQrToken(
+  token: string,
+  checkpointId: string | number,
+  validForSeconds = 60,
+) {
+  return adminRequest<AttendanceCheckpointQrTokenResponse>(
+    `/api/attendance/checkpoints/${checkpointId}/qr-token`,
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify({ valid_for_seconds: validForSeconds }),
+    },
+  );
+}
+
 export async function listAttendanceGeofences(
   token: string,
   params: AttendanceQueryParams = {},
@@ -5746,6 +5764,8 @@ function timetableResourcePath(resource: TimetableResourceKey) {
   const resourcePathMap: Partial<Record<TimetableResourceKey, string>> = {
     timetables: "/api/attendance/schedule-definitions/timetables",
     "timetable-days": "/api/attendance/schedule-definitions/timetable-days",
+    "timetable-shift-rules": "/api/attendance/schedule-definitions/timetable-day-shift-options",
+    "timetable-generated-schedules": "/api/attendance/schedules/generated-schedules",
     "timetable-holiday-rules":
       "/api/attendance/schedule-definitions/timetable-holiday-rules",
     "timetable-rotations":
@@ -7233,6 +7253,28 @@ export async function createTimetableResource(
     method: "POST",
     token,
     body: data,
+  });
+}
+
+export async function publishGeneratedSchedule(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/attendance/schedules/generated-schedules/${id}/publish`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function unpublishGeneratedSchedule(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/attendance/schedules/generated-schedules/${id}/unpublish`, {
+    method: "PATCH",
+    token,
+  });
+}
+
+export async function createGeneratedSchedulesBulk(token: string, schedules: AdminRecord[]) {
+  return adminRequest<unknown>("/api/attendance/schedules/generated-schedules/bulk", {
+    method: "POST",
+    token,
+    body: schedules,
   });
 }
 

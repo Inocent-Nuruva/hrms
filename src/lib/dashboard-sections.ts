@@ -81,6 +81,7 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "Shift Management",
     items: [
       { title: "Shift Schedules", url: "/dashboard/attendance/shift-schedules" },
+      { title: "Generated Schedules", url: "/dashboard/attendance/timetable-generated-schedules" },
       { title: "Shifts", url: "/dashboard/attendance/shifts" },
       { title: "Shift Breaks", url: "/dashboard/attendance/shift-breaks" },
       { title: "Shift Assignments", url: "/dashboard/attendance/shift-assignments" },
@@ -98,6 +99,7 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Timetables", url: "/dashboard/attendance/timetables" },
       { title: "Timetable Days", url: "/dashboard/attendance/timetable-days" },
+      { title: "Timetable Shift Options", url: "/dashboard/attendance/timetable-shift-rules" },
       { title: "Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules" },
       { title: "Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations" },
       { title: "Employee Timetables", url: "/dashboard/attendance/employee-timetables" },

@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  createGeneratedSchedulesBulk,
   getEmployeeAttendanceAssignmentPresence,
   getShiftResourceById,
   listShiftResources,
   patchShiftResourceById,
+  listTimetableResources,
 } from "./admin-api"
 
 function jsonResponse(payload: unknown) {
@@ -142,6 +144,34 @@ describe("attendance schedule API helpers", () => {
           allow_early_checkin: true,
         }),
       }),
+    )
+  })
+
+  it("loads timetable shift options from the attendance schedule-definition API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ id: 4, shiftId: 17 }]))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await listTimetableResources("token", "timetable-shift-rules", { page: 1, limit: 100 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/attendance/schedule-definitions/timetable-day-shift-options?page=1&limit=100",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
+  it("posts bulk employee schedule drafts to the generated-schedules API", async () => {
+    const schedules = [
+      { employee_id: 101, schedule_date: "2026-10-20", shift_id: 17 },
+      { employee_id: 102, schedule_date: "2026-10-20", shift_id: 17 },
+    ]
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ id: 1 }, { id: 2 }]))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await createGeneratedSchedulesBulk("token", schedules)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/attendance/schedules/generated-schedules/bulk",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(schedules) }),
     )
   })
 })

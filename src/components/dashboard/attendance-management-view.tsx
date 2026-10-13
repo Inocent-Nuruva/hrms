@@ -10,6 +10,7 @@ import {
   InfoIcon,
   PencilIcon,
   PlusIcon,
+  QrCodeIcon,
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -82,6 +83,7 @@ import {
   activateAttendancePolicy,
   activateAttendanceGeofence,
   activateAttendanceWifiNetwork,
+  issueAttendanceCheckpointQrToken,
   deactivateAttendanceGeofence,
   deactivateAttendanceWifiNetwork,
   getAttendanceResourceById,
@@ -101,6 +103,7 @@ import {
   validateAttendanceGeofenceLocation,
   validateAttendanceWifiNetwork,
   type AdminRecord,
+  type AttendanceCheckpointQrTokenResponse,
   type AttendanceResourceKey,
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -2038,6 +2041,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
   const [selectedRow, setSelectedRow] = React.useState<AdminRecord | null>(null)
+  const [checkpointQr, setCheckpointQr] = React.useState<AttendanceCheckpointQrTokenResponse | null>(null)
+  const [checkpointQrBusy, setCheckpointQrBusy] = React.useState(false)
   const [mobilePunchReviewNote, setMobilePunchReviewNote] = React.useState("")
   const [mobilePunchActionBusy, setMobilePunchActionBusy] = React.useState<"" | "approve" | "reject">("")
   const [currentCompanyName, setCurrentCompanyName] = React.useState<string | null>(() =>
@@ -2638,6 +2643,26 @@ export function AttendanceManagementView({ section }: { section: string }) {
       setFormError(errorObject instanceof Error ? errorObject.message : "Activation failed.")
     } finally {
       setActivatingId("")
+    }
+  }
+
+  const onIssueCheckpointQr = async (row: AdminRecord) => {
+    if (activeSection !== "checkpoints" || !row.id) return
+    const token = readStoredToken()
+    if (!token) {
+      setFormError("Authentication required. Please log in again.")
+      return
+    }
+    setCheckpointQrBusy(true)
+    try {
+      const result = await issueAttendanceCheckpointQrToken(token, row.id as string | number, 60)
+      setCheckpointQr(result)
+      setFormError(null)
+      setMessage("A 60 second checkpoint QR code is ready.")
+    } catch (errorObject) {
+      setFormError(errorObject instanceof Error ? errorObject.message : "Could not generate checkpoint QR.")
+    } finally {
+      setCheckpointQrBusy(false)
     }
   }
 
@@ -3505,6 +3530,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
               if (!open) {
                 setMobilePunchReviewNote("")
                 setMobilePunchActionBusy("")
+                setCheckpointQr(null)
               }
             }}
             title={`${activeSection.replaceAll("-", " ")} details`}
@@ -3514,7 +3540,26 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 : "Review the selected attendance record in a readable operational summary."
             }
             row={selectedRow}
-            content={<AttendanceDetailsContent section={activeSection} row={selectedRow} lookupMaps={lookupMaps} />}
+            content={
+              <>
+                <AttendanceDetailsContent section={activeSection} row={selectedRow} lookupMaps={lookupMaps} />
+                {activeSection === "checkpoints" &&
+                checkpointQr &&
+                String(checkpointQr.checkpoint_id) === String(selectedRow?.id) ? (
+                  <div className="mt-4 grid justify-items-center gap-3 rounded-xl border p-4 text-center">
+                    <p className="text-sm font-medium">Rotating QR expires {new Date(checkpointQr.expires_at).toLocaleTimeString()}.</p>
+                    <img className="size-64 max-w-full rounded bg-white p-2" src={checkpointQr.qr_image_data_url} alt="Short-lived attendance checkpoint QR code" />
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-1.5 text-sm font-medium"
+                      onClick={() => void navigator.clipboard.writeText(checkpointQr.token)}
+                    >
+                      Copy QR token
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            }
             resolveLabel={(key) => key.replaceAll("_", " ")}
             resolveValue={(key, row) => resolveAttendanceCellValue(key, row, lookupMaps)}
             footer={
@@ -3578,6 +3623,18 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       }}
                     >
                       {activatingId === String(selectedRow.id) ? "Activating…" : "Activate checkpoint"}
+                    </Button>
+                  ) : null}
+                  {activeSection === "checkpoints" &&
+                  readStringFromRecord(selectedRow, ["type"])?.toUpperCase() === "QR" &&
+                  readStringFromRecord(selectedRow, ["status"])?.toUpperCase() === "ACTIVE" ? (
+                    <Button
+                      appearance="primary"
+                      icon={<QrCodeIcon className="size-4" />}
+                      disabled={checkpointQrBusy}
+                      onClick={() => void onIssueCheckpointQr(selectedRow)}
+                    >
+                      {checkpointQrBusy ? "Generating QR…" : "Generate rotating QR"}
                     </Button>
                   ) : null}
                   {activeSection === "geofences" || activeSection === "wifi-networks" ? (

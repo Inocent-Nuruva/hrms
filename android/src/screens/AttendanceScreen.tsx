@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Clock3, MapPin, Navigation2 } from 'lucide-react-native';
+import { ArrowRight, Clock3, MapPin, Navigation2, QrCode } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError } from '../lib/api';
@@ -31,6 +31,7 @@ import {
   AttendanceSelfieModal,
   type AttendanceSelfie,
 } from '../components/attendance/AttendanceSelfieModal';
+import { AttendanceQrScannerModal } from '../components/attendance/AttendanceQrScannerModal';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -51,6 +52,8 @@ export function AttendanceScreen({ auth }: Props) {
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const lineColor = isDark ? COLORS.outlineDark : COLORS.outline;
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
+  const [qrScannerVisible, setQrScannerVisible] = useState(false);
+  const [qrToken, setQrToken] = useState<string | null>(null);
   const [selfieError, setSelfieError] = useState<string | null>(null);
   const toast = useToast();
   const [fingerprintPulse] = React.useState(() => new Animated.Value(1));
@@ -72,6 +75,7 @@ export function AttendanceScreen({ auth }: Props) {
       const payload = await buildMobilePunchPayload({ overrideReason: 'New check in' });
       return api.checkIn({
         ...payload,
+        qrToken: qrToken ?? undefined,
         selfie: {
           fileName: selfie.fileName,
           fileSize: selfie.fileSize,
@@ -83,6 +87,7 @@ export function AttendanceScreen({ auth }: Props) {
     onSuccess: async () => {
       toast.success('Check-in recorded successfully.');
       setSelfieError(null);
+      setQrToken(null);
       setSelfieModalVisible(false);
       Vibration.vibrate([0, 24, 45, 34]);
       await Promise.allSettled([
@@ -103,10 +108,11 @@ export function AttendanceScreen({ auth }: Props) {
   const checkOutMutation = useMutation({
     mutationFn: async () => {
       const payload = await buildMobilePunchPayload({ overrideReason: 'New check out' });
-      return api.checkOut(payload);
+      return api.checkOut({ ...payload, qrToken: qrToken ?? undefined });
     },
     onSuccess: async () => {
       toast.success('Check-out recorded successfully.');
+      setQrToken(null);
       Vibration.vibrate([0, 24, 45, 34]);
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] }),
@@ -208,6 +214,14 @@ export function AttendanceScreen({ auth }: Props) {
               <Text style={[styles.navigationText, { color: textColor }]}>Punch history</Text>
               <ArrowRight size={16} color={mutedColor} />
             </Pressable>
+            <Pressable style={[styles.navigationRow, { borderBottomColor: lineColor }]} onPress={() => setQrScannerVisible(true)}>
+              <QrCode size={18} color={actionColor} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.navigationText, { color: textColor }]}>Scan attendance QR checkpoint</Text>
+                <Text style={[styles.locationHintText, { color: mutedColor }]}>{qrToken ? 'Checkpoint scanned and ready' : 'Scan before punching if your workplace requires it'}</Text>
+              </View>
+              <ArrowRight size={16} color={mutedColor} />
+            </Pressable>
             <Pressable style={styles.navigationRow} onPress={() => router.push('/(tabs)/location')}>
               <MapPin size={18} color={actionColor} />
               <Text style={[styles.navigationText, { color: textColor }]}>Work location</Text>
@@ -270,6 +284,15 @@ export function AttendanceScreen({ auth }: Props) {
         onSubmit={(selfie) => {
           setSelfieError(null);
           void checkInMutation.mutateAsync(selfie);
+        }}
+      />
+      <AttendanceQrScannerModal
+        visible={qrScannerVisible}
+        onClose={() => setQrScannerVisible(false)}
+        onScanned={(value) => {
+          setQrToken(value);
+          setQrScannerVisible(false);
+          toast.success('Attendance checkpoint scanned.');
         }}
       />
     </SafeAreaView>
