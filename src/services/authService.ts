@@ -1,3 +1,4 @@
+import { ApiResponseSchema, EmptyResponseSchema } from "@/lib/request-json";
 import type {
   AuthSessionRecord,
   AuthScope,
@@ -623,7 +624,7 @@ export const authService = {
       password: payload.password,
     };
 
-    const response = await apiRequest<unknown>("/api/auth/login", {
+    const response = await apiRequest("/api/auth/login", ApiResponseSchema, {
       method: "POST",
       body,
     });
@@ -632,7 +633,7 @@ export const authService = {
 
   async verifyOtp(payload: VerifyOtpRequest) {
     // Backend Complete2FALoginDto accepts tempToken + code (login flow).
-    const response = await apiRequest<unknown>("/api/auth/2fa/complete-login", {
+    const response = await apiRequest("/api/auth/2fa/complete-login", ApiResponseSchema, {
       method: "POST",
       body: {
         tempToken: payload.tempToken,
@@ -643,7 +644,7 @@ export const authService = {
   },
 
   async setupTwoFactor(token: string): Promise<TwoFactorSetupResponse> {
-    const response = await apiRequest<unknown>("/api/users/2fa/setup", {
+    const response = await apiRequest("/api/users/2fa/setup", ApiResponseSchema, {
       method: "POST",
       token,
     });
@@ -661,7 +662,7 @@ export const authService = {
   },
 
   async verifyTwoFactor(token: string, code: string) {
-    return apiRequest<unknown>("/api/users/2fa/verify", {
+    return apiRequest("/api/users/2fa/verify", ApiResponseSchema, {
       method: "POST",
       token,
       body: { token: code },
@@ -669,7 +670,7 @@ export const authService = {
   },
 
   async disableTwoFactor(token: string, code: string) {
-    return apiRequest<unknown>("/api/users/2fa/disable", {
+    return apiRequest("/api/users/2fa/disable", ApiResponseSchema, {
       method: "POST",
       token,
       body: { token: code },
@@ -677,8 +678,8 @@ export const authService = {
   },
 
   async regenerateBackupCodes(token: string, code: string): Promise<string[]> {
-    const response = await apiRequest<unknown>(
-      "/api/users/2fa/backup-codes/regenerate",
+    const response = await apiRequest(
+      "/api/users/2fa/backup-codes/regenerate", ApiResponseSchema,
       {
         method: "POST",
         token,
@@ -689,7 +690,7 @@ export const authService = {
   },
 
   async getSecurityFlags(token: string): Promise<UserSecurityFlags> {
-    const response = await apiRequest<unknown>("/api/users/me", {
+    const response = await apiRequest("/api/users/me", ApiResponseSchema, {
       method: "GET",
       token,
     });
@@ -754,7 +755,7 @@ export const authService = {
     if (!normalizedEmail) {
       throw new Error("Email is required.");
     }
-    await apiRequest<unknown>("/api/auth/resend-verification", {
+    await apiRequest("/api/auth/resend-verification", ApiResponseSchema, {
       method: "POST",
       body: { email: normalizedEmail },
     });
@@ -766,7 +767,7 @@ export const authService = {
       throw new Error("Verification token is missing.");
     }
     const searchParams = new URLSearchParams({ token: normalizedToken });
-    await apiRequest<unknown>(`/api/auth/verify-email?${searchParams.toString()}`, {
+    await apiRequest(`/api/auth/verify-email?${searchParams.toString()}`, ApiResponseSchema, {
       method: "GET",
     });
   },
@@ -776,7 +777,7 @@ export const authService = {
     if (!accessToken) {
       throw new Error("Authentication required. Please sign in again.");
     }
-    await apiRequest<unknown>("/api/auth/logout-all", {
+    await apiRequest("/api/auth/logout-all", ApiResponseSchema, {
       method: "POST",
       token: accessToken,
     });
@@ -787,7 +788,7 @@ export const authService = {
     if (!accessToken) {
       throw new Error("Authentication required. Please sign in again.");
     }
-    const response = await apiRequest<unknown>("/api/auth/sessions", {
+    const response = await apiRequest("/api/auth/sessions", ApiResponseSchema, {
       method: "GET",
       token: accessToken,
     });
@@ -803,7 +804,7 @@ export const authService = {
     if (!normalizedSessionId) {
       throw new Error("Session id is required.");
     }
-    await apiRequest<unknown>(`/api/auth/sessions/${encodeURIComponent(normalizedSessionId)}`, {
+    await apiRequest(`/api/auth/sessions/${encodeURIComponent(normalizedSessionId)}`, ApiResponseSchema, {
       method: "DELETE",
       token: accessToken,
     });
@@ -817,7 +818,7 @@ export const authService = {
     if (!Number.isFinite(companyId) || companyId <= 0) {
       throw new Error("A valid company id is required.");
     }
-    const response = await apiRequest<unknown>("/api/auth/switch-company", {
+    const response = await apiRequest("/api/auth/switch-company", ApiResponseSchema, {
       method: "POST",
       token: accessToken,
       body: { company_id: companyId },
@@ -826,7 +827,7 @@ export const authService = {
   },
 
   async refresh(refreshToken: string): Promise<RefreshTokenResponse> {
-    const response = await apiRequest<unknown>("/api/auth/refresh", {
+    const response = await apiRequest("/api/auth/refresh", ApiResponseSchema, {
       method: "POST",
       body: { refresh_token: refreshToken },
     });
@@ -841,7 +842,7 @@ export const authService = {
   },
 
   changePassword(payload: ChangePasswordRequest, token: string) {
-    return apiRequest<unknown>("/api/users/me/change-password", {
+    return apiRequest("/api/users/me/change-password", ApiResponseSchema, {
       method: "POST",
       body: {
         old_password: payload.currentPassword,
@@ -861,7 +862,7 @@ export const authService = {
     if (!email) {
       throw new Error("Email is required.");
     }
-    await apiRequest<unknown>("/api/auth/forgot-password", {
+    await apiRequest("/api/auth/forgot-password", ApiResponseSchema, {
       method: "POST",
       body: { email },
     });
@@ -882,7 +883,7 @@ export const authService = {
       throw new Error("Password must be at least 8 characters.");
     }
     try {
-      await apiRequest<unknown>("/api/auth/reset-password", {
+      await apiRequest("/api/auth/reset-password", ApiResponseSchema, {
         method: "POST",
         body: {
           token,
@@ -902,7 +903,7 @@ export const authService = {
   },
 
   async getCurrentUser(token: string) {
-    const response = await apiRequest<unknown>("/api/users/me", {
+    const response = await apiRequest("/api/users/me", ApiResponseSchema, {
       method: "GET",
       token,
     });
@@ -924,7 +925,7 @@ export const authService = {
 
     // Session is identified by the Bearer access token. Include refresh_token
     // only when we still have one — a blank refresh must not skip logout.
-    await apiRequest<void>("/api/auth/logout", {
+    await apiRequest("/api/auth/logout", EmptyResponseSchema, {
       method: "POST",
       token: accessToken,
       body: refreshToken ? { refresh_token: refreshToken } : {},

@@ -13,6 +13,7 @@ export default function HomeTab() {
         if (tab === 'profile') router.push('/(tabs)/profile');
         if (tab === 'attendance') router.push('/(tabs)/attendance');
         if (tab === 'leave') router.push('/(tabs)/leave');
+        if (tab === 'calendar') router.push({ pathname: '/(tabs)/leave', params: { tab: 'holidays' } });
       }}
     />
   );

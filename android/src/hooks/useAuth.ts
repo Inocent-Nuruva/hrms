@@ -8,6 +8,7 @@ import {
   setBiometricEnabled as storeBiometricEnabled,
 } from '../lib/biometrics';
 import { normalizeSingle } from '../lib/api';
+import { unregisterRemotePushDeviceAsync } from '../lib/notification-settings';
 
 type AnyRecord = Record<string, unknown>;
 type AuthEmployee = AnyRecord & {
@@ -247,6 +248,7 @@ function useProvideAuth() {
   const logout = useCallback(async () => {
     const rt = (await SecureStore.getItemAsync('hrms.refreshToken')) || undefined;
     const biometricStatus = await getBiometricStatus();
+    await unregisterRemotePushDeviceAsync().catch(() => {});
     await api.logout(rt);
     if (!biometricStatus.enabled) {
       await clearTokens();

@@ -310,6 +310,51 @@ export const FINANCE_ROUTE_PERMISSION: PermissionRequirement = {
     "employee_finance:settlements",
     "employee_finance:reports",
     "employee_finance:reconciliation",
+    "employee_finance:applications:management-approve",
+    "employee_finance:settlements:approve",
+    "employee_finance:adjustments",
+    "employee_finance:adjustments:approve",
+    "employee_finance:templates",
+    "employee_finance:integrations",
+    "employee_finance:migration",
+  ],
+  mode: "any",
+}
+
+/** Deferment, reschedule, adjustment, and exit-recovery queues. */
+export const FINANCE_SERVICING_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FINANCE_MODULE_WIDE,
+    "employee_finance:settlements",
+    "employee_finance:settlements:approve",
+    "employee_finance:adjustments",
+    "employee_finance:adjustments:approve",
+    "employee_finance:reconciliation",
+  ],
+  mode: "any",
+}
+
+export const FINANCE_PAYROLL_PERMISSION: PermissionRequirement = {
+  permissions: [...FINANCE_MODULE_WIDE, "employee_finance:payroll"],
+  mode: "any",
+}
+
+/** Bank and ERP connections, journal and payment files, and loan migration. */
+export const FINANCE_INTEGRATIONS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FINANCE_MODULE_WIDE,
+    "employee_finance:integrations",
+    "employee_finance:migration",
+  ],
+  mode: "any",
+}
+
+/** Sanction letter template and approval delegations. */
+export const FINANCE_SETTINGS_PERMISSION: PermissionRequirement = {
+  permissions: [
+    ...FINANCE_MODULE_WIDE,
+    "employee_finance:templates",
+    "employee_finance:delegations",
   ],
   mode: "any",
 }
@@ -1123,6 +1168,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/finance/applications": FINANCE_ROUTE_PERMISSION,
   "/dashboard/finance/accounts": FINANCE_ACCOUNTS_PERMISSION,
   "/dashboard/finance/reports": FINANCE_ROUTE_PERMISSION,
+  "/dashboard/finance/servicing": FINANCE_SERVICING_PERMISSION,
+  "/dashboard/finance/payroll": FINANCE_PAYROLL_PERMISSION,
+  "/dashboard/finance/settings": FINANCE_SETTINGS_PERMISSION,
+  "/dashboard/finance/integrations": FINANCE_INTEGRATIONS_PERMISSION,
   "/dashboard/activities": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/overview": ACTIVITY_ROUTE_PERMISSION,
   "/dashboard/activities/reports": ACTIVITY_ROUTE_PERMISSION,

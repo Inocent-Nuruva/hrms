@@ -320,7 +320,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
     const challengeEmail = (twoFactorAccountEmail || email).trim();
     return (
       <div className="w-full">
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} noValidate className="space-y-3">
           <div className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
             <div className="min-w-0 space-y-0.5">
@@ -388,7 +388,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
 
   return (
     <div className="w-full">
-      <form onSubmit={handleSubmit} className="space-y-3">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3">
         <div
           className="space-y-1"
           style={{

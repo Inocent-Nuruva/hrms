@@ -1,0 +1,111 @@
+.tabNav {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--font-comfortaa), "Comfortaa", sans-serif;
+}
+
+.tabList:global(.fui-TabList) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+  padding: 4px;
+  overflow: visible;
+  border: 1px solid var(--colorNeutralStroke2);
+  border-radius: 8px;
+  background: var(--colorNeutralBackground2);
+}
+
+.tab:global(.fui-Tab) {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: auto;
+  min-height: 36px;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  overflow: visible;
+  color: var(--colorNeutralForeground1);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  white-space: normal;
+}
+
+.tab:global(.fui-Tab) :global(.fui-Tab__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.tab:global(.fui-Tab) :global(.fui-Tab__content--reserved-space) {
+  display: none;
+}
+
+.tab:global(.fui-Tab):hover {
+  background: var(--colorNeutralBackground1Hover);
+}
+
+.tabNumber {
+  display: inline-flex;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--colorNeutralBackground3);
+  color: var(--colorNeutralForeground2);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tabNumber[data-state="active"] {
+  background: var(--colorBrandBackground);
+  color: var(--colorNeutralForegroundOnBrand);
+}
+
+.tabNumber[data-state="done"] {
+  background: var(--colorPaletteGreenBackground1);
+  color: var(--colorPaletteGreenForeground1);
+}
+
+.tabNumber svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tabTitle {
+  min-width: 0;
+  font-weight: 600;
+  line-height: 16px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.contentCard:global(.fui-Card) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: fit-content;
+  gap: var(--spacingVerticalS);
+  padding: var(--spacingHorizontalS);
+}
+
+@media (max-width: 720px) {
+  .tabList:global(.fui-TabList) {
+    grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
+  }
+}

@@ -1,20 +1,33 @@
 "use client";
 
+import { WorkflowGuide } from "@/components/dashboard/workflow-guide";
+import { ValidatedWorkflowForm } from "@/components/dashboard/validated-workflow-form";
+import { employeeKpiFormSchema } from "@/lib/workflow-schemas";
+import { useWorkflowRequest } from "@/hooks/use-workflow-request";
+
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import * as React from "react";
 import Link from "next/link";
-import { Badge, Button as FluentButton, Input as FluentInput, ProgressBar } from "@fluentui/react-components";
+import {
+  Badge,
+  Button as FluentButton,
+  Input as FluentInput,
+  ProgressBar,
+} from "@fluentui/react-components";
 import {
   CheckIcon,
   PlusIcon,
   RefreshCwIcon,
   RotateCcwIcon,
-  SearchIcon,
   XIcon,
 } from "lucide-react";
-import { Filter24Regular, Search20Regular, Target20Regular as KpiIcon } from "@fluentui/react-icons";
+import {
+  Filter24Regular,
+  Search20Regular,
+  Target20Regular as KpiIcon,
+} from "@fluentui/react-icons";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
@@ -26,7 +39,11 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { FluentSelect } from "@/components/ui/fluent-select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   StatusChip,
@@ -53,6 +70,7 @@ import {
   listPerformancePeriods,
   listMyEmployeeKpis,
   listMyPerformanceAssignments,
+  beginManagerEmployeeKpiReview,
   reviewManagerEmployeeKpi,
   submitMyEmployeeKpis,
   updateMyEmployeeKpi,
@@ -100,6 +118,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [reviewRefresh, setReviewRefresh] = React.useState(0);
+  const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
@@ -110,15 +129,19 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     progress_source: "MANUAL",
   });
 
+  const { begin, invalidate, credential } = useWorkflowRequest(mode);
+
   const load = React.useCallback(async () => {
-    const accessToken = token();
+    const { commit, current } = begin();
+    void current;
+    const accessToken = credential?.trim() || token();
     if (!accessToken) {
-      setError("Authentication required. Please log in again.");
-      setLoading(false);
+      commit(() => setError("Authentication required. Please log in again."));
+      commit(() => setLoading(false));
       return;
     }
-    setLoading(true);
-    setError(null);
+    commit(() => setLoading(true));
+    commit(() => setError(null));
     try {
       if (mode === "manager") {
         const [kpis, team, availablePeriods] = await Promise.all([
@@ -126,10 +149,10 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           listManagerKpiAssignees(accessToken),
           listPerformancePeriods(accessToken),
         ]);
-        setRows(kpis);
-        setEmployees(team);
-        setPeriods(
-          availablePeriods.filter(canProposeEmployeeKpis),
+        commit(() => setRows(kpis));
+        commit(() => setEmployees(team));
+        commit(() =>
+          setPeriods(availablePeriods.filter(canProposeEmployeeKpis)),
         );
       } else {
         const [kpis, assignments] = await Promise.all([
@@ -137,30 +160,34 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           listMyPerformanceAssignments(accessToken),
         ]);
         const allPeriods = collectEmployeeKpiPeriods([...assignments, ...kpis]);
-        setRows(kpis);
-        setPeriods(allPeriods);
+        commit(() => setRows(kpis));
+        commit(() => setPeriods(allPeriods));
         const writablePeriod = firstWritableEmployeeKpiPeriod(allPeriods);
-        setPeriodId(
-          (current) =>
-            current ||
-            employeeKpiPeriodId(writablePeriod) ||
-            employeeKpiPeriodId(allPeriods[0]) ||
-            "",
+        commit(() =>
+          setPeriodId(
+            (current) =>
+              current ||
+              employeeKpiPeriodId(writablePeriod) ||
+              employeeKpiPeriodId(allPeriods[0]) ||
+              "",
+          ),
         );
       }
     } catch (cause) {
-      setError(
-        isPermissionError(cause)
-          ? "Your account does not have permission to view this KPI workflow. Ask an administrator to grant the required performance KPI permissions."
-          : cause instanceof Error
-            ? cause.message
-            : "Could not load KPIs.",
+      commit(() =>
+        setError(
+          isPermissionError(cause)
+            ? "Your account does not have permission to view this KPI workflow. Ask an administrator to grant the required performance KPI permissions."
+            : cause instanceof Error
+              ? cause.message
+              : "Could not load KPIs.",
+        ),
       );
     } finally {
-      setLoading(false);
-      setReviewRefresh((current) => current + 1);
+      commit(() => setLoading(false));
+      commit(() => setReviewRefresh((current) => current + 1));
     }
-  }, [mode]);
+  }, [begin, credential, mode]);
 
   React.useEffect(() => {
     forgetForbiddenRoute("/dashboard/me/performance/kpis");
@@ -168,7 +195,8 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
 
   React.useEffect(() => {
     void load();
-  }, [load]);
+    return invalidate;
+  }, [load, invalidate]);
 
   const visibleRows = React.useMemo(
     () =>
@@ -189,8 +217,12 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     const query = searchTerm.trim().toLocaleLowerCase();
     if (!query) return visibleRows;
     return visibleRows.filter((row) =>
-      [readString(row, ["title"]), readString(row, ["description"]), readString(row, ["status"]), readString(row, ["unit"])]
-        .some((value) => value.toLocaleLowerCase().includes(query)),
+      [
+        readString(row, ["title"]),
+        readString(row, ["description"]),
+        readString(row, ["status"]),
+        readString(row, ["unit"]),
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
     );
   }, [searchTerm, visibleRows]);
   const totalWeight = visibleRows
@@ -264,8 +296,16 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
         ["progressSource", "progress_source"],
         "MANUAL",
       ),
-      scoring_type: readString(row, ["scoringType", "scoring_type"], "NUMERIC_TARGET"),
-      measurement_direction: readString(row, ["measurementDirection", "measurement_direction"], "HIGHER_IS_BETTER"),
+      scoring_type: readString(
+        row,
+        ["scoringType", "scoring_type"],
+        "NUMERIC_TARGET",
+      ),
+      measurement_direction: readString(
+        row,
+        ["measurementDirection", "measurement_direction"],
+        "HIGHER_IS_BETTER",
+      ),
     });
     setOpen(true);
   }
@@ -287,11 +327,71 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     setOpen(true);
   }
 
+  const beginReview = React.useCallback(
+    async (row: AdminRecord) => {
+      const accessToken = token();
+      const id = rowId(row);
+      if (!accessToken || !id) return;
+      setSaving(true);
+      try {
+        await beginManagerEmployeeKpiReview(accessToken, id);
+        toast.success("KPI review started.");
+        await load();
+      } catch (cause) {
+        toast.error(
+          cause instanceof Error
+            ? cause.message
+            : "Could not start KPI review.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [load],
+  );
+
+  const formPeriod = periods.find(
+    (period) =>
+      employeeKpiPeriodId(period) === (form.performance_period_id || periodId),
+  );
+  const kpiFormInput = {
+    ...form,
+    performance_period_id: form.performance_period_id || periodId,
+    period_start_date: readString(formPeriod ?? {}, [
+      "startDate",
+      "start_date",
+    ]),
+    period_end_date: readString(formPeriod ?? {}, ["endDate", "end_date"]),
+  };
+
+  const { begin: beginMutation } = useWorkflowRequest(
+    `${mode}:${JSON.stringify(kpiFormInput)}`,
+  );
+  React.useEffect(() => {
+    setSaving(false);
+  }, [credential, mode, beginMutation]);
+
   async function save() {
+    const validationResult = employeeKpiFormSchema(
+      dialogMode,
+      mode === "manager",
+    ).safeParse(kpiFormInput);
+    if (!validationResult.success) {
+      setFormError(
+        validationResult.error.issues
+          .map(
+            (issue) => issue.path.map(String).join(".") + ": " + issue.message,
+          )
+          .join("; "),
+      );
+      return;
+    }
+    if (saving) return;
     const accessToken = token();
     if (!accessToken) return;
+    const { current: isMutationCurrent } = beginMutation();
     setSaving(true);
-    setError(null);
+    setFormError(null);
     try {
       if (dialogMode === "review") {
         const id = rowId(selected ?? {});
@@ -307,6 +407,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           form.decision as "APPROVE" | "RETURN" | "REJECT",
           form.comment || undefined,
         );
+        if (!isMutationCurrent()) return;
         toast.success(`KPI ${form.decision.toLowerCase()}.`);
       } else if (dialogMode === "actual") {
         const id = rowId(selected ?? {});
@@ -317,6 +418,7 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           id,
           Number(form.actual_value),
         );
+        if (!isMutationCurrent()) return;
         toast.success("KPI progress updated.");
       } else {
         if (
@@ -334,16 +436,27 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           title: form.title.trim(),
           description: form.description.trim(),
           measurement_type: form.measurement_type,
-          target_value:
-            form.target_value === "" ? undefined : Number(form.target_value),
+          target_value: !form.target_value
+            ? undefined
+            : Number(form.target_value),
           unit: form.unit || undefined,
           weight: Number(form.weight),
           start_date: form.start_date || undefined,
           due_date: form.due_date,
           progress_source: form.progress_source,
           scoring_type: form.scoring_type || "NUMERIC_TARGET",
-          measurement_direction: form.measurement_direction || "HIGHER_IS_BETTER",
-          formula_config: form.scoring_type === "MIXED" ? { numeric_share: Number(form.numeric_share || 0.5) } : form.scoring_type === "MILESTONE" ? { total_milestones: Number(form.total_milestones || form.target_value || 1) } : undefined,
+          measurement_direction:
+            form.measurement_direction || "HIGHER_IS_BETTER",
+          formula_config:
+            form.scoring_type === "MIXED"
+              ? { numeric_share: Number(form.numeric_share || 0.5) }
+              : form.scoring_type === "MILESTONE"
+                ? {
+                    total_milestones: Number(
+                      form.total_milestones || form.target_value || 1,
+                    ),
+                  }
+                : undefined,
         };
         const id = rowId(selected ?? {});
         if (dialogMode === "create" && mode === "manager") {
@@ -352,25 +465,30 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
             ...payload,
             employee_id: Number(form.employee_id),
           });
+          if (!isMutationCurrent()) return;
           toast.success("KPI assigned and submitted for approval.");
         } else if (dialogMode === "edit" && id) {
           delete payload.performance_period_id;
           await updateMyEmployeeKpi(accessToken, id, payload);
+          if (!isMutationCurrent()) return;
           toast.success("KPI updated.");
         } else {
           await createMyEmployeeKpi(accessToken, payload);
+          if (!isMutationCurrent()) return;
           toast.success("KPI draft created.");
         }
       }
       setOpen(false);
       await load();
+      if (!isMutationCurrent()) return;
     } catch (cause) {
+      if (!isMutationCurrent()) return;
       const message =
         cause instanceof Error ? cause.message : "Could not save KPI.";
-      setError(message);
+      setFormError(message);
       toast.error(message);
     } finally {
-      setSaving(false);
+      if (isMutationCurrent()) setSaving(false);
     }
   }
 
@@ -391,29 +509,32 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
   }
 
-  async function removeKpi(row: AdminRecord) {
-    const id = rowId(row);
-    if (
-      !id ||
-      !window.confirm(`Delete KPI ${readString(row, ["title"], `#${id}`)}?`)
-    )
-      return;
-    const accessToken = token();
-    if (!accessToken) return;
-    setSaving(true);
-    try {
-      await deleteMyEmployeeKpi(accessToken, id);
-      toast.success("KPI deleted.");
-      await load();
-    } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "Could not delete KPI.";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  const removeKpi = React.useCallback(
+    async (row: AdminRecord) => {
+      const id = rowId(row);
+      if (
+        !id ||
+        !window.confirm(`Delete KPI ${readString(row, ["title"], `#${id}`)}?`)
+      )
+        return;
+      const accessToken = token();
+      if (!accessToken) return;
+      setSaving(true);
+      try {
+        await deleteMyEmployeeKpi(accessToken, id);
+        toast.success("KPI deleted.");
+        await load();
+      } catch (cause) {
+        const message =
+          cause instanceof Error ? cause.message : "Could not delete KPI.";
+        setError(message);
+        toast.error(message);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [load],
+  );
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     const base: Column<AdminRecord>[] = [
@@ -482,6 +603,19 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
             ].includes(status);
             return reviewable ? (
               <div className="flex flex-wrap gap-1">
+                {["SUBMITTED", "RESUBMITTED"].includes(status) ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={saving}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void beginReview(row);
+                    }}
+                  >
+                    Begin review
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={actionButtonClass}
@@ -547,17 +681,24 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
           if (status === "APPROVED") {
             return (
               <div className="flex flex-wrap gap-1">
-                {readString(row, ["progressSource", "progress_source"]) === "MANUAL" ? <button
-                  type="button"
+                {readString(row, ["progressSource", "progress_source"]) ===
+                "MANUAL" ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      showActual(row);
+                    }}
+                  >
+                    Update actual
+                  </button>
+                ) : null}
+                <Link
                   className={actionButtonClass}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    showActual(row);
-                  }}
+                  href={`/dashboard/me/activities/today?create=1&kpi=${encodeURIComponent(rowId(row))}`}
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  Update actual
-                </button> : null}
-                <Link className={actionButtonClass} href={`/dashboard/me/activities/today?create=1&kpi=${encodeURIComponent(rowId(row))}`} onClick={(event) => event.stopPropagation()}>
                   Add linked activity
                 </Link>
               </div>
@@ -568,53 +709,221 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
       },
     ];
     return base;
-  }, [mode]);
+  }, [mode, beginReview, removeKpi, saving]);
+
+  if (loading && !open)
+    return (
+      <section aria-busy="true" className="flex flex-col gap-3">
+        <FluentLoadingIndicator />
+        <p role="status">
+          Loading this workflow and checking its available actions…
+        </p>
+      </section>
+    );
+
+  if (error && !loading && !open)
+    return (
+      <section className="flex flex-col gap-4">
+        <WorkflowGuide
+          title="This workflow needs attention"
+          unavailable={error}
+          steps={[
+            "Resolve the permission, setup, or network issue described above.",
+            "Reload this view before continuing.",
+          ]}
+        />
+        <button
+          type="button"
+          className={secondaryButtonClass}
+          onClick={() => void load()}
+        >
+          Reload workflow
+        </button>
+      </section>
+    );
 
   return (
     <section className="space-y-5 pt-4">
+      <WorkflowGuide
+        title="Build and review the KPI set"
+        steps={[
+          "Choose an available performance period.",
+          "Create measurable KPIs with due dates inside the cycle.",
+          "Make the complete set total exactly 100% before submission.",
+          "The manager approves or returns KPIs with comments.",
+          "Update actual values and complete mid-cycle and final reviews.",
+        ]}
+        unavailable={error}
+      />
       {mode === "self" ? (
         <>
           <header className="border-b border-border pb-4">
             <div className="flex flex-wrap items-center justify-end gap-2">
-                {periods.length > 0 ? <FluentButton className="justify-center" appearance="primary" icon={<PlusIcon className="size-4" />} onClick={showCreate} disabled={!canCreateKpi || loading} title={!canCreateKpi ? unavailableReason : undefined} aria-describedby={!canCreateKpi && !loading ? "kpi-create-unavailable" : undefined}>New KPI</FluentButton> : null}
-                {periods.length > 0 ? <FluentButton className="justify-center" appearance="secondary" onClick={() => void submitPeriod()} disabled={!periodId || saving || totalWeight !== 100 || visibleRows.length === 0}>Submit set · {totalWeight}%</FluentButton> : null}
-                <div className="flex items-center gap-1">
-                  <Popover>
-                  <PopoverTrigger className="inline-flex items-center justify-center p-1 text-muted-foreground transition-colors hover:text-primary" aria-label="Filter KPIs" title="Filter KPIs">
+              {periods.length > 0 ? (
+                <FluentButton
+                  className="justify-center"
+                  appearance="primary"
+                  icon={<PlusIcon className="size-4" />}
+                  onClick={showCreate}
+                  disabled={!canCreateKpi || loading}
+                  title={!canCreateKpi ? unavailableReason : undefined}
+                  aria-describedby={
+                    !canCreateKpi && !loading
+                      ? "kpi-create-unavailable"
+                      : undefined
+                  }
+                >
+                  New KPI
+                </FluentButton>
+              ) : null}
+              {periods.length > 0 ? (
+                <FluentButton
+                  className="justify-center"
+                  appearance="secondary"
+                  onClick={() => void submitPeriod()}
+                  disabled={
+                    !periodId ||
+                    saving ||
+                    totalWeight !== 100 ||
+                    visibleRows.length === 0
+                  }
+                >
+                  Submit set · {totalWeight}%
+                </FluentButton>
+              ) : null}
+              <div className="flex items-center gap-1">
+                <Popover>
+                  <PopoverTrigger
+                    className="inline-flex items-center justify-center p-1 text-muted-foreground transition-colors hover:text-primary"
+                    aria-label="Filter KPIs"
+                    title="Filter KPIs"
+                  >
                     <Filter24Regular className="size-5" />
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] space-y-4 p-4">
+                  <PopoverContent
+                    align="start"
+                    className="w-[min(22rem,calc(100vw-2rem))] space-y-4 p-4"
+                  >
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Filter KPIs</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Search goals or choose a performance period.</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Filter KPIs
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Search goals or choose a performance period.
+                      </p>
                     </div>
                     <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                       Search
-                      <FluentInput className="w-full" contentBefore={<Search20Regular className="block size-5" aria-hidden="true" />} placeholder="Search KPIs" aria-label="Search KPIs" value={searchTerm} onChange={(event) => setSearchTerm(event.currentTarget.value)} />
+                      <FluentInput
+                        className="w-full"
+                        contentBefore={
+                          <Search20Regular
+                            className="block size-5"
+                            aria-hidden="true"
+                          />
+                        }
+                        placeholder="Search KPIs"
+                        aria-label="Search KPIs"
+                        value={searchTerm}
+                        onChange={(event) =>
+                          setSearchTerm(event.currentTarget.value)
+                        }
+                      />
                     </label>
                     <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                       Performance period
-                      <FluentSelect ariaLabel="Performance period" className="w-full" value={periodId} onChange={setPeriodId} disabled={!periods.length} placeholder={periods.length ? "All periods" : "No periods assigned"} options={[...(periods.length ? [{ value: "", label: "All periods" }] : []), ...periods.map((period) => ({ value: rowId(period), label: `${optionLabel(period)} · ${readString(period, ["status"])}` }))]} />
+                      <FluentSelect
+                        ariaLabel="Performance period"
+                        className="w-full"
+                        value={periodId}
+                        onChange={setPeriodId}
+                        disabled={!periods.length}
+                        placeholder={
+                          periods.length ? "All periods" : "No periods assigned"
+                        }
+                        options={[
+                          ...(periods.length
+                            ? [{ value: "", label: "All periods" }]
+                            : []),
+                          ...periods.map((period) => ({
+                            value: rowId(period),
+                            label: `${optionLabel(period)} · ${readString(period, ["status"])}`,
+                          })),
+                        ]}
+                      />
                     </label>
                   </PopoverContent>
-                  </Popover>
-                  <FluentButton className="!min-w-0 !p-1" appearance="subtle" icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} onClick={() => void load()} disabled={loading} aria-label="Refresh KPIs" title="Refresh KPIs" />
-                </div>
+                </Popover>
+                <FluentButton
+                  className="!min-w-0 !p-1"
+                  appearance="subtle"
+                  icon={
+                    loading ? (
+                      <FluentLoadingIndicator className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCwIcon className="size-4" />
+                    )
+                  }
+                  onClick={() => void load()}
+                  disabled={loading}
+                  aria-label="Refresh KPIs"
+                  title="Refresh KPIs"
+                />
+              </div>
             </div>
           </header>
 
-          {periods.length > 0 ? <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4 text-sm">
-            <p className="text-muted-foreground"><span className="font-semibold text-foreground">Workflow</span><span className="mx-2 text-primary">Set goals → get approval → link activities → track results</span></p>
-            <Link href="/dashboard/me/activities/today" className="text-sm font-semibold text-primary hover:underline">Open my activities</Link>
-          </div> : null}
+          {periods.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4 text-sm">
+              <p className="text-muted-foreground">
+                <span className="font-semibold text-foreground">Workflow</span>
+                <span className="mx-2 text-primary">
+                  Set goals → get approval → link activities → track results
+                </span>
+              </p>
+              <Link
+                href="/dashboard/me/activities/today"
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Open my activities
+              </Link>
+            </div>
+          ) : null}
 
-          {error ? <p role="alert" className="border-l-2 border-rose-500 py-2 pl-3 text-sm text-rose-700">{error}</p> : null}
-          {selectedPeriod && readString(selectedPeriod, ["kpiPhase", "kpi_phase"]) === "REOPENED" ? <p className="border-l-2 border-amber-500 py-2 pl-3 text-sm text-amber-900">This KPI cycle was reopened. {readString(selectedPeriod, ["kpiReopenReason", "kpi_reopen_reason"])}</p> : null}
+          {error ? (
+            <p
+              role="alert"
+              className="border-l-2 border-rose-500 py-2 pl-3 text-sm text-rose-700"
+            >
+              {error}
+            </p>
+          ) : null}
+          {selectedPeriod &&
+          readString(selectedPeriod, ["kpiPhase", "kpi_phase"]) ===
+            "REOPENED" ? (
+            <p className="border-l-2 border-amber-500 py-2 pl-3 text-sm text-amber-900">
+              This KPI cycle was reopened.{" "}
+              {readString(selectedPeriod, [
+                "kpiReopenReason",
+                "kpi_reopen_reason",
+              ])}
+            </p>
+          ) : null}
 
           {!loading && !error && periods.length > 0 && !canCreateKpi ? (
-            <div id="kpi-create-unavailable" className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-4 text-sm">
+            <div
+              id="kpi-create-unavailable"
+              className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-4 text-sm"
+            >
               <p className="text-muted-foreground">{unavailableReason}</p>
-              {canManagePerformance ? <Link href="/dashboard/performance/setup" className="font-semibold text-primary hover:underline">Open performance setup</Link> : null}
+              {canManagePerformance ? (
+                <Link
+                  href="/dashboard/performance/setup"
+                  className="font-semibold text-primary hover:underline"
+                >
+                  Open performance setup
+                </Link>
+              ) : null}
             </div>
           ) : null}
 
@@ -623,95 +932,366 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               <div className="max-w-2xl">
                 <div className="flex items-center gap-3">
                   <KpiIcon className="size-6 text-primary" aria-hidden="true" />
-                  <h2 className="text-lg font-semibold text-foreground">Start by setting up your KPI cycle</h2>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Start by setting up your KPI cycle
+                  </h2>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  A performance cycle and KPI plan need to be assigned to you before you can create goals or see cycle reviews. Ask your manager or HR to open a cycle and assign your plan; it will then appear here.
+                  A performance cycle and KPI plan need to be assigned to you
+                  before you can create goals or see cycle reviews. Ask your
+                  manager or HR to open a cycle and assign your plan; it will
+                  then appear here.
                 </p>
                 <ol className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-                  <li className="border-l-2 border-primary pl-3"><span className="block font-semibold text-foreground">1. Open a cycle</span><span className="text-muted-foreground">Manager or HR sets the review period.</span></li>
-                  <li className="border-l-2 border-border pl-3"><span className="block font-semibold text-foreground">2. Assign your plan</span><span className="text-muted-foreground">Your KPI period becomes available here.</span></li>
-                  <li className="border-l-2 border-border pl-3"><span className="block font-semibold text-foreground">3. Set goals and track work</span><span className="text-muted-foreground">Create KPIs, link activities, and review progress.</span></li>
+                  <li className="border-l-2 border-primary pl-3">
+                    <span className="block font-semibold text-foreground">
+                      1. Open a cycle
+                    </span>
+                    <span className="text-muted-foreground">
+                      Manager or HR sets the review period.
+                    </span>
+                  </li>
+                  <li className="border-l-2 border-border pl-3">
+                    <span className="block font-semibold text-foreground">
+                      2. Assign your plan
+                    </span>
+                    <span className="text-muted-foreground">
+                      Your KPI period becomes available here.
+                    </span>
+                  </li>
+                  <li className="border-l-2 border-border pl-3">
+                    <span className="block font-semibold text-foreground">
+                      3. Set goals and track work
+                    </span>
+                    <span className="text-muted-foreground">
+                      Create KPIs, link activities, and review progress.
+                    </span>
+                  </li>
                 </ol>
                 <div className="mt-5 flex flex-wrap items-center gap-3">
-                  {canManagePerformance ? <Link href="/dashboard/performance/setup" className={primaryButtonClass}>Open performance setup</Link> : <span className="text-sm font-medium text-muted-foreground">Your manager or HR can open performance setup and assign your plan.</span>}
-                  <Link href="/dashboard/me/activities/today" className={secondaryButtonClass}>Open my activities</Link>
+                  {canManagePerformance ? (
+                    <Link
+                      href="/dashboard/performance/setup"
+                      className={primaryButtonClass}
+                    >
+                      Open performance setup
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Your manager or HR can open performance setup and assign
+                      your plan.
+                    </span>
+                  )}
+                  <Link
+                    href="/dashboard/me/activities/today"
+                    className={secondaryButtonClass}
+                  >
+                    Open my activities
+                  </Link>
                 </div>
               </div>
             </section>
           ) : null}
 
-          {periodId ? <div className="grid gap-0 border-y border-border sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: "Weight allocated", value: `${totalWeight}%`, detail: "Target is 100%" },
-              { label: "KPIs in this cycle", value: visibleRows.length, detail: "Goals assigned or proposed" },
-              { label: "Submission", value: totalWeight === 100 && visibleRows.length > 0 ? "Ready" : "In progress", detail: "Requires exactly 100% weight" },
-              { label: "Weighted progress", value: `${overallScore.toFixed(1)}%`, detail: "Based on recorded actuals" },
-            ].map((metric) => <div key={metric.label} className="border-b border-border px-3 py-3 last:border-b-0 sm:px-5 xl:border-b-0 xl:border-r xl:last:border-r-0">
-              <p className="text-sm font-semibold text-foreground">{metric.label}</p><p className="mt-1 text-2xl font-bold tabular-nums text-primary">{metric.value}</p><p className="mt-1 text-xs text-muted-foreground">{metric.detail}</p>
-            </div>)}
-          </div> : null}
-
-          {periods.length > 0 ? <section className="border-t border-border pt-2">
-            <div className="flex flex-wrap items-end justify-between gap-3 px-1 py-3">
-              <div><h2 className="text-base font-semibold text-foreground">Goals for this cycle</h2><p className="mt-0.5 text-xs text-muted-foreground">Targets, current progress, and linked work.</p></div>
-              {selectedPeriod ? <Badge appearance="tint" color="brand">{optionLabel(selectedPeriod)}</Badge> : null}
+          {periodId ? (
+            <div className="grid gap-0 border-y border-border sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "Weight allocated",
+                  value: `${totalWeight}%`,
+                  detail: "Target is 100%",
+                },
+                {
+                  label: "KPIs in this cycle",
+                  value: visibleRows.length,
+                  detail: "Goals assigned or proposed",
+                },
+                {
+                  label: "Submission",
+                  value:
+                    totalWeight === 100 && visibleRows.length > 0
+                      ? "Ready"
+                      : "In progress",
+                  detail: "Requires exactly 100% weight",
+                },
+                {
+                  label: "Weighted progress",
+                  value: `${overallScore.toFixed(1)}%`,
+                  detail: "Based on recorded actuals",
+                },
+              ].map((metric) => (
+                <div
+                  key={metric.label}
+                  className="border-b border-border px-3 py-3 last:border-b-0 sm:px-5 xl:border-b-0 xl:border-r xl:last:border-r-0"
+                >
+                  <p className="text-sm font-semibold text-foreground">
+                    {metric.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-primary">
+                    {metric.value}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {metric.detail}
+                  </p>
+                </div>
+              ))}
             </div>
-            {displayedRows.length ? <div className="divide-y divide-border">
-              {displayedRows.map((row) => {
-                const status = readString(row, ["status"], "DRAFT").toUpperCase()
-                const progress = progressOf(row)
-                const achievement = readNumber(progress, ["achievementPercent", "achievement_percent"])
-                const actual = readString(progress, ["actualValue", "actual_value"], readString(row, ["actualValue", "actual_value"], "—"))
-                const target = readString(row, ["targetValue", "target_value"], "Manual")
-                const unit = readString(row, ["unit"])
-                return <article key={rowId(row)} className="grid gap-3 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.6fr)_auto] lg:items-center">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2"><KpiIcon className="size-4 shrink-0 text-muted-foreground" /><h3 className="min-w-0 text-sm font-semibold text-foreground">{readString(row, ["title"], `KPI #${rowId(row)}`)}</h3><Badge appearance="tint" color={status === "APPROVED" ? "success" : status === "REJECTED" ? "danger" : status === "RETURNED" ? "warning" : "informative"}>{status.replaceAll("_", " ")}</Badge></div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{readString(row, ["description"], "No description provided.")}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">Target <span className="font-semibold text-foreground">{target} {unit}</span><span className="mx-2">·</span>Weight <span className="font-semibold text-foreground">{readString(row, ["weight"], "0")}%</span><span className="mx-2">·</span>Due {formatDate(row.dueDate ?? row.due_date)}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="mb-1 flex items-center justify-between gap-2 text-xs"><span className="text-muted-foreground">Progress</span><span className="font-semibold tabular-nums text-foreground">{achievement === null ? "Not started" : `${Math.round(achievement)}%`}</span></div>
-                    <ProgressBar value={achievement === null ? 0 : Math.min(1, Math.max(0, achievement / 100))} thickness="medium" />
-                    <p className="mt-1 text-[11px] text-muted-foreground">Actual {actual}{unit ? ` ${unit}` : ""} of {target}{unit ? ` ${unit}` : ""}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 lg:justify-end">
-                    {["DRAFT", "RETURNED"].includes(status) ? <>
-                      <FluentButton appearance="subtle" size="small" onClick={() => showEdit(row)}>Edit</FluentButton>
-                      <FluentButton appearance="subtle" size="small" disabled={saving} onClick={() => void removeKpi(row)}>Delete</FluentButton>
-                    </> : null}
-                    {status === "APPROVED" ? <>
-                      {readString(row, ["progressSource", "progress_source"]) === "MANUAL" ? <FluentButton appearance="subtle" size="small" onClick={() => showActual(row)}>Update actual</FluentButton> : null}
-                      <Link className={actionButtonClass} href={`/dashboard/me/activities/today?create=1&kpi=${encodeURIComponent(rowId(row))}`}>Add linked activity</Link>
-                    </> : null}
-                  </div>
-                </article>
-              })}
-            </div> : !loading ? <div className="flex flex-col items-center border-y border-border px-4 py-10 text-center">
-              <KpiIcon className="size-8 text-muted-foreground" aria-hidden="true" />
-              <h3 className="mt-3 text-base font-semibold text-foreground">No KPIs in this cycle yet</h3>
-              <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">Create a measurable goal for this period. Once approved, you can link activities and track progress here.</p>
-              <FluentButton appearance="primary" icon={<PlusIcon className="size-4" />} className="mt-4" onClick={showCreate} disabled={!canCreateKpi}>Create a KPI</FluentButton>
-            </div> : null}
-          </section> : null}
+          ) : null}
+
+          {periods.length > 0 ? (
+            <section className="border-t border-border pt-2">
+              <div className="flex flex-wrap items-end justify-between gap-3 px-1 py-3">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">
+                    Goals for this cycle
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Targets, current progress, and linked work.
+                  </p>
+                </div>
+                {selectedPeriod ? (
+                  <Badge appearance="tint" color="brand">
+                    {optionLabel(selectedPeriod)}
+                  </Badge>
+                ) : null}
+              </div>
+              {displayedRows.length ? (
+                <div className="divide-y divide-border">
+                  {displayedRows.map((row) => {
+                    const status = readString(
+                      row,
+                      ["status"],
+                      "DRAFT",
+                    ).toUpperCase();
+                    const progress = progressOf(row);
+                    const achievement = readNumber(progress, [
+                      "achievementPercent",
+                      "achievement_percent",
+                    ]);
+                    const actual = readString(
+                      progress,
+                      ["actualValue", "actual_value"],
+                      readString(row, ["actualValue", "actual_value"], "—"),
+                    );
+                    const target = readString(
+                      row,
+                      ["targetValue", "target_value"],
+                      "Manual",
+                    );
+                    const unit = readString(row, ["unit"]);
+                    return (
+                      <article
+                        key={rowId(row)}
+                        className="grid gap-3 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.6fr)_auto] lg:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <KpiIcon className="size-4 shrink-0 text-muted-foreground" />
+                            <h3 className="min-w-0 text-sm font-semibold text-foreground">
+                              {readString(row, ["title"], `KPI #${rowId(row)}`)}
+                            </h3>
+                            <Badge
+                              appearance="tint"
+                              color={
+                                status === "APPROVED"
+                                  ? "success"
+                                  : status === "REJECTED"
+                                    ? "danger"
+                                    : status === "RETURNED"
+                                      ? "warning"
+                                      : "informative"
+                              }
+                            >
+                              {status.replaceAll("_", " ")}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                            {readString(
+                              row,
+                              ["description"],
+                              "No description provided.",
+                            )}
+                          </p>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Target{" "}
+                            <span className="font-semibold text-foreground">
+                              {target} {unit}
+                            </span>
+                            <span className="mx-2">·</span>Weight{" "}
+                            <span className="font-semibold text-foreground">
+                              {readString(row, ["weight"], "0")}%
+                            </span>
+                            <span className="mx-2">·</span>Due{" "}
+                            {formatDate(row.dueDate ?? row.due_date)}
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                            <span className="text-muted-foreground">
+                              Progress
+                            </span>
+                            <span className="font-semibold tabular-nums text-foreground">
+                              {achievement === null
+                                ? "Not started"
+                                : `${Math.round(achievement)}%`}
+                            </span>
+                          </div>
+                          <ProgressBar
+                            value={
+                              achievement === null
+                                ? 0
+                                : Math.min(1, Math.max(0, achievement / 100))
+                            }
+                            thickness="medium"
+                          />
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Actual {actual}
+                            {unit ? ` ${unit}` : ""} of {target}
+                            {unit ? ` ${unit}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+                          {["DRAFT", "RETURNED"].includes(status) ? (
+                            <>
+                              <FluentButton
+                                appearance="subtle"
+                                size="small"
+                                onClick={() => showEdit(row)}
+                              >
+                                Edit
+                              </FluentButton>
+                              <FluentButton
+                                appearance="subtle"
+                                size="small"
+                                disabled={saving}
+                                onClick={() => void removeKpi(row)}
+                              >
+                                Delete
+                              </FluentButton>
+                            </>
+                          ) : null}
+                          {status === "APPROVED" ? (
+                            <>
+                              {readString(row, [
+                                "progressSource",
+                                "progress_source",
+                              ]) === "MANUAL" ? (
+                                <FluentButton
+                                  appearance="subtle"
+                                  size="small"
+                                  onClick={() => showActual(row)}
+                                >
+                                  Update actual
+                                </FluentButton>
+                              ) : null}
+                              <Link
+                                className={actionButtonClass}
+                                href={`/dashboard/me/activities/today?create=1&kpi=${encodeURIComponent(rowId(row))}`}
+                              >
+                                Add linked activity
+                              </Link>
+                            </>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : !loading ? (
+                <div className="flex flex-col items-center border-y border-border px-4 py-10 text-center">
+                  <KpiIcon
+                    className="size-8 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <h3 className="mt-3 text-base font-semibold text-foreground">
+                    No KPIs in this cycle yet
+                  </h3>
+                  <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                    Create a measurable goal for this period. Once approved, you
+                    can link activities and track progress here.
+                  </p>
+                  <FluentButton
+                    appearance="primary"
+                    icon={<PlusIcon className="size-4" />}
+                    className="mt-4"
+                    onClick={showCreate}
+                    disabled={!canCreateKpi}
+                  >
+                    Create a KPI
+                  </FluentButton>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
         </>
       ) : (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div><h1 className="text-xl font-semibold tracking-tight">KPI reviews</h1><p className="text-sm text-muted-foreground">Review KPI proposals from employees in your reporting scope.</p></div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">
+                KPI reviews
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Review KPI proposals from employees in your reporting scope.
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className={primaryButtonClass} onClick={showCreate} disabled={!periods.length || !employees.length || loading}><PlusIcon className="size-4" /> Assign KPI</button>
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>{loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />} Refresh</button>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                onClick={showCreate}
+                disabled={!periods.length || !employees.length || loading}
+              >
+                <PlusIcon className="size-4" /> Assign KPI
+              </button>
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-4" />
+                )}{" "}
+                Refresh
+              </button>
             </div>
           </div>
-          {error ? <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
-          <div className="overflow-hidden border border-border bg-card"><ResizableTable title="Team KPI proposals" data={rows} columns={columns} loading={loading} itemsPerPage={20} showExport={false} storageKey={`employee-kpis-${mode}`} /></div>
+          {error ? (
+            <div className="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+          <div className="overflow-hidden border border-border bg-card">
+            <ResizableTable
+              title="Team KPI proposals"
+              data={rows}
+              columns={columns}
+              loading={loading}
+              itemsPerPage={20}
+              showExport={false}
+              storageKey={`employee-kpis-${mode}`}
+            />
+          </div>
         </>
       )}
-      {mode === "manager" || periods.length > 0 ? <KpiCycleReviewPanel mode={mode} periodId={periodId} refreshKey={reviewRefresh} /> : null}
+      {mode === "manager" || periods.length > 0 ? (
+        <KpiCycleReviewPanel
+          mode={mode}
+          periodId={periodId}
+          period={selectedPeriod}
+          refreshKey={reviewRefresh}
+        />
+      ) : null}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!saving) setOpen(next);
+        }}
+      >
         <DialogPopup className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
@@ -731,309 +1311,408 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
                 : "Drafts can be saved below 100%; the complete period set is validated when submitted."}
             </DialogDescription>
           </DialogHeader>
-          {dialogMode === "review" ? (
-            <div className="grid gap-4 text-sm">
-              <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2">
-                <div>
-                  <span className="text-xs text-muted-foreground">
-                    Employee
-                  </span>
-                  <p className="font-medium">
-                    {employeeLabel(selected?.employee as AdminRecord)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">Period</span>
-                  <p className="font-medium">
-                    {optionLabel(periodOf(selected ?? {}) ?? {})}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">
-                    Measurement
-                  </span>
-                  <p className="font-medium">
-                    {readString(selected ?? {}, [
-                      "measurementType",
-                      "measurement_type",
-                    ])}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">Target</span>
-                  <p className="font-medium">
-                    {readString(
-                      selected ?? {},
-                      ["targetValue", "target_value"],
-                      "Manual",
-                    )}{" "}
-                    {readString(selected ?? {}, ["unit"])}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">Weight</span>
-                  <p className="font-medium">
-                    {readString(selected ?? {}, ["weight"])}%
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">
-                    Due date
-                  </span>
-                  <p className="font-medium">
-                    {formatDate(selected?.dueDate ?? selected?.due_date)}
-                  </p>
-                </div>
-                <div className="sm:col-span-2">
-                  <span className="text-xs text-muted-foreground">
-                    Description
-                  </span>
-                  <p className="whitespace-pre-wrap">
-                    {readString(selected ?? {}, ["description"])}
-                  </p>
-                </div>
-                {readString(selected ?? {}, [
-                  "reviewComment",
-                  "review_comment",
-                ]) ? (
-                  <div className="sm:col-span-2">
+          <ValidatedWorkflowForm
+            key={dialogMode}
+            saving={saving}
+            submitError={formError}
+            onSubmit={save}
+            validation={{
+              schema: employeeKpiFormSchema(dialogMode, mode === "manager"),
+              input: kpiFormInput,
+            }}
+            description="Create and revise drafts, make the set total 100%, then submit it for manager approval."
+          >
+            {dialogMode === "review" ? (
+              <div className="grid gap-4 text-sm">
+                <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2">
+                  <div>
                     <span className="text-xs text-muted-foreground">
-                      Previous review comment
+                      Employee
                     </span>
-                    <p className="whitespace-pre-wrap">
+                    <p className="font-medium">
+                      {employeeLabel(selected?.employee as AdminRecord)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Period
+                    </span>
+                    <p className="font-medium">
+                      {optionLabel(periodOf(selected ?? {}) ?? {})}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Measurement
+                    </span>
+                    <p className="font-medium">
                       {readString(selected ?? {}, [
-                        "reviewComment",
-                        "review_comment",
+                        "measurementType",
+                        "measurement_type",
                       ])}
                     </p>
                   </div>
-                ) : null}
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Target
+                    </span>
+                    <p className="font-medium">
+                      {readString(
+                        selected ?? {},
+                        ["targetValue", "target_value"],
+                        "Manual",
+                      )}{" "}
+                      {readString(selected ?? {}, ["unit"])}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Weight
+                    </span>
+                    <p className="font-medium">
+                      {readString(selected ?? {}, ["weight"])}%
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Due date
+                    </span>
+                    <p className="font-medium">
+                      {formatDate(selected?.dueDate ?? selected?.due_date)}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-xs text-muted-foreground">
+                      Description
+                    </span>
+                    <p className="whitespace-pre-wrap">
+                      {readString(selected ?? {}, ["description"])}
+                    </p>
+                  </div>
+                  {readString(selected ?? {}, [
+                    "reviewComment",
+                    "review_comment",
+                  ]) ? (
+                    <div className="sm:col-span-2">
+                      <span className="text-xs text-muted-foreground">
+                        Previous review comment
+                      </span>
+                      <p className="whitespace-pre-wrap">
+                        {readString(selected ?? {}, [
+                          "reviewComment",
+                          "review_comment",
+                        ])}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+                <label className="grid gap-1.5">
+                  <span className="font-medium">
+                    Comment{" "}
+                    {form.decision === "APPROVE" ? "(optional)" : "(required)"}
+                  </span>
+                  <Textarea
+                    className={textareaClass}
+                    value={form.comment ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        comment: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
               </div>
-              <label className="grid gap-1.5">
-                <span className="font-medium">
-                  Comment{" "}
-                  {form.decision === "APPROVE" ? "(optional)" : "(required)"}
-                </span>
-                <Textarea
-                  className={textareaClass}
-                  value={form.comment ?? ""}
+            ) : dialogMode === "actual" ? (
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">Actual value</span>
+                <input
+                  className={inputClass}
+                  type="number"
+                  value={form.actual_value ?? ""}
                   onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      comment: event.target.value,
-                    }))
+                    setForm({ actual_value: event.target.value })
                   }
                 />
               </label>
-            </div>
-          ) : dialogMode === "actual" ? (
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Actual value</span>
-              <input
-                className={inputClass}
-                type="number"
-                value={form.actual_value ?? ""}
-                onChange={(event) =>
-                  setForm({ actual_value: event.target.value })
-                }
-              />
-            </label>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {dialogMode === "create" && mode === "manager" ? (
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {dialogMode === "create" && mode === "manager" ? (
+                  <label className="grid gap-1.5 text-sm sm:col-span-2">
+                    <span className="font-medium">Employee</span>
+                    <FluentSelect
+                      ariaLabel="Employee"
+                      className="w-full"
+                      value={form.employee_id ?? ""}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          employee_id: value,
+                        }))
+                      }
+                      options={[
+                        { value: "", label: "Select employee" },
+                        ...employees.map((employee) => ({
+                          value: rowId(employee),
+                          label: employeeLabel(employee),
+                        })),
+                      ]}
+                    />
+                  </label>
+                ) : null}
+                {dialogMode === "create" ? (
+                  <label className="grid gap-1.5 text-sm sm:col-span-2">
+                    <span className="font-medium">Period</span>
+                    <FluentSelect
+                      ariaLabel="Period"
+                      className="w-full"
+                      value={form.performance_period_id ?? ""}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          performance_period_id: value,
+                        }))
+                      }
+                      options={(mode === "manager"
+                        ? periods
+                        : periods.filter(canProposeEmployeeKpis)
+                      ).map((period) => ({
+                        value: employeeKpiPeriodId(period),
+                        label: `${optionLabel(period)}${
+                          readString(period, ["status"])
+                            ? ` · ${readString(period, ["status"])}`
+                            : ""
+                        }`,
+                      }))}
+                    />
+                  </label>
+                ) : null}
                 <label className="grid gap-1.5 text-sm sm:col-span-2">
-                  <span className="font-medium">Employee</span>
-                  <FluentSelect
-                    ariaLabel="Employee"
-                    className="w-full"
-                    value={form.employee_id ?? ""}
-                    onChange={(value) =>
-                      setForm((current) => ({ ...current, employee_id: value }))
+                  <span className="font-medium">Title</span>
+                  <input
+                    className={inputClass}
+                    value={form.title ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
                     }
-                    options={[
-                      { value: "", label: "Select employee" },
-                      ...employees.map((employee) => ({
-                        value: rowId(employee),
-                        label: employeeLabel(employee),
-                      })),
-                    ]}
                   />
                 </label>
-              ) : null}
-              {dialogMode === "create" ? (
                 <label className="grid gap-1.5 text-sm sm:col-span-2">
-                  <span className="font-medium">Period</span>
+                  <span className="font-medium">Description</span>
+                  <Textarea
+                    className={textareaClass}
+                    value={form.description ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Measurement</span>
                   <FluentSelect
-                    ariaLabel="Period"
+                    ariaLabel="Measurement"
                     className="w-full"
-                    value={form.performance_period_id ?? ""}
+                    value={form.measurement_type}
                     onChange={(value) =>
                       setForm((current) => ({
                         ...current,
-                        performance_period_id: value,
+                        measurement_type: value,
                       }))
                     }
-                    options={(mode === "manager"
-                      ? periods
-                      : periods.filter(canProposeEmployeeKpis)
-                    ).map((period) => ({
-                      value: employeeKpiPeriodId(period),
-                      label: `${optionLabel(period)}${
-                        readString(period, ["status"])
-                          ? ` · ${readString(period, ["status"])}`
-                          : ""
-                      }`,
-                    }))}
+                    options={[
+                      "NUMBER",
+                      "PERCENTAGE",
+                      "CURRENCY",
+                      "BOOLEAN",
+                      "RATING",
+                      "MANUAL",
+                    ].map((value) => ({ value, label: value }))}
                   />
                 </label>
-              ) : null}
-              <label className="grid gap-1.5 text-sm sm:col-span-2">
-                <span className="font-medium">Title</span>
-                <input
-                  className={inputClass}
-                  value={form.title ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm sm:col-span-2">
-                <span className="font-medium">Description</span>
-                <Textarea
-                  className={textareaClass}
-                  value={form.description ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Measurement</span>
-                <FluentSelect
-                  ariaLabel="Measurement"
-                  className="w-full"
-                  value={form.measurement_type}
-                  onChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      measurement_type: value,
-                    }))
-                  }
-                  options={[
-                    "NUMBER",
-                    "PERCENTAGE",
-                    "CURRENCY",
-                    "BOOLEAN",
-                    "RATING",
-                    "MANUAL",
-                  ].map((value) => ({ value, label: value }))}
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Progress source</span>
-                <FluentSelect
-                  ariaLabel="Progress source"
-                  className="w-full"
-                  value={form.progress_source}
-                  onChange={(value) =>
-                    setForm((current) => ({
-                      ...current,
-                      progress_source: value,
-                    }))
-                  }
-                  options={[
-                    { value: "MANUAL", label: "Manual actual" },
-                    {
-                      value: "APPROVED_ACTIVITIES",
-                      label: "Approved activities",
-                    },
-                    { value: "SYSTEM", label: "System" },
-                  ]}
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm"><span className="font-medium">Scoring method</span><FluentSelect ariaLabel="Scoring method" value={form.scoring_type || "NUMERIC_TARGET"} onChange={(value) => setForm((current) => ({ ...current, scoring_type: value }))} options={[{ value: "NUMERIC_TARGET", label: "Numeric target" }, { value: "RATING_SCALE", label: "Manager rating" }, { value: "MILESTONE", label: "Milestones" }, { value: "MIXED", label: "Numeric and rating" }]} /></label>
-              {form.scoring_type === "NUMERIC_TARGET" || form.scoring_type === "MIXED" ? <label className="grid gap-1.5 text-sm"><span className="font-medium">Target direction</span><FluentSelect ariaLabel="Target direction" value={form.measurement_direction || "HIGHER_IS_BETTER"} onChange={(value) => setForm((current) => ({ ...current, measurement_direction: value }))} options={[{ value: "HIGHER_IS_BETTER", label: "Higher is better" }, { value: "LOWER_IS_BETTER", label: "Lower is better" }, { value: "TARGET_MATCH", label: "Exact target" }]} /></label> : null}
-              {form.scoring_type === "MIXED" ? <label className="grid gap-1.5 text-sm"><span className="font-medium">Numeric share (0–1)</span><input className={inputClass} type="number" min="0" max="1" step="0.1" value={form.numeric_share ?? "0.5"} onChange={(event) => setForm((current) => ({ ...current, numeric_share: event.target.value }))} /></label> : null}
-              {form.scoring_type === "MILESTONE" ? <label className="grid gap-1.5 text-sm"><span className="font-medium">Total milestones</span><input className={inputClass} type="number" min="1" value={form.total_milestones ?? ""} onChange={(event) => setForm((current) => ({ ...current, total_milestones: event.target.value }))} /></label> : null}
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Target</span>
-                <input
-                  className={inputClass}
-                  type="number"
-                  value={form.target_value ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      target_value: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Unit</span>
-                <input
-                  className={inputClass}
-                  value={form.unit ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      unit: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Weight (%)</span>
-                <input
-                  className={inputClass}
-                  type="number"
-                  min="0.01"
-                  max="100"
-                  value={form.weight ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      weight: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Start date</span>
-                <DateInput
-                  className={inputClass}
-
-                  value={form.start_date ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      start_date: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Due date</span>
-                <DateInput
-                  className={inputClass}
-
-                  value={form.due_date ?? ""}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      due_date: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          )}
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Progress source</span>
+                  <FluentSelect
+                    ariaLabel="Progress source"
+                    className="w-full"
+                    value={form.progress_source}
+                    onChange={(value) =>
+                      setForm((current) => ({
+                        ...current,
+                        progress_source: value,
+                      }))
+                    }
+                    options={[
+                      { value: "MANUAL", label: "Manual actual" },
+                      {
+                        value: "APPROVED_ACTIVITIES",
+                        label: "Approved activities",
+                      },
+                      { value: "SYSTEM", label: "System" },
+                    ]}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Scoring method</span>
+                  <FluentSelect
+                    ariaLabel="Scoring method"
+                    value={form.scoring_type || "NUMERIC_TARGET"}
+                    onChange={(value) =>
+                      setForm((current) => ({
+                        ...current,
+                        scoring_type: value,
+                      }))
+                    }
+                    options={[
+                      { value: "NUMERIC_TARGET", label: "Numeric target" },
+                      { value: "RATING_SCALE", label: "Manager rating" },
+                      { value: "MILESTONE", label: "Milestones" },
+                      { value: "MIXED", label: "Numeric and rating" },
+                    ]}
+                  />
+                </label>
+                {form.scoring_type === "NUMERIC_TARGET" ||
+                form.scoring_type === "MIXED" ? (
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Target direction</span>
+                    <FluentSelect
+                      ariaLabel="Target direction"
+                      value={form.measurement_direction || "HIGHER_IS_BETTER"}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          measurement_direction: value,
+                        }))
+                      }
+                      options={[
+                        {
+                          value: "HIGHER_IS_BETTER",
+                          label: "Higher is better",
+                        },
+                        { value: "LOWER_IS_BETTER", label: "Lower is better" },
+                        { value: "TARGET_MATCH", label: "Exact target" },
+                      ]}
+                    />
+                  </label>
+                ) : null}
+                {form.scoring_type === "MIXED" ? (
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Numeric share (0–1)</span>
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={form.numeric_share ?? "0.5"}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          numeric_share: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ) : null}
+                {form.scoring_type === "MILESTONE" ? (
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Total milestones</span>
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min="1"
+                      value={form.total_milestones ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          total_milestones: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ) : null}
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Target</span>
+                  <input
+                    className={inputClass}
+                    type="number"
+                    value={form.target_value ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        target_value: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Unit</span>
+                  <input
+                    className={inputClass}
+                    value={form.unit ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        unit: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Weight (%)</span>
+                  <input
+                    className={inputClass}
+                    type="number"
+                    min="0.01"
+                    max="100"
+                    value={form.weight ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        weight: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Start date</span>
+                  <DateInput
+                    className={inputClass}
+                    value={form.start_date ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        start_date: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Due date</span>
+                  <DateInput
+                    className={inputClass}
+                    value={form.due_date ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        due_date: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            )}
+            {formError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {formError}
+              </p>
+            ) : null}
+          </ValidatedWorkflowForm>
           <DialogFooter>
             <button
               type="button"
@@ -1041,18 +1720,6 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
               onClick={() => setOpen(false)}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className={primaryButtonClass}
-              onClick={() => void save()}
-              disabled={saving}
-            >
-              {saving ? (
-                <FluentLoadingIndicator className="size-4 animate-spin" />
-              ) : (
-                "Save"
-              )}
             </button>
           </DialogFooter>
         </DialogPopup>

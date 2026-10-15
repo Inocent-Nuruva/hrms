@@ -1,0 +1,27 @@
+.preview {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  background: #edf5ff;
+}
+.highlight {
+  animation: workflow-highlight 18s linear infinite;
+  animation-delay: var(--step-delay, 0s);
+}
+@keyframes workflow-highlight {
+  0%,
+  9% {
+    opacity: 0.2;
+  }
+  11%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .highlight {
+    animation: none;
+    opacity: 0;
+  }
+}

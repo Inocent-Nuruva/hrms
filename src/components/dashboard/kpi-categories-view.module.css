@@ -1,0 +1,80 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  font-family: var(--font-comfortaa);
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.toolbar :global(.fui-Input) {
+  flex: 1;
+  min-width: 160px;
+}
+.table {
+  width: 100%;
+  font-family: inherit;
+}
+.table :global(.fui-TableHeader) {
+  background: var(--colorNeutralBackground2);
+}
+.table :global(.fui-TableHeaderCell) {
+  font-family: inherit;
+  font-weight: 600;
+}
+.table :global(.fui-TableCell) {
+  padding: 16px 12px;
+  font-family: inherit;
+  vertical-align: middle;
+}
+.table :global(.fui-TableBody) :global(.fui-TableRow):hover {
+  background: var(--colorNeutralBackground2Hover);
+}
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.description {
+  display: block;
+  color: var(--colorNeutralForeground2);
+  overflow-wrap: anywhere;
+  max-width: 360px;
+}
+.actionHeading {
+  width: 160px;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.actions :global(.fui-Button) {
+  min-height: 32px;
+  font-family: inherit;
+}
+.deleteButton:not(:disabled) {
+  color: var(--colorPaletteRedForeground1);
+  border-color: var(--colorPaletteRedBorder1);
+  background: var(--colorPaletteRedBackground1);
+}
+.deleteButton:not(:disabled):hover {
+  border-color: currentColor;
+  background: var(--colorPaletteRedBackground2);
+}
+@media (max-width: 480px) {
+  .actionHeading {
+    width: 88px;
+  }
+  .table :global(.fui-TableCell) {
+    padding: 12px 8px;
+  }
+}

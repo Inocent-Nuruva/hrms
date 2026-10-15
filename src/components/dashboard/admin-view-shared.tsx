@@ -157,7 +157,7 @@ function formatReadableDetailValue(value: unknown): string {
   return "—"
 }
 
-function collectReadableDetailSections(row: AdminRecord) {
+export function collectReadableDetailSections(row: AdminRecord) {
   const lead: string[] = []
   const fields: Array<{ key: string; label: string; value: string }> = []
   const lists: Array<{ title: string; items: string[] }> = []

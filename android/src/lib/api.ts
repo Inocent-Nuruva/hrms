@@ -369,6 +369,24 @@ export const api = {
     return request<unknown>(`/api/notifications${buildQuery(params)}`);
   },
 
+  async registerMyPushDevice(input: {
+    expo_push_token: string;
+    platform: 'ios' | 'android';
+    device_name?: string;
+  }) {
+    return request<unknown>('/api/notifications/push-devices', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  async unregisterMyPushDevice(expoPushToken: string) {
+    return request<unknown>('/api/notifications/push-devices', {
+      method: 'DELETE',
+      body: { expo_push_token: expoPushToken },
+    });
+  },
+
   async markNotificationAsRead(id: string | number) {
     return request<unknown>(`/api/notifications/${id}/read`, { method: 'PATCH' });
   },
@@ -606,6 +624,75 @@ export const api = {
     return normalizeList(await request<unknown>('/api/me/finance/applications'));
   },
 
+  async listMyFinanceProducts() {
+    return normalizeList(await request<unknown>('/api/me/finance/products'));
+  },
+
+  async listMyFinanceAccounts() {
+    return normalizeList(await request<unknown>('/api/me/finance/accounts'));
+  },
+
+  async createMyFinanceApplication(data: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/api/me/finance/applications', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  async submitMyFinanceApplication(id: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/submit`, {
+      method: 'POST',
+    });
+  },
+
+  async getMyFinanceAccountStatement(id: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/accounts/${encodeURIComponent(String(id))}/statement`);
+  },
+
+  async requestMyFinanceDeferment(accountId: string | number, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/finance/accounts/${encodeURIComponent(String(accountId))}/deferments`, {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  async listMyPayslips() {
+    return normalizeList(await request<unknown>('/api/me/payslips'));
+  },
+
+  async getMyPayrollSummary(year = new Date().getFullYear()) {
+    return request<Record<string, unknown>>(
+      `/api/me/payslips/summary/current?year=${encodeURIComponent(String(year))}`,
+    );
+  },
+
+  async downloadMyPayslip(id: string | number) {
+    const url = `${API_BASE_URL}/api/me/payslips/${encodeURIComponent(String(id))}/download`;
+    const fetchPdf = async (token: string | null) =>
+      fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    let response = await fetchPdf(await getBearerToken());
+    if (response.status === 401) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) response = await fetchPdf(refreshedToken);
+    }
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `Payslip download failed (${response.status}).`);
+    }
+    const contentDisposition = response.headers.get('content-disposition') ?? '';
+    const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return {
+      base64: globalThis.btoa(binary),
+      filename: filenameMatch?.[1] ?? `payslip-${id}.pdf`,
+    };
+  },
   async listMyPerformanceAssignments() {
     const payload = await request<unknown>('/api/performance/me/assignments');
     return normalizeList(payload);

@@ -23,7 +23,7 @@ import {
   type NotificationPreferenceType,
 } from "@/lib/admin-api"
 import { setMyProfilePhotoUrl } from "@/lib/my-profile-photo"
-import { clearStoredSession, readStoredSessionTokens } from "@/lib/session-client"
+import { clearStoredSession, persistSessionUser, readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
 import { authService } from "@/services/authService"
@@ -151,7 +151,7 @@ function persistCurrentUserSnapshot(user: unknown, accessToken: string) {
   }
 
   try {
-    window.localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(user))
+    persistSessionUser(user)
     publishDashboardActorSnapshotFromBrowserStorage(user, accessToken)
     return true
   } catch {

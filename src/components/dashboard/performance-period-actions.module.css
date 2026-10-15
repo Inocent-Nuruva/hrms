@@ -1,0 +1,29 @@
+.actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: max-content;
+  min-width: 150px;
+  max-width: 100%;
+}
+.actions :global(.fui-Button) {
+  justify-content: flex-start;
+  min-height: 32px;
+  width: 100%;
+  border-radius: var(--borderRadiusMedium);
+}
+.actions :global(.fui-Button)[data-action="lock"]:not(:disabled) {
+  color: var(--colorPaletteMarigoldForeground1);
+  background-color: var(--colorPaletteMarigoldBackground1);
+  border-color: var(--colorPaletteMarigoldBorder1);
+}
+.actions :global(.fui-Button)[data-action="sync"]:not(:disabled) {
+  color: var(--colorBrandForeground1);
+  background-color: var(--colorBrandBackground2);
+  border-color: var(--colorBrandStroke2);
+}
+.actions :global(.fui-Button)[data-action="lock"]:not(:disabled):hover,
+.actions :global(.fui-Button)[data-action="sync"]:not(:disabled):hover {
+  border-color: currentColor;
+}

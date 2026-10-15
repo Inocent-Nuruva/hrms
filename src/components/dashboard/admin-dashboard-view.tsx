@@ -1,10 +1,23 @@
 "use client";
+import {
+  clearStoredSession as clearSharedSession,
+  persistSessionTokens as persistSharedTokens,
+  readStoredSessionTokens as readSharedTokens,
+} from "@/lib/session-client";
 
 import * as React from "react";
+import {
+  getSessionSnapshot,
+  getServerSessionSnapshot,
+  subscribeSession,
+} from "@/lib/auth-session-store";
 import { usePathname, useRouter } from "next/navigation";
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 
-import { AppSidebar, resolveDashboardSearchItems } from "@/components/app-sidebar";
+import {
+  AppSidebar,
+  resolveDashboardSearchItems,
+} from "@/components/app-sidebar";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 import { ThemeTogglerButton } from "@/components/animate-ui/components/buttons/theme-toggler";
 import {
@@ -117,11 +130,7 @@ import {
 } from "@/lib/dashboard-permissions";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { authService } from "@/services/authService";
-import {
-  asRecord,
-  isLikelyRefreshToken,
-  readString,
-} from "@/utils/token-utils";
+import { asRecord, readString } from "@/utils/token-utils";
 import { env } from "@/lib/env";
 import { AUTH_STORAGE_KEYS, ROUTES } from "@/utils/constants";
 import { isSelfServiceDashboardRoute } from "@/lib/dashboard-nav";
@@ -131,8 +140,6 @@ import {
 } from "@/lib/forbidden-routes";
 import { useHideRememberedForbiddenPath } from "@/hooks/use-forbidden-route-guard";
 
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
-const LEGACY_TOKEN_STORAGE_KEY = "ess_auth_token";
 const FORCE_PASSWORD_RESET_EVENT = "hrms:force-password-reset";
 const DEFAULT_USERS_QUERY: Required<UsersQueryParams> = {
   page: 1,
@@ -423,7 +430,12 @@ export default function AdminDashboardView({
     actorSnapshot.scope === "platform"
       ? accessGovernanceSectionTabGroups
       : accessControlSectionTabGroups;
-  const [token, setToken] = React.useState("");
+  const authSession = React.useSyncExternalStore(
+    subscribeSession,
+    getSessionSnapshot,
+    getServerSessionSnapshot,
+  );
+  const token = authSession.tokens?.accessToken ?? "";
   const [collections, setCollections] =
     React.useState<AdminResourceCollections>({
       users: [],
@@ -489,123 +501,18 @@ export default function AdminDashboardView({
       ? catalogMeta[resolvedActiveResource].totalPages
       : null;
 
-  const resolveStoredTokens = React.useCallback(() => {
-    if (typeof window === "undefined") {
-      return {
-        accessToken: "",
-        refreshToken: "",
-      };
-    }
+  const resolveStoredTokens = React.useCallback(readSharedTokens, []);
 
-    const adminToken =
-      window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
-    const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens);
-    const legacySessionToken =
-      window.sessionStorage.getItem(LEGACY_TOKEN_STORAGE_KEY)?.trim() ?? "";
-
-    let authAccessToken = "";
-    let authRefreshToken = "";
-    if (authTokensRaw) {
-      try {
-        const parsed = JSON.parse(authTokensRaw) as unknown;
-        if (typeof parsed === "string") {
-          authAccessToken = parsed.trim();
-        }
-        const root = asRecord(parsed);
-        const rootTokens = asRecord(root?.tokens);
-        const rootData = asRecord(root?.data);
-        const rootDataTokens = asRecord(rootData?.tokens);
-        const candidates = [root, rootTokens, rootData, rootDataTokens];
-
-        for (const candidate of candidates) {
-          const candidateAccess = readString(candidate, [
-            "accessToken",
-            "access_token",
-            "token",
-          ]);
-          const candidateRefresh = readString(candidate, [
-            "refreshToken",
-            "refresh_token",
-          ]);
-          if (candidateRefresh && !authRefreshToken) {
-            authRefreshToken = candidateRefresh;
-          }
-          if (
-            candidateAccess &&
-            !isLikelyRefreshToken(
-              candidateAccess,
-              candidateRefresh ?? authRefreshToken,
-            )
-          ) {
-            authAccessToken = candidateAccess;
-            break;
-          }
-        }
-      } catch {
-        authAccessToken = authTokensRaw.trim();
-        authRefreshToken = "";
-      }
-    }
-
-    const preferredToken =
-      authAccessToken ||
-      (adminToken && !isLikelyRefreshToken(adminToken, authRefreshToken)
-        ? adminToken
-        : "") ||
-      (legacySessionToken &&
-      !isLikelyRefreshToken(legacySessionToken, authRefreshToken)
-        ? legacySessionToken
-        : "");
-
-    if (preferredToken) {
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, preferredToken);
-      persistDashboardAccessToken(preferredToken);
-    } else {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-      clearDashboardActorSnapshot();
-    }
-
-    return {
-      accessToken: preferredToken,
-      refreshToken: authRefreshToken,
-    };
-  }, []);
-
-  const clearStoredSession = React.useCallback(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    window.localStorage.removeItem(AUTH_STORAGE_KEYS.tokens);
-    window.localStorage.removeItem(AUTH_STORAGE_KEYS.user);
-    window.sessionStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
-    clearDashboardActorSnapshot();
-  }, []);
-
-  const persistSessionTokens = React.useCallback(
-    (nextAccessToken: string, nextRefreshToken: string) => {
-      if (typeof window === "undefined") {
-        return;
-      }
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, nextAccessToken);
-      window.localStorage.setItem(
-        AUTH_STORAGE_KEYS.tokens,
-        JSON.stringify({
-          accessToken: nextAccessToken,
-          refreshToken: nextRefreshToken,
-        }),
-      );
-      persistDashboardAccessToken(nextAccessToken);
-    },
-    [],
-  );
+  const clearStoredSession = React.useCallback(clearSharedSession, []);
+  const persistSessionTokens = React.useCallback(persistSharedTokens, []);
 
   const hydrateTokenFromStorage = React.useCallback(() => {
     return resolveStoredTokens().accessToken;
   }, [resolveStoredTokens]);
 
   const attemptRefreshToken = React.useCallback(async () => {
-    const { refreshToken } = resolveStoredTokens();
+    const { refreshToken, accessToken: previousAccessToken } =
+      resolveStoredTokens();
     if (!refreshToken) {
       return "";
     }
@@ -617,13 +524,12 @@ export default function AdminDashboardView({
       if (!nextAccessToken || !nextRefreshToken) {
         return "";
       }
-      persistSessionTokens(nextAccessToken, nextRefreshToken);
-      if (response.user && typeof window !== "undefined") {
-        window.localStorage.setItem(
-          AUTH_STORAGE_KEYS.user,
-          JSON.stringify(response.user),
-        );
-      }
+      if (
+        readSharedTokens().refreshToken !== refreshToken ||
+        readSharedTokens().accessToken !== previousAccessToken
+      )
+        return "";
+      persistSessionTokens(nextAccessToken, nextRefreshToken, response.user);
       return nextAccessToken;
     } catch {
       return "";
@@ -713,15 +619,12 @@ export default function AdminDashboardView({
         if (retryOnUnauthorized && isUnauthorizedError(errorObject)) {
           const refreshedToken = await attemptRefreshToken();
           if (refreshedToken) {
-            if (refreshedToken !== token) {
-              setToken(refreshedToken);
-            }
             await runLoadData(refreshedToken, false);
             return;
           }
 
           clearStoredSession();
-          setToken("");
+
           setError("Your session has expired. Please log in again.");
           router.replace(ROUTES.login);
           return;
@@ -757,14 +660,13 @@ export default function AdminDashboardView({
   );
 
   React.useEffect(() => {
-    const stored = hydrateTokenFromStorage();
-    if (stored) {
-      setToken(stored);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(TOKEN_STORAGE_KEY, stored);
-      }
-    }
-  }, [hydrateTokenFromStorage]);
+    setCollections({ users: [], roles: [], permissions: [], companies: [] });
+    setRows([]);
+    setMyCompany(null);
+    setCurrentAdmin(null);
+    setCurrentEmployeeIdentity(null);
+    setCurrentEmployeeProfile(null);
+  }, [authSession.credentialVersion]);
 
   React.useEffect(() => {
     setRows(
@@ -793,9 +695,7 @@ export default function AdminDashboardView({
 
   const refreshCurrentResource = React.useCallback(async () => {
     const accessToken = resolveStoredTokens().accessToken;
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     await loadData(accessToken);
   }, [loadData, resolveStoredTokens, token]);
 
@@ -817,9 +717,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.createResource(resource, accessToken, payload);
     await loadData(accessToken);
@@ -834,9 +732,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.patchResource(resource, id, accessToken, payload);
     await loadData(accessToken);
@@ -850,9 +746,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.deleteResource(resource, id, accessToken);
     await loadData(accessToken);
@@ -902,9 +796,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.updateUserById(id, accessToken, payload);
     await loadData(accessToken);
@@ -918,9 +810,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.changeCurrentUserPassword(accessToken, oldPassword, newPassword);
   };
@@ -934,10 +824,13 @@ export default function AdminDashboardView({
       setForcePasswordResetBusy(true);
       setForcePasswordResetError(null);
       try {
-        await handleChangeMyPassword(payload.currentPassword, payload.newPassword);
+        await handleChangeMyPassword(
+          payload.currentPassword,
+          payload.newPassword,
+        );
         setForcePasswordResetOpen(false);
         clearStoredSession();
-        setToken("");
+
         router.replace(ROUTES.login);
       } catch (err) {
         setForcePasswordResetError(
@@ -954,7 +847,7 @@ export default function AdminDashboardView({
     setForcePasswordResetOpen(false);
     setForcePasswordResetError(null);
     clearStoredSession();
-    setToken("");
+
     router.replace(ROUTES.login);
   }, [clearStoredSession, router]);
 
@@ -966,9 +859,7 @@ export default function AdminDashboardView({
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
     }
-    if (accessToken !== token) {
-      setToken(accessToken);
-    }
+
     const api = await loadAdminApi();
     await api.resetUserPassword(accessToken, id, newPassword);
     await loadData(accessToken);
@@ -982,9 +873,6 @@ export default function AdminDashboardView({
     const accessToken = resolveStoredTokens().accessToken;
     if (!accessToken) {
       throw new Error("Authentication required. Please log in again.");
-    }
-    if (accessToken !== token) {
-      setToken(accessToken);
     }
 
     const api = await loadAdminApi();
@@ -1100,7 +988,9 @@ export default function AdminDashboardView({
     }
 
     const syncFromStoredUser = () => {
-      setForcePasswordResetOpen(Boolean(token) && readStoredUserPasswordChangeRequirement());
+      setForcePasswordResetOpen(
+        Boolean(token) && readStoredUserPasswordChangeRequirement(),
+      );
     };
     const openFromApiGuard = () => {
       setForcePasswordResetOpen(Boolean(token));
@@ -1145,10 +1035,7 @@ export default function AdminDashboardView({
     ) ||
     null;
   const adminAvatar = myProfilePhotoUrl
-    ? withMyProfilePhotoRevision(
-        resolvedAdminAvatar,
-        myProfilePhotoRevision,
-      )
+    ? withMyProfilePhotoRevision(resolvedAdminAvatar, myProfilePhotoRevision)
     : resolvedAdminAvatar;
   const companyName =
     getStringValue(myCompany, ["company_name", "name", "display_name"]) ??
@@ -1217,10 +1104,7 @@ export default function AdminDashboardView({
         setMyCompany(company);
         const modules = await resolveCompanyDashboardModules({
           company,
-          extraIdSources: [
-            clientIdentity.rawUser,
-            clientIdentity.tokenPayload,
-          ],
+          extraIdSources: [clientIdentity.rawUser, clientIdentity.tokenPayload],
           loadModules: (id) => api.getCompanyModules(token, id),
         });
         if (!active) return;
@@ -1279,12 +1163,16 @@ export default function AdminDashboardView({
         // The employee dashboard endpoint is the authoritative source used by
         // the employee home itself and can contain a richer nested department.
         if (!isHumanResourcesEmployeeRecord(identity)) {
-          const dashboard = await api.getEmployeeDashboard(token).catch(() => null);
+          const dashboard = await api
+            .getEmployeeDashboard(token)
+            .catch(() => null);
           if (isHumanResourcesEmployeeRecord(dashboard)) identity = dashboard;
         }
 
         if (!isHumanResourcesEmployeeRecord(identity)) {
-          const fallbackDashboard = await api.getMyDashboard(token).catch(() => null);
+          const fallbackDashboard = await api
+            .getMyDashboard(token)
+            .catch(() => null);
           if (isHumanResourcesEmployeeRecord(fallbackDashboard)) {
             identity = fallbackDashboard;
           }
@@ -1312,7 +1200,12 @@ export default function AdminDashboardView({
   }, [accessIdentityReady, actorSnapshot.scope, homeDashboardKind, token]);
 
   React.useEffect(() => {
-    if (!resolvedShowOverview || !accessIdentityReady || !token || currentAdmin) {
+    if (
+      !resolvedShowOverview ||
+      !accessIdentityReady ||
+      !token ||
+      currentAdmin
+    ) {
       return;
     }
 
@@ -1336,9 +1229,12 @@ export default function AdminDashboardView({
       : homeDashboardKind;
   const showWorkforceDashboard =
     accessIdentityReady &&
-    (effectiveHomeDashboardKind === "company" || effectiveHomeDashboardKind === "hr");
+    (effectiveHomeDashboardKind === "company" ||
+      effectiveHomeDashboardKind === "hr");
   const checkingEmployeeDashboardIdentity =
-    accessIdentityReady && homeDashboardKind === "employee" && !employeeIdentityChecked;
+    accessIdentityReady &&
+    homeDashboardKind === "employee" &&
+    !employeeIdentityChecked;
 
   React.useEffect(() => {
     if (!resolvedUseApis || !accessIdentityReady || !token) {
@@ -1360,7 +1256,11 @@ export default function AdminDashboardView({
       return;
     }
 
-    if (accessMode !== "admin" || actorSnapshot.scope === "platform" || !token) {
+    if (
+      accessMode !== "admin" ||
+      actorSnapshot.scope === "platform" ||
+      !token
+    ) {
       return;
     }
 
@@ -1446,125 +1346,134 @@ export default function AdminDashboardView({
           } as React.CSSProperties
         }
       >
-      <AppSidebar
-        variant="inset"
-        accessMode={accessMode}
-        scope={actorSnapshot.scope}
-        homeDashboardKind={effectiveHomeDashboardKind}
-        identityReady={navigationReady}
-        permissionLabels={effectivePermissionLabels}
-        activeResource={resolvedActiveResource}
-        onSelectResource={navigateToResource}
-      />
-      <SidebarTrigger
-        className="fixed left-3 top-2 z-[60] !hidden text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex"
-        aria-label="Toggle navigation"
-        title="Navigation"
-      />
-      <SidebarInset className="min-w-0 overflow-hidden">
-        {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
-        <SiteHeader
-          onRefresh={handleHeaderRefresh}
-          loading={loading}
-          adminName={adminName}
-          adminEmail={adminEmail}
-          adminAvatar={adminAvatar}
-          companyName={companyName}
+        <AppSidebar
+          variant="inset"
+          accessMode={accessMode}
           scope={actorSnapshot.scope}
-          searchItems={navigationReady ? resolveDashboardSearchItems({
-            scope: actorSnapshot.scope,
-            permissionLabels: effectivePermissionLabels,
-            accessMode,
-            homeDashboardKind: effectiveHomeDashboardKind,
-          }) : []}
+          homeDashboardKind={effectiveHomeDashboardKind}
+          identityReady={navigationReady}
+          permissionLabels={effectivePermissionLabels}
+          activeResource={resolvedActiveResource}
+          onSelectResource={navigateToResource}
         />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
-          <div className="@container/main flex min-w-0 max-w-full flex-col">
-            {resolvedShowOverview && showWorkforceDashboard ? (
-              <HrAnalyticsDashboard
-                refreshKey={overviewRefreshKey}
-                companyName={companyName}
-                adminRolesLabel={adminRolesLabel}
-                assignedRoleNames={adminRoleNames}
-                userName={adminName}
-                profilePhotoUrl={adminAvatar}
-                showLeaveRequests={effectiveHomeDashboardKind === "hr"}
-                showHrAnalytics={effectiveHomeDashboardKind === "hr"}
-              />
-            ) : null}
-            <div className={`flex min-w-0 max-w-full flex-col px-3 pt-0 pb-3 sm:px-4 md:px-4 md:pb-4 ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}>
-              {navigationReady && showAccessControlTabs ? (
-                <DashboardSectionTabs groups={accessControlTabGroups} />
-              ) : null}
-              <div className="min-w-0">
-                {accessIdentityReady ? (
-                  resolvedShowOverview &&
-                  (showWorkforceDashboard || checkingEmployeeDashboardIdentity) ? null : (
-                    children
-                  )
-                ) : <AccessSkeleton className="min-h-40" variant="dashboard" />}
-              </div>
-              {accessIdentityReady &&
-              resolvedActiveResource &&
-              resolvedUseApis &&
-              resolvedActiveResource !== "companies" &&
-              (resolvedActiveResource !== "roles" &&
-              resolvedActiveResource !== "permissions"
-                ? true
-                : navigationReady &&
-                  isDashboardRouteEnabledForCompanyModules(
-                    `/dashboard/${resolvedActiveResource}`,
-                    readPublishedCompanyModules(),
-                  )) ? (
-                <DataTable
-                  token={token}
-                  activeResource={resolvedActiveResource}
-                  rows={rows}
-                  roles={collections.roles}
-                  permissions={collections.permissions}
-                  actorPermissions={effectivePermissionLabels}
-                  usersQuery={usersQuery}
-                  usersTotal={usersTotal}
-                  usersTotalPages={usersTotalPages}
-                  onUsersQueryChange={handleUsersQueryChange}
-                  catalogQuery={catalogQuery}
-                  catalogTotal={catalogTotal}
-                  catalogTotalPages={catalogTotalPages}
-                  onCatalogQueryChange={handleCatalogQueryChange}
-                  loading={
-                    loading ||
-                    ((resolvedActiveResource === "roles" ||
-                      resolvedActiveResource === "permissions") &&
-                      !token)
-                  }
-                  error={error}
-                  onCreate={handleCreate}
-                  onPatch={handlePatch}
-                  onDelete={handleDelete}
-                  onUpdateUser={handleUpdateUser}
-                  onSetUserPassword={handleSetUserPassword}
-                  onSyncUserRoles={handleSyncUserRoles}
-                  onRefresh={refreshCurrentResource}
-                />
-              ) : null}
-              {accessIdentityReady && resolvedShowSettings ? (
-                <AccountSettingsPanel
-                  token={token}
-                  loading={loading}
-                  onChangeMyPassword={handleChangeMyPassword}
+        <SidebarTrigger
+          className="fixed left-3 top-2 z-[60] !hidden text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex"
+          aria-label="Toggle navigation"
+          title="Navigation"
+        />
+        <SidebarInset className="min-w-0 overflow-hidden">
+          {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
+          <SiteHeader
+            onRefresh={handleHeaderRefresh}
+            loading={loading}
+            adminName={adminName}
+            adminEmail={adminEmail}
+            adminAvatar={adminAvatar}
+            companyName={companyName}
+            scope={actorSnapshot.scope}
+            searchItems={
+              navigationReady
+                ? resolveDashboardSearchItems({
+                    scope: actorSnapshot.scope,
+                    permissionLabels: effectivePermissionLabels,
+                    accessMode,
+                    homeDashboardKind: effectiveHomeDashboardKind,
+                  })
+                : []
+            }
+          />
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
+            <div className="@container/main flex min-w-0 max-w-full flex-col">
+              {resolvedShowOverview && showWorkforceDashboard ? (
+                <HrAnalyticsDashboard
+                  refreshKey={overviewRefreshKey}
+                  companyName={companyName}
+                  adminRolesLabel={adminRolesLabel}
+                  assignedRoleNames={adminRoleNames}
+                  userName={adminName}
                   profilePhotoUrl={adminAvatar}
-                  displayName={adminName}
-                  profilePictureHref={
-                    actorSnapshot.scope !== "platform"
-                      ? "/dashboard/me/profile?tab=summary&edit=profile-photo"
-                      : null
-                  }
+                  showLeaveRequests={effectiveHomeDashboardKind === "hr"}
+                  showHrAnalytics={effectiveHomeDashboardKind === "hr"}
                 />
               ) : null}
+              <div
+                className={`flex min-w-0 max-w-full flex-col px-3 pt-0 pb-3 sm:px-4 md:px-4 md:pb-4 ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
+              >
+                {navigationReady && showAccessControlTabs ? (
+                  <DashboardSectionTabs groups={accessControlTabGroups} />
+                ) : null}
+                <div className="min-w-0">
+                  {accessIdentityReady ? (
+                    resolvedShowOverview &&
+                    (showWorkforceDashboard ||
+                      checkingEmployeeDashboardIdentity) ? null : (
+                      children
+                    )
+                  ) : (
+                    <AccessSkeleton className="min-h-40" variant="dashboard" />
+                  )}
+                </div>
+                {accessIdentityReady &&
+                resolvedActiveResource &&
+                resolvedUseApis &&
+                resolvedActiveResource !== "companies" &&
+                (resolvedActiveResource !== "roles" &&
+                resolvedActiveResource !== "permissions"
+                  ? true
+                  : navigationReady &&
+                    isDashboardRouteEnabledForCompanyModules(
+                      `/dashboard/${resolvedActiveResource}`,
+                      readPublishedCompanyModules(),
+                    )) ? (
+                  <DataTable
+                    token={token}
+                    activeResource={resolvedActiveResource}
+                    rows={rows}
+                    roles={collections.roles}
+                    permissions={collections.permissions}
+                    actorPermissions={effectivePermissionLabels}
+                    usersQuery={usersQuery}
+                    usersTotal={usersTotal}
+                    usersTotalPages={usersTotalPages}
+                    onUsersQueryChange={handleUsersQueryChange}
+                    catalogQuery={catalogQuery}
+                    catalogTotal={catalogTotal}
+                    catalogTotalPages={catalogTotalPages}
+                    onCatalogQueryChange={handleCatalogQueryChange}
+                    loading={
+                      loading ||
+                      ((resolvedActiveResource === "roles" ||
+                        resolvedActiveResource === "permissions") &&
+                        !token)
+                    }
+                    error={error}
+                    onCreate={handleCreate}
+                    onPatch={handlePatch}
+                    onDelete={handleDelete}
+                    onUpdateUser={handleUpdateUser}
+                    onSetUserPassword={handleSetUserPassword}
+                    onSyncUserRoles={handleSyncUserRoles}
+                    onRefresh={refreshCurrentResource}
+                  />
+                ) : null}
+                {accessIdentityReady && resolvedShowSettings ? (
+                  <AccountSettingsPanel
+                    token={token}
+                    loading={loading}
+                    onChangeMyPassword={handleChangeMyPassword}
+                    profilePhotoUrl={adminAvatar}
+                    displayName={adminName}
+                    profilePictureHref={
+                      actorSnapshot.scope !== "platform"
+                        ? "/dashboard/me/profile?tab=summary&edit=profile-photo"
+                        : null
+                    }
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
-      </SidebarInset>
+        </SidebarInset>
         <Dialog open={forcePasswordResetOpen}>
           <DialogPopup
             className="!h-dvh !w-screen !max-w-none !max-h-none !rounded-none !border-0 !p-0"
@@ -1589,7 +1498,9 @@ export default function AdminDashboardView({
                     aria-label="Alliance HRMS account security"
                   >
                     <div className="relative z-10">
-                      <span className="text-sm font-semibold tracking-tight">Alliance HRMS</span>
+                      <span className="text-sm font-semibold tracking-tight">
+                        Alliance HRMS
+                      </span>
                       <div className="mt-16 max-w-sm">
                         <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25">
                           <ShieldCheck className="size-6" />
@@ -1598,12 +1509,14 @@ export default function AdminDashboardView({
                           A fresh start for your account.
                         </h1>
                         <p className="mt-4 text-sm leading-6 text-white/80">
-                          Choose a personal password to keep your HRMS account secure.
+                          Choose a personal password to keep your HRMS account
+                          secure.
                         </p>
                       </div>
                     </div>
                     <p className="relative z-10 text-xs text-white/60">
-                      © {new Date().getFullYear()} Alliance Insurance Corporation Ltd
+                      © {new Date().getFullYear()} Alliance Insurance
+                      Corporation Ltd
                     </p>
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#fff_0.9px,transparent_1px)] bg-[length:5px_5px] opacity-20" />
                   </section>
@@ -1612,7 +1525,11 @@ export default function AdminDashboardView({
                     <div className="mx-auto w-full max-w-[360px]">
                       <div className="mb-6 text-center md:hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/assets/alliance-logo.png" alt="Alliance Insurance" className="mx-auto mb-4 h-8 w-auto dark:brightness-0 dark:invert" />
+                        <img
+                          src="/assets/alliance-logo.png"
+                          alt="Alliance Insurance"
+                          className="mx-auto mb-4 h-8 w-auto dark:brightness-0 dark:invert"
+                        />
                         <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                           <LockKeyhole className="size-5" />
                         </div>
@@ -1622,7 +1539,8 @@ export default function AdminDashboardView({
                           Change your temporary password
                         </DialogTitle>
                         <DialogDescription className="text-sm leading-5 text-muted-foreground">
-                          Your administrator provided a temporary password. Create a new one before continuing.
+                          Your administrator provided a temporary password.
+                          Create a new one before continuing.
                         </DialogDescription>
                       </DialogHeader>
                       <ChangePasswordForm
@@ -1630,13 +1548,16 @@ export default function AdminDashboardView({
                         loading={forcePasswordResetBusy}
                         error={forcePasswordResetError}
                         requiredMode
-                        onUseDifferentAccount={handleUseDifferentAccountForForcedReset}
+                        onUseDifferentAccount={
+                          handleUseDifferentAccountForForcedReset
+                        }
                       />
                     </div>
                   </section>
                 </div>
                 <p className="mt-4 text-center text-[10px] text-muted-foreground md:hidden">
-                  © {new Date().getFullYear()} Alliance Insurance Corporation Ltd
+                  © {new Date().getFullYear()} Alliance Insurance Corporation
+                  Ltd
                 </p>
               </div>
             </div>

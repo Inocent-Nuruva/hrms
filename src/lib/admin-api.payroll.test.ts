@@ -6,6 +6,10 @@ import {
   createPayrollInput,
   downloadMyPayslip,
   downloadPayrollBankingBatch,
+  generatePayrollBankingBatch,
+  generatePayrollBankReadyBatch,
+  getPayrollInternalLedger,
+  getPayrollPaymentHistory,
   exportPayrollAccountingJournal,
   generatePayrollPeriod,
   getPayrollIntegrationCatalog,
@@ -83,6 +87,28 @@ describe("payroll admin API helpers", () => {
       }),
     ]);
     expect(result.total).toBe(1);
+  });
+
+  it("uses internal payment batches by default and exposes optional bank-ready history paths", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 15, mode: "INTERNAL" } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 16, mode: "BANK_READY" } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { batches: [], imports: [] } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { balanced: true } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await generatePayrollBankingBatch("token", 12);
+    await generatePayrollBankReadyBatch("token", 12);
+    await getPayrollPaymentHistory("token", 12);
+    await getPayrollInternalLedger("token", 12);
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://localhost:8888/api/payroll/banking/runs/12/batches",
+      "http://localhost:8888/api/payroll/banking/runs/12/batches/bank-ready",
+      "http://localhost:8888/api/payroll/banking/runs/12/history",
+      "http://localhost:8888/api/payroll/accounting/ledger?payroll_run_id=12",
+    ]);
   });
 
   it("lists employee payroll profiles without requiring a user sort field", async () => {
