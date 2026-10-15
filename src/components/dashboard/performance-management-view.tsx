@@ -10,6 +10,8 @@ import {
   resolveKpiCategory,
 } from "@/lib/kpi-categories";
 import tableStyles from "./performance-records-table.module.css";
+import reportTableStyles from "./performance-reports-table.module.css";
+import planTableStyles from "./performance-plans-table.module.css";
 import { PerformanceWorkflowHelp } from "@/components/dashboard/performance-workflow-help";
 import { PerformanceSetupWizard } from "@/components/dashboard/performance-setup-wizard";
 import {
@@ -74,6 +76,10 @@ import {
   Clock20Regular as PendingIcon,
   Gauge20Regular as ScoreIcon,
   SearchSparkle20Regular as SearchIcon,
+  ArrowDownload20Regular,
+  DocumentPdf20Regular,
+  TableSimple20Regular,
+  Eye20Regular,
 } from "@fluentui/react-icons";
 import { toast } from "@/components/ui/fluent-toast-store";
 
@@ -2222,64 +2228,100 @@ export function PerformanceManagementView({
         {
           key: "report",
           label: "Report",
+          defaultWidth: 190,
           render: (row) => (
-            <div className="space-y-0.5">
-              <p className="font-medium">
-                {readString(row, ["name"], optionLabel(row))}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {readString(row, ["code"])}
-              </p>
+            <div className={reportTableStyles.reportCell}>
+              <span className={reportTableStyles.reportIcon} aria-hidden="true">
+                <ChartMultiple20Regular />
+              </span>
+              <span className={reportTableStyles.reportCopy}>
+                <span className={reportTableStyles.reportName}>
+                  {readString(row, ["name"], optionLabel(row))}
+                </span>
+                <span className={reportTableStyles.reportCode}>
+                  {readString(row, ["code"])}
+                </span>
+              </span>
             </div>
           ),
         },
         {
           key: "description",
           label: "Description",
-          render: (row) => readString(row, ["description"], "N/A"),
+          defaultWidth: 290,
+          render: (row) => (
+            <span className={reportTableStyles.description}>
+              {readString(row, ["description"], "No description provided.")}
+            </span>
+          ),
         },
         {
           key: "actions",
           label: "Exports",
+          defaultWidth: 160,
+          sortable: false,
           render: (row) => {
             const code = readString(row, ["code"]);
             const formats = ["csv", "xlsx", "pdf"] as const;
             return (
-              <div className="flex flex-wrap gap-1">
-                {formats.map((format) => (
-                  <FluentButton
-                    key={format}
-                    type="button"
-                    appearance="secondary"
-                    disabled={!code || busyId === `${code}-${format}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void runAction(
-                        `${code}-${format}`,
-                        async (token) => {
-                          const blob = await downloadPerformanceReport(
-                            token,
-                            code,
-                            format,
-                          );
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          link.download = `${code.toLowerCase()}.${format}`;
-                          link.click();
-                          URL.revokeObjectURL(url);
-                        },
-                        `${format.toUpperCase()} export downloaded.`,
-                      );
-                    }}
-                  >
-                    {busyId === `${code}-${format}` ? (
-                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
+              <div className={reportTableStyles.actions}>
+                {formats.map((format) => {
+                  const busy = busyId === `${code}-${format}`;
+                  const icon =
+                    format === "pdf" ? (
+                      <DocumentPdf20Regular />
+                    ) : format === "xlsx" ? (
+                      <TableSimple20Regular />
                     ) : (
-                      format.toUpperCase()
-                    )}
-                  </FluentButton>
-                ))}
+                      <ArrowDownload20Regular />
+                    );
+                  return (
+                    <Tooltip
+                      key={format}
+                      content={`Download ${format.toUpperCase()}`}
+                      relationship="label"
+                    >
+                      <FluentButton
+                        type="button"
+                        appearance="subtle"
+                        size="small"
+                        className={reportTableStyles.exportButton}
+                        data-format={format}
+                        aria-label={`Download ${readString(row, ["name"], "report")} as ${format.toUpperCase()}`}
+                        icon={
+                          busy ? (
+                            <FluentLoadingIndicator className="size-4 animate-spin" />
+                          ) : (
+                            icon
+                          )
+                        }
+                        disabled={!code || busy}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void runAction(
+                            `${code}-${format}`,
+                            async (token) => {
+                              const blob = await downloadPerformanceReport(
+                                token,
+                                code,
+                                format,
+                              );
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement("a");
+                              link.href = url;
+                              link.download = `${code.toLowerCase()}.${format}`;
+                              link.click();
+                              URL.revokeObjectURL(url);
+                            },
+                            `${format.toUpperCase()} export downloaded.`,
+                          );
+                        }}
+                      >
+                        {format.toUpperCase()}
+                      </FluentButton>
+                    </Tooltip>
+                  );
+                })}
               </div>
             );
           },
@@ -2346,22 +2388,31 @@ export function PerformanceManagementView({
         {
           key: "employee",
           label: "Employee",
+          defaultWidth: 230,
           render: (row) => (
-            <div className="space-y-0.5">
-              <p className="font-medium">{employeeLabel(row)}</p>
-              <p className="text-xs text-muted-foreground">
-                {readString(
-                  asRecord(row.financialYear ?? row.financial_year),
-                  ["name", "code"],
-                  `Year #${readNumber(row, ["financialYearId", "financial_year_id"]) ?? "—"}`,
-                )}
-              </p>
+            <div className={planTableStyles.employeeCell}>
+              <span className={planTableStyles.employeeIcon} aria-hidden="true">
+                <PeopleTeam20Regular />
+              </span>
+              <span className={planTableStyles.employeeCopy}>
+                <span className={planTableStyles.employeeName}>
+                  {employeeLabel(row)}
+                </span>
+                <span className={planTableStyles.employeeYear}>
+                  {readString(
+                    asRecord(row.financialYear ?? row.financial_year),
+                    ["name", "code"],
+                    `Year #${readNumber(row, ["financialYearId", "financial_year_id"]) ?? "—"}`,
+                  )}
+                </span>
+              </span>
             </div>
           ),
         },
         {
           key: "status",
           label: "Status",
+          defaultWidth: 105,
           render: (row) => (
             <StatusChip
               value={readString(
@@ -2375,19 +2426,43 @@ export function PerformanceManagementView({
         {
           key: "effective",
           label: "Effective",
+          defaultWidth: 160,
           render: (row) => (
-            <div className="space-y-0.5 text-xs">
-              <p>{formatDate(row.effectiveFrom ?? row.effective_from)}</p>
-              <p className="text-muted-foreground">
+            <div className={planTableStyles.effectiveDates}>
+              <span>{formatDate(row.effectiveFrom ?? row.effective_from)}</span>
+              <span className={planTableStyles.effectiveEnd}>
                 To {formatDate(row.effectiveTo ?? row.effective_to)}
-              </p>
+              </span>
             </div>
           ),
         },
         {
           key: "items",
           label: "Items",
+          defaultWidth: 72,
           render: (row) => String(asRecordArray(row.items).length),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          defaultWidth: 100,
+          sortable: false,
+          render: (row) => (
+            <FluentButton
+              type="button"
+              appearance="subtle"
+              size="small"
+              className={planTableStyles.viewButton}
+              icon={<Eye20Regular />}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDetailRecord(row);
+                setDetailOpen(true);
+              }}
+            >
+              View
+            </FluentButton>
+          ),
         },
       ];
     }
@@ -3369,7 +3444,11 @@ export function PerformanceManagementView({
         className={
           activeTab === "setup"
             ? tableStyles.records
-            : "overflow-hidden rounded-xl border border-border bg-card"
+            : activeTab === "reports"
+              ? reportTableStyles.surface
+              : activeTab === "plans"
+                ? planTableStyles.surface
+                : "overflow-hidden rounded-xl border border-border bg-card"
         }
       >
         <ResizableTable
@@ -3392,8 +3471,22 @@ export function PerformanceManagementView({
             />
           }
           compact={activeTab !== "setup"}
+          fluent
+          className={
+            activeTab === "reports"
+              ? reportTableStyles.table
+              : activeTab === "plans"
+                ? planTableStyles.table
+                : undefined
+          }
           frameClassName={
-            activeTab === "setup" ? "!border-0 !shadow-none" : undefined
+            activeTab === "setup"
+              ? "!border-0 !shadow-none"
+              : activeTab === "reports"
+                ? reportTableStyles.frame
+                : activeTab === "plans"
+                  ? planTableStyles.frame
+                  : undefined
           }
           data={visibleRows}
           columns={columns}
@@ -3936,7 +4029,13 @@ export function PerformanceManagementView({
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={
+              activeTab === "plans"
+                ? planTableStyles.headerActions
+                : "flex flex-wrap gap-2"
+            }
+          >
             <PerformanceWorkflowHelp
               periodActions={activeTab === "setup" && setupTab === "periods"}
             />
@@ -3988,6 +4087,7 @@ export function PerformanceManagementView({
                 <FluentButton
                   type="button"
                   appearance="secondary"
+                  icon={<Play20Regular />}
                   onClick={() => openCreate("generate-plan")}
                 >
                   Generate from rules
@@ -3995,9 +4095,9 @@ export function PerformanceManagementView({
                 <FluentButton
                   type="button"
                   appearance="primary"
+                  icon={<PlusIcon />}
                   onClick={() => openCreate("plan")}
                 >
-                  <PlusIcon className="size-4" />
                   New plan
                 </FluentButton>
               </>

@@ -85,7 +85,16 @@ export function SearchToggleField({
         aria-label={label}
         placeholder={placeholder}
         value={value}
-        onChange={(_event, data) => onChange(data.value)}
+        onChange={(event, data) => {
+          // Fluent SearchBox reports its dismiss button through this callback
+          // as a mouse event with an empty value. Keep that action explicit so
+          // controlled search fields always clear their parent state as well.
+          if (event.type === "click") {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+          onChange(data.value)
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault()

@@ -20,4 +20,17 @@ describe("employee probation payload", () => {
     expect(record).toEqual(expect.objectContaining({ id: 18, status: "IN_PROGRESS" }))
     expect(probationCriteriaFromCase(record).map((item) => item.code)).toEqual(["QUALITY"])
   })
+
+  it("omits criteria that do not allow employee self-ratings", () => {
+    const record = {
+      id: 19,
+      policy: {
+        criteria: [
+          { code: "QUALITY", selfRatingEnabled: true },
+          { code: "ATTENDANCE", self_rating_enabled: false },
+        ],
+      },
+    }
+    expect(probationCriteriaFromCase(record).map((item) => item.code)).toEqual(["QUALITY"])
+  })
 })

@@ -1,6 +1,7 @@
 "use client"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
@@ -4888,12 +4889,35 @@ export function EmployeePromotionView() {
   const detailStatus = readString(selectedMovement, ["status"], "")
   const detailStatusMeta = resolveMovementStatusMeta(detailStatus)
   const listLoading = loading || movementsLoading
+  const employeeRecordMissing = [error, movementsError].some((value) => {
+    const normalized = value?.toLowerCase() ?? ""
+    return normalized.includes("employee profile") ||
+      normalized.includes("no employee record") ||
+      (normalized.includes("employee record") && /(not linked|not found|missing)/.test(normalized))
+  })
+
+  if (employeeRecordMissing) {
+    return (
+      <EmployeeProfileRequiredState
+        description="Your promotions and transfers need to be linked to an employee record. Complete or update your profile, then return here to review movement history."
+        returnLabel="My promotion"
+        completionNote="Your movement history will appear after your employee record is available."
+      />
+    )
+  }
 
   return (
     <section className="space-y-4">
       <HeroBand
+        variant="dashboard"
         eyebrow="My movements"
         title="Promotions & movements"
+        identityInline
+        identity={(
+          <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-sky-50 via-blue-50 to-violet-100 ring-1 ring-blue-100 dark:from-sky-950/40 dark:via-blue-950/40 dark:to-violet-950/50 dark:ring-blue-900">
+            <PeopleTeam20Color className="size-8" aria-hidden="true" />
+          </div>
+        )}
         description={
           canRecordMovements
             ? "Your own promotions and transfers. Record changes for other employees from Movement operations."
@@ -6176,11 +6200,26 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   }
 
   if (profileError) {
+    if (profileError.toLowerCase().includes("employee profile")) {
+      return (
+        <EmployeeProfileRequiredState
+          description="Leave requests and balances are connected to your employee profile. Complete the required details once, then return here to continue."
+          returnLabel="My leave"
+          completionNote="Your leave information will be available after your profile is ready."
+        />
+      )
+    }
     return <div className="px-4 py-2 text-sm text-red-600">{profileError}</div>
   }
 
   if (employeeId === null) {
-    return <div className="px-4 py-2 text-sm text-red-600">Employee profile not found.</div>
+    return (
+      <EmployeeProfileRequiredState
+        description="Leave requests and balances are connected to your employee profile. Complete the required details once, then return here to continue."
+        returnLabel="My leave"
+        completionNote="Your leave information will be available after your profile is ready."
+      />
+    )
   }
 
   let tabContent: React.ReactNode = null

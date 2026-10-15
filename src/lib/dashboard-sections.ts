@@ -222,7 +222,7 @@ const probationOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/probation/overview" },
       { title: "Policies", url: "/dashboard/probation/policies" },
       { title: "Cases", url: "/dashboard/probation/cases" },
-      { title: "Team", url: "/dashboard/probation/team" },
+      { title: "My team", url: "/dashboard/probation/team" },
     ],
   },
 ]

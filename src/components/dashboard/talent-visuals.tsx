@@ -237,6 +237,7 @@ export function HeroBand({
   description,
   actions,
   identity,
+  identityInline = false,
   variant = "brand",
 }: {
   eyebrow: string
@@ -244,6 +245,7 @@ export function HeroBand({
   description?: string
   actions?: React.ReactNode
   identity?: React.ReactNode
+  identityInline?: boolean
   variant?: "brand" | "dashboard"
 }) {
   const motionPreset = useDashboardMotion()
@@ -293,40 +295,42 @@ export function HeroBand({
         </>
       )}
       <div className="relative z-10 flex w-full min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          {identity ? <div className="mb-3">{identity}</div> : null}
-          <motion.p
-            className={cn(
-              "text-[11px] font-semibold uppercase tracking-[0.18em]",
-              dashboardStyle ? "text-muted-foreground" : "text-white/70",
-            )}
-            initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.32 }}
-          >
-            {eyebrow}
-          </motion.p>
-          <motion.h1
-            className={cn(
-              "flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl",
-              dashboardStyle ? "text-foreground" : "text-white",
-            )}
-            initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.06 }}
-          >
-            {title}
-          </motion.h1>
-          {description ? (
+        <div className={cn("min-w-0 flex-1", identityInline && "flex items-start gap-3 sm:gap-4")}>
+          {identity ? <div className={identityInline ? "shrink-0 pt-1" : "mb-3"}>{identity}</div> : null}
+          <div className="min-w-0 space-y-1.5">
             <motion.p
-              className={cn("text-sm", dashboardStyle ? "text-muted-foreground" : "text-white/75")}
-              initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.38, delay: 0.12 }}
+              className={cn(
+                "text-[11px] font-semibold uppercase tracking-[0.18em]",
+                dashboardStyle ? "text-muted-foreground" : "text-white/70",
+              )}
+              initial={motionPreset.reduce ? false : { opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.32 }}
             >
-              {description}
+              {eyebrow}
             </motion.p>
-          ) : null}
+            <motion.h1
+              className={cn(
+                "flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight sm:text-3xl",
+                dashboardStyle ? "text-foreground" : "text-white",
+              )}
+              initial={motionPreset.reduce ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.06 }}
+            >
+              {title}
+            </motion.h1>
+            {description ? (
+              <motion.p
+                className={cn("text-sm", dashboardStyle ? "text-muted-foreground" : "text-white/75")}
+                initial={motionPreset.reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.38, delay: 0.12 }}
+              >
+                {description}
+              </motion.p>
+            ) : null}
+          </div>
         </div>
         {actions ? (
           <motion.div

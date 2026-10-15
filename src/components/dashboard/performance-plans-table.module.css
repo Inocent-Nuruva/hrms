@@ -1,0 +1,124 @@
+.surface {
+  min-width: 0;
+}
+
+.table {
+  padding: 0;
+  font-family: var(--font-comfortaa), "Comfortaa", sans-serif;
+}
+
+.frame {
+  overflow: hidden;
+  border-color: var(--colorNeutralStroke2) !important;
+  border-radius: 8px;
+  box-shadow: none !important;
+}
+
+.table :global(.fui-TableHeader) {
+  background: var(--colorNeutralBackground2);
+}
+
+.table :global(.fui-TableHeaderCell) {
+  color: var(--colorNeutralForeground2);
+}
+
+.table :global(.fui-TableBody .fui-TableRow) {
+  min-height: 48px;
+  border-bottom: 1px solid var(--colorNeutralStroke2);
+  transition: background-color 120ms ease;
+}
+
+.table :global(.fui-TableBody .fui-TableRow:hover) {
+  background: var(--colorNeutralBackground1Hover);
+}
+
+.table :global(.fui-TableCell),
+.table :global(.fui-TableHeaderCell),
+.table :global(.fui-Button) {
+  font-family: inherit;
+}
+
+.employeeCell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.employeeIcon {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--colorBrandBackground2);
+  color: var(--colorBrandForeground1);
+}
+
+.employeeCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.employeeName {
+  overflow: hidden;
+  color: var(--colorNeutralForeground1);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employeeYear,
+.effectiveEnd {
+  overflow: hidden;
+  color: var(--colorNeutralForeground3);
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.effectiveDates {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--colorNeutralForeground1);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.viewButton:global(.fui-Button) {
+  min-width: 72px;
+  height: 28px;
+  padding-inline: 7px;
+  border-radius: 6px;
+  color: var(--colorBrandForeground1);
+  font-size: 10px;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .table {
+    padding: 0;
+  }
+
+  .headerActions {
+    width: 100%;
+  }
+
+  .headerActions :global(.fui-Button) {
+    flex: 1 1 auto;
+  }
+}

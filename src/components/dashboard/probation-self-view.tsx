@@ -48,7 +48,7 @@ export function ProbationSelfView() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [comment, setComment] = React.useState("")
-  const [ratings, setRatings] = React.useState<Array<{ code: string; name: string; rating: string; comment: string }>>([])
+  const [ratings, setRatings] = React.useState<Array<{ code: string; name: string; maximumRating: number; required: boolean; rating: string; comment: string }>>([])
   const [objectives, setObjectives] = React.useState<Array<{ id: string; title: string; percent: string; comment: string }>>([])
   const [saving, setSaving] = React.useState(false)
 
@@ -71,6 +71,8 @@ export function ProbationSelfView() {
         probationCriteriaFromCase(caseRecord).map((item) => ({
           code: readString(item, ["code", "criterion_code", "criterionCode"]),
           name: readString(item, ["name", "title"], readString(item, ["code"])),
+          maximumRating: readNumber(item, ["maximumRating", "maximum_rating"]) ?? 5,
+          required: item.isRequired !== false && item.is_required !== false,
           rating: "",
           comment: "",
         })),
@@ -121,12 +123,52 @@ export function ProbationSelfView() {
     "minimum_confirmation_score",
   ])
   const caseId = rowId(record)
+  const caseStatus = readString(record, ["status"]).toUpperCase()
+  const cycles = asRecordArray(record?.reviewCycles)
+  const currentCycleNumber = readNumber(record, ["currentCycleNumber", "current_cycle_number"])
+  const currentCycle =
+    cycles.find((cycle) => readNumber(cycle, ["cycleNumber", "cycle_number"]) === currentCycleNumber) ??
+    cycles[0] ??
+    null
+  const assessmentSubmittedAt = currentCycle?.selfAssessmentSubmittedAt ?? currentCycle?.self_assessment_submitted_at
+  const assessmentRequired = currentCycle?.selfAssessmentRequired ?? currentCycle?.self_assessment_required
+  const assessmentOpen =
+    caseStatus === "SELF_ASSESSMENT_PENDING" && assessmentRequired !== false && !assessmentSubmittedAt
+  const cycleStepStatus =
+    ["DRAFT", "OBJECTIVES_PENDING", "ACTIVE", "EXTENDED"].includes(caseStatus)
+      ? "ACTIVE"
+      : ["NOT_CONFIRMED", "TERMINATION_RECOMMENDED", "CANCELLED"].includes(caseStatus)
+        ? "HR_REVIEW_PENDING"
+        : caseStatus
 
   async function onSubmit() {
     const token = readStoredToken()
     if (!token || !caseId) return
+    if (!assessmentOpen) return
     if (!comment.trim()) {
       toast.error("Add an overall comment before submitting.")
+      return
+    }
+    const incompleteRating = ratings.find((item) => item.required && item.rating.trim() === "")
+    if (incompleteRating) {
+      toast.error(`Add a rating for ${incompleteRating.name}.`)
+      return
+    }
+    const invalidRating = ratings.find((item) => {
+      const rating = Number(item.rating)
+      return !Number.isFinite(rating) || rating < 0 || rating > item.maximumRating
+    })
+    if (invalidRating) {
+      toast.error(`${invalidRating.name} must be rated from 0 to ${invalidRating.maximumRating}.`)
+      return
+    }
+    const invalidProgress = objectives.find((item) => {
+      if (!item.percent.trim()) return false
+      const percent = Number(item.percent)
+      return !Number.isFinite(percent) || percent < 0 || percent > 100
+    })
+    if (invalidProgress) {
+      toast.error(`${invalidProgress.title} progress must be between 0 and 100%.`)
       return
     }
     setSaving(true)
@@ -134,7 +176,7 @@ export function ProbationSelfView() {
       await submitMyProbationSelfAssessment(token, caseId, {
         overall_comment: comment.trim(),
         ratings: ratings
-          .filter((item) => item.code && item.rating)
+          .filter((item) => item.code && item.rating.trim())
           .map((item) => ({
             criterion_code: item.code,
             rating: Number(item.rating),
@@ -230,9 +272,9 @@ export function ProbationSelfView() {
                     },
                     {
                       label: "Self-assessment",
-                      value: formatDate(asRecordArray(record.reviewCycles)[0]?.selfAssessmentSubmittedAt) === "—"
+                      value: formatDate(currentCycle?.selfAssessmentSubmittedAt ?? currentCycle?.self_assessment_submitted_at) === "—"
                         ? "Not submitted"
-                        : formatDate(asRecordArray(record.reviewCycles)[0]?.selfAssessmentSubmittedAt),
+                        : formatDate(currentCycle?.selfAssessmentSubmittedAt ?? currentCycle?.self_assessment_submitted_at),
                     },
                     {
                       label: "Due",
@@ -246,8 +288,8 @@ export function ProbationSelfView() {
               <h2 className="text-sm font-semibold">Cycle</h2>
               <div className="mt-4">
                 <CycleRail
-                  steps={["OPEN", "IN_PROGRESS", "SELF_ASSESSED", "MANAGER_REVIEWED", "CONFIRMED"]}
-                  current={readString(record, ["status"], "OPEN")}
+                  steps={["ACTIVE", "SELF_ASSESSMENT_PENDING", "MANAGER_REVIEW_PENDING", "HR_REVIEW_PENDING", "CONFIRMED"]}
+                  current={cycleStepStatus || "ACTIVE"}
                 />
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -257,12 +299,12 @@ export function ProbationSelfView() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-4">
+          {assessmentOpen ? <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-sm font-semibold">Self-assessment</h2>
                 <p className="text-xs text-muted-foreground">
-                  Rate each criterion, update objective progress, then send the assessment to your manager.
+                  Rate required criteria and update objective progress before submitting your assessment.
                 </p>
               </div>
               <button type="button" className={primaryButtonClass} onClick={() => void onSubmit()} disabled={saving}>
@@ -277,7 +319,9 @@ export function ProbationSelfView() {
               {ratings.map((item, index) => (
                 <div key={`${item.code}-${index}`} className="grid gap-2 rounded-xl bg-muted/40 p-3 md:grid-cols-[minmax(0,1fr)_120px]">
                   <div>
-                    <p className="text-sm font-medium">{item.name}</p>
+                    <p className="text-sm font-medium">
+                      {item.name}{item.required ? <span className="text-rose-600"> *</span> : <span className="ml-1 text-xs text-muted-foreground">Optional</span>}
+                    </p>
                     <input
                       className={`${textareaClass} mt-2 min-h-16`}
                       value={item.comment}
@@ -295,6 +339,10 @@ export function ProbationSelfView() {
                     <span className="font-medium">Rating</span>
                     <input
                       className={inputClass}
+                      type="number"
+                      min={0}
+                      max={item.maximumRating}
+                      step="0.1"
                       value={item.rating}
                       onChange={(event) =>
                         setRatings((current) =>
@@ -328,6 +376,10 @@ export function ProbationSelfView() {
                     <span className="font-medium">% complete</span>
                     <input
                       className={inputClass}
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="1"
                       value={item.percent}
                       onChange={(event) =>
                         setObjectives((current) =>
@@ -342,6 +394,19 @@ export function ProbationSelfView() {
               ))}
             </div>
           </div>
+          : assessmentRequired === false ? (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              This policy does not require an employee self-assessment.
+            </div>
+          ) : assessmentSubmittedAt ? (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              Your self-assessment has been submitted and is waiting for the next review stage.
+            </div>
+          ) : ["CONFIRMED", "NOT_CONFIRMED", "TERMINATION_RECOMMENDED", "CANCELLED"].includes(caseStatus) ? null : (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              Self-assessment opens when your probation review is due.
+            </div>
+          )}
         </>
       ) : error ? null : (
         <div className="rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">

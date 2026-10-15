@@ -4,7 +4,18 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import {
+  Add20Regular,
+  ArrowClockwise20Regular,
+  ArrowSwap20Regular,
+  BuildingBank20Regular,
+  CheckmarkCircle20Regular,
+  CloudArrowUp20Regular,
+  Delete20Regular,
+  DocumentBulletList20Regular,
+  DocumentSearch20Regular,
+  PersonMoney20Regular,
+} from "@fluentui/react-icons";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/fluent-toast-store";
 
@@ -423,6 +434,40 @@ function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+type BankPaymentEntry = {
+  id: number;
+  employeeNo: string;
+  accountMasked: string;
+  reference: string;
+  amount: string;
+  status: string;
+};
+
+const BANK_STATEMENT_HEADERS = [
+  "employee_id",
+  "employee_no",
+  "account_number_masked",
+  "reference",
+  "amount",
+  "status",
+];
+
+function bankStatementRowsToCsv(rows: BankPaymentEntry[]) {
+  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const values = rows
+    .filter((row) => row.employeeNo || row.accountMasked || row.reference || row.amount)
+    .map((row) => ["", row.employeeNo, row.accountMasked, row.reference, row.amount, row.status]);
+  return [
+    BANK_STATEMENT_HEADERS.join(","),
+    ...values.map((row) => row.map(escape).join(",")),
+  ].join("\n");
+}
+
+function downloadBankStatementTemplate() {
+  const csv = `${BANK_STATEMENT_HEADERS.join(",")}\n`;
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "payroll-bank-statement-template.csv");
 }
 
 function optionLabel(row: AdminRecord) {
@@ -1912,6 +1957,14 @@ export function PayrollOperationsView() {
   const [advancedForm, setAdvancedForm] = React.useState(
     emptyAdvancedPayrollForm,
   );
+  const [bankInputMode, setBankInputMode] = React.useState<"manual" | "csv">("manual");
+  const [bankPaymentRows, setBankPaymentRows] = React.useState<BankPaymentEntry[]>([
+    { id: 1, employeeNo: "", accountMasked: "", reference: "", amount: "", status: "PAID" },
+  ]);
+  const [bankCsvText, setBankCsvText] = React.useState("");
+  const [bankCsvName, setBankCsvName] = React.useState("");
+  const [bankCsvError, setBankCsvError] = React.useState("");
+  const bankFileInputRef = React.useRef<HTMLInputElement>(null);
   const [approveForm, setApproveForm] = React.useState(emptyApproveRunForm);
 
   const [processingRunId, setProcessingRunId] = React.useState("");
@@ -2460,6 +2513,10 @@ export function PayrollOperationsView() {
                   : tab === "reports"
                     ? "Payroll reports"
                     : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`;
+
+  const sectionDescription = tab === "reports"
+    ? "Check payroll readiness, compare runs, review final settlements, and prepare reports or accounting records."
+    : "Runs, inputs, employee profiles, periods, and setup.";
 
   const canMutatePayroll = canPerformPermission(actor.permissionLabels, {
     permissions: [
@@ -4296,12 +4353,26 @@ export function PayrollOperationsView() {
 
   async function onImportBankStatement() {
     const token = readStoredToken();
-    if (
-      !token ||
-      !advancedForm.bankImportRunId ||
-      !advancedForm.importText.trim()
-    ) {
-      toast.error("Select a payroll run and paste bank statement rows.");
+    const fileText = bankInputMode === "csv"
+      ? bankCsvText.trim()
+      : bankStatementRowsToCsv(bankPaymentRows);
+    const completedRows = bankPaymentRows.filter((row) => row.employeeNo.trim() || row.accountMasked.trim() || row.reference.trim() || row.amount.trim());
+    if (bankInputMode === "manual") {
+      if (completedRows.length === 0) {
+        toast.error("Add at least one payment row before importing.");
+        return;
+      }
+      if (completedRows.some((row) => !row.employeeNo.trim() || !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0)) {
+        toast.error("Each payment needs an employee number and a positive amount.");
+        return;
+      }
+    }
+    if (bankInputMode === "csv" && bankCsvText.trim().split(/\r?\n/).filter(Boolean).length < 2) {
+      toast.error("Add at least one payment row to the CSV before importing.");
+      return;
+    }
+    if (!token || !advancedForm.bankImportRunId || !fileText.trim()) {
+      toast.error("Choose a payroll run and add at least one bank payment row.");
       return;
     }
     setReportBusy("bank-import");
@@ -4314,7 +4385,7 @@ export function PayrollOperationsView() {
         provider_key: advancedForm.providerKey.trim() || undefined,
         payment_reference: advancedForm.paymentReference.trim() || undefined,
         payment_date: advancedForm.paymentDate || undefined,
-        file_text: advancedForm.importText.trim(),
+        file_text: fileText,
       });
       setReportKind("report");
       setReportResult((result as AdminRecord | null) ?? { status: "imported" });
@@ -4328,6 +4399,32 @@ export function PayrollOperationsView() {
       );
     } finally {
       setReportBusy("");
+    }
+  }
+
+  async function onBankStatementFileSelected(file: File | null) {
+    setBankCsvError("");
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setBankCsvError("Choose a CSV file smaller than 5 MB.");
+      return;
+    }
+    try {
+      const text = await file.text();
+      const header = (text.split(/\r?\n/, 1)[0] ?? "")
+        .split(",")
+        .map((value) => value.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, "_"));
+      const hasAmount = header.includes("amount");
+      const hasEmployeeMatch = ["employee_no", "employee_id", "account_number_masked", "reference"].some((key) => header.includes(key));
+      if (text.trim().split(/\r?\n/).filter(Boolean).length < 2 || !hasAmount || !hasEmployeeMatch) {
+        setBankCsvError("This file needs an amount column and at least one employee or payment reference column. Download the template if you need a starting point.");
+        return;
+      }
+      setBankCsvText(text);
+      setBankCsvName(file.name);
+      setBankInputMode("csv");
+    } catch {
+      setBankCsvError("We could not read this file. Try saving it as a CSV and upload it again.");
     }
   }
 
@@ -7172,7 +7269,7 @@ export function PayrollOperationsView() {
                   }))
                 }
               >
-                <PlusIcon className="size-3.5" />
+                <Add20Regular className="size-3.5" />
                 Add line
               </button>
             </div>
@@ -8266,7 +8363,7 @@ export function PayrollOperationsView() {
         <div className="min-w-0">
           <h1 className="text-base font-semibold text-foreground">Payroll</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Runs, inputs, employee profiles, periods, and setup.
+            {sectionDescription}
           </p>
         </div>
       </div>
@@ -8474,13 +8571,32 @@ export function PayrollOperationsView() {
         </div>
       ) : tab === "reports" ? (
         <div className="space-y-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+            <p className="text-sm font-semibold text-foreground">How to use these tools</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Check setup before processing, compare two runs to see what changed, and calculate final pay for an offboarding request. These tools create checks and reports; start or process payroll from the Runs tab.
+            </p>
+            <nav aria-label="Payroll report tasks" className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { href: "#payroll-reconciliation", icon: <CheckmarkCircle20Regular aria-hidden="true" />, title: "1. Check setup", detail: "Find blockers before a run" },
+                { href: "#payroll-run-comparison", icon: <ArrowSwap20Regular aria-hidden="true" />, title: "2. Compare runs", detail: "See what changed" },
+                { href: "#payroll-final-settlement", icon: <PersonMoney20Regular aria-hidden="true" />, title: "3. Final pay", detail: "Review an exit settlement" },
+                { href: "#payroll-bank-match", icon: <BuildingBank20Regular aria-hidden="true" />, title: "4. Match bank results", detail: "Record payments already sent" },
+              ].map((step) => (
+                <a key={step.href} href={step.href} className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left transition hover:bg-muted/40">
+                  <span className="text-primary">{step.icon}</span>
+                  <span className="min-w-0"><span className="block text-xs font-semibold text-foreground">{step.title}</span><span className="block truncate text-[11px] text-muted-foreground">{step.detail}</span></span>
+                </a>
+              ))}
+            </nav>
+          </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="grid gap-0 lg:grid-cols-3">
-              <div className="space-y-3 border-border p-4 lg:border-r">
+              <div id="payroll-reconciliation" className="scroll-mt-24 space-y-3 border-border p-4 lg:border-r">
                 <div>
-                  <h2 className="text-sm font-semibold">Reconciliation</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold"><CheckmarkCircle20Regular aria-hidden="true" className="text-primary" />Reconciliation</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Check profiles, mappings, and run readiness.
+                    Find missing employee payroll profiles, salary mappings, or setup items that could stop payroll from running. This check does not create a payroll run.
                   </p>
                 </div>
                 <button
@@ -8492,24 +8608,24 @@ export function PayrollOperationsView() {
                   {reportBusy === "reconciliation" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Run
+                  Run reconciliation
                 </button>
               </div>
-              <div className="space-y-3 border-t border-border p-4 lg:border-l-0 lg:border-r lg:border-t-0">
+              <div id="payroll-run-comparison" className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-l-0 lg:border-r lg:border-t-0">
                 <div>
-                  <h2 className="text-sm font-semibold">Run variance</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold"><ArrowSwap20Regular aria-hidden="true" className="text-primary" />Run variance</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Compare two payroll runs.
+                    Select two runs to see differences in payroll totals and employee amounts. Choose the first run, then the run you want to compare it with.
                   </p>
                 </div>
                 <FluentSelect
                   ariaLabel="Primary run"
                   className="w-full"
                   value={varianceRunId}
-                  placeholder="Primary run"
+                  placeholder="First payroll run"
                   onChange={setVarianceRunId}
                   options={[
-                    { value: "", label: "Primary run" },
+                    { value: "", label: "First payroll run" },
                     ...recentRuns.map((row) => ({
                       value: rowId(row),
                       label:
@@ -8523,10 +8639,10 @@ export function PayrollOperationsView() {
                   ariaLabel="Comparison run"
                   className="w-full"
                   value={comparisonRunId}
-                  placeholder="Comparison run"
+                  placeholder="Compare with"
                   onChange={setComparisonRunId}
                   options={[
-                    { value: "", label: "Comparison run" },
+                    { value: "", label: "Compare with" },
                     ...recentRuns.map((row) => ({
                       value: rowId(row),
                       label:
@@ -8549,21 +8665,21 @@ export function PayrollOperationsView() {
                   {reportBusy === "variance" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Compare
+                  Compare runs
                 </button>
               </div>
-              <div className="space-y-3 border-t border-border p-4 lg:border-t-0">
+              <div id="payroll-final-settlement" className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-t-0">
                 <div>
-                  <h2 className="text-sm font-semibold">Final settlement</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold"><PersonMoney20Regular aria-hidden="true" className="text-primary" />Final settlement</h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Calculate one offboarding request.
+                    Calculate final pay for an employee leaving the company. Select the offboarding request to review its settlement details.
                   </p>
                 </div>
                 <FluentSelect
                   ariaLabel="Offboarding request"
                   className="w-full"
                   value={settlementRequestId}
-                  placeholder="Offboarding request"
+                  placeholder="Select offboarding request"
                   onChange={setSettlementRequestId}
                   options={[
                     { value: "", label: "Offboarding request" },
@@ -8586,18 +8702,17 @@ export function PayrollOperationsView() {
                   {reportBusy === "settlement" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Calculate
+                  Calculate final pay
                 </button>
               </div>
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
+          <div id="payroll-readiness" className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
               <div>
-                <h2 className="text-sm font-semibold">Deployment readiness</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold"><CheckmarkCircle20Regular aria-hidden="true" className="text-primary" />Deployment readiness</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Review external app options, notification events, environment
-                  mappings, and live-run prerequisites.
+                  Check whether payroll is ready to run, and review connected services and payroll notifications. Use this when setting up or troubleshooting payroll.
                 </p>
                 {reportKind === "readiness" && reportResult ? (
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -8679,7 +8794,7 @@ export function PayrollOperationsView() {
                   {reportBusy === "readiness" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Readiness
+                  Check readiness
                 </button>
                 <button
                   type="button"
@@ -8690,7 +8805,7 @@ export function PayrollOperationsView() {
                   {reportBusy === "integrations" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Integrations
+                  View integrations
                 </button>
                 <button
                   type="button"
@@ -8701,19 +8816,25 @@ export function PayrollOperationsView() {
                   {reportBusy === "notifications" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Notifications
+                  View notification events
                 </button>
               </div>
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
+          <div id="payroll-report-catalog" className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4">
+            <div className="mb-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><DocumentSearch20Regular aria-hidden="true" className="text-primary" />Generate a payroll report</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose a report and optionally narrow it to a payroll run or year. Use the catalog to see available reports.
+              </p>
+            </div>
             <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto_auto] lg:items-end">
-              <Field label="Report">
+              <Field label="Report type">
                 <FluentSelect
-                  ariaLabel="Report"
+                  ariaLabel="Report type"
                   className="w-full"
                   value={advancedForm.reportCode}
-                  placeholder="Select report"
+                  placeholder="Choose a report"
                   onChange={(value) =>
                     setAdvancedForm((current) => ({
                       ...current,
@@ -8721,7 +8842,7 @@ export function PayrollOperationsView() {
                     }))
                   }
                   options={[
-                    { value: "", label: "Select report" },
+                    { value: "", label: "Choose a report" },
                     ...(reportCatalog.length > 0
                       ? reportCatalog
                       : PAYROLL_REPORT_CODES.map((code) => ({ code }))
@@ -8738,9 +8859,9 @@ export function PayrollOperationsView() {
                   ]}
                 />
               </Field>
-              <Field label="Run">
+              <Field label="Payroll run (optional)">
                 <FluentSelect
-                  ariaLabel="Run"
+                  ariaLabel="Payroll run (optional)"
                   className="w-full"
                   value={advancedForm.reportRunId}
                   placeholder="Any recent run"
@@ -8762,7 +8883,7 @@ export function PayrollOperationsView() {
                   ]}
                 />
               </Field>
-              <Field label="Year">
+              <Field label="Year (optional)">
                 <input
                   className={inputClass}
                   value={advancedForm.reportYear}
@@ -8783,7 +8904,7 @@ export function PayrollOperationsView() {
                 {reportBusy === "catalog" ? (
                   <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
-                Catalog
+                View report catalog
               </button>
               <button
                 type="button"
@@ -8796,7 +8917,7 @@ export function PayrollOperationsView() {
                 {reportBusy === "catalog-report" ? (
                   <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
-                Load
+                Generate report
               </button>
               <button
                 type="button"
@@ -8812,19 +8933,26 @@ export function PayrollOperationsView() {
                 advancedForm.reportCode === "payroll-run-reconciliation" ? (
                   <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                 ) : null}
-                Reconcile run
+                Reconcile selected run
               </button>
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Payment run">
+            <div id="payroll-bank-match" className="scroll-mt-24 rounded-xl border border-border bg-card p-4">
+              <div className="mb-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold"><BuildingBank20Regular aria-hidden="true" className="text-primary" />Match bank payments to a payroll run</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Record the results of a payment batch your bank has already processed. Choose a run, enter payments below or upload a CSV, then match the rows to employees. This does not send money.
+                </p>
+              </div>
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Step 1 · Payroll run to match">
                   <FluentSelect
-                    ariaLabel="Bank import run"
+                    ariaLabel="Payroll run to match"
                     className="w-full"
                     value={advancedForm.bankImportRunId}
-                    placeholder="Select run"
+                    placeholder="Choose a payroll run"
                     onChange={(value) =>
                       setAdvancedForm((current) => ({
                         ...current,
@@ -8832,7 +8960,7 @@ export function PayrollOperationsView() {
                       }))
                     }
                     options={[
-                      { value: "", label: "Select run" },
+                      { value: "", label: "Choose a payroll run" },
                       ...recentRuns.map((row) => ({
                         value: rowId(row),
                         label:
@@ -8843,68 +8971,59 @@ export function PayrollOperationsView() {
                     ]}
                   />
                 </Field>
-                <Field label="Bank batch ID">
-                  <input
-                    className={inputClass}
-                    value={advancedForm.bankBatchId}
-                    onChange={(event) =>
-                      setAdvancedForm((current) => ({
-                        ...current,
-                        bankBatchId: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                  />
-                </Field>
-                <Field label="Payment reference">
-                  <input
-                    className={inputClass}
-                    value={advancedForm.paymentReference}
-                    onChange={(event) =>
-                      setAdvancedForm((current) => ({
-                        ...current,
-                        paymentReference: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Payment date">
-                  <DateInput
-                    className={inputClass}
-
-                    value={advancedForm.paymentDate}
-                    onChange={(event) =>
-                      setAdvancedForm((current) => ({
-                        ...current,
-                        paymentDate: event.target.value,
-                      }))
-                    }
-                  />
-                </Field>
-                <div className="md:col-span-2">
-                  <Field label="Payment confirmation or bank statement rows">
-                    <Textarea
-                      className={cn(
-                        textareaClass,
-                        "min-h-28 font-mono text-xs",
-                      )}
-                      value={advancedForm.importText}
-                      onChange={(event) =>
-                        setAdvancedForm((current) => ({
-                          ...current,
-                          importText: event.target.value,
-                        }))
-                      }
-                      placeholder={
-                        "employee_id,reference,amount,status\n101,MANUAL-1001,1250000,PAID"
-                      }
-                    />
-                  </Field>
+                  <p className="self-end pb-2 text-xs text-muted-foreground">Choose the payroll run whose bank payments you are checking.</p>
                 </div>
+                <div className="rounded-lg border border-border bg-muted/15 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Step 2 · Add payment details</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Enter payments one by one, or upload a CSV statement from your bank.</p>
+                    </div>
+                    <div role="group" aria-label="Payment entry method" className="inline-flex rounded-md border border-border bg-background p-1">
+                      <button type="button" aria-pressed={bankInputMode === "manual"} className={cn("rounded px-3 py-1.5 text-xs font-medium", bankInputMode === "manual" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => setBankInputMode("manual")}>Enter payments</button>
+                      <button type="button" aria-pressed={bankInputMode === "csv"} className={cn("rounded px-3 py-1.5 text-xs font-medium", bankInputMode === "csv" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => setBankInputMode("csv")}>Upload CSV</button>
+                    </div>
+                  </div>
+                  {bankInputMode === "manual" ? (
+                    <div className="mt-3 space-y-2">
+                      {bankPaymentRows.map((row, index) => (
+                        <div key={row.id} className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_auto] xl:items-end">
+                          <Field label={`Employee number · row ${index + 1}`}><input className={inputClass} value={row.employeeNo} placeholder="e.g. EMP-0101" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, employeeNo: event.target.value } : entry))} /></Field>
+                          <Field label="Masked bank account"><input className={inputClass} value={row.accountMasked} placeholder="Optional · ****1234" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, accountMasked: event.target.value } : entry))} /></Field>
+                          <Field label="Bank reference"><input className={inputClass} value={row.reference} placeholder="Optional · e.g. PAY-1001" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, reference: event.target.value } : entry))} /></Field>
+                          <Field label="Amount paid"><input className={inputClass} type="number" min="0" step="0.01" value={row.amount} placeholder="0.00" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, amount: event.target.value } : entry))} /></Field>
+                          <Field label="Bank result"><FluentSelect ariaLabel={`Bank result for row ${index + 1}`} className="w-full" value={row.status} onChange={(value) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, status: value } : entry))} options={[{ value: "PAID", label: "Paid" }, { value: "FAILED", label: "Failed" }, { value: "PENDING", label: "Pending" }]} /></Field>
+                          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40" aria-label={`Remove payment row ${index + 1}`} disabled={bankPaymentRows.length === 1} onClick={() => setBankPaymentRows((rows) => rows.filter((entry) => entry.id !== row.id))}><Delete20Regular aria-hidden="true" /></button>
+                        </div>
+                      ))}
+                      <button type="button" className={secondaryButtonClass} onClick={() => setBankPaymentRows((rows) => [...rows, { id: Date.now(), employeeNo: "", accountMasked: "", reference: "", amount: "", status: "PAID" }])}><Add20Regular aria-hidden="true" />Add another payment</button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-md border border-dashed border-border bg-background p-4">
+                      <input ref={bankFileInputRef} type="file" accept=".csv,text/csv" className="sr-only" aria-label="Choose bank statement CSV" onChange={(event) => { void onBankStatementFileSelected(event.target.files?.[0] ?? null); event.currentTarget.value = ""; }} />
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" className={secondaryButtonClass} onClick={() => bankFileInputRef.current?.click()}><CloudArrowUp20Regular aria-hidden="true" />Choose CSV file</button>
+                        <button type="button" className={secondaryButtonClass} onClick={downloadBankStatementTemplate}><DocumentBulletList20Regular aria-hidden="true" />Download CSV template</button>
+                        {bankCsvName ? <span className="text-xs text-muted-foreground">{bankCsvName} · {Math.max(0, bankCsvText.trim().split(/\r?\n/).filter(Boolean).length - 1)} payment rows</span> : null}
+                        {bankCsvName ? <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => { setBankCsvText(""); setBankCsvName(""); setBankCsvError(""); }}>Remove file</button> : null}
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-muted-foreground">CSV must include an <strong>amount</strong> column and at least one matching field: <strong>employee_no</strong>, <strong>employee_id</strong>, <strong>account_number_masked</strong>, or <strong>reference</strong>. Maximum file size: 5 MB.</p>
+                      {bankCsvError ? <p role="alert" className="mt-2 text-xs font-medium text-destructive">{bankCsvError}</p> : null}
+                    </div>
+                  )}
+                </div>
+                <details className="rounded-md border border-border px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-medium text-foreground">Optional batch details</summary>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <Field label="Bank batch ID"><input className={inputClass} value={advancedForm.bankBatchId} onChange={(event) => setAdvancedForm((current) => ({ ...current, bankBatchId: event.target.value }))} placeholder="Optional" /></Field>
+                    <Field label="Payment reference"><input className={inputClass} value={advancedForm.paymentReference} onChange={(event) => setAdvancedForm((current) => ({ ...current, paymentReference: event.target.value }))} placeholder="Optional" /></Field>
+                    <Field label="Payment date"><DateInput className={inputClass} value={advancedForm.paymentDate} onChange={(event) => setAdvancedForm((current) => ({ ...current, paymentDate: event.target.value }))} /></Field>
+                  </div>
+                </details>
                 <button
                   type="button"
                   className={primaryButtonClass}
-                  disabled={reportBusy === "bank-import"}
+                  disabled={reportBusy === "bank-import" || !advancedForm.bankImportRunId || (bankInputMode === "csv" && !bankCsvText.trim())}
                   onClick={() => void onImportBankStatement()}
                 >
                   {reportBusy === "bank-import" ? (
@@ -8925,7 +9044,13 @@ export function PayrollOperationsView() {
                 </button>
               </div>
             </div>
-            <div className="rounded-xl border border-border bg-card p-4">
+            <div id="payroll-journal" className="scroll-mt-24 rounded-xl border border-border bg-card p-4">
+              <div className="mb-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold"><DocumentBulletList20Regular aria-hidden="true" className="text-primary" />Accounting journal</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Export a journal batch, mark it as posted to your accounting system, or reverse a posted batch when correcting an entry.
+                </p>
+              </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label="Journal batch ID">
                   <input
@@ -8977,9 +9102,9 @@ export function PayrollOperationsView() {
                     }
                   />
                 </Field>
-                <Field label="Format">
+                  <Field label="Export format">
                   <FluentSelect
-                    ariaLabel="Format"
+                    ariaLabel="Export format"
                     className="w-full"
                     value={advancedForm.exportFormat}
                     onChange={(value) =>
@@ -9015,7 +9140,7 @@ export function PayrollOperationsView() {
                     {reportBusy === "journal-export" ? (
                       <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
-                    Export
+                    Download journal
                   </button>
                   <button
                     type="button"
@@ -9026,7 +9151,7 @@ export function PayrollOperationsView() {
                     {reportBusy === "journal-post" ? (
                       <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
-                    Post
+                    Mark as posted
                   </button>
                   <button
                     type="button"
@@ -9037,7 +9162,7 @@ export function PayrollOperationsView() {
                     {reportBusy === "journal-reverse" ? (
                       <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                     ) : null}
-                    Reverse
+                    Reverse journal
                   </button>
                 </div>
               </div>
@@ -9677,7 +9802,7 @@ export function PayrollOperationsView() {
                     )
                   }
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
+                  <Add20Regular className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">
                     {tab === "periods" ? "Generate period" : "Create"}
                   </span>
@@ -9689,7 +9814,7 @@ export function PayrollOperationsView() {
                   className={secondaryButtonClass}
                   onClick={openRuleDialog}
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
+                  <Add20Regular className="h-3.5 w-3.5" />
                   Add rule
                 </button>
               ) : null}
@@ -9699,7 +9824,7 @@ export function PayrollOperationsView() {
                   className={secondaryButtonClass}
                   onClick={() => openCreate("adjustment")}
                 >
-                  <PlusIcon className="h-3.5 w-3.5" />
+                  <Add20Regular className="h-3.5 w-3.5" />
                   Adjustment
                 </button>
               ) : null}
@@ -9710,7 +9835,7 @@ export function PayrollOperationsView() {
                     className={secondaryButtonClass}
                     onClick={() => openCreate("sourceImport")}
                   >
-                    <PlusIcon className="h-3.5 w-3.5" />
+                    <Add20Regular className="h-3.5 w-3.5" />
                     Import
                   </button>
                   <button
@@ -9718,7 +9843,7 @@ export function PayrollOperationsView() {
                     className={secondaryButtonClass}
                     onClick={() => openCreate("sourceGenerate")}
                   >
-                    <PlusIcon className="h-3.5 w-3.5" />
+                    <Add20Regular className="h-3.5 w-3.5" />
                     Generate
                   </button>
                 </>
@@ -9731,7 +9856,7 @@ export function PayrollOperationsView() {
                 aria-label="Refresh"
                 title="Refresh"
               >
-                <RefreshCwIcon
+                <ArrowClockwise20Regular
                   className={cn(
                     "h-3.5 w-3.5 text-primary",
                     loading && "animate-spin",

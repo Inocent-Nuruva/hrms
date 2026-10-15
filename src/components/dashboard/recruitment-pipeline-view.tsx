@@ -40,7 +40,20 @@ function readToken() {
 
 function idOf(row: AdminRecord) { return Number(row.id ?? 0) }
 function value(row: AdminRecord, key: string) { return String(row[key] ?? "") }
-function label(row: AdminRecord) { return [row.first_name, row.last_name].filter(Boolean).join(" ") || value(row, "name") || `#${idOf(row)}` }
+function label(row: AdminRecord) {
+  const firstName = value(row, "first_name") || value(row, "firstName") || value(row, "given_name") || value(row, "givenName")
+  const lastName = value(row, "last_name") || value(row, "lastName") || value(row, "family_name") || value(row, "familyName")
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim()
+  const displayName = ["display_name", "displayName", "full_name", "fullName", "employee_name", "employeeName", "name", "preferred_name", "preferredName"]
+    .map((key) => value(row, key).trim())
+    .find(Boolean)
+  const employeeNo = value(row, "employee_no") || value(row, "employeeNo")
+  const personName = fullName || displayName
+  if (personName && employeeNo && !personName.includes(employeeNo)) return `${personName} · ${employeeNo}`
+  if (personName) return personName
+  if (employeeNo) return `Employee ${employeeNo}`
+  return `Unnamed employee · #${idOf(row)}`
+}
 function status(row: AdminRecord) { return value(row, "status") }
 
 const fieldClass = "min-h-9 w-full rounded-sm border border-border bg-background px-2.5 py-1.5 text-sm"

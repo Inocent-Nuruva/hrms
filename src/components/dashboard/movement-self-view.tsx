@@ -1,6 +1,7 @@
 "use client"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
 import { RefreshCwIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
@@ -119,6 +120,11 @@ export function MovementSelfView() {
   const awaiting = rows.filter((row) => needsAcknowledgement(row)).length
   const applied = rows.filter((row) => readString(row, ["status"]).toUpperCase() === "APPLIED").length
   const selectedChanges = asRecordArray(detail?.changes)
+  const profileRequired = Boolean(error?.toLowerCase().includes("employee profile"))
+
+  if (profileRequired) {
+    return <EmployeeProfileRequiredState description="Movement records are linked to your employee profile. Complete the required details once, then return to My movements to review your transfers and promotions." returnLabel="My movements" completionNote="Your movement records will be available after your profile is ready." />
+  }
 
   return (
     <section className="space-y-4">

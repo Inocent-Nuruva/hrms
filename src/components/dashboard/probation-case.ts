@@ -41,5 +41,7 @@ export function resolveMyProbationCase(payload: unknown): AdminRecord | null {
 export function probationCriteriaFromCase(caseRecord: AdminRecord | null | undefined) {
   if (!caseRecord) return []
   const policy = asRecord(caseRecord.policy)
-  return asRecordArray(policy?.criteria ?? caseRecord.criteria)
+  return asRecordArray(policy?.criteria ?? caseRecord.criteria).filter(
+    (criterion) => criterion.selfRatingEnabled !== false && criterion.self_rating_enabled !== false,
+  )
 }

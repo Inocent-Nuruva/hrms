@@ -3,13 +3,21 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
+import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import {
+  Button as FluentButton,
+  Card as FluentCard,
+  Text as FluentText,
+} from "@fluentui/react-components"
+import {
+  Add20Regular,
+  ArrowClockwise20Regular,
+  ArrowSync20Regular,
+} from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
-  HeroBand,
-  MetricTile,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -136,7 +144,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
     void load()
   }, [load])
 
-  async function onCheckIn(row: AdminRecord) {
+  const onCheckIn = React.useCallback(async (row: AdminRecord) => {
     const token = readStoredToken()
     const id = rowId(row)
     if (!token || !id) return
@@ -156,7 +164,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
     } finally {
       setBusyId("")
     }
-  }
+  }, [load])
 
   async function onSave() {
     const token = readStoredToken()
@@ -252,6 +260,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
   }
 
   const rows = activeTab === "plans" ? plans : activeTab === "follow-ups" ? followUps : visits
+  const profileRequired = Boolean(error?.toLowerCase().includes("employee profile"))
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "follow-ups") {
       return [
@@ -385,97 +394,146 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         },
       },
     ]
-  }, [activeTab, busyId, load])
+  }, [activeTab, busyId, load, onCheckIn])
+
+  if (profileRequired) {
+    return <EmployeeProfileRequiredState description="Field work uses your employee profile to connect visits, plans, and follow-ups to you. Finish the required details once, then return here to continue." returnLabel="My visits" completionNote="Your field work records will be available after your profile is ready." />
+  }
 
   return (
     <section className="space-y-4">
       <TalentDoodleSprites />
-      {activeTab === "visits" ? (
-        <HeroBand
-          eyebrow="My field"
-          title="Today's visits"
-          description="Check in, add expenses, and close the visit when you leave the site."
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-                {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-                Refresh
-              </button>
-              <button type="button" className={actionButtonClass} onClick={() => {
+      <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">My field work</p>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight">
+            {activeTab === "visits" ? "Visits" : activeTab === "plans" ? "Visit plans" : "Follow-ups"}
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            {activeTab === "visits"
+              ? "Check in at a site, record expenses and evidence, then capture the outcome when you leave."
+              : activeTab === "plans"
+                ? "Plan upcoming site visits and submit your plan for review."
+                : "Keep track of actions due after your visits and record them as complete."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {activeTab === "visits" ? (
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => {
+                setCreateMode("unplanned")
+                setForm({ visit_type: "CUSTOMER_VISIT", visit_date: new Date().toISOString().slice(0, 10) })
+                setCreateOpen(true)
+              }}
+            >
+              Unplanned visit
+            </FluentButton>
+          ) : activeTab === "plans" ? (
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => {
+                setCreateMode("plan")
+                setForm({ visit_type: "CUSTOMER_VISIT", visit_date: new Date().toISOString().slice(0, 10) })
+                setCreateOpen(true)
+              }}
+            >
+              New plan
+            </FluentButton>
+          ) : (
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => {
+                setCreateMode("follow-up")
+                setForm({
+                  due_date: new Date().toISOString().slice(0, 10),
+                  field_visit_id: visits[0] ? rowId(visits[0]) : "",
+                  action: "",
+                })
+                setFormError(null)
+                setCreateOpen(true)
+              }}
+            >
+              New follow-up
+            </FluentButton>
+          )}
+          {activeTab === "visits" ? (
+            <FluentButton
+              appearance="secondary"
+              icon={<ArrowSync20Regular />}
+              onClick={() => {
                 const token = readStoredToken()
                 if (!token) return
                 void syncMyFieldWork(token, {
                   sync_request_id: newRequestId(),
                   device_identifier: "web-dashboard",
                   items: [],
-                }).then(() => toast.success("Field sync queued.")).catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Sync failed."))
-              }}>Sync</button>
-            </div>
-          }
-        />
-      ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">{activeTab === "plans" ? "Visit plans" : "Follow-ups"}</h1>
-            <p className="text-sm text-muted-foreground">
-              {activeTab === "plans" ? "Plan the day and submit it for review." : "Create, update, complete, or cancel follow-ups from your visits."}
-            </p>
-          </div>
-          <button type="button" className={secondaryButtonClass} onClick={() => void load()} disabled={loading}>
-            {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+                })
+                  .then(() => toast.success("Field sync queued."))
+                  .catch((errorObject) => toast.error(errorObject instanceof Error ? errorObject.message : "Sync failed."))
+              }}
+            >
+              Sync
+            </FluentButton>
+          ) : null}
+          <FluentButton
+            appearance="subtle"
+            icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwise20Regular />}
+            onClick={() => void load()}
+            disabled={loading}
+          >
             Refresh
-          </button>
+          </FluentButton>
         </div>
-      )}
+      </header>
 
       {activeTab === "visits" ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MetricTile label="Visits" value={visits.length} />
-          <MetricTile label="Plans" value={plans.length} />
-          <MetricTile label="Follow-ups" value={followUps.length} />
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            { label: "Visits", value: visits.length, hint: "Recorded site visits" },
+            { label: "Plans", value: plans.length, hint: "Visit plans" },
+            { label: "Follow-ups", value: followUps.length, hint: "Actions to track" },
+          ].map((metric) => (
+            <FluentCard key={metric.label} appearance="outline" className="flex min-w-0 items-center justify-between gap-3 !rounded-lg !px-3 !py-2.5">
+              <div className="min-w-0">
+                <FluentText size={200} weight="semibold" className="block uppercase tracking-wide text-muted-foreground">
+                  {metric.label}
+                </FluentText>
+                <p className="mt-0.5 text-xs text-muted-foreground">{metric.hint}</p>
+              </div>
+              <span className="text-2xl font-semibold tabular-nums text-foreground">{metric.value}</span>
+            </FluentCard>
+          ))}
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {activeTab === "visits" ? (
-          <button type="button" className={primaryButtonClass} onClick={() => { setCreateMode("unplanned"); setForm({ visit_type: "CUSTOMER_VISIT", visit_date: new Date().toISOString().slice(0, 10) }); setCreateOpen(true) }}>
-            <PlusIcon className="size-4" /> Unplanned visit
-          </button>
-        ) : null}
-        {activeTab === "plans" ? (
-          <button type="button" className={primaryButtonClass} onClick={() => { setCreateMode("plan"); setForm({ visit_type: "CUSTOMER_VISIT", visit_date: new Date().toISOString().slice(0, 10) }); setCreateOpen(true) }}>
-            <PlusIcon className="size-4" /> New plan
-          </button>
-        ) : null}
-        {activeTab === "follow-ups" ? (
-          <button type="button" className={primaryButtonClass} onClick={() => {
-            setCreateMode("follow-up")
-            setForm({
-              due_date: new Date().toISOString().slice(0, 10),
-              field_visit_id: visits[0] ? rowId(visits[0]) : "",
-              action: "",
-            })
-            setFormError(null)
-            setCreateOpen(true)
-          }}>
-            <PlusIcon className="size-4" /> New follow-up
-          </button>
-        ) : null}
-      </div>
+      {error ? (
+        <div role="alert" className="flex flex-col gap-3 rounded-lg border border-amber-300/70 bg-amber-50/70 px-3 py-3 text-sm dark:border-amber-800 dark:bg-amber-950/20 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">Field work could not be loaded</p>
+            <p className="mt-0.5 text-muted-foreground">{error}</p>
+          </div>
+          <FluentButton appearance="secondary" size="small" onClick={() => void load()} disabled={loading}>
+            Try again
+          </FluentButton>
+        </div>
+      ) : null}
 
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
-
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <ResizableTable
+      <ResizableTable
           title="My field records"
           data={rows}
           columns={columns}
           loading={loading}
           itemsPerPage={20}
           showExport={false}
+          fluent
+          sortIconOnly
+          frameClassName="!border-0 !bg-transparent !shadow-none"
           storageKey={`me-field-${activeTab}`}
         />
-      </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="max-w-xl">
