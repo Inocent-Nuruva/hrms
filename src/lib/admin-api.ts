@@ -16533,6 +16533,24 @@ export async function createPayrollStatutoryRule(
   });
 }
 
+export async function listPayrollStatutoryRules(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/configuration/statutory-rules",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function approvePayrollStatutoryRule(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/statutory-rules/${id}/approve`,
+    { method: "POST", token },
+  );
+}
+
 export async function listPayrollAccountingMappings(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/payroll/configuration/accounting-mappings",
@@ -16637,6 +16655,27 @@ export async function generatePayrollBankingBatch(
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function generatePayrollBankReadyBatch(
+  token: string,
+  runId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/banking/runs/${runId}/batches/bank-ready`,
+    { method: "POST", token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getPayrollPaymentHistory(
+  token: string,
+  runId: string | number,
+) {
+  return adminRequest<unknown>(`/api/payroll/banking/runs/${runId}/history`, {
+    method: "GET",
+    token,
+  });
+}
+
 export async function downloadPayrollBankingBatch(
   token: string,
   batchId: string | number,
@@ -16703,6 +16742,19 @@ export async function generatePayrollAccountingJournals(
     },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getPayrollInternalLedger(
+  token: string,
+  runId?: string | number,
+) {
+  const query = runId
+    ? `?payroll_run_id=${encodeURIComponent(String(runId))}`
+    : "";
+  return adminRequest<unknown>(`/api/payroll/accounting/ledger${query}`, {
+    method: "GET",
+    token,
+  });
 }
 
 export async function exportPayrollAccountingJournal(
@@ -19088,6 +19140,623 @@ export async function getMyFinanceAccountStatement(
     { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+// --- Staff loans: product lifecycle, approvals, servicing, payroll ops ---
+
+function financePost(path: string, token: string, body: AdminRecord = {}) {
+  return adminRequest<unknown>(path, { method: "POST", token, body });
+}
+
+export async function updateEmployeeFinanceProduct(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/employee-finance/products/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function createEmployeeFinanceProductVersion(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return financePost(`/api/employee-finance/products/${id}/versions`, token, data);
+}
+
+export async function retireEmployeeFinanceProduct(
+  token: string,
+  id: string | number,
+) {
+  return financePost(`/api/employee-finance/products/${id}/retire`, token);
+}
+
+export async function listMyFinanceProducts(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/me/finance/products", { token }),
+  );
+}
+
+export async function listMyFinanceAccounts(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/me/finance/accounts", { token }),
+  );
+}
+
+export async function updateMyFinanceApplication(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/finance/applications/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function requestMyFinanceDeferment(
+  token: string,
+  accountId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/me/finance/accounts/${accountId}/deferments`,
+    token,
+    data,
+  );
+}
+
+export async function downloadMyFinanceSanctionLetter(
+  token: string,
+  applicationId: string | number,
+) {
+  return downloadAdminBlob(
+    `/api/me/finance/applications/${applicationId}/sanction-letter/pdf`,
+    token,
+    `sanction-letter-${applicationId}.pdf`,
+  );
+}
+
+export async function downloadEmployeeFinanceSanctionLetter(
+  token: string,
+  applicationId: string | number,
+) {
+  return downloadAdminBlob(
+    `/api/employee-finance/applications/${applicationId}/sanction-letter/pdf`,
+    token,
+    `sanction-letter-${applicationId}.pdf`,
+  );
+}
+
+export async function getEmployeeFinanceApprovalHistory(
+  token: string,
+  applicationId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/applications/${applicationId}/approvals`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function decideEmployeeFinanceApplication(
+  token: string,
+  applicationId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/employee-finance/applications/${applicationId}/decision`,
+    token,
+    data,
+  );
+}
+
+export async function delegatedEmployeeFinanceDecision(
+  token: string,
+  applicationId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/employee-finance/applications/${applicationId}/delegated-decision`,
+    token,
+    data,
+  );
+}
+
+export async function approveManagementEmployeeFinanceApplication(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return financePost(
+    `/api/management/finance/applications/${id}/approve`,
+    token,
+    data,
+  );
+}
+
+export async function listEmployeeFinanceDelegations(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/employee-finance/delegations", { token }),
+  );
+}
+
+export async function createEmployeeFinanceDelegation(
+  token: string,
+  data: AdminRecord,
+) {
+  return financePost("/api/employee-finance/delegations", token, data);
+}
+
+export async function revokeEmployeeFinanceDelegation(
+  token: string,
+  id: string | number,
+) {
+  return financePost(`/api/employee-finance/delegations/${id}/revoke`, token);
+}
+
+export async function getEmployeeFinanceSanctionTemplate(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/templates/sanction-letter",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function saveEmployeeFinanceSanctionTemplate(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/employee-finance/templates/sanction-letter", {
+    method: "PUT",
+    token,
+    body: data,
+  });
+}
+
+export async function previewEmployeeFinanceSanctionTemplate(
+  token: string,
+  body: string,
+) {
+  const payload = await financePost(
+    "/api/employee-finance/templates/sanction-letter/preview",
+    token,
+    { body },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function cancelEmployeeFinanceDisbursement(
+  token: string,
+  id: string | number,
+  reason?: string,
+) {
+  return financePost(
+    `/api/finance/employee-finance/disbursements/${id}/cancel`,
+    token,
+    { reason },
+  );
+}
+
+export async function listPendingEmployeeFinanceDeferments(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      "/api/finance/employee-finance/deferments/pending",
+      { token },
+    ),
+  );
+}
+
+export async function decideEmployeeFinanceDeferment(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/deferments/${id}/decide`,
+    token,
+    data,
+  );
+}
+
+export async function listPendingEmployeeFinanceReschedules(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      "/api/finance/employee-finance/reschedules/pending",
+      { token },
+    ),
+  );
+}
+
+export async function decideEmployeeFinanceReschedule(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/reschedules/${id}/decide`,
+    token,
+    data,
+  );
+}
+
+export async function settleEmployeeFinanceQuote(
+  token: string,
+  quoteId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/settlement-quotes/${quoteId}/settle`,
+    token,
+    data,
+  );
+}
+
+export async function listEmployeeFinanceExitRecoveries(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/finance/employee-finance/exit-recoveries${buildRecordQuery(params)}`,
+      { token },
+    ),
+  );
+}
+
+export async function confirmEmployeeFinanceExitRecovery(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/exit-recoveries/${id}/confirm`,
+    token,
+    data,
+  );
+}
+
+export async function listEmployeeFinanceAdjustments(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/finance/employee-finance/adjustments${buildRecordQuery(params)}`,
+      { token },
+    ),
+  );
+}
+
+export async function requestEmployeeFinanceAdjustment(
+  token: string,
+  accountId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/accounts/${accountId}/adjustments`,
+    token,
+    data,
+  );
+}
+
+export async function decideEmployeeFinanceAdjustment(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/finance/employee-finance/adjustments/${id}/decide`,
+    token,
+    data,
+  );
+}
+
+export async function runEmployeeFinanceOverdueSweep(token: string) {
+  return financePost("/api/finance/employee-finance/overdue/run", token);
+}
+
+export async function runEmployeeFinanceEscalationSweep(token: string) {
+  return financePost(
+    "/api/finance/employee-finance/approvals/escalation-sweep",
+    token,
+  );
+}
+
+export async function backfillEmployeeFinanceInterest(
+  token: string,
+  dryRun: boolean,
+) {
+  return financePost(
+    `/api/employee-finance/reconciliation/backfill-interest?dry_run=${dryRun ? "true" : "false"}`,
+    token,
+  );
+}
+
+export async function getEmployeeFinancePayrollPreview(
+  token: string,
+  payrollPeriodId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/payroll/preview?payroll_period_id=${payrollPeriodId}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getEmployeeFinancePayrollRunDeductions(
+  token: string,
+  payrollRunId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/payroll/runs/${payrollRunId}/deductions`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listEmployeeFinancePayrollShortfalls(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/employee-finance/payroll/shortfalls${buildRecordQuery(params)}`,
+      { token },
+    ),
+  );
+}
+
+async function postAdminBlob(
+  path: string,
+  token: string,
+  body: AdminRecord,
+  fallbackName: string,
+) {
+  const response = await fetch(buildUrl(path), {
+    method: "POST",
+    headers: {
+      accept: "*/*",
+      "content-type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = { message: text };
+    try {
+      payload = JSON.parse(text) as unknown;
+    } catch {
+      // keep text payload
+    }
+    throw new Error(extractMessage(payload, response.status));
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ? decodeURIComponent(match[1]) : fallbackName,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function listEmployeeFinanceLoanReportCatalog(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/employee-finance/loan-reports", { token }),
+  );
+}
+
+export async function getEmployeeFinanceLoanReport(
+  token: string,
+  reportType: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/loan-reports/${encodeURIComponent(reportType)}${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function exportEmployeeFinanceReport(
+  token: string,
+  reportType: string,
+  format: "xlsx" | "csv",
+  params: Record<string, string | number | undefined> = {},
+) {
+  return downloadAdminBlob(
+    `/api/employee-finance/loan-reports/${encodeURIComponent(reportType)}/export${buildRecordQuery({ ...params, format })}`,
+    token,
+    `loan-${reportType}.${format}`,
+  );
+}
+
+export async function downloadEmployeeFinanceStatement(
+  token: string,
+  accountId: string | number,
+  format: "pdf" | "xlsx",
+) {
+  return downloadAdminBlob(
+    `/api/finance/employee-finance/accounts/${accountId}/statement/download?format=${format}`,
+    token,
+    `loan-statement-${accountId}.${format}`,
+  );
+}
+
+export async function downloadMyFinanceStatement(
+  token: string,
+  accountId: string | number,
+  format: "pdf" | "xlsx",
+) {
+  return downloadAdminBlob(
+    `/api/me/finance/accounts/${accountId}/statement/download?format=${format}`,
+    token,
+    `loan-statement-${accountId}.${format}`,
+  );
+}
+
+export async function getEmployeeFinanceIntegrationSettings(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/employee-finance/integrations/settings",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function saveEmployeeFinanceIntegrationSettings(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/employee-finance/integrations/settings", {
+    method: "PUT",
+    token,
+    body: data,
+  });
+}
+
+export async function testEmployeeFinanceIntegration(
+  token: string,
+  channel: "erp" | "bank",
+) {
+  return financePost(`/api/employee-finance/integrations/test/${channel}`, token);
+}
+
+export async function listEmployeeFinanceIntegrationLogs(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/employee-finance/integrations/logs${buildRecordQuery(params)}`,
+      { token },
+    ),
+  );
+}
+
+export async function retryEmployeeFinanceIntegration(
+  token: string,
+  logId: string | number,
+) {
+  return financePost(`/api/employee-finance/integrations/logs/${logId}/retry`, token);
+}
+
+export async function previewEmployeeFinanceJournal(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employee-finance/integrations/journal/preview${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function exportEmployeeFinanceJournal(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return downloadAdminBlob(
+    `/api/employee-finance/integrations/journal/export${buildRecordQuery(params)}`,
+    token,
+    "loan-journal.xlsx",
+  );
+}
+
+export async function postEmployeeFinanceJournal(
+  token: string,
+  data: AdminRecord = {},
+) {
+  return financePost("/api/employee-finance/integrations/journal/post", token, data);
+}
+
+export async function downloadEmployeeFinancePaymentFile(
+  token: string,
+  disbursementIds?: number[],
+) {
+  return postAdminBlob(
+    "/api/employee-finance/integrations/bank/payment-file",
+    token,
+    { disbursement_ids: disbursementIds },
+    "loan-payments.csv",
+  );
+}
+
+export async function submitEmployeeFinancePayments(
+  token: string,
+  disbursementIds?: number[],
+) {
+  return financePost("/api/employee-finance/integrations/bank/submit-payments", token, {
+    disbursement_ids: disbursementIds,
+  });
+}
+
+export async function importEmployeeFinanceBankStatement(
+  token: string,
+  file: File,
+  dryRun: boolean,
+) {
+  return financePost("/api/employee-finance/integrations/bank/statement-import", token, {
+    file: await fileToBase64UploadDto(file),
+    dry_run: dryRun,
+  });
+}
+
+export async function downloadEmployeeFinanceMigrationTemplate(token: string) {
+  return downloadAdminBlob(
+    "/api/employee-finance/migration/template",
+    token,
+    "staff-loan-migration-template.xlsx",
+  );
+}
+
+export async function importEmployeeFinanceMigration(
+  token: string,
+  file: File,
+  options: { dryRun: boolean; cutoverDate?: string },
+) {
+  const payload = await financePost("/api/employee-finance/migration/import", token, {
+    file: await fileToBase64UploadDto(file),
+    dry_run: options.dryRun,
+    cutover_date: options.cutoverDate || undefined,
+  });
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function listEmployeeFinanceMigrationBatches(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/employee-finance/migration/batches", { token }),
+  );
+}
+
+export async function signOffEmployeeFinanceMigration(
+  token: string,
+  batchId: string,
+  comments?: string,
+) {
+  return financePost(
+    `/api/employee-finance/migration/batches/${encodeURIComponent(batchId)}/sign-off`,
+    token,
+    { comments },
+  );
+}
+
+export async function resolveEmployeeFinancePayrollShortfall(
+  token: string,
+  instructionId: string | number,
+  data: AdminRecord,
+) {
+  return financePost(
+    `/api/employee-finance/payroll/shortfalls/${instructionId}/resolve`,
+    token,
+    data,
+  );
 }
 
 function normalizeActivityReport(payload: unknown) {

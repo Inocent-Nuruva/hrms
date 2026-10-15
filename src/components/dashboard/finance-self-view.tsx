@@ -57,7 +57,13 @@ import {
   decideMyFinanceGuarantorRequest,
   evaluateMyFinanceEligibility,
   fileToBase64UploadDto,
-  listEmployeeFinanceProducts,
+  listMyFinanceProducts,
+  listMyFinanceAccounts,
+  getMyFinanceAccountStatement,
+  requestMyFinanceDeferment,
+  updateMyFinanceApplication,
+  downloadMyFinanceSanctionLetter,
+  downloadMyFinanceStatement,
   listMyFinanceApplications,
   listMyFinanceApplicationDocuments,
   listMyFinanceApplicationGuarantors,
@@ -181,6 +187,18 @@ export function FinanceSelfView() {
   const [documentFiles, setDocumentFiles] = React.useState<
     Record<string, File | null>
   >({});
+  const [accounts, setAccounts] = React.useState<AdminRecord[]>([]);
+  const [correctTarget, setCorrectTarget] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [correctForm, setCorrectForm] = React.useState<Record<string, string>>(
+    {},
+  );
+  const [deferTarget, setDeferTarget] = React.useState<{
+    account: AdminRecord;
+    installment: AdminRecord;
+  } | null>(null);
+  const [deferReason, setDeferReason] = React.useState("");
 
   const load = React.useCallback(
     async (isActive: () => boolean = () => mountedRef.current) => {
@@ -203,10 +221,12 @@ export function FinanceSelfView() {
       setError(null);
       const results = await Promise.allSettled([
         listMyFinanceApplications(token),
-        listEmployeeFinanceProducts(token),
+        listMyFinanceProducts(token),
         listMyFinanceGuarantorRequests(token),
+        listMyFinanceAccounts(token),
       ]);
       if (!active()) return;
+      if (results[3].status === "fulfilled") setAccounts(results[3].value);
       const failed = results.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") {
         if (!leaveIfForbidden(failed.reason))
@@ -501,8 +521,66 @@ export function FinanceSelfView() {
         label: "Actions",
         render: (row) => {
           const id = rowId(row);
+          const status = readString(row, ["status"], "DRAFT").toUpperCase();
+          const inProgress = [
+            "DRAFT",
+            "RETURNED_FOR_CORRECTION",
+            "PENDING_MANAGER_RECOMMENDATION",
+            "PENDING_HR_APPROVAL",
+            "PENDING_FINANCE_APPROVAL",
+            "PENDING_MANAGEMENT_APPROVAL",
+            "PENDING_EMPLOYEE_ACCEPTANCE",
+          ].includes(status);
           return (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1">
+              {status === "RETURNED_FOR_CORRECTION" ? (
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  title={readString(row, ["decisionComments", "decision_comments"], "")}
+                  onClick={() => {
+                    setCorrectTarget(row);
+                    setCorrectForm({
+                      requested_amount: readString(row, ["requestedAmount", "requested_amount"], ""),
+                      requested_term_months: readString(row, ["requestedTermMonths", "requested_term_months"], ""),
+                      purpose: readString(row, ["purpose"], ""),
+                    });
+                  }}
+                >
+                  Correct &amp; resubmit
+                </button>
+              ) : null}
+              {status === "PENDING_EMPLOYEE_ACCEPTANCE" ||
+              status === "APPROVED" ||
+              status === "DISBURSED" ? (
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  onClick={() => {
+                    const token = readStoredToken();
+                    if (!token || !id) return;
+                    void downloadMyFinanceSanctionLetter(token, id)
+                      .then((file) => {
+                        const url = URL.createObjectURL(file.blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = file.filename;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      })
+                      .catch((errorObject) =>
+                        toast.error(
+                          errorObject instanceof Error
+                            ? errorObject.message
+                            : "Could not download the letter.",
+                        ),
+                      );
+                  }}
+                >
+                  Sanction letter
+                </button>
+              ) : null}
+              {status !== "DRAFT" ? null : (
               <button
                 type="button"
                 className={actionButtonClass}
@@ -528,6 +606,8 @@ export function FinanceSelfView() {
               >
                 Submit
               </button>
+              )}
+              {status !== "PENDING_EMPLOYEE_ACCEPTANCE" ? null : (
               <button
                 type="button"
                 className={actionButtonClass}
@@ -553,6 +633,8 @@ export function FinanceSelfView() {
               >
                 Accept
               </button>
+              )}
+              {!inProgress ? null : (
               <button
                 type="button"
                 className={actionButtonClass}
@@ -578,6 +660,19 @@ export function FinanceSelfView() {
               >
                 Withdraw
               </button>
+              )}
+              {status === "RETURNED_FOR_CORRECTION" &&
+              readString(row, ["decisionComments", "decision_comments"], "") ? (
+                <span className="w-full text-xs text-amber-700">
+                  Returned: {readString(row, ["decisionComments", "decision_comments"])}
+                </span>
+              ) : null}
+              {status === "REJECTED" &&
+              readString(row, ["decisionComments", "decision_comments"], "") ? (
+                <span className="w-full text-xs text-rose-700">
+                  Declined: {readString(row, ["decisionComments", "decision_comments"])}
+                </span>
+              ) : null}
             </div>
           );
         },
@@ -585,6 +680,85 @@ export function FinanceSelfView() {
     ],
     [busyId, load],
   );
+
+  async function submitCorrection() {
+    const token = readStoredToken();
+    const id = rowId(correctTarget);
+    if (!token || !id) return;
+    setBusyId(`fix-${id}`);
+    try {
+      await updateMyFinanceApplication(token, id, {
+        requested_amount: correctForm.requested_amount || undefined,
+        requested_term_months: correctForm.requested_term_months
+          ? Number(correctForm.requested_term_months)
+          : undefined,
+        purpose: correctForm.purpose || undefined,
+      });
+      await submitMyFinanceApplication(token, id);
+      toast.success("Corrected and resubmitted.");
+      setCorrectTarget(null);
+      await load();
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Could not resubmit.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function openDeferment(account: AdminRecord) {
+    const token = readStoredToken();
+    const id = rowId(account);
+    if (!token || !id) return;
+    try {
+      const statement = await getMyFinanceAccountStatement(token, id);
+      const installments = Array.isArray(statement?.installments)
+        ? (statement.installments as AdminRecord[])
+        : [];
+      const next = installments
+        .filter((item) =>
+          ["SCHEDULED", "PARTIALLY_PAID", "OVERDUE"].includes(
+            readString(item, ["status"], "").toUpperCase(),
+          ),
+        )
+        .sort((a, b) =>
+          readString(a, ["dueDate", "due_date"]).localeCompare(
+            readString(b, ["dueDate", "due_date"]),
+          ),
+        )[0];
+      if (!next) {
+        toast.error("There is no unpaid instalment to defer.");
+        return;
+      }
+      setDeferReason("");
+      setDeferTarget({ account, installment: next });
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Could not load the loan.",
+      );
+    }
+  }
+
+  async function submitDeferment() {
+    const token = readStoredToken();
+    if (!token || !deferTarget) return;
+    setBusyId("defer");
+    try {
+      await requestMyFinanceDeferment(token, rowId(deferTarget.account), {
+        installment_id: Number(rowId(deferTarget.installment)),
+        reason: deferReason.trim(),
+      });
+      toast.success("Request sent to Finance for approval.");
+      setDeferTarget(null);
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Could not send the request.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
 
   const guarantorColumns = React.useMemo<Column<AdminRecord>[]>(
     () => [
@@ -788,6 +962,199 @@ export function FinanceSelfView() {
           storageKey="me-finance-guarantor-requests"
         />
       </div>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <ResizableTable
+          title="My loans"
+          data={accounts}
+          columns={[
+            {
+              key: "account",
+              label: "Loan",
+              render: (row) => (
+                <div className="space-y-0.5">
+                  <p className="font-medium">
+                    {readString(row, ["accountNo", "account_no"], `Loan #${rowId(row)}`)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {prettify(readString(row, ["productType", "product_type"], ""))}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "outstanding",
+              label: "Outstanding",
+              render: (row) =>
+                readString(row, ["outstandingTotal", "outstanding_total"], "0.00"),
+            },
+            {
+              key: "installment",
+              label: "Monthly",
+              render: (row) =>
+                readString(
+                  row,
+                  ["scheduledMonthlyInstallment", "scheduled_monthly_installment"],
+                  "—",
+                ),
+            },
+            {
+              key: "status",
+              label: "Status",
+              render: (row) => (
+                <StatusChip value={readString(row, ["status"], "ACTIVE")} />
+              ),
+            },
+            {
+              key: "actions",
+              label: "Actions",
+              render: (row) => (
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={() => {
+                      const token = readStoredToken();
+                      if (!token) return;
+                      void downloadMyFinanceStatement(token, rowId(row), "pdf")
+                        .then((file) => {
+                          const url = URL.createObjectURL(file.blob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          link.download = file.filename;
+                          link.click();
+                          URL.revokeObjectURL(url);
+                        })
+                        .catch((errorObject) =>
+                          toast.error(
+                            errorObject instanceof Error
+                              ? errorObject.message
+                              : "Could not download the statement.",
+                          ),
+                        );
+                    }}
+                  >
+                    Statement
+                  </button>
+                  {["ACTIVE", "IN_ARREARS", "RESTRUCTURED"].includes(
+                    readString(row, ["status"], "").toUpperCase(),
+                  ) ? (
+                    <button
+                      type="button"
+                      className={actionButtonClass}
+                      onClick={() => void openDeferment(row)}
+                    >
+                      Ask to defer next instalment
+                    </button>
+                  ) : null}
+                </div>
+              ),
+            },
+          ]}
+          loading={loading}
+          itemsPerPage={10}
+          showExport={false}
+          storageKey="me-finance-accounts"
+        />
+      </div>
+
+      <Dialog
+        open={Boolean(correctTarget)}
+        onOpenChange={(open) => !open && setCorrectTarget(null)}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Correct and resubmit</DialogTitle>
+          </DialogHeader>
+          {readString(correctTarget, ["decisionComments", "decision_comments"], "") ? (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {readString(correctTarget, ["decisionComments", "decision_comments"])}
+            </p>
+          ) : null}
+          <div className="grid gap-3">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Amount</span>
+              <input
+                className={inputClass}
+                value={correctForm.requested_amount ?? ""}
+                onChange={(event) =>
+                  setCorrectForm((current) => ({ ...current, requested_amount: event.target.value }))
+                }
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Repayment period (months)</span>
+              <input
+                className={inputClass}
+                value={correctForm.requested_term_months ?? ""}
+                onChange={(event) =>
+                  setCorrectForm((current) => ({ ...current, requested_term_months: event.target.value }))
+                }
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">Purpose</span>
+              <Textarea
+                className={textareaClass}
+                value={correctForm.purpose ?? ""}
+                onChange={(event) =>
+                  setCorrectForm((current) => ({ ...current, purpose: event.target.value }))
+                }
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setCorrectTarget(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={busyId.startsWith("fix-")}
+              onClick={() => void submitCorrection()}
+            >
+              Resubmit
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deferTarget)}
+        onOpenChange={(open) => !open && setDeferTarget(null)}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ask to defer an instalment</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The instalment of{" "}
+            {readString(deferTarget?.installment ?? null, ["totalDue", "total_due"], "")} due{" "}
+            {readString(deferTarget?.installment ?? null, ["dueDate", "due_date"], "")} would move to after your last
+            instalment. Finance must approve it.
+          </p>
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">Reason</span>
+            <Textarea
+              className={textareaClass}
+              value={deferReason}
+              onChange={(event) => setDeferReason(event.target.value)}
+            />
+          </label>
+          <DialogFooter>
+            <button type="button" className={secondaryButtonClass} onClick={() => setDeferTarget(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={deferReason.trim().length < 3 || busyId === "defer"}
+              onClick={() => void submitDeferment()}
+            >
+              Send request
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog
         open={createOpen}

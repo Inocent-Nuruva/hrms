@@ -22,6 +22,7 @@ import {
 import {
   approvePayrollInput,
   approvePayrollRun,
+  approvePayrollStatutoryRule,
   approvePayrollSource,
   closePayrollRun,
   createPayrollAdjustment,
@@ -53,12 +54,15 @@ import {
   exportPayrollAccountingJournal,
   generatePayrollAccountingJournals,
   generatePayrollBankingBatch,
+  generatePayrollBankReadyBatch,
   generatePayrollPayslipsForRun,
   generatePayrollPeriod,
   getPayrollReport,
   calculatePayrollFinalSettlement,
   getPayrollDashboard,
   getPayrollIntegrationCatalog,
+  getPayrollInternalLedger,
+  getPayrollPaymentHistory,
   getPayrollNotificationCatalog,
   getPayrollReadiness,
   getPayrollRun,
@@ -86,6 +90,7 @@ import {
   listPayrollSalaryStructures,
   listPayrollSources,
   listPayrollStatutorySchemes,
+  listPayrollStatutoryRules,
   lockPayrollRun,
   markPayrollRunPaid,
   processPayrollRun,
@@ -792,6 +797,8 @@ function emptyRuleForm() {
     baseTax: "",
     ratePercent: "",
     sortOrder: "1",
+    sourceReference: "",
+    employerExempt: "false",
   };
 }
 
@@ -864,6 +871,7 @@ function emptyAdvancedPayrollForm() {
     autoPost: "false",
     bankImportRunId: "",
     bankBatchId: "",
+    journalRunId: "",
     journalBatchId: "",
     externalReference: "",
     exportFormat: "csv",
@@ -1796,6 +1804,9 @@ export function PayrollOperationsView() {
   const [calendars, setCalendars] = React.useState<AdminRecord[]>([]);
   const [structures, setStructures] = React.useState<AdminRecord[]>([]);
   const [schemes, setSchemes] = React.useState<AdminRecord[]>([]);
+  const [statutoryRules, setStatutoryRules] = React.useState<AdminRecord[]>([]);
+  const [approvingStatutoryRuleId, setApprovingStatutoryRuleId] =
+    React.useState("");
   const [mappings, setMappings] = React.useState<AdminRecord[]>([]);
   const [groups, setGroups] = React.useState<AdminRecord[]>([]);
   const [groupAssignments, setGroupAssignments] = React.useState<AdminRecord[]>(
@@ -1891,6 +1902,12 @@ export function PayrollOperationsView() {
   } | null>(null);
   const [schemeForm, setSchemeForm] = React.useState(emptySchemeForm);
   const [ruleForm, setRuleForm] = React.useState(emptyRuleForm);
+  const ruleSchemeCode = React.useMemo(() => {
+    const selected = schemes.find(
+      (row) => String(readNumber(row, ["id"]) ?? "") === ruleForm.schemeId,
+    );
+    return readString(selected ?? {}, ["code"]).toUpperCase();
+  }, [ruleForm.schemeId, schemes]);
   const [mappingForm, setMappingForm] = React.useState(emptyMappingForm);
   const [advancedForm, setAdvancedForm] = React.useState(
     emptyAdvancedPayrollForm,
@@ -1918,6 +1935,7 @@ export function PayrollOperationsView() {
     calendars: AdminRecord[];
     structures: AdminRecord[];
     schemes: AdminRecord[];
+    statutoryRules: AdminRecord[];
     mappings: AdminRecord[];
     groups: AdminRecord[];
     groupAssignments: AdminRecord[];
@@ -1935,6 +1953,7 @@ export function PayrollOperationsView() {
       setCalendars(next.calendars);
       setStructures(next.structures);
       setSchemes(next.schemes);
+      setStatutoryRules(next.statutoryRules);
       setMappings(next.mappings);
       setGroups(next.groups);
       setGroupAssignments(next.groupAssignments);
@@ -1959,6 +1978,7 @@ export function PayrollOperationsView() {
         calendarsResult,
         structuresResult,
         schemesResult,
+        statutoryRulesResult,
         mappingsResult,
         groupsResult,
         groupAssignmentsResult,
@@ -1973,6 +1993,7 @@ export function PayrollOperationsView() {
         listPayrollCalendars(token),
         listPayrollSalaryStructures(token),
         listPayrollStatutorySchemes(token),
+        listPayrollStatutoryRules(token),
         listPayrollAccountingMappings(token),
         listPayrollGroups(token),
         listPayrollGroupAssignments(token),
@@ -1997,6 +2018,10 @@ export function PayrollOperationsView() {
           structuresResult.status === "fulfilled" ? structuresResult.value : [],
         schemes:
           schemesResult.status === "fulfilled" ? schemesResult.value : [],
+        statutoryRules:
+          statutoryRulesResult.status === "fulfilled"
+            ? statutoryRulesResult.value
+            : [],
         mappings:
           mappingsResult.status === "fulfilled" ? mappingsResult.value : [],
         groups: groupsResult.status === "fulfilled" ? groupsResult.value : [],
@@ -2470,6 +2495,9 @@ export function PayrollOperationsView() {
     ],
     mode: "any",
   });
+  const canApproveStatutoryRule = canPerformPermission(actor.permissionLabels, {
+    permissions: ["payroll:statutory:approve"],
+  });
   const canCreate =
     canMutatePayroll &&
     tab !== "overview" &&
@@ -2704,6 +2732,20 @@ export function PayrollOperationsView() {
                     type="button"
                     className={actionButtonClass}
                     disabled={bankingRunId === id}
+                    title="Optional external bank file; requires the approved bank format and encryption key."
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onGenerateBankingBatch(row, true);
+                    }}
+                  >
+                    Bank-ready file
+                  </button>
+                ) : null}
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={bankingRunId === id}
                     onClick={(event) => {
                       event.stopPropagation();
                       void onGenerateBankingBatch(row);
@@ -2712,7 +2754,7 @@ export function PayrollOperationsView() {
                     {bankingRunId === id ? (
                       <FluentLoadingIndicator className="size-3.5 animate-spin" />
                     ) : (
-                      "Bank file"
+                      "Internal payment list"
                     )}
                   </button>
                 ) : null}
@@ -4136,13 +4178,18 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onGenerateBankingBatch(row: AdminRecord) {
+  async function onGenerateBankingBatch(
+    row: AdminRecord,
+    bankReady = false,
+  ) {
     const token = readStoredToken();
     const id = rowId(row);
     if (!token || !id) return;
     setBankingRunId(id);
     try {
-      const batch = await generatePayrollBankingBatch(token, id);
+      const batch = bankReady
+        ? await generatePayrollBankReadyBatch(token, id)
+        : await generatePayrollBankingBatch(token, id);
       const batchId =
         readNumber(batch, ["batchId", "batch_id", "id"]) ??
         readNumber(
@@ -4156,16 +4203,26 @@ export function PayrollOperationsView() {
       if (batchId !== null) {
         const download = await downloadPayrollBankingBatch(token, batchId);
         downloadBlob(download.blob, download.filename);
-        toast.success("Bank batch generated and downloaded.");
+        toast.success(
+          bankReady
+            ? "Encrypted bank-ready file generated and downloaded."
+            : "Internal payment list generated and downloaded.",
+        );
       } else {
-        toast.success("Bank batch generation started.");
+        toast.success(
+          bankReady
+            ? "Bank-ready file generation started."
+            : "Internal payment list generation started.",
+        );
       }
       await loadRows({ refreshLookups: true });
     } catch (errorObject) {
       toast.error(
         errorObject instanceof Error
           ? errorObject.message
-          : "Failed to generate bank batch.",
+          : bankReady
+            ? "Failed to generate bank-ready file."
+            : "Failed to generate internal payment list.",
       );
     } finally {
       setBankingRunId("");
@@ -4294,6 +4351,53 @@ export function PayrollOperationsView() {
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to export journal.",
+      );
+    } finally {
+      setReportBusy("");
+    }
+  }
+
+  async function onLoadInternalLedger() {
+    const token = readStoredToken();
+    if (!token) return;
+    setReportBusy("internal-ledger");
+    try {
+      const result = await getPayrollInternalLedger(
+        token,
+        advancedForm.journalRunId || undefined,
+      );
+      setReportResult((result as AdminRecord | null) ?? {});
+      setReportKind("report");
+      toast.success("Internal payroll ledger loaded.");
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load the internal payroll ledger.",
+      );
+    } finally {
+      setReportBusy("");
+    }
+  }
+
+  async function onLoadPaymentHistory() {
+    const token = readStoredToken();
+    const runId = advancedForm.bankImportRunId;
+    if (!token || !runId) {
+      toast.error("Select a payroll run to view payment history.");
+      return;
+    }
+    setReportBusy("payment-history");
+    try {
+      const result = await getPayrollPaymentHistory(token, runId);
+      setReportResult((result as AdminRecord | null) ?? {});
+      setReportKind("report");
+      toast.success("Payment history loaded.");
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load payment history.",
       );
     } finally {
       setReportBusy("");
@@ -5034,6 +5138,9 @@ export function PayrollOperationsView() {
       if (!ruleForm.schemeId || !ruleForm.effectiveFrom) {
         throw new Error("Scheme and effective-from date are required.");
       }
+      if (!ruleForm.sourceReference.trim()) {
+        throw new Error("An official source or evidence reference is required.");
+      }
       const bands =
         ruleForm.lowerLimit.trim() || ruleForm.ratePercent.trim()
           ? [
@@ -5046,6 +5153,16 @@ export function PayrollOperationsView() {
               },
             ]
           : undefined;
+      const configuration =
+        ruleSchemeCode === "SDL"
+          ? {
+              basis: "GROSS_EMOLUMENTS",
+              employeeCountThreshold: 10,
+              employerExempt: ruleForm.employerExempt === "true",
+            }
+          : ruleSchemeCode === "WCF"
+            ? { basis: "BASIC_PLUS_REGULAR_FIXED_ALLOWANCES" }
+            : undefined;
       await createPayrollStatutoryRule(token, {
         scheme_id: Number(ruleForm.schemeId),
         version_number: Number(ruleForm.versionNumber) || 1,
@@ -5056,6 +5173,8 @@ export function PayrollOperationsView() {
         deduct_employee_before_tax: ruleForm.deductEmployeeBeforeTax === "true",
         effective_from: ruleForm.effectiveFrom,
         effective_to: ruleForm.effectiveTo || undefined,
+        source_reference: ruleForm.sourceReference.trim(),
+        configuration,
         bands,
       });
       toast.success("Statutory rule created.");
@@ -5070,6 +5189,26 @@ export function PayrollOperationsView() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onApproveStatutoryRule(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setApprovingStatutoryRuleId(id);
+    try {
+      await approvePayrollStatutoryRule(token, id);
+      toast.success("Statutory rule approved and recorded.");
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not approve statutory rule.",
+      );
+    } finally {
+      setApprovingStatutoryRuleId("");
     }
   }
 
@@ -8680,7 +8819,7 @@ export function PayrollOperationsView() {
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Bank import run">
+                <Field label="Payment run">
                   <FluentSelect
                     ariaLabel="Bank import run"
                     className="w-full"
@@ -8743,7 +8882,7 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <div className="md:col-span-2">
-                  <Field label="Bank statement rows">
+                  <Field label="Payment confirmation or bank statement rows">
                     <Textarea
                       className={cn(
                         textareaClass,
@@ -8757,7 +8896,7 @@ export function PayrollOperationsView() {
                         }))
                       }
                       placeholder={
-                        "employee_id,employee_no,account_number_masked,reference,amount,status\n101,,****1234,PAY-1001,1250000,PAID"
+                        "employee_id,reference,amount,status\n101,MANUAL-1001,1250000,PAID"
                       }
                     />
                   </Field>
@@ -8771,7 +8910,18 @@ export function PayrollOperationsView() {
                   {reportBusy === "bank-import" ? (
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : null}
-                  Import bank
+                  Import payments
+                </button>
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  disabled={reportBusy === "payment-history"}
+                  onClick={() => void onLoadPaymentHistory()}
+                >
+                  {reportBusy === "payment-history" ? (
+                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  View payment history
                 </button>
               </div>
             </div>
@@ -8789,7 +8939,20 @@ export function PayrollOperationsView() {
                     }
                   />
                 </Field>
-                <Field label="Provider">
+                <Field label="Ledger run ID (optional)">
+                  <input
+                    className={inputClass}
+                    value={advancedForm.journalRunId}
+                    onChange={(event) =>
+                      setAdvancedForm((current) => ({
+                        ...current,
+                        journalRunId: event.target.value,
+                      }))
+                    }
+                    placeholder="All posted payroll journals"
+                  />
+                </Field>
+                <Field label="Optional ERP provider">
                   <input
                     className={inputClass}
                     value={advancedForm.providerKey}
@@ -8799,7 +8962,7 @@ export function PayrollOperationsView() {
                         providerKey: event.target.value,
                       }))
                     }
-                    placeholder="QuickBooks, Xero, SAP"
+                    placeholder="Leave blank to post internally"
                   />
                 </Field>
                 <Field label="External reference">
@@ -8832,6 +8995,17 @@ export function PayrollOperationsView() {
                   />
                 </Field>
                 <div className="flex flex-wrap gap-2 md:col-span-2">
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    disabled={reportBusy === "internal-ledger"}
+                    onClick={() => void onLoadInternalLedger()}
+                  >
+                    {reportBusy === "internal-ledger" ? (
+                      <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
+                    ) : null}
+                    Internal ledger
+                  </button>
                   <button
                     type="button"
                     className={secondaryButtonClass}
@@ -9411,6 +9585,7 @@ export function PayrollOperationsView() {
           ) : null}
         </section>
       ) : (
+        <div className="space-y-4">
         <ResizableTable
           title={sectionTitle}
           data={rows}
@@ -9570,6 +9745,68 @@ export function PayrollOperationsView() {
             void openDetail(row);
           }}
         />
+        {tab === "configuration" && configTab === "schemes" ? (
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold">Statutory rule versions</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Verify each rule against its source evidence. A different user from the rule creator must approve it.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={loading}
+                onClick={() => void loadRows({ refreshLookups: true })}
+              >
+                Refresh rules
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {statutoryRules.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+                  No statutory rule versions found.
+                </p>
+              ) : statutoryRules.map((rule) => {
+                const id = rowId(rule);
+                const scheme = asRecord(rule.scheme);
+                const configuration = asRecord(rule.configuration);
+                const status = readStatus(rule).toUpperCase();
+                const busy = approvingStatutoryRuleId === id;
+                return (
+                  <div key={id} className="grid gap-3 rounded-lg border border-border/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">
+                          {readString(scheme, ["name", "code"], "Statutory scheme")} · v{readString(rule, ["version_number", "versionNumber"], "1")}
+                        </p>
+                        <Badge variant="outline" className={cn("capitalize", statusTone(status))}>{prettify(status)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {prettify(readString(rule, ["calculation_method", "calculationMethod"], ""))} · Effective {formatAdminValue(rule.effective_from ?? rule.effectiveFrom)} to {formatAdminValue(rule.effective_to ?? rule.effectiveTo)} · {asRecordArray(rule.bands).length} tax band(s)
+                      </p>
+                      <p className="break-words text-xs text-muted-foreground">
+                        Source: {readString(configuration, ["source_reference", "sourceReference"], "Missing source reference")}
+                      </p>
+                    </div>
+                    {status === "DRAFT" && canApproveStatutoryRule ? (
+                      <button
+                        type="button"
+                        className={primaryButtonClass}
+                        disabled={busy || !readString(configuration, ["source_reference", "sourceReference"])}
+                        onClick={() => void onApproveStatutoryRule(rule)}
+                      >
+                        {busy ? "Approving…" : "Approve rule"}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+        </div>
       )}
 
       <Dialog
@@ -9928,12 +10165,32 @@ export function PayrollOperationsView() {
                   className="w-full"
                   value={ruleForm.schemeId}
                   placeholder="Select a scheme"
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    const latestVersion = Math.max(
+                      0,
+                      ...statutoryRules
+                        .filter(
+                          (rule) =>
+                            String(
+                              readNumber(rule, ["schemeId", "scheme_id"]) ??
+                                readNumber(
+                                  (rule.scheme as AdminRecord | undefined) ?? {},
+                                  ["id"],
+                                ) ??
+                                "",
+                            ) === value,
+                        )
+                        .map((rule) =>
+                          readNumber(rule, ["versionNumber", "version_number"]) ??
+                          0,
+                        ),
+                    );
                     setRuleForm((current) => ({
                       ...current,
                       schemeId: value,
-                    }))
-                  }
+                      versionNumber: String(latestVersion + 1),
+                    }));
+                  }}
                   options={[
                     { value: "", label: "Select a scheme" },
                     ...schemes.flatMap((row) => {
@@ -9999,6 +10256,19 @@ export function PayrollOperationsView() {
                   }
                 />
               </Field>
+              <Field label="Official source / evidence reference">
+                <input
+                  className={inputClass}
+                  value={ruleForm.sourceReference}
+                  onChange={(event) =>
+                    setRuleForm((current) => ({
+                      ...current,
+                      sourceReference: event.target.value,
+                    }))
+                  }
+                  placeholder="Circular, gazette, or controlled document ID"
+                />
+              </Field>
               <Field label="Employee rate">
                 <input
                   className={inputClass}
@@ -10023,6 +10293,25 @@ export function PayrollOperationsView() {
                   }
                 />
               </Field>
+              {ruleSchemeCode === "SDL" ? (
+                <Field label="Employer exempt from SDL">
+                  <FluentSelect
+                    ariaLabel="Employer exempt from SDL"
+                    className="w-full"
+                    value={ruleForm.employerExempt}
+                    onChange={(value) =>
+                      setRuleForm((current) => ({
+                        ...current,
+                        employerExempt: value,
+                      }))
+                    }
+                    options={[
+                      { value: "false", label: "No - standard levy applies" },
+                      { value: "true", label: "Yes - exemption approved" },
+                    ]}
+                  />
+                </Field>
+              ) : null}
               <Field label="Maximum basis">
                 <input
                   className={inputClass}

@@ -624,6 +624,43 @@ export const api = {
     return normalizeList(await request<unknown>('/api/me/finance/applications'));
   },
 
+  async listMyPayslips() {
+    return normalizeList(await request<unknown>('/api/me/payslips'));
+  },
+
+  async getMyPayrollSummary(year = new Date().getFullYear()) {
+    return request<Record<string, unknown>>(
+      `/api/me/payslips/summary/current?year=${encodeURIComponent(String(year))}`,
+    );
+  },
+
+  async downloadMyPayslip(id: string | number) {
+    const url = `${API_BASE_URL}/api/me/payslips/${encodeURIComponent(String(id))}/download`;
+    const fetchPdf = async (token: string | null) =>
+      fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    let response = await fetchPdf(await getBearerToken());
+    if (response.status === 401) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) response = await fetchPdf(refreshedToken);
+    }
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `Payslip download failed (${response.status}).`);
+    }
+    const contentDisposition = response.headers.get('content-disposition') ?? '';
+    const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return {
+      base64: globalThis.btoa(binary),
+      filename: filenameMatch?.[1] ?? `payslip-${id}.pdf`,
+    };
+  },
   async listMyPerformanceAssignments() {
     const payload = await request<unknown>('/api/performance/me/assignments');
     return normalizeList(payload);

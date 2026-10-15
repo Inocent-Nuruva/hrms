@@ -66,6 +66,19 @@ import {
   requestEmployeeFinanceReschedule,
   runEmployeeFinanceReconciliation,
   verifyEmployeeFinanceApplicationDocument,
+  approveManagementEmployeeFinanceApplication,
+  cancelEmployeeFinanceDisbursement,
+  createEmployeeFinanceProductVersion,
+  decideEmployeeFinanceApplication,
+  downloadEmployeeFinanceSanctionLetter,
+  getEmployeeFinanceApprovalHistory,
+  requestEmployeeFinanceAdjustment,
+  retireEmployeeFinanceProduct,
+  settleEmployeeFinanceQuote,
+  updateEmployeeFinanceProduct,
+  downloadEmployeeFinanceStatement,
+  exportEmployeeFinanceReport,
+  getEmployeeFinanceLoanReport,
   type AdminRecord,
 } from "@/lib/admin-api";
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
@@ -146,44 +159,28 @@ function sumRecordAmounts(rows: AdminRecord[], keys: string[]) {
     return sum + (value ?? 0);
   }, 0);
 }
+
+
+
 
-function csvValue(value: unknown) {
-  const text =
-    value === null || value === undefined
-      ? ""
-      : typeof value === "string"
-        ? value
-        : JSON.stringify(value);
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function rowsToCsv(rows: AdminRecord[]) {
-  if (rows.length === 0) return "";
-  const keys = Array.from(
-    rows.reduce((set, row) => {
-      Object.keys(row).forEach((key) => set.add(key));
-      return set;
-    }, new Set<string>()),
-  );
-  return [
-    keys.map(csvValue).join(","),
-    ...rows.map((row) => keys.map((key) => csvValue(row[key])).join(",")),
-  ].join("\n");
-}
-
-function downloadTextFile(content: string, filename: string, type: string) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
+const LOAN_REPORT_TYPES = new Set([
+  "applications",
+  "approvals",
+  "active-loans",
+  "monthly-deductions",
+  "outstanding",
+  "settled-loans",
+  "exit-recoveries",
+]);
 
 const financeReportTypes = [
+  { value: "applications", label: "Loan applications" },
+  { value: "approvals", label: "Loan approvals" },
+  { value: "active-loans", label: "Active loans" },
+  { value: "monthly-deductions", label: "Monthly loan deductions" },
+  { value: "outstanding", label: "Outstanding and overdue" },
+  { value: "settled-loans", label: "Settled loans" },
+  { value: "exit-recoveries", label: "Recovery at final settlement" },
   { value: "aging", label: "Aging" },
   { value: "exposure", label: "Outstanding exposure" },
   { value: "repayment-performance", label: "Repayment performance" },
@@ -196,33 +193,8 @@ const financeReportTypes = [
 function reportRows(report: AdminRecord | null) {
   return statementArray(report, "rows");
 }
-
-function csvCell(value: unknown) {
-  const text =
-    typeof value === "object" && value !== null
-      ? JSON.stringify(value)
-      : String(value ?? "");
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function downloadReportCsv(report: AdminRecord | null) {
-  const rows = reportRows(report);
-  if (!rows.length) return;
-  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
-  const csv = [
-    headers.map(csvCell).join(","),
-    ...rows.map((row) =>
-      headers.map((header) => csvCell(row[header])).join(","),
-    ),
-  ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `employee-finance-${readString(report, ["reportType", "report_type"], "report")}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+
+
 
 function parseCsvList(value?: string) {
   return (value ?? "")
@@ -235,6 +207,59 @@ function optionalNumber(value?: string) {
   if (!value?.trim()) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+const STAGE_BY_STATUS: Record<string, "recommend" | "hr" | "finance" | "management"> = {
+  PENDING_MANAGER_RECOMMENDATION: "recommend",
+  PENDING_HR_APPROVAL: "hr",
+  PENDING_FINANCE_APPROVAL: "finance",
+  PENDING_MANAGEMENT_APPROVAL: "management",
+};
+
+const STAGE_CODE: Record<"recommend" | "hr" | "finance" | "management", string> = {
+  recommend: "MANAGER",
+  hr: "HR",
+  finance: "FINANCE",
+  management: "MANAGEMENT",
+};
+
+const STAGE_LABEL: Record<"recommend" | "hr" | "finance" | "management", string> = {
+  recommend: "Recommend",
+  hr: "HR approve",
+  finance: "Finance approve",
+  management: "Management approve",
+};
+
+function currentStageAction(row: AdminRecord | null) {
+  return STAGE_BY_STATUS[readString(row, ["status"], "").toUpperCase()] ?? null;
+}
+
+function saveBlob(file: { blob: Blob; filename: string }) {
+  const url = URL.createObjectURL(file.blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+type TierDraft = { minimum_amount: string; maximum_amount: string; stages: string[] };
+
+function tiersFromProduct(row: AdminRecord | null): TierDraft[] {
+  const approval = asRecord(row?.approvalConfiguration ?? row?.approval_configuration);
+  const raw = approval?.approval_tiers;
+  return Array.isArray(raw)
+    ? raw.map((tier) => {
+        const record = asRecord(tier);
+        return {
+          minimum_amount: readString(record, ["minimum_amount"], "0"),
+          maximum_amount: readString(record, ["maximum_amount"], ""),
+          stages: Array.isArray(record?.stages) ? record.stages.map(String) : [],
+        };
+      })
+    : [];
 }
 
 function makerCheckerSummary(row: AdminRecord, includeConfirmation = false) {
@@ -316,8 +341,24 @@ export function FinanceOperationsView({
   const [postingAccounting, setPostingAccounting] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createMode, setCreateMode] = React.useState<
-    "product" | "disburse" | "repay" | "defer" | "reschedule"
+    | "product"
+    | "product-edit"
+    | "product-version"
+    | "disburse"
+    | "repay"
+    | "defer"
+    | "reschedule"
+    | "adjust"
+    | "settle"
   >("product");
+  const [productTarget, setProductTarget] = React.useState<AdminRecord | null>(null);
+  const [tiers, setTiers] = React.useState<TierDraft[]>([]);
+  const [approvalHistory, setApprovalHistory] = React.useState<AdminRecord | null>(null);
+  const [decisionTarget, setDecisionTarget] = React.useState<{
+    row: AdminRecord;
+    decision: "REJECTED" | "RETURNED";
+  } | null>(null);
+  const [decisionComments, setDecisionComments] = React.useState("");
   const [form, setForm] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -390,7 +431,9 @@ export function FinanceOperationsView({
         date_to: reportFilters.date_to || undefined,
       };
       const [report, audit] = await Promise.all([
-        getEmployeeFinanceReport(token, selectedReport, params),
+        LOAN_REPORT_TYPES.has(selectedReport)
+          ? getEmployeeFinanceLoanReport(token, selectedReport, params)
+          : getEmployeeFinanceReport(token, selectedReport, params),
         listEmployeeFinanceAuditTimeline(token, { limit: 100 }),
       ]);
       setReportData(report);
@@ -420,12 +463,16 @@ export function FinanceOperationsView({
     setApplicationDetail(row);
     setApplicationLoading(true);
     setApplicationError(null);
-    const [documentsResult, guarantorsResult, sanctionResult] =
+    const [documentsResult, guarantorsResult, sanctionResult, historyResult] =
       await Promise.allSettled([
         listEmployeeFinanceApplicationDocuments(token, id),
         listEmployeeFinanceApplicationGuarantors(token, id),
         getEmployeeFinanceSanctionLetter(token, id),
+        getEmployeeFinanceApprovalHistory(token, id),
       ]);
+    setApprovalHistory(
+      historyResult.status === "fulfilled" ? asRecord(historyResult.value) : null,
+    );
     if (documentsResult.status === "fulfilled") {
       setApplicationDocuments(documentsResult.value);
     } else {
@@ -486,7 +533,10 @@ export function FinanceOperationsView({
   );
 
   const actOnApplication = React.useCallback(
-    async (row: AdminRecord, action: "recommend" | "hr" | "finance") => {
+    async (
+      row: AdminRecord,
+      action: "recommend" | "hr" | "finance" | "management",
+    ) => {
       const token = readStoredToken();
       const id = rowId(row);
       if (!token || !id) return;
@@ -503,6 +553,9 @@ export function FinanceOperationsView({
         } else if (action === "hr") {
           await approveHrEmployeeFinanceApplication(token, id, payload);
           toast.success("HR approved.");
+        } else if (action === "management") {
+          await approveManagementEmployeeFinanceApplication(token, id, payload);
+          toast.success("Management approved.");
         } else {
           await approveEmployeeFinanceApplication(token, id, payload);
           toast.success("Finance approved.");
@@ -523,6 +576,154 @@ export function FinanceOperationsView({
     },
     [applicationDetail, load, loadApplicationDetail],
   );
+
+  async function exportServerReport(format: "xlsx" | "csv") {
+    const token = readStoredToken();
+    if (!token) return;
+    try {
+      saveBlob(
+        await exportEmployeeFinanceReport(token, selectedReport, format, {
+          date_from: reportFilters.date_from || undefined,
+          date_to: reportFilters.date_to || undefined,
+        }),
+      );
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not export.");
+    }
+  }
+
+  async function downloadStatement(format: "pdf" | "xlsx") {
+    const token = readStoredToken();
+    const id = rowId(accountDetail);
+    if (!token || !id) return;
+    try {
+      saveBlob(await downloadEmployeeFinanceStatement(token, id, format));
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not download the statement.");
+    }
+  }
+
+  async function submitApplicationDecision() {
+    const token = readStoredToken();
+    if (!token || !decisionTarget) return;
+    const action = currentStageAction(decisionTarget.row);
+    const id = rowId(decisionTarget.row);
+    if (!action || !id) return;
+    setBusyId(`decision-${id}`);
+    try {
+      await decideEmployeeFinanceApplication(token, id, {
+        stage: STAGE_CODE[action],
+        decision: decisionTarget.decision,
+        comments: decisionComments.trim(),
+      });
+      toast.success(
+        decisionTarget.decision === "RETURNED"
+          ? "Returned to the employee for correction."
+          : "Application declined.",
+      );
+      setDecisionTarget(null);
+      setDecisionComments("");
+      await load();
+      if (applicationDetail && rowId(applicationDetail) === id) {
+        await loadApplicationDetail({ ...applicationDetail, ...decisionTarget.row });
+      }
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Could not record the decision.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function downloadSanctionLetter(row: AdminRecord | null) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    try {
+      saveBlob(await downloadEmployeeFinanceSanctionLetter(token, id));
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error ? errorObject.message : "Could not download the letter.",
+      );
+    }
+  }
+
+  function openProductForm(
+    mode: "product" | "product-edit" | "product-version",
+    row: AdminRecord | null,
+  ) {
+    setCreateMode(mode);
+    setProductTarget(row);
+    setFormError(null);
+    if (!row) {
+      setForm({ product_type: "STAFF_LOAN", interest_method: "FLAT_RATE" });
+      setTiers([]);
+      setCreateOpen(true);
+      return;
+    }
+    const approval = asRecord(row.approvalConfiguration ?? row.approval_configuration);
+    const policy = asRecord(
+      asRecord(row.eligibilityConfiguration ?? row.eligibility_configuration)
+        ?.policy_configuration,
+    );
+    const penalty = asRecord(policy?.penalty);
+    const flag = (keys: string[]) =>
+      String(Boolean((row as Record<string, unknown>)[keys[0]] ?? (row as Record<string, unknown>)[keys[1]]));
+    setForm({
+      product_type: readString(row, ["productType", "product_type"], "STAFF_LOAN"),
+      code: readString(row, ["code"], ""),
+      name: readString(row, ["name"], ""),
+      description: readString(row, ["description"], ""),
+      interest_method: readString(row, ["interestMethod", "interest_method"], "ZERO_INTEREST"),
+      annual_interest_rate: readString(row, ["annualInterestRate", "annual_interest_rate"], ""),
+      processing_fee_method: readString(row, ["processingFeeMethod", "processing_fee_method"], "NONE"),
+      processing_fee_value: readString(row, ["processingFeeValue", "processing_fee_value"], ""),
+      minimum_amount: readString(row, ["minimumAmount", "minimum_amount"], ""),
+      maximum_amount: readString(row, ["maximumAmount", "maximum_amount"], ""),
+      minimum_term_months: readString(row, ["minimumTermMonths", "minimum_term_months"], ""),
+      maximum_term_months: readString(row, ["maximumTermMonths", "maximum_term_months"], ""),
+      maximum_salary_multiple: readString(row, ["maximumSalaryMultiple", "maximum_salary_multiple"], ""),
+      maximum_installment_percentage: readString(row, ["maximumInstallmentPercentage", "maximum_installment_percentage"], ""),
+      minimum_service_months: readString(row, ["minimumServiceMonths", "minimum_service_months"], ""),
+      maximum_active_accounts: readString(row, ["maximumActiveAccounts", "maximum_active_accounts"], ""),
+      required_document_types: (Array.isArray(row.requiredDocumentTypes ?? row.required_document_types)
+        ? ((row.requiredDocumentTypes ?? row.required_document_types) as unknown[]).map(String)
+        : []
+      ).join(", "),
+      required_guarantors: readString(approval, ["required_guarantors"], ""),
+      penalty_method: readString(penalty, ["method"], "NONE"),
+      penalty_value: readString(penalty, ["value"], ""),
+      requires_confirmation: flag(["requiresConfirmation", "requires_confirmation"]),
+      allow_during_probation: flag(["allowDuringProbation", "allow_during_probation"]),
+      allow_rescheduling: flag(["allowRescheduling", "allow_rescheduling"]),
+      allow_deferment: flag(["allowDeferment", "allow_deferment"]),
+      allow_early_settlement: flag(["allowEarlySettlement", "allow_early_settlement"]),
+      allow_additional_repayment: flag(["allowAdditionalRepayment", "allow_additional_repayment"]),
+      effective_from:
+        mode === "product-version"
+          ? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+          : readString(row, ["effectiveFrom", "effective_from"], ""),
+    });
+    setTiers(tiersFromProduct(row));
+    setCreateOpen(true);
+  }
+
+  async function retireProduct(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setBusyId(`retire-${id}`);
+    try {
+      await retireEmployeeFinanceProduct(token, id);
+      toast.success("Product retired; existing loans are unaffected.");
+      await load();
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not retire.");
+    } finally {
+      setBusyId("");
+    }
+  }
 
   const decideDocument = React.useCallback(
     async (document: AdminRecord, status: "VERIFIED" | "REJECTED") => {
@@ -557,7 +758,7 @@ export function FinanceOperationsView({
 
   const openAccountAction = React.useCallback(
     (
-      mode: "disburse" | "repay" | "defer" | "reschedule",
+      mode: "disburse" | "repay" | "defer" | "reschedule" | "adjust" | "settle",
       account: AdminRecord,
       extra: Record<string, string> = {},
     ) => {
@@ -710,7 +911,11 @@ export function FinanceOperationsView({
     setSaving(true);
     setFormError(null);
     try {
-      if (createMode === "product") {
+      if (
+        createMode === "product" ||
+        createMode === "product-edit" ||
+        createMode === "product-version"
+      ) {
         if (
           !form.code ||
           !form.name ||
@@ -722,13 +927,25 @@ export function FinanceOperationsView({
             "Code, name, minimum amount, term, and effective from are required.",
           );
         }
-        await createEmployeeFinanceProduct(token, {
+        for (const tier of tiers) {
+          if (!tier.stages.length) {
+            throw new Error("Each approval tier needs at least one stage.");
+          }
+        }
+        const existingEligibility = asRecord(
+          productTarget?.eligibilityConfiguration ??
+            productTarget?.eligibility_configuration,
+        );
+        const existingPolicy = asRecord(existingEligibility?.policy_configuration);
+        const payload: AdminRecord = {
           product_type: form.product_type || "STAFF_LOAN",
           code: form.code,
           name: form.name,
           description: form.description || undefined,
           interest_method: form.interest_method || undefined,
           annual_interest_rate: form.annual_interest_rate || undefined,
+          processing_fee_method: form.processing_fee_method || "NONE",
+          processing_fee_value: form.processing_fee_value || undefined,
           minimum_amount: form.minimum_amount,
           maximum_amount: form.maximum_amount || undefined,
           maximum_salary_multiple: form.maximum_salary_multiple || undefined,
@@ -746,11 +963,56 @@ export function FinanceOperationsView({
           allow_additional_repayment:
             form.allow_additional_repayment !== "false",
           required_document_types: parseCsvList(form.required_document_types),
+          eligibility_configuration: {
+            ...(existingEligibility ?? {}),
+            policy_configuration: {
+              ...(existingPolicy ?? {}),
+              penalty:
+                form.penalty_method && form.penalty_method !== "NONE"
+                  ? { method: form.penalty_method, value: form.penalty_value }
+                  : { method: "NONE" },
+            },
+          },
           approval_configuration: {
             required_guarantors: optionalNumber(form.required_guarantors) ?? 0,
+            approval_tiers: tiers.map((tier) => ({
+              minimum_amount: tier.minimum_amount || "0",
+              maximum_amount: tier.maximum_amount || null,
+              stages: tier.stages,
+            })),
           },
           effective_from: form.effective_from,
+        };
+        const targetId = rowId(productTarget);
+        if (createMode === "product-edit" && targetId) {
+          await updateEmployeeFinanceProduct(token, targetId, payload);
+        } else if (createMode === "product-version" && targetId) {
+          await createEmployeeFinanceProductVersion(token, targetId, payload);
+        } else {
+          await createEmployeeFinanceProduct(token, payload);
+        }
+      } else if (createMode === "adjust") {
+        if (!form.account_id || !form.adjustment_type || !form.reason) {
+          throw new Error("Type and reason are required.");
+        }
+        if (form.adjustment_type !== "WRITE_OFF" && !form.amount) {
+          throw new Error("Amount is required.");
+        }
+        await requestEmployeeFinanceAdjustment(token, form.account_id, {
+          adjustment_type: form.adjustment_type,
+          amount: form.adjustment_type === "WRITE_OFF" ? undefined : form.amount,
+          reason: form.reason,
         });
+        toast.success("Sent for approval by a second Finance user.");
+      } else if (createMode === "settle") {
+        if (!form.quote_id || !form.payment_reference || !form.payment_date) {
+          throw new Error("Payment reference and date are required.");
+        }
+        await settleEmployeeFinanceQuote(token, form.quote_id, {
+          payment_reference: form.payment_reference,
+          payment_date: form.payment_date,
+        });
+        toast.success("Payoff recorded; a second Finance user must approve the repayment.");
       } else if (createMode === "disburse") {
         if (
           !form.account_id ||
@@ -782,6 +1044,7 @@ export function FinanceOperationsView({
           installment_id: Number(form.installment_id),
           reason: form.reason,
         });
+        toast.success("Deferment sent for approval.");
       } else if (createMode === "reschedule") {
         if (!form.account_id || !form.new_term_months || !form.reason)
           throw new Error("New term and reason are required.");
@@ -789,6 +1052,7 @@ export function FinanceOperationsView({
           new_term_months: Number(form.new_term_months),
           reason: form.reason,
         });
+        toast.success("Reschedule sent for approval with a preview of the new schedule.");
       }
       toast.success("Saved.");
       setCreateOpen(false);
@@ -864,11 +1128,71 @@ export function FinanceOperationsView({
           },
         },
         {
+          key: "version",
+          label: "Version",
+          render: (row) =>
+            `v${readString(row, ["versionNumber", "version_number"], "1")}${
+              readString(row, ["effectiveTo", "effective_to"], "")
+                ? ` · to ${readString(row, ["effectiveTo", "effective_to"])}`
+                : ""
+            }`,
+        },
+        {
           key: "status",
           label: "Status",
           render: (row) => (
             <StatusChip value={readString(row, ["status"], "ACTIVE")} />
           ),
+        },
+        {
+          key: "actions",
+          label: "Actions",
+          render: (row) => {
+            const locked = Boolean(row.isLocked ?? row.is_locked);
+            const retired = readString(row, ["status"]) === "RETIRED";
+            return (
+              <div className="flex flex-wrap gap-1">
+                {!locked && !retired ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openProductForm("product-edit", row);
+                    }}
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                {!retired ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    title="Publish changed terms; existing loans keep their terms"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openProductForm("product-version", row);
+                    }}
+                  >
+                    New version
+                  </button>
+                ) : null}
+                {!retired ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={busyId === `retire-${rowId(row)}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void retireProduct(row);
+                    }}
+                  >
+                    Retire
+                  </button>
+                ) : null}
+              </div>
+            );
+          },
         },
       ];
     }
@@ -978,46 +1302,48 @@ export function FinanceOperationsView({
         label: "Actions",
         render: (row) => {
           const id = rowId(row);
+          const action = currentStageAction(row);
+          if (!action) return null;
           return (
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
                 className={actionButtonClass}
-                disabled={busyId === `recommend-${id}`}
+                disabled={busyId === `${action}-${id}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void actOnApplication(row, "recommend");
+                  void actOnApplication(row, action);
                 }}
               >
-                Recommend
+                {STAGE_LABEL[action]}
               </button>
               <button
                 type="button"
                 className={actionButtonClass}
-                disabled={busyId === `hr-${id}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void actOnApplication(row, "hr");
+                  setDecisionTarget({ row, decision: "RETURNED" });
                 }}
               >
-                HR approve
+                Return
               </button>
               <button
                 type="button"
                 className={actionButtonClass}
-                disabled={busyId === `fin-${id}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void actOnApplication(row, "finance");
+                  setDecisionTarget({ row, decision: "REJECTED" });
                 }}
               >
-                Finance approve
+                Reject
               </button>
             </div>
           );
         },
       },
     ];
+    // openProductForm and retireProduct only read state through setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, actOnApplication, busyId, openAccountAction, quoteAccount]);
 
   const requiredApplicationDocuments =
@@ -1093,41 +1419,7 @@ export function FinanceOperationsView({
   const currentReportRows = reportRows(reportData);
   const reportTotals =
     asRecord(reportData?.totals) ?? asRecord(reportData?.buckets);
-
-  function exportAccountStatement() {
-    if (!statementAccount || !accountStatement) return;
-    const accountNo = readString(
-      statementAccount,
-      ["accountNo", "account_no"],
-      rowId(statementAccount) || "account",
-    );
-    const rows = [
-      ...accountInstallments.map((row) => ({
-        section: "installments",
-        ...row,
-      })),
-      ...accountLedger.map((row) => ({ section: "ledger", ...row })),
-      ...accountDisbursements.map((row) => ({
-        section: "disbursements",
-        ...row,
-      })),
-      ...accountRepayments.map((row) => ({ section: "repayments", ...row })),
-      ...accountDeferments.map((row) => ({ section: "deferments", ...row })),
-      ...accountReschedules.map((row) => ({
-        section: "reschedules",
-        ...row,
-      })),
-      ...accountSettlementQuotes.map((row) => ({
-        section: "settlement_quotes",
-        ...row,
-      })),
-    ];
-    downloadTextFile(
-      rowsToCsv(rows),
-      `finance-statement-${accountNo}.csv`,
-      "text/csv;charset=utf-8",
-    );
-  }
+
 
   if (!canAccess) return null;
 
@@ -1248,14 +1540,7 @@ export function FinanceOperationsView({
                 <button
                   type="button"
                   className={primaryButtonClass}
-                  onClick={() => {
-                    setCreateMode("product");
-                    setForm({
-                      product_type: "STAFF_LOAN",
-                      interest_method: "FLAT_RATE",
-                    });
-                    setCreateOpen(true);
-                  }}
+                  onClick={() => openProductForm("product", null)}
                 >
                   <PlusIcon className="size-4" /> New product
                 </button>
@@ -1381,11 +1666,17 @@ export function FinanceOperationsView({
                 </button>
                 <button
                   type="button"
-                  className={primaryButtonClass}
-                  onClick={() => downloadReportCsv(reportData)}
-                  disabled={!currentReportRows.length}
+                  className={secondaryButtonClass}
+                  onClick={() => void exportServerReport("csv")}
                 >
                   Export CSV
+                </button>
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  onClick={() => void exportServerReport("xlsx")}
+                >
+                  Export Excel
                 </button>
               </div>
             </div>
@@ -1789,61 +2080,131 @@ export function FinanceOperationsView({
 
                 <div className="rounded-lg border border-border bg-card p-3">
                   <h3 className="text-sm font-semibold">Stage actions</h3>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className={actionButtonClass}
-                      disabled={
-                        !applicationDetail ||
-                        busyId === `recommend-${rowId(applicationDetail)}`
-                      }
-                      onClick={() =>
-                        applicationDetail &&
-                        void actOnApplication(applicationDetail, "recommend")
-                      }
-                    >
-                      Recommend
-                    </button>
-                    <button
-                      type="button"
-                      className={actionButtonClass}
-                      disabled={
-                        !applicationDetail ||
-                        busyId === `hr-${rowId(applicationDetail)}`
-                      }
-                      onClick={() =>
-                        applicationDetail &&
-                        void actOnApplication(applicationDetail, "hr")
-                      }
-                    >
-                      HR approve
-                    </button>
-                    <button
-                      type="button"
-                      className={actionButtonClass}
-                      disabled={
-                        !applicationDetail ||
-                        !supportReady ||
-                        busyId === `finance-${rowId(applicationDetail)}`
-                      }
-                      onClick={() =>
-                        applicationDetail &&
-                        void actOnApplication(applicationDetail, "finance")
-                      }
-                    >
-                      Finance approve
-                    </button>
-                  </div>
+                  {(() => {
+                    const action = currentStageAction(applicationDetail);
+                    const route = Array.isArray(approvalHistory?.approval_route)
+                      ? approvalHistory.approval_route.map(String)
+                      : [];
+                    const isFinal =
+                      action !== null && route[route.length - 1] === STAGE_CODE[action];
+                    if (!action || !applicationDetail) {
+                      return (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          No approval is waiting at this status.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={
+                            busyId === `${action}-${rowId(applicationDetail)}` ||
+                            (isFinal && !supportReady)
+                          }
+                          title={isFinal && !supportReady ? "Verify documents and guarantors first" : undefined}
+                          onClick={() => void actOnApplication(applicationDetail, action)}
+                        >
+                          {STAGE_LABEL[action]}
+                        </button>
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          onClick={() =>
+                            setDecisionTarget({ row: applicationDetail, decision: "RETURNED" })
+                          }
+                        >
+                          Return for correction
+                        </button>
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          onClick={() =>
+                            setDecisionTarget({ row: applicationDetail, decision: "REJECTED" })
+                          }
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <h3 className="text-sm font-semibold">Approval route</h3>
+                  {approvalHistory ? (
+                    <div className="mt-2 space-y-2 text-sm">
+                      <p className="text-xs text-muted-foreground">
+                        {(Array.isArray(approvalHistory.approval_route)
+                          ? approvalHistory.approval_route.map(String)
+                          : []
+                        )
+                          .map(prettify)
+                          .join(" → ")}{" "}
+                        · cycle {readString(approvalHistory, ["approval_cycle"], "1")}
+                        {Number(approvalHistory.escalation_level ?? 0) > 0
+                          ? ` · escalated (level ${String(approvalHistory.escalation_level)})`
+                          : ""}
+                      </p>
+                      {readString(approvalHistory, ["decision_comments"], "") ? (
+                        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                          Last comment: {readString(approvalHistory, ["decision_comments"])}
+                        </p>
+                      ) : null}
+                      <ul className="divide-y divide-border">
+                        {(Array.isArray(approvalHistory.approvals)
+                          ? (approvalHistory.approvals as AdminRecord[])
+                          : []
+                        ).map((item) => (
+                          <li key={rowId(item)} className="py-1.5 text-xs">
+                            <span className="font-medium">
+                              {prettify(readString(item, ["stage"]))}: {prettify(readString(item, ["decision"]))}
+                            </span>{" "}
+                            <span className="text-muted-foreground">
+                              cycle {readString(item, ["approvalCycle", "approval_cycle"], "1")} · user{" "}
+                              {readString(item, ["createdByCompanyUserId", "created_by_company_user_id"])}
+                              {readString(item, ["onBehalfOfCompanyUserId", "on_behalf_of_company_user_id"], "")
+                                ? ` for ${readString(item, ["onBehalfOfCompanyUserId", "on_behalf_of_company_user_id"])}`
+                                : ""}
+                            </span>
+                            {readString(item, ["comments"], "") ? (
+                              <p className="text-muted-foreground">{readString(item, ["comments"])}</p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">No history loaded.</p>
+                  )}
                 </div>
 
                 <div className="rounded-lg border border-border bg-card p-3">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold">Sanction letter</h3>
-                    {sanctionLetter ? (
-                      <StatusChip value="GENERATED" />
-                    ) : (
-                      <StatusChip value="PENDING" />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {sanctionLetter ? (
+                        <>
+                          <StatusChip
+                            value={
+                              readString(sanctionLetter, ["acceptedAt", "accepted_at"], "")
+                                ? "ACCEPTED"
+                                : "GENERATED"
+                            }
+                          />
+                          <button
+                            type="button"
+                            className={actionButtonClass}
+                            onClick={() => void downloadSanctionLetter(applicationDetail)}
+                          >
+                            PDF
+                          </button>
+                        </>
+                      ) : (
+                        <StatusChip value="PENDING" />
+                      )}
+                    </div>
                   </div>
                   {sanctionContent ? (
                     <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs leading-relaxed text-foreground">
@@ -1975,10 +2336,18 @@ export function FinanceOperationsView({
               <button
                 type="button"
                 className={secondaryButtonClass}
-                disabled={!accountStatement}
-                onClick={exportAccountStatement}
+                disabled={!accountDetail}
+                onClick={() => void downloadStatement("pdf")}
               >
-                Export statement
+                Statement PDF
+              </button>
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={!accountDetail}
+                onClick={() => void downloadStatement("xlsx")}
+              >
+                Statement Excel
               </button>
               <button
                 type="button"
@@ -2024,6 +2393,18 @@ export function FinanceOperationsView({
               </button>
               <button
                 type="button"
+                className={secondaryButtonClass}
+                onClick={() =>
+                  accountDetail &&
+                  openAccountAction("adjust", accountDetail, {
+                    adjustment_type: "PENALTY",
+                  })
+                }
+              >
+                Penalty / waiver / write-off
+              </button>
+              <button
+                type="button"
                 className={primaryButtonClass}
                 disabled={
                   !accountDetail || busyId === `quote-${rowId(accountDetail)}`
@@ -2034,6 +2415,22 @@ export function FinanceOperationsView({
               >
                 Quote settlement
               </button>
+              {accountSettlementQuotes[0] &&
+              readString(accountSettlementQuotes[0], ["status"], "") === "OPEN" ? (
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  onClick={() =>
+                    accountDetail &&
+                    openAccountAction("settle", accountDetail, {
+                      quote_id: rowId(accountSettlementQuotes[0]),
+                    })
+                  }
+                >
+                  Record payoff of{" "}
+                  {readString(accountSettlementQuotes[0], ["settlementAmount", "settlement_amount"])}
+                </button>
+              ) : null}
             </div>
 
             <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
@@ -2258,6 +2655,35 @@ export function FinanceOperationsView({
                               >
                                 Confirm
                               </button>
+                              {["PENDING_APPROVAL", "APPROVED"].includes(
+                                readString(item, ["status"], "").toUpperCase(),
+                              ) ? (
+                                <button
+                                  type="button"
+                                  className={actionButtonClass}
+                                  disabled={busyId === `disb-cancel-${id}`}
+                                  onClick={async () => {
+                                    const accessToken = readStoredToken();
+                                    if (!accessToken || !accountDetail) return;
+                                    setBusyId(`disb-cancel-${id}`);
+                                    try {
+                                      await cancelEmployeeFinanceDisbursement(accessToken, id);
+                                      toast.success("Disbursement cancelled.");
+                                      await loadAccountDetail(accountDetail);
+                                    } catch (errorObject) {
+                                      toast.error(
+                                        errorObject instanceof Error
+                                          ? errorObject.message
+                                          : "Could not cancel.",
+                                      );
+                                    } finally {
+                                      setBusyId("");
+                                    }
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         );
@@ -2407,22 +2833,102 @@ export function FinanceOperationsView({
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {createMode === "product"
-                ? "New product"
-                : createMode === "disburse"
-                  ? "Disburse"
-                  : createMode === "repay"
-                    ? "Repayment"
-                    : createMode === "defer"
-                      ? "Deferment"
-                      : "Reschedule"}
+              {(
+                {
+                  product: "New product",
+                  "product-edit": "Edit product",
+                  "product-version": "New product version",
+                  disburse: "Disburse",
+                  repay: "Repayment",
+                  defer: "Request deferment",
+                  reschedule: "Request reschedule",
+                  adjust: "Penalty, waiver, or write-off",
+                  settle: "Record early settlement payment",
+                } as const
+              )[createMode]}
             </DialogTitle>
             <DialogDescription>
-              Save this finance record for the employee.
+              {createMode === "product-version"
+                ? "Changed terms apply to applications from the effective date. Loans already granted keep their terms."
+                : createMode === "adjust" ||
+                    createMode === "defer" ||
+                    createMode === "reschedule" ||
+                    createMode === "settle"
+                  ? "This creates a request that a second Finance user must approve."
+                  : "Save this finance record for the employee."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            {createMode === "product" ? (
+          <div className="grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
+            {createMode === "adjust" ? (
+              <>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Type</span>
+                  <FluentSelect
+                    ariaLabel="Adjustment type"
+                    className="w-full"
+                    value={form.adjustment_type ?? "PENALTY"}
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, adjustment_type: value }))
+                    }
+                    options={[
+                      { value: "PENALTY", label: "Late-payment penalty" },
+                      { value: "INTEREST_WAIVER", label: "Waive interest" },
+                      { value: "FEE_WAIVER", label: "Waive fees" },
+                      { value: "WRITE_OFF", label: "Write off the remaining balance" },
+                    ]}
+                  />
+                </label>
+                {form.adjustment_type !== "WRITE_OFF" ? (
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Amount</span>
+                    <input
+                      className={inputClass}
+                      value={form.amount ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, amount: event.target.value }))
+                      }
+                    />
+                  </label>
+                ) : null}
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Reason</span>
+                  <Textarea
+                    className={textareaClass}
+                    value={form.reason ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, reason: event.target.value }))
+                    }
+                  />
+                </label>
+              </>
+            ) : null}
+            {createMode === "settle" ? (
+              <>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Bank payment reference</span>
+                  <input
+                    className={inputClass}
+                    value={form.payment_reference ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, payment_reference: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Payment date</span>
+                  <DateInput
+                    className={inputClass}
+                    value={form.payment_date ?? ""}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, payment_date: event.target.value }))
+                    }
+                  />
+                </label>
+              </>
+            ) : null}
+            {createMode === "product" ||
+            createMode === "product-edit" ||
+            createMode === "product-version" ? (
               <>
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">Type</span>
@@ -2446,6 +2952,7 @@ export function FinanceOperationsView({
                   <span className="font-medium">Code</span>
                   <input
                     className={inputClass}
+                    disabled={createMode === "product-version"}
                     value={form.code ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -2514,6 +3021,146 @@ export function FinanceOperationsView({
                       }
                     />
                   </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Processing fee</span>
+                    <FluentSelect
+                      ariaLabel="Processing fee"
+                      className="w-full"
+                      value={form.processing_fee_method ?? "NONE"}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, processing_fee_method: value }))
+                      }
+                      options={[
+                        { value: "NONE", label: "No fee" },
+                        { value: "FLAT", label: "Flat amount" },
+                        { value: "PERCENT", label: "Percent of loan" },
+                      ]}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Fee value</span>
+                    <input
+                      className={inputClass}
+                      disabled={(form.processing_fee_method ?? "NONE") === "NONE"}
+                      value={form.processing_fee_value ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, processing_fee_value: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Late-payment penalty</span>
+                    <FluentSelect
+                      ariaLabel="Late-payment penalty"
+                      className="w-full"
+                      value={form.penalty_method ?? "NONE"}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, penalty_method: value }))
+                      }
+                      options={[
+                        { value: "NONE", label: "No penalty" },
+                        { value: "FLAT", label: "Flat amount per overdue instalment" },
+                        { value: "PERCENT_OF_OVERDUE", label: "Percent of overdue amount" },
+                      ]}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Penalty value</span>
+                    <input
+                      className={inputClass}
+                      disabled={(form.penalty_method ?? "NONE") === "NONE"}
+                      value={form.penalty_value ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, penalty_value: event.target.value }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-2 rounded-lg border border-border p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">Approval stages by amount</span>
+                    <button
+                      type="button"
+                      className={actionButtonClass}
+                      onClick={() =>
+                        setTiers((current) => [
+                          ...current,
+                          { minimum_amount: "0", maximum_amount: "", stages: ["MANAGER", "HR", "FINANCE"] },
+                        ])
+                      }
+                    >
+                      Add tier
+                    </button>
+                  </div>
+                  {tiers.length ? null : (
+                    <p className="text-xs text-muted-foreground">
+                      No tiers: every application goes Manager → HR → Finance.
+                    </p>
+                  )}
+                  {tiers.map((tier, index) => (
+                    <div key={index} className="grid gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-[1fr_1fr_auto]">
+                      <input
+                        className={inputClass}
+                        placeholder="From amount"
+                        value={tier.minimum_amount}
+                        onChange={(event) =>
+                          setTiers((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, minimum_amount: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                      <input
+                        className={inputClass}
+                        placeholder="To amount (blank = no limit)"
+                        value={tier.maximum_amount}
+                        onChange={(event) =>
+                          setTiers((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, maximum_amount: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        className={actionButtonClass}
+                        onClick={() =>
+                          setTiers((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                        }
+                      >
+                        Remove
+                      </button>
+                      <div className="flex flex-wrap gap-3 sm:col-span-3">
+                        {["MANAGER", "HR", "FINANCE", "MANAGEMENT"].map((stage) => (
+                          <label key={stage} className="flex items-center gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={tier.stages.includes(stage)}
+                              onChange={(event) =>
+                                setTiers((current) =>
+                                  current.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? {
+                                          ...item,
+                                          stages: event.target.checked
+                                            ? [...item.stages, stage]
+                                            : item.stages.filter((value) => value !== stage),
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            {prettify(stage)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-sm">
@@ -2825,6 +3472,56 @@ export function FinanceOperationsView({
               ) : (
                 "Save"
               )}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(decisionTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDecisionTarget(null);
+            setDecisionComments("");
+          }
+        }}
+      >
+        <DialogPopup className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {decisionTarget?.decision === "RETURNED"
+                ? "Return for correction"
+                : "Reject application"}
+            </DialogTitle>
+            <DialogDescription>
+              {decisionTarget?.decision === "RETURNED"
+                ? "The employee can change the application and submit it again; it then restarts the approval route."
+                : "The application is closed. The employee will see your reason."}
+            </DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">Reason for the employee</span>
+            <Textarea
+              className={textareaClass}
+              value={decisionComments}
+              onChange={(event) => setDecisionComments(event.target.value)}
+            />
+          </label>
+          <DialogFooter>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setDecisionTarget(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={decisionComments.trim().length < 3 || busyId.startsWith("decision-")}
+              onClick={() => void submitApplicationDecision()}
+            >
+              Confirm
             </button>
           </DialogFooter>
         </DialogPopup>

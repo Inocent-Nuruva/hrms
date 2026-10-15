@@ -13,9 +13,15 @@ vi.mock("@/hooks/use-forbidden-route-guard", () => ({
 vi.mock("@/lib/admin-api", () => ({
   evaluateMyFinanceEligibility: mocks.evaluate,
   listMyFinanceApplications: vi.fn().mockResolvedValue([]),
-  listEmployeeFinanceProducts: vi
+  listMyFinanceProducts: vi
     .fn()
     .mockResolvedValue([{ id: 1, name: "Loan", requiredDocumentTypes: [] }]),
+  listMyFinanceAccounts: vi.fn().mockResolvedValue([]),
+  getMyFinanceAccountStatement: vi.fn(),
+  requestMyFinanceDeferment: vi.fn(),
+  updateMyFinanceApplication: vi.fn(),
+  downloadMyFinanceSanctionLetter: vi.fn(),
+  downloadMyFinanceStatement: vi.fn(),
   listMyFinanceGuarantorRequests: vi.fn().mockResolvedValue([]),
   listMyFinanceApplicationDocuments: vi.fn().mockResolvedValue([]),
   listMyFinanceApplicationGuarantors: vi.fn().mockResolvedValue([]),
