@@ -124,7 +124,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (!auth.isAuthenticated) seenNotificationIds.current = null;
   }, [auth.isAuthenticated]);
 
-  const notifications = query.data?.pages.flatMap((page) => page.rows) ?? [];
+  const notifications = useMemo(
+    () => query.data?.pages.flatMap((page) => page.rows) ?? [],
+    [query.data],
+  );
   const markAsRead = useCallback(async (id: string) => {
     await api.markNotificationAsRead(id);
     await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
