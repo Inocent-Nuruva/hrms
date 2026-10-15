@@ -202,7 +202,6 @@ export function PositionsView() {
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [departmentsLoaded, setDepartmentsLoaded] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -306,33 +305,12 @@ export function PositionsView() {
       .then(([branchResult, departmentResult]) => {
         setBranches(branchResult.rows)
         setDepartments(departmentResult.rows)
-        setDepartmentsLoaded(true)
       })
       .catch(() => {
         setBranches([])
         setDepartments([])
-        setDepartmentsLoaded(true)
       })
   }, [])
-
-  React.useEffect(() => {
-    if (!openForm || !form.branch_id || !departmentsLoaded || departments.length === 0) return
-    const availableIds = new Set(availableDepartmentIds)
-    const invalidIds = form.department_ids.filter((id) => !availableIds.has(id))
-    if (invalidIds.length === 0) return
-
-    const invalidNames = invalidIds.map((id) => {
-      const department = departments.find((row) => String(readNumber(row, ["id"]) ?? "") === id)
-      return department ? readString(department, ["name", "code"]) : `Department #${id}`
-    })
-    setForm((current) => ({
-      ...current,
-      department_ids: current.department_ids.filter((id) => availableIds.has(id)),
-    }))
-    setError(
-      `${invalidNames.join(", ")} ${invalidNames.length === 1 ? "was" : "were"} removed because ${invalidNames.length === 1 ? "it does" : "they do"} not belong to the selected branch.`,
-    )
-  }, [availableDepartmentIds, departments, departmentsLoaded, form.branch_id, form.department_ids, openForm])
 
   function fillFormFromRow(row: AdminRecord) {
     const code = readString(row, ["code"])
@@ -474,7 +452,7 @@ export function PositionsView() {
       },
     },
     { key: "level", label: "Lvl", defaultWidth: 40, sortable: true, render: (r) => String(readNumber(r, ["level"]) ?? "-") },
-    { key: "headcount", label: "HC", defaultWidth: 45, sortable: true, render: (r) => String(readNumber(r, ["headcount"]) ?? "-") },
+    { key: "headcount", label: "Dept. staffing limit", defaultWidth: 145, sortable: true, render: (r) => String(readNumber(r, ["headcount"]) ?? "-") },
     { key: "manager", label: "Mgr", defaultWidth: 40, render: (r) => (readBoolean(r, ["is_manager"]) ? "Y" : "N") },
     { key: "status", label: "Status", defaultWidth: 50, sortable: true, render: (r) => readString(r, ["status"]) },
     {
@@ -759,8 +737,9 @@ export function PositionsView() {
                 <input type="number" min={1} max={100} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.level} onChange={(event) => setForm((prev) => ({ ...prev, level: event.target.value }))} />
               </label>
               <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Headcount</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Department staffing limit</span>
                 <input type="number" min={1} className="h-10 rounded-md border border-slate-300 px-3 text-sm" value={form.headcount} onChange={(event) => setForm((prev) => ({ ...prev, headcount: event.target.value }))} />
+                <span className="text-[11px] text-slate-500">Maximum employees allowed for this position in each selected department.</span>
               </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manager Position</span>

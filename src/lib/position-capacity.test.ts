@@ -26,7 +26,7 @@ describe("positionCapacityWarning", () => {
         will_overfill: true,
       }),
     ).toBe(
-      "This position is full: 1 of 2 seats filled and 1 pending invitation. Accepting this invitation will exceed the approved headcount.",
+      "This position is full in the selected department: 1 of 2 seats filled and 1 pending invitation. Accepting this invitation will exceed that department's staffing limit.",
     )
   })
 
@@ -40,7 +40,7 @@ describe("positionCapacityWarning", () => {
         will_overfill: true,
       }),
     ).toBe(
-      "This position is full: 1 of 1 seat filled. Accepting this invitation will exceed the approved headcount.",
+      "This position is full in the selected department: 1 of 1 seat filled. Accepting this invitation will exceed that department's staffing limit.",
     )
   })
 })

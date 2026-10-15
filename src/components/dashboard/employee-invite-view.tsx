@@ -432,9 +432,9 @@ export function EmployeeInviteView() {
     React.useState<PositionCapacity | null>(null)
   React.useEffect(() => {
     setPositionCapacity(null)
-    if (!token || positionId === null) return
+    if (!token || positionId === null || departmentId === null) return
     let active = true
-    getEmployeeInvitationPositionCapacity(token, positionId)
+    getEmployeeInvitationPositionCapacity(token, positionId, departmentId)
       .then((capacity) => {
         if (active) setPositionCapacity(capacity)
       })
@@ -443,7 +443,7 @@ export function EmployeeInviteView() {
     return () => {
       active = false
     }
-  }, [token, positionId])
+  }, [token, positionId, departmentId])
   const capacityWarning = positionCapacityWarning(positionCapacity)
 
   React.useEffect(() => {

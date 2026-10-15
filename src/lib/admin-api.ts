@@ -767,9 +767,10 @@ export interface PositionCapacity {
 export async function getEmployeeInvitationPositionCapacity(
   token: string,
   positionId: number,
+  departmentId: number,
 ) {
   const payload = await adminRequest<unknown>(
-    `/api/employee-invitations/position-capacity/${positionId}`,
+    `/api/employee-invitations/position-capacity/${positionId}?departmentId=${departmentId}`,
     { token, dedupe: false },
   );
   return normalizeSingle(payload) as unknown as PositionCapacity;
