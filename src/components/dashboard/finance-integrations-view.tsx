@@ -162,12 +162,12 @@ export function FinanceIntegrationsView() {
       const current = asRecord(settingsResult.value) ?? {};
       setSettings(current);
       setForm({
-        erp_mode: readString(current, ["erp_mode"], "FILE"),
+        erp_mode: readString(current, ["erp_mode"], "OFF"),
         erp_provider: readString(current, ["erp_provider"], "GENERIC_WEBHOOK"),
         erp_environment: readString(current, ["erp_environment"], "SANDBOX"),
         erp_endpoint_url: readString(current, ["erp_endpoint_url"], ""),
         erp_auth_type: readString(current, ["erp_auth_type"], "none"),
-        bank_mode: readString(current, ["bank_mode"], "FILE"),
+        bank_mode: readString(current, ["bank_mode"], "OFF"),
         bank_provider: readString(current, ["bank_provider"], "GENERIC_REST"),
         bank_environment: readString(current, ["bank_environment"], "SANDBOX"),
         bank_endpoint_url: readString(current, ["bank_endpoint_url"], ""),
@@ -271,8 +271,8 @@ export function FinanceIntegrationsView() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
-        <MetricTile label="ERP mode" value={prettify(readString(settings, ["erp_mode"], "FILE"))} />
-        <MetricTile label="Bank mode" value={prettify(readString(settings, ["bank_mode"], "FILE"))} />
+        <MetricTile label="ERP mode" value={prettify(readString(settings, ["erp_mode"], "OFF"))} />
+        <MetricTile label="Bank mode" value={prettify(readString(settings, ["bank_mode"], "OFF"))} />
         <MetricTile label="Unmapped GL roles" value={unmapped.length} />
         <MetricTile
           label="Failed transmissions"
@@ -316,7 +316,7 @@ export function FinanceIntegrationsView() {
           <div className="grid gap-3 rounded-lg border border-border p-3">
             <h3 className="text-sm font-semibold">Bank</h3>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Mode">{select("bank_mode", ["FILE", "DIRECT"])}</Field>
+              <Field label="Mode">{select("bank_mode", ["OFF", "FILE", "DIRECT"])}</Field>
               <Field label="Environment">{select("bank_environment", ["SANDBOX", "LIVE"])}</Field>
               <Field label="Connector">{select("bank_provider", Array.isArray(available.bank_providers) ? available.bank_providers.map(String) : ["GENERIC_REST"])}</Field>
               <Field label="Authentication">{select("bank_auth_type", ["none", "bearer", "api-key", "basic"])}</Field>

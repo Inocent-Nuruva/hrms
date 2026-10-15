@@ -624,6 +624,38 @@ export const api = {
     return normalizeList(await request<unknown>('/api/me/finance/applications'));
   },
 
+  async listMyFinanceProducts() {
+    return normalizeList(await request<unknown>('/api/me/finance/products'));
+  },
+
+  async listMyFinanceAccounts() {
+    return normalizeList(await request<unknown>('/api/me/finance/accounts'));
+  },
+
+  async createMyFinanceApplication(data: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/api/me/finance/applications', {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  async submitMyFinanceApplication(id: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/submit`, {
+      method: 'POST',
+    });
+  },
+
+  async getMyFinanceAccountStatement(id: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/accounts/${encodeURIComponent(String(id))}/statement`);
+  },
+
+  async requestMyFinanceDeferment(accountId: string | number, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/finance/accounts/${encodeURIComponent(String(accountId))}/deferments`, {
+      method: 'POST',
+      body: data,
+    });
+  },
+
   async listMyPayslips() {
     return normalizeList(await request<unknown>('/api/me/payslips'));
   },
