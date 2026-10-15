@@ -1,6 +1,7 @@
 import { extractBackupCodes } from "@/lib/backup-codes";
 import { env } from "@/lib/env";
 import { z } from "zod";
+import { ContractError } from "@/lib/request-json";
 import { resolveBackendMediaUrl } from "@/lib/backend-media-url";
 import {
   employeeOwnsEmail,
@@ -35,6 +36,7 @@ type CachedAdminResponse = {
 const adminResponseCache = new Map<string, CachedAdminResponse>();
 const inflightAdminRequests = new Map<string, Promise<unknown>>();
 export const ADMIN_CACHE_INVALIDATED_EVENT = "hrms:admin-cache-invalidated";
+let adminCacheGeneration = 0;
 
 function getAdminRequestKey(
   path: string,
@@ -55,8 +57,10 @@ function createAbortError() {
 }
 
 export function invalidateAdminGetCache() {
+  adminCacheGeneration += 1;
   adminResponseCache.clear();
-  if (typeof window !== "undefined") {
+  inflightAdminRequests.clear();
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
     window.dispatchEvent(new Event(ADMIN_CACHE_INVALIDATED_EVENT));
   }
 }
@@ -1184,6 +1188,13 @@ function normalizeList(payload: unknown): AdminRecord[] {
   const record = asRecord(payload);
   if (!record) {
     return [];
+  }
+
+  // An explicitly present primary collection is authoritative even when empty.
+  // Do not substitute a sibling relation such as `employees` for `data: []`.
+  const primaryList = asArray(record.data);
+  if (primaryList) {
+    return primaryList;
   }
 
   const list = extractListFromRecord(record);
@@ -2624,6 +2635,12 @@ function normalizeSingle(payload: unknown): AdminRecord | null {
     return null;
   }
 
+  // Prefer the entity envelope itself when it already has an identity. Nested
+  // relations (for example company.id) must not shadow the entity's own ID.
+  if ("id" in record) {
+    return record;
+  }
+
   const nested = [
     record.data,
     record.result,
@@ -2970,6 +2987,7 @@ export async function adminRequest<T>(
   } = options;
   const requestKey = getAdminRequestKey(path, method, token, body);
   const canReuseGetRequest = method === "GET" && body === undefined;
+  const requestGeneration = adminCacheGeneration;
 
   if (signal?.aborted) {
     throw createAbortError();
@@ -2982,7 +3000,7 @@ export async function adminRequest<T>(
   if (canReuseGetRequest && cacheTtlMs > 0) {
     const cached = adminResponseCache.get(requestKey);
     if (cached && cached.expiresAt > Date.now()) {
-      return cached.value as T;
+      return (schema ? parseAdminContract(schema, cached.value) : cached.value) as T;
     }
     if (cached) {
       adminResponseCache.delete(requestKey);
@@ -3031,6 +3049,10 @@ export async function adminRequest<T>(
       const text = await response.text();
       const payload = parseResponseBodyText(text, contentType);
 
+      if (canReuseGetRequest && requestGeneration !== adminCacheGeneration) {
+        throw createAbortError();
+      }
+
       if (!response.ok) {
         const error = new Error(
           extractMessage(payload, response.status),
@@ -3050,7 +3072,7 @@ export async function adminRequest<T>(
         });
       }
 
-      return (schema ? schema.parse(payload) : payload) as T;
+      return (schema ? parseAdminContract(schema, payload) : payload) as T;
     }
   })();
 
@@ -3061,8 +3083,21 @@ export async function adminRequest<T>(
   try {
     return await requestPromise;
   } finally {
-    inflightAdminRequests.delete(requestKey);
+    if (inflightAdminRequests.get(requestKey) === requestPromise) {
+      inflightAdminRequests.delete(requestKey);
+    }
   }
+}
+
+function parseAdminContract<S extends z.ZodType>(schema: S, payload: unknown): z.output<S> {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    throw new ContractError(
+      "The service response does not match its expected contract.",
+      result.error.issues,
+    );
+  }
+  return result.data;
 }
 
 export type PerformanceKpiCategory = {
