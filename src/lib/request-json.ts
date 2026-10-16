@@ -37,6 +37,17 @@ export const ApiResponseSchema = z.union([
 ]);
 export const EmptyResponseSchema = z.union([RecordSchema, z.undefined()]);
 
+const FORCE_PASSWORD_RESET_EVENT = "hrms:force-password-reset";
+
+function notifyPasswordChangeRequired(message: string) {
+  if (
+    typeof window !== "undefined" &&
+    /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(message)
+  ) {
+    window.dispatchEvent(new CustomEvent(FORCE_PASSWORD_RESET_EVENT));
+  }
+}
+
 function record(value: unknown): Record<string, unknown> {
   return RecordSchema.safeParse(value).success ? RecordSchema.parse(value) : {};
 }
@@ -80,8 +91,10 @@ export async function requestJson<S extends z.ZodType>(
     const details = z
       .record(z.string(), z.union([z.string(), z.array(z.string())]))
       .safeParse(record(raw).details);
+    const message = errorMessage(raw, response.status);
+    notifyPasswordChangeRequired(message);
     throw new ApiError(
-      errorMessage(raw, response.status),
+      message,
       response.status,
       details.success ? details.data : undefined,
       raw,

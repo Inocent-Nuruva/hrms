@@ -56,14 +56,12 @@ export default function ChangePasswordPage() {
 
     try {
       const response = await authService.changePassword(payload, tokens.accessToken)
-      acceptPasswordChangeTokens(response)
       if (requiresPasswordChange) {
-        const next = typeof router.query.next === "string" && router.query.next.startsWith("/")
-          ? router.query.next
-          : ROUTES.dashboard
-        window.location.assign(next)
+        clearSession()
+        window.location.assign(ROUTES.login)
         return
       }
+      acceptPasswordChangeTokens(response)
       window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update password.")

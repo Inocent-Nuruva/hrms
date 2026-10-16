@@ -615,6 +615,12 @@ function AccountSettingsPanelContent({
     setPasswordError(null)
     try {
       await onChangeMyPassword(currentPassword, newPassword)
+      const mustSignInAgain = requiresPasswordChange || searchParams?.get("required") === "1"
+      if (mustSignInAgain) {
+        clearStoredSession()
+        window.location.assign(ROUTES.login)
+        return
+      }
       const currentUser = await authService.getCurrentUser(accessToken).catch(() => null)
       if (!persistCurrentUserSnapshot(currentUser, accessToken)) {
         clearStoredPasswordChangeRequirement(accessToken)
@@ -625,9 +631,6 @@ function AccountSettingsPanelContent({
           ? "Password updated. You can continue in HRMS."
           : "Password changed.",
       )
-      if (searchParams?.get("required") === "1") {
-        router.replace(buildDashboardResetPasswordHref(), { scroll: false })
-      }
       void refreshSecurityFlags()
     } catch (errorObject) {
       const message = errorObject instanceof Error ? errorObject.message : "Password change failed."

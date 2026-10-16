@@ -36,7 +36,17 @@ type CachedAdminResponse = {
 const adminResponseCache = new Map<string, CachedAdminResponse>();
 const inflightAdminRequests = new Map<string, Promise<unknown>>();
 export const ADMIN_CACHE_INVALIDATED_EVENT = "hrms:admin-cache-invalidated";
+const FORCE_PASSWORD_RESET_EVENT = "hrms:force-password-reset";
 let adminCacheGeneration = 0;
+
+function notifyPasswordChangeRequired(message: string) {
+  if (
+    typeof window !== "undefined" &&
+    /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(message)
+  ) {
+    window.dispatchEvent(new CustomEvent(FORCE_PASSWORD_RESET_EVENT));
+  }
+}
 
 function getAdminRequestKey(
   path: string,
@@ -3055,9 +3065,9 @@ export async function adminRequest<T>(
       }
 
       if (!response.ok) {
-        const error = new Error(
-          extractMessage(payload, response.status),
-        ) as Error & {
+        const message = extractMessage(payload, response.status);
+        notifyPasswordChangeRequired(message);
+        const error = new Error(message) as Error & {
           status?: number;
           payload?: unknown;
         };

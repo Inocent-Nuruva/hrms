@@ -5,6 +5,14 @@ import * as React from "react"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import {
+  Button as FluentButton,
+  Card,
+  Field as FluentField,
+  Input as FluentInput,
+  Switch,
+  Text,
+} from "@fluentui/react-components"
+import {
   DownloadIcon, PencilIcon, PlayIcon, PlusIcon, RefreshCwIcon, RotateCcwIcon, SendIcon, Trash2Icon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 
@@ -2462,16 +2470,16 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
 
   const renderSmtpFields = (form: ReturnType<typeof emptySmtpForm>, setForm: typeof setSmtpForm, isEdit: boolean) => (
     <div className="grid gap-3 md:grid-cols-2">
-      <Field label="Name *">
-        <input className={inputClass} value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
-      </Field>
-      <Field label="Host *">
-        <input className={inputClass} value={form.host} onChange={(e) => setForm((c) => ({ ...c, host: e.target.value }))} />
-      </Field>
-      <Field label="Port">
-        <input className={inputClass} type="number" value={form.port} onChange={(e) => setForm((c) => ({ ...c, port: e.target.value }))} />
-      </Field>
-      <Field label="Security">
+      <FluentField label="Name" required>
+        <FluentInput value={form.name} onChange={(_, data) => setForm((c) => ({ ...c, name: data.value }))} />
+      </FluentField>
+      <FluentField label="Host" required>
+        <FluentInput value={form.host} onChange={(_, data) => setForm((c) => ({ ...c, host: data.value }))} />
+      </FluentField>
+      <FluentField label="Port">
+        <FluentInput type="number" value={form.port} onChange={(_, data) => setForm((c) => ({ ...c, port: data.value }))} />
+      </FluentField>
+      <FluentField label="Security">
         <FluentSelect
           ariaLabel="Security"
           className="w-full"
@@ -2479,102 +2487,83 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
           onChange={(value) => setForm((c) => ({ ...c, securityType: value }))}
           options={SECURITY_TYPES.map((value) => ({ value, label: value }))}
         />
-      </Field>
-      <Field label="Username">
-        <input className={inputClass} value={form.username} onChange={(e) => setForm((c) => ({ ...c, username: e.target.value }))} />
-      </Field>
-      <Field label={isEdit ? "Password (leave blank to keep)" : "Password"}>
-        <input
-          className={inputClass}
+      </FluentField>
+      <FluentField label="Username">
+        <FluentInput value={form.username} onChange={(_, data) => setForm((c) => ({ ...c, username: data.value }))} />
+      </FluentField>
+      <FluentField label={isEdit ? "Password (leave blank to keep)" : "Password"}>
+        <FluentInput
           type="password"
           value={form.password}
-          onChange={(e) => setForm((c) => ({ ...c, password: e.target.value }))}
+          onChange={(_, data) => setForm((c) => ({ ...c, password: data.value }))}
           autoComplete="new-password"
         />
-      </Field>
-      <Field label="Sender name">
-        <input className={inputClass} value={form.senderName} onChange={(e) => setForm((c) => ({ ...c, senderName: e.target.value }))} />
-      </Field>
-      <Field label="Sender email *">
-        <input
-          className={inputClass}
+      </FluentField>
+      <FluentField label="Sender name">
+        <FluentInput value={form.senderName} onChange={(_, data) => setForm((c) => ({ ...c, senderName: data.value }))} />
+      </FluentField>
+      <FluentField label="Sender email" required>
+        <FluentInput
           type="email"
           value={form.senderEmail}
-          onChange={(e) => setForm((c) => ({ ...c, senderEmail: e.target.value }))}
+          onChange={(_, data) => setForm((c) => ({ ...c, senderEmail: data.value }))}
         />
-      </Field>
-      <Field label="Reply-to email">
-        <input
-          className={inputClass}
+      </FluentField>
+      <FluentField label="Reply-to email">
+        <FluentInput
           type="email"
           value={form.replyToEmail}
-          onChange={(e) => setForm((c) => ({ ...c, replyToEmail: e.target.value }))}
+          onChange={(_, data) => setForm((c) => ({ ...c, replyToEmail: data.value }))}
         />
-      </Field>
-      <Field label="Connection timeout (ms)">
-        <input
-          className={inputClass}
+      </FluentField>
+      <FluentField label="Connection timeout (ms)">
+        <FluentInput
           type="number"
           value={form.connectionTimeoutMs}
-          onChange={(e) => setForm((c) => ({ ...c, connectionTimeoutMs: e.target.value }))}
+          onChange={(_, data) => setForm((c) => ({ ...c, connectionTimeoutMs: data.value }))}
         />
-      </Field>
-      <Field label="Active">
-        <FluentSelect
-          ariaLabel="Active"
-          className="w-full"
-          value={form.isActive}
-          onChange={(value) => setForm((c) => ({ ...c, isActive: value }))}
-          options={[
-            { value: "true", label: "Active" },
-            { value: "false", label: "Inactive" },
-          ]}
+      </FluentField>
+      <FluentField label="Status">
+        <Switch
+          checked={form.isActive === "true"}
+          label={form.isActive === "true" ? "Active" : "Inactive"}
+          onChange={(_, data) => setForm((c) => ({ ...c, isActive: String(data.checked) }))}
         />
-      </Field>
-      <Field label="Default">
-        <FluentSelect
-          ariaLabel="Default"
-          className="w-full"
-          value={form.isDefault}
-          onChange={(value) => setForm((c) => ({ ...c, isDefault: value }))}
-          options={[
-            { value: "false", label: "No" },
-            { value: "true", label: "Yes" },
-          ]}
+      </FluentField>
+      <FluentField label="Default configuration">
+        <Switch
+          checked={form.isDefault === "true"}
+          label={form.isDefault === "true" ? "Default" : "Not default"}
+          onChange={(_, data) => setForm((c) => ({ ...c, isDefault: String(data.checked) }))}
         />
-      </Field>
-      <div className="grid gap-3 rounded-md border border-border bg-muted/10 p-3 md:col-span-2">
+      </FluentField>
+      <Card className="grid gap-3 p-4 md:col-span-2" appearance="subtle">
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Draft SMTP test</p>
-          <p className="text-[11px] text-muted-foreground">
+          <Text weight="semibold" size={200}>Draft SMTP test</Text>
+          <Text as="p" size={200} className="mt-1 text-muted-foreground">
             Test the form values before saving. If you are editing an authenticated SMTP server, include the password if the connection needs it.
-          </p>
+          </Text>
         </div>
-        <Field label="Test recipient email">
-          <input
-            className={inputClass}
+        <FluentField label="Test recipient email" required>
+          <FluentInput
             type="email"
             value={smtpDraftTestRecipient}
-            onChange={(e) => setSmtpDraftTestRecipient(e.target.value)}
+            onChange={(_, data) => setSmtpDraftTestRecipient(data.value)}
             placeholder="name@example.com"
           />
-        </Field>
+        </FluentField>
         <div className="flex justify-end">
-          <button
+          <FluentButton
             type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium disabled:opacity-60"
+            appearance="outline"
+            icon={testingDraftSmtp ? <FluentLoadingIndicator className="size-3.5" /> : <SendIcon className="size-3.5" />}
             disabled={testingDraftSmtp || !smtpDraftTestRecipient.trim()}
             onClick={() => void onTestDraftSmtp()}
           >
-            {testingDraftSmtp ? (
-              <FluentLoadingIndicator className="size-3.5 animate-spin" />
-            ) : (
-              <SendIcon className="size-3.5" />
-            )}
             {testingDraftSmtp ? "Testing…" : "Send draft test"}
-          </button>
+          </FluentButton>
         </div>
-      </div>
+      </Card>
     </div>
   )
 

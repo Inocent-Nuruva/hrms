@@ -830,8 +830,7 @@ export default function AdminDashboardView({
         );
         setForcePasswordResetOpen(false);
         clearStoredSession();
-
-        router.replace(ROUTES.login);
+        window.location.assign(ROUTES.login);
       } catch (err) {
         setForcePasswordResetError(
           err instanceof Error ? err.message : "Unable to update password.",
@@ -989,7 +988,10 @@ export default function AdminDashboardView({
 
     const syncFromStoredUser = () => {
       setForcePasswordResetOpen(
-        Boolean(token) && readStoredUserPasswordChangeRequirement(),
+        Boolean(token) && (
+          authSession.user?.requiresPasswordChange === true ||
+          readStoredUserPasswordChangeRequirement()
+        ),
       );
     };
     const openFromApiGuard = () => {
