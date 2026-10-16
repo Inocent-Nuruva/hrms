@@ -98,6 +98,10 @@ describe("employee section navigation", () => {
       title: "All Employees",
       url: "/dashboard/employees/all",
     })
+    expect(employeeSectionTabGroups[1]?.items).toContainEqual({
+      title: "Invite & Register",
+      url: "/dashboard/operations/recruitment",
+    })
   })
 
   it("keeps promotion outside the employee tab groups", () => {

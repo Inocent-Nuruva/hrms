@@ -43,8 +43,6 @@ import {
   PeopleCommunity24Color,
   PeopleTeam24Regular,
   PeopleTeam24Color,
-  PersonAdd24Regular,
-  PersonAdd24Color,
   Receipt24Regular,
   Receipt24Color,
   ShieldCheckmark24Regular,
@@ -146,8 +144,6 @@ const MovementsIcon = ArrowMove24Regular
 const ActiveMovementsIcon = ArrowSquare24Color
 const PositionsIcon = Briefcase24Regular
 const ActivePositionsIcon = Briefcase24Color
-const InviteIcon = PersonAdd24Regular
-const ActiveInviteIcon = PersonAdd24Color
 const PayrollIcon = Receipt24Regular
 const ActivePayrollIcon = Receipt24Color
 const ReportsIcon = DataTrending24Regular
@@ -397,12 +393,6 @@ const adminData: SidebarData = {
       icon: DepartmentsIcon,
       activeIcon: ActiveDepartmentsIcon,
       items: sidebarWorkspacesFromSections(structureSectionTabGroups),
-    },
-    {
-      title: "Invite & register",
-      url: "/dashboard/operations/recruitment",
-      icon: InviteIcon,
-      activeIcon: ActiveInviteIcon,
     },
     {
       title: "Payroll",
