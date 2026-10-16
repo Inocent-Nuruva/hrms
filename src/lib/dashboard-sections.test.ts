@@ -6,6 +6,7 @@ import {
   employeeSectionTabGroups,
   employeeAttendanceSectionTabGroups,
   findFirstAccessibleSectionUrl,
+  notificationSectionTabGroups,
   operationsReportSectionTabGroups,
   resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
@@ -65,7 +66,6 @@ describe("operations report navigation", () => {
     expect(operationsReportSectionTabGroups[0]?.items.map((item) => item.title)).toEqual([
       "Reports & Analytics",
       "Scheduled Reporting",
-      "SMTP Settings",
     ])
     expect(
       findFirstAccessibleSectionUrl(
@@ -81,6 +81,16 @@ describe("operations report navigation", () => {
         "admin",
       ),
     ).toBe("/dashboard/operations/scheduled-reporting")
+  })
+})
+
+describe("notification navigation", () => {
+  it("groups the inbox and delivery configuration together", () => {
+    expect(notificationSectionTabGroups[0]?.items).toEqual([
+      { title: "Current notifications", url: "/dashboard/operations/notifications" },
+      { title: "Mail / SMTP configuration", url: "/dashboard/smtp" },
+      { title: "SMS configuration", url: "/dashboard/sms" },
+    ])
   })
 })
 

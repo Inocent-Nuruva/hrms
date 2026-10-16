@@ -25,8 +25,6 @@ import {
   BuildingMultiple24Color,
   CalendarClock24Regular,
   CalendarClock24Color,
-  Chat24Regular,
-  Chat24Color,
   ChartMultiple24Regular,
   ChartMultiple24Color,
   Clock24Regular,
@@ -71,10 +69,10 @@ import {
   insightsSectionTabGroups,
   leaveManagementSectionTabGroups,
   movementSectionTabGroups,
+  notificationSectionTabGroups,
   operationsReportSectionTabGroups,
   performanceActivitySectionTabGroups,
   probationSectionTabGroups,
-  smsSectionTabGroups,
   structureSectionTabGroups,
   type DashboardSectionTabGroup,
 } from "@/lib/dashboard-sections"
@@ -116,6 +114,20 @@ function sidebarWorkspacesFromSections(
   })
 }
 
+function sidebarLinksFromSections(
+  groups: DashboardSectionTabGroup[],
+): SidebarNavItem[] {
+  return groups.flatMap((group) => group.items)
+}
+
+const notificationMatchUrls = [
+  ...notificationSectionTabGroups.flatMap((group) => group.items.map((item) => item.url)),
+  "/dashboard/sms/overview",
+  "/dashboard/sms/registry",
+  "/dashboard/sms/logs",
+  "/dashboard/sms/platform",
+]
+
 const AccessControlIcon = ShieldCheckmark24Regular
 const ActiveAccessControlIcon = ShieldCheckmark24Color
 const AttendanceIcon = Clock24Regular
@@ -150,8 +162,6 @@ const ReportsIcon = DataTrending24Regular
 const ActiveReportsIcon = DataTrending24Color
 const NotificationsIcon = Alert24Regular
 const ActiveNotificationsIcon = Alert24Color
-const SmsIcon = Chat24Regular
-const ActiveSmsIcon = Chat24Color
 const InsightsIcon = DataBarVerticalAscending24Regular
 const ActiveInsightsIcon = DataBarVerticalAscending24Color
 
@@ -406,7 +416,6 @@ const adminData: SidebarData = {
       matchUrls: [
         "/dashboard/operations/reports",
         "/dashboard/operations/scheduled-reporting",
-        "/dashboard/smtp",
       ],
       icon: ReportsIcon,
       activeIcon: ActiveReportsIcon,
@@ -415,22 +424,10 @@ const adminData: SidebarData = {
     {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
+      matchUrls: notificationMatchUrls,
       icon: NotificationsIcon,
       activeIcon: ActiveNotificationsIcon,
-    },
-    {
-      title: "SMS",
-      url: "/dashboard/sms",
-      matchUrls: [
-        "/dashboard/sms",
-        "/dashboard/sms/overview",
-        "/dashboard/sms/registry",
-        "/dashboard/sms/logs",
-        "/dashboard/sms/platform",
-      ],
-      icon: SmsIcon,
-      activeIcon: ActiveSmsIcon,
-      items: sidebarWorkspacesFromSections(smsSectionTabGroups),
+      items: sidebarLinksFromSections(notificationSectionTabGroups),
     },
     {
       title: "Insights",
@@ -473,14 +470,10 @@ const platformData: SidebarData = {
     {
       title: "Notifications",
       url: "/dashboard/operations/notifications",
+      matchUrls: notificationMatchUrls,
       icon: NotificationsIcon,
       activeIcon: ActiveNotificationsIcon,
-    },
-    {
-      title: "SMS Platform",
-      url: "/dashboard/sms/platform",
-      icon: SmsIcon,
-      activeIcon: ActiveSmsIcon,
+      items: sidebarLinksFromSections(notificationSectionTabGroups),
     },
   ],
 }
@@ -490,8 +483,9 @@ const platformSearchIndex: SearchItem[] = [
   { title: "Companies", url: "/dashboard/companies", section: "Platform", keywords: ["tenants", "organizations"] },
   { title: "Roles", url: "/dashboard/roles", section: "Governance", keywords: ["access", "roles"] },
   { title: "Permissions", url: "/dashboard/permissions", section: "Governance", keywords: ["access", "permissions"] },
-  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Delivery", keywords: ["email", "channels", "logs"] },
-  { title: "SMS Platform", url: "/dashboard/sms/platform", section: "Delivery", keywords: ["sms", "registry", "logs"] },
+  { title: "Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["inbox", "alerts", "read", "seen", "archive"] },
+  { title: "Mail / SMTP configuration", url: "/dashboard/smtp", section: "Notifications", keywords: ["smtp", "email", "mail"] },
+  { title: "SMS configuration", url: "/dashboard/sms", section: "Notifications", keywords: ["sms", "registry", "logs"] },
 ]
 
 const adminSearchIndex = [
@@ -572,10 +566,10 @@ const adminSearchIndex = [
   { title: "Movements / Overview", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer", "promotion"] },
   { title: "Movements / Cases", url: "/dashboard/movements/cases", section: "Movements", keywords: ["movement", "approve", "apply"] },
   { title: "Movements / Operations", url: "/dashboard/movements/operations", section: "Movements", keywords: ["movement", "retry", "operation"] },
-  { title: "SMS / Overview", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text", "message"] },
-  { title: "SMS / Registry", url: "/dashboard/sms/registry", section: "SMS", keywords: ["sms", "template", "registry"] },
-  { title: "SMS / Logs", url: "/dashboard/sms/logs", section: "SMS", keywords: ["sms", "log", "retry"] },
-  { title: "SMTP Settings", url: "/dashboard/smtp", section: "Delivery", keywords: ["smtp", "email", "mail", "invitation", "reports"] },
+  { title: "Notifications / SMS overview", url: "/dashboard/sms/overview", section: "Notifications", keywords: ["sms", "text", "message"] },
+  { title: "Notifications / SMS registry", url: "/dashboard/sms/registry", section: "Notifications", keywords: ["sms", "template", "registry"] },
+  { title: "Notifications / SMS logs", url: "/dashboard/sms/logs", section: "Notifications", keywords: ["sms", "log", "retry"] },
+  { title: "Notifications / Mail / SMTP configuration", url: "/dashboard/smtp", section: "Notifications", keywords: ["smtp", "email", "mail", "invitation", "reports"] },
   { title: "Structure / Cost centers", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
   { title: "Structure / Grades", url: "/dashboard/structure/grades", section: "Structure", keywords: ["grade", "level"] },
   { title: "Insights / HR", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr", "analytics"] },
@@ -591,7 +585,7 @@ const adminSearchIndex = [
   { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
   { title: "Reports & Analytics", url: "/dashboard/operations/reports", section: "Operations", keywords: ["reports", "analytics", "attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
-  { title: "Notifications", url: "/dashboard/operations/notifications", section: "Operations", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
+  { title: "Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
   { title: "Access Control / Roles", url: "/dashboard/access-control/roles", section: "Access Control", keywords: ["role", "access", "authorization"] },
   { title: "Access Control / Permissions", url: "/dashboard/access-control/permissions", section: "Access Control", keywords: ["permission", "policy", "authorization"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },

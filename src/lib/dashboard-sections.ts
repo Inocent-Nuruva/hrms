@@ -392,13 +392,22 @@ export const smsSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ]
 
+export const notificationSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    items: [
+      { title: "Current notifications", url: "/dashboard/operations/notifications" },
+      { title: "Mail / SMTP configuration", url: "/dashboard/smtp" },
+      { title: "SMS configuration", url: "/dashboard/sms" },
+    ],
+  },
+]
+
 export const operationsReportSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Reports",
     items: [
       { title: "Reports & Analytics", url: "/dashboard/operations/reports" },
       { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting" },
-      { title: "SMTP Settings", url: "/dashboard/smtp" },
     ],
   },
 ]
