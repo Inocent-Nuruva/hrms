@@ -15,12 +15,14 @@ type DashboardSectionTabsProps = {
   groups: DashboardSectionTabGroup[]
   className?: string
   showGroupNavigation?: boolean
+  hideOnPaths?: string[]
 }
 
 export function DashboardSectionTabs({
   groups,
   className,
   showGroupNavigation = false,
+  hideOnPaths = [],
 }: DashboardSectionTabsProps) {
   const pathname = usePathname()
   const currentPath = pathname ?? ""
@@ -71,6 +73,10 @@ export function DashboardSectionTabs({
 
   const hasGroupedTabs =
     filteredGroups.length > 1 && filteredGroups.every((group) => Boolean(group.title))
+
+  if (hideOnPaths.includes(currentPath.replace(/\/$/, ""))) {
+    return null
+  }
 
   // Stable shell height during SSR → client so layout does not jump hard.
   if (!mounted || !actor.ready) {

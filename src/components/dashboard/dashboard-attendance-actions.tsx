@@ -142,7 +142,7 @@ function requestBrowserLocation(): Promise<BrowserLocationResult> {
       resolve({
         location: null,
         locationMessage:
-          "Location requires HTTPS. Use localhost during development or open the deployed secure site.",
+          "To check in with your location, open HRMS using your organization’s secure link.",
       })
       return
     }

@@ -22,6 +22,9 @@ export function AttendanceSectionTabs() {
         actor.accessMode,
         actor.isAdmin,
       )}
+      // Correction approvals are a To do workflow, not part of the personal
+      // Attendance workspace. Keep its queue free of Attendance tabs.
+      hideOnPaths={["/dashboard/attendance/correction-requests"]}
     />
   )
 }

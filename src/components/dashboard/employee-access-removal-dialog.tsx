@@ -454,9 +454,8 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
       for (const shift of shifts) {
         await runStep(`End shift assignment ${shift.label}`, async () => {
           await patchShiftResourceById(token, "shift-assignments", shift.id, {
-            status: "inactive",
-            is_active: false,
-            end_date: new Date().toISOString().slice(0, 10),
+            status: "INACTIVE",
+            effective_to: new Date().toISOString().slice(0, 10),
           })
         })
       }

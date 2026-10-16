@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { adjustLeaveBalance, listAllLeaveBalances } from "./admin-api"
+import { adjustLeaveBalance, listAllLeaveBalances, listMyLeaveBalances } from "./admin-api"
 
 function jsonResponse(payload: unknown) {
   return new Response(JSON.stringify(payload), {
@@ -74,5 +74,50 @@ describe("listAllLeaveBalances", () => {
         }),
       }),
     )
+  })
+})
+
+describe("listMyLeaveBalances", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it("flattens the employee-grouped self-service response into leave-type balances", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: [{
+        id: 12,
+        employee_id: 12,
+        employee_name: "Amina Example",
+        leave_balances: [{
+          id: 91,
+          leave_type_id: 4,
+          leave_type_name: "Annual leave",
+          fiscal_year: "2026",
+          allocated_days: "28.00",
+          used_days: "5.00",
+          pending_days: "2.00",
+          carried_forward_days: "0.00",
+          expired_days: "0.00",
+          available_days: "21.00",
+        }],
+      }],
+      meta: { page: 1, limit: 100, total: 1, totalPages: 1 },
+      current_fiscal_year: "2026",
+      totals: { allocated_days: 28, used_days: 5, pending_days: 2, available_days: 21 },
+    }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await listMyLeaveBalances("token", { page: 1, limit: 100 })
+
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0]).toMatchObject({
+      employee_id: 12,
+      employee_name: "Amina Example",
+      leave_type_name: "Annual leave",
+      allocated_days: "28.00",
+      available_days: "21.00",
+    })
+    expect(result.totals?.available_days).toBe(21)
   })
 })

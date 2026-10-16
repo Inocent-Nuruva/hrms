@@ -15,6 +15,12 @@ import {
   UserRoundXIcon,
 } from "lucide-react"
 import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
+import {
+  Button as FluentButton,
+  Field as FluentField,
+  Input as FluentInput,
+  Textarea as FluentTextarea,
+} from "@fluentui/react-components"
 import { getCountryCallingCode } from "libphonenumber-js"
 import { countries as countryCodes } from "country-flag-icons"
 
@@ -1915,6 +1921,7 @@ function Section({
   const token = readStoredToken()
   const apiSection = sectionTitleToApiSection(title)
   const isDocumentsSection = title.toLowerCase() === "documents"
+  const isContactsSection = title.toLowerCase() === "contacts"
   const routeKey = sectionTitleToRouteKey(title)
   const isHighlighted = requestedRouteKey === routeKey
   const supportsMutations = Boolean((apiSection || isDocumentsSection) && employeeId)
@@ -2103,7 +2110,7 @@ function Section({
                     {supportsDelete && readNumber(item.id) !== null ? (
                       <button
                         type="button"
-                        aria-label={`Delete ${title} record ${index + 1}`}
+                        aria-label={`${isContactsSection ? "Remove" : "Delete"} ${title} record ${index + 1}`}
                         className="p-1 text-muted-foreground hover:text-foreground"
                         onClick={() => setDeletingRecord({ item, index })}
                       >
@@ -2302,9 +2309,11 @@ function Section({
       >
         <AlertDialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
+            <AlertDialogTitle>{isContactsSection ? "Remove contact" : "Confirm Delete"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this {title.toLowerCase()} record? This action cannot be undone.
+              {isContactsSection
+                ? "This contact will be removed from the active employee profile. It will remain in historical records for audit purposes."
+                : `Are you sure you want to delete this ${title.toLowerCase()} record? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2342,7 +2351,7 @@ function Section({
                 }
               }}
             >
-              {submitting ? "Deleting..." : "Delete"}
+              {submitting ? (isContactsSection ? "Removing..." : "Deleting...") : isContactsSection ? "Remove contact" : "Delete"}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -5493,43 +5502,39 @@ export function EmployeeProfilePage({
           </SheetHeader>
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-            <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">First Name</span>
-              <input
+            <FluentField label="First name" className="min-w-0">
+              <FluentInput
                 value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
+                onChange={(_event, data) => setFirstName(data.value)}
+                className="!w-full"
                 placeholder="Enter first name"
               />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last Name</span>
-              <input
+            </FluentField>
+            <FluentField label="Last name" className="min-w-0">
+              <FluentInput
                 value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
+                onChange={(_event, data) => setLastName(data.value)}
+                className="!w-full"
                 placeholder="Enter last name"
               />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Username</span>
-              <input
+            </FluentField>
+            <FluentField label="Username" className="min-w-0">
+              <FluentInput
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
+                onChange={(_event, data) => setUsername(data.value)}
+                className="!w-full"
                 placeholder="Enter username"
               />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</span>
-              <input
+            </FluentField>
+            <FluentField label="Email" className="min-w-0">
+              <FluentInput
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 text-sm"
+                onChange={(_event, data) => setEmail(data.value)}
+                className="!w-full"
                 placeholder="Enter email"
               />
-            </label>
+            </FluentField>
             <div className="grid min-w-0 grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 [&>*]:min-w-0">
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch</span>
@@ -5688,55 +5693,50 @@ export function EmployeeProfilePage({
                 onChange={setAssignmentEffectiveDate}
               />
             </label>
-            <label className="grid gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                New Password (Optional)
-              </span>
+            <FluentField label="New password (optional)" className="min-w-0">
               <div className="relative">
-                <input
+                <FluentInput
                   type={showProfilePassword ? "text" : "password"}
                   value={profilePassword}
-                  onChange={(event) => setProfilePassword(event.target.value)}
+                  onChange={(_event, data) => setProfilePassword(data.value)}
                   minLength={6}
-                  className="h-10 w-full min-w-0 rounded-md border border-slate-300 px-3 pr-10 text-sm"
+                  className="!w-full pr-10"
                   placeholder="Leave blank to keep current password"
                 />
-                <button
+                <FluentButton
                   type="button"
+                  appearance="subtle"
                   aria-label={showProfilePassword ? "Hide password" : "Show password"}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                  className="absolute top-1/2 right-1 -translate-y-1/2"
                   onClick={() => setShowProfilePassword((prev) => !prev)}
                 >
                   {showProfilePassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-                </button>
+                </FluentButton>
               </div>
-            </label>
-            <label className="grid min-w-0 gap-1 sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Assignment Reason (Optional)
-              </span>
-              <Textarea
+            </FluentField>
+            <FluentField label="Assignment reason (optional)" className="min-w-0 sm:col-span-2">
+              <FluentTextarea
                 value={assignmentReason}
-                onChange={(event) => setAssignmentReason(event.target.value)}
-                className="min-h-20 w-full min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                onChange={(_event, data) => setAssignmentReason(data.value)}
+                className="!w-full"
               />
-            </label>
+            </FluentField>
             </div>
             {identityError ? <p role="alert" className="mt-3 text-sm text-rose-600">{identityError}</p> : null}
           </div>
           <SheetFooter className="mt-0 w-full shrink-0 flex-row justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6">
-            <button
+            <FluentButton
               type="button"
               disabled={identitySubmitting}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium disabled:opacity-50"
+              appearance="secondary"
               onClick={() => setIdentityDialogOpen(false)}
             >
               Cancel
-            </button>
-            <button
+            </FluentButton>
+            <FluentButton
               type="button"
               disabled={identitySubmitting}
-              className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium !text-white disabled:opacity-50"
+              appearance="primary"
               onClick={async () => {
                 const token = readStoredToken()
                 const userId = resolveCompanyUserId(employee)
@@ -5834,7 +5834,7 @@ export function EmployeeProfilePage({
               }}
             >
               {identitySubmitting ? "Updating..." : "Update Profile"}
-            </button>
+            </FluentButton>
           </SheetFooter>
         </SheetContent>
       </Sheet>

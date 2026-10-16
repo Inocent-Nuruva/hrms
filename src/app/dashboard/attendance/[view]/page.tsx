@@ -109,6 +109,12 @@ export default async function AttendanceViewPage({ params, searchParams }: Atten
     redirect("/dashboard/attendance/attendance-history")
   }
 
+  // Today is presented as the live hero inside Attendance History so personal
+  // attendance has one focused workspace instead of a duplicate Overview tab.
+  if (normalized === "today") {
+    redirect("/dashboard/attendance/attendance-history")
+  }
+
   if (normalized === "settings") {
     redirect("/dashboard/attendance/policies")
   }

@@ -14361,7 +14361,20 @@ export async function listMyLeaveBalances(
     `/api/me/leave/balances${query}`,
     { token },
   );
-  const rows = normalizeList(payload);
+  const groupedRows = normalizeList(payload);
+  // The self-service endpoint returns balances grouped under the employee
+  // record, while the profile UI renders one card per leave type.
+  const rows = groupedRows.flatMap((group) => {
+    const leaveBalances = asArray(group.leave_balances ?? group.leaveBalances);
+    if (!leaveBalances) {
+      return [group];
+    }
+    return leaveBalances.map((balance) => ({
+      ...balance,
+      employee_id: balance.employee_id ?? group.employee_id ?? group.id,
+      employee_name: balance.employee_name ?? group.employee_name,
+    }));
+  });
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,

@@ -4,6 +4,7 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Filter, RefreshCw, XCircle } from "lucide-react";
+import { CheckmarkCircle20Filled, MailInboxRegular } from "@fluentui/react-icons"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -1189,12 +1190,36 @@ export function HrAttendanceCorrectionApprovalsView() {
             </button>
           </>
         }
+        emptyContent={
+          <div className="flex flex-col items-center gap-1.5 py-5">
+            <div
+              className="relative grid size-11 place-items-center rounded-xl bg-sky-50 text-primary dark:bg-sky-950/40"
+              aria-hidden
+            >
+              <MailInboxRegular className="size-6" />
+              <CheckmarkCircle20Filled className="absolute -bottom-1 -right-1 size-5 text-emerald-500 dark:text-emerald-400" />
+              <span className="absolute left-1 top-1 size-1.5 rounded-full bg-amber-400" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">
+              {activeFilterCount > 0 ? "No matching requests" : "Correction inbox is clear"}
+            </p>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              {activeFilterCount > 0
+                ? "Try changing or resetting the filters to see other requests."
+                : "New employee correction requests will appear here for review."}
+            </p>
+            {activeFilterCount > 0 ? (
+              <button
+                type="button"
+                className="mt-1 text-xs font-semibold text-primary hover:underline"
+                onClick={resetFilters}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+        }
       />
-      {!loading && requests.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-          No correction requests match the current filters.
-        </div>
-      ) : null}
 
       <Sheet
         open={detailSheetOpen}

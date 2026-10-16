@@ -31,8 +31,16 @@ describe("attendance section selection", () => {
     const groups = resolveAttendanceSectionTabGroups([], "admin", true)
     expect(groups).toBe(attendanceWorkspaceSectionTabGroups)
     expect(findFirstAccessibleSectionUrl(groups, [], "admin")).toBe(
-      "/dashboard/attendance/today",
+      "/dashboard/attendance/attendance-history",
     )
+  })
+
+  it("keeps correction requests out of Attendance navigation", () => {
+    const urls = attendanceWorkspaceSectionTabGroups.flatMap((group) =>
+      group.items.map((item) => item.url),
+    )
+    expect(urls).not.toContain("/dashboard/attendance/correction-requests")
+    expect(urls).not.toContain("/dashboard/attendance/corrections")
   })
 })
 

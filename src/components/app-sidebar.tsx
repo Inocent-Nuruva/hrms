@@ -162,6 +162,20 @@ const ActiveInsightsIcon = DataBarVerticalAscending24Color
 const adminData: SidebarData = {
   navMain: [
     {
+      title: "To do",
+      url: "/dashboard/me/requests/actions",
+      matchUrls: [
+        "/dashboard/me/requests/actions",
+        "/dashboard/attendance/correction-requests",
+      ],
+      icon: NotificationsIcon,
+      activeIcon: ActiveNotificationsIcon,
+      items: [
+        { title: "Employee Requests", url: "/dashboard/me/requests/actions" },
+        { title: "Correction Requests", url: "/dashboard/attendance/correction-requests" },
+      ],
+    },
+    {
       title: "Access Control",
       url: "/dashboard/access-control",
       matchUrls: [
@@ -247,10 +261,7 @@ const adminData: SidebarData = {
       ],
       icon: EmployeesIcon,
       activeIcon: ActiveEmployeesIcon,
-      items: [
-        ...sidebarWorkspacesFromSections(employeeSectionTabGroups),
-        { title: "To do", url: "/dashboard/me/requests/actions" },
-      ],
+      items: sidebarWorkspacesFromSections(employeeSectionTabGroups),
     },
     {
       title: "Promotion",
@@ -609,7 +620,7 @@ const employeeSearchIndex = [
   { title: "My Attendance / Overview", url: "/dashboard/attendance/today", section: "Employees", keywords: ["attendance", "timesheet"] },
   { title: "My Attendance / Today", url: "/dashboard/attendance/today", section: "Employee Attendance", keywords: ["attendance", "today", "state"] },
   { title: "My Attendance / Attendance History", url: "/dashboard/attendance/attendance-history", section: "Employee Attendance", keywords: ["attendance", "history", "punch"] },
-  { title: "My Attendance / Schedule Preview", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule preview"] },
+  { title: "My Attendance / My Schedule", url: "/dashboard/attendance/schedule-preview", section: "Employee Attendance", keywords: ["attendance", "schedule", "schedule preview"] },
   { title: "My Attendance / Correction Requests", url: "/dashboard/attendance/corrections", section: "Employee Attendance", keywords: ["attendance", "correction", "request"] },
   { title: "My Leave / Requests", url: "/dashboard/me/leave/requests", section: "Leave", keywords: ["leave", "request"] },
   { title: "My Leave / Balances", url: "/dashboard/me/leave/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },

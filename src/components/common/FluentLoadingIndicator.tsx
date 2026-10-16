@@ -22,11 +22,18 @@ export function FluentLoadingIndicator({
   )
 
   return (
-    <Spinner
-      {...props}
-      size={resolvedSize}
-      appearance="primary"
-      className={cn("inline-flex shrink-0 align-middle", className?.replace(/\banimate-spin\b/g, ""))}
-    />
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center overflow-visible align-middle leading-none",
+        className?.replace(/\banimate-spin\b/g, ""),
+      )}
+    >
+      <Spinner
+        {...props}
+        size={resolvedSize}
+        appearance="primary"
+        className="!m-0 !max-h-none !max-w-none !overflow-visible"
+      />
+    </span>
   )
 }

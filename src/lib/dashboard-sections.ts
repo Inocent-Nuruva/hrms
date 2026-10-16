@@ -90,11 +90,6 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     ],
   },
   {
-    // Single-item group → rendered as a direct tab link (no dropdown).
-    title: "Correction Requests",
-    items: [{ title: "Correction Requests", url: "/dashboard/attendance/correction-requests" }],
-  },
-  {
     title: "Timetable Management",
     items: [
       { title: "Timetables", url: "/dashboard/attendance/timetables" },
@@ -111,10 +106,8 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My attendance",
     items: [
-      { title: "Overview", url: "/dashboard/attendance/today" },
       { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
-      { title: "Schedule Preview", url: "/dashboard/attendance/schedule-preview" },
-      { title: "Correction Requests", url: "/dashboard/attendance/corrections" },
+      { title: "My Schedule", url: "/dashboard/attendance/schedule-preview" },
     ],
   },
 ]

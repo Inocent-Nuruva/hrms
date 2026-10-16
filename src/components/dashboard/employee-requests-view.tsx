@@ -5,16 +5,14 @@ import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
 import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { CheckmarkCircle20Filled } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
   CompactStatStrip,
-  HeroBand,
   StatusChip,
-  TalentDoodleSprites,
   actionButtonClass,
   formatDate,
-  heroGhostButtonClass,
   inputClass,
   optionLabel,
   pageBleedClass,
@@ -62,6 +60,7 @@ import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
+type ActionFilter = "waiting" | "all" | "done"
 
 const TAB_COPY: Record<
   RequestsSelfTab,
@@ -203,6 +202,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const leaveIfForbidden = useLeaveIfForbidden()
   const copy = TAB_COPY[activeTab]
   const [actions, setActions] = React.useState<AdminRecord[]>([])
+  const [actionFilter, setActionFilter] = React.useState<ActionFilter>("all")
   const [timeline, setTimeline] = React.useState<AdminRecord[]>([])
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [changes, setChanges] = React.useState<AdminRecord[]>([])
@@ -373,9 +373,23 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     }
   }
 
+  const isWaitingAction = React.useCallback((row: AdminRecord) => {
+    const status = readString(row, ["status"]).toUpperCase()
+    return !status || ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)
+  }, [])
+
+  const pendingActions = actions.filter(isWaitingAction).length
+  const doneActions = Math.max(actions.length - pendingActions, 0)
+  const filteredActions = React.useMemo(() => {
+    if (actionFilter === "all") return actions
+    return actions.filter((row) =>
+      actionFilter === "waiting" ? isWaitingAction(row) : !isWaitingAction(row),
+    )
+  }, [actionFilter, actions, isWaitingAction])
+
   const rows =
     activeTab === "actions"
-      ? actions
+      ? filteredActions
       : activeTab === "timeline"
         ? timeline
         : activeTab === "documents"
@@ -645,19 +659,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   }, [activeTab, busyId, load])
 
   const changeFields = PROFILE_CHANGE_FIELDS[form.request_type || "CONTACT_INFORMATION"] ?? []
-  const pendingActions = actions.filter((row) => {
-    const status = readString(row, ["status"]).toUpperCase()
-    return !status || ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)
-  }).length
-
   const summaryItems =
-    activeTab === "actions"
-      ? [
-          { label: "Waiting on you", value: loading ? "…" : String(pendingActions) },
-          { label: "All items", value: loading ? "…" : String(actions.length) },
-          { label: "Done", value: loading ? "…" : String(Math.max(actions.length - pendingActions, 0)) },
-        ]
-      : activeTab === "timeline"
+    activeTab === "timeline"
         ? [
             { label: "Requests sent", value: loading ? "…" : String(timeline.length) },
             { label: "Open", value: loading ? "…" : "—" },
@@ -683,43 +686,71 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
 
   return (
     <section className="w-full min-w-0 space-y-4">
-      <TalentDoodleSprites />
-      <HeroBand
-        variant="dashboard"
-        eyebrow="My requests"
-        title={copy.title}
-        description={copy.description}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={heroGhostButtonClass}
-              onClick={() => void load()}
-              disabled={mounted ? loading : undefined}
-            >
-              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-              Refresh
-            </button>
-            {activeTab === "documents" ? (
-              <button type="button" className={heroGhostButtonClass} onClick={() => openCreate("document")}>
-                <PlusIcon className="size-4" /> Upload a file
-              </button>
-            ) : null}
-            {activeTab === "profile-changes" ? (
-              <button type="button" className={heroGhostButtonClass} onClick={() => openCreate("change")}>
-                <PlusIcon className="size-4" /> Ask HR to update
-              </button>
+      <header
+        className={cn(
+          "flex min-w-0 flex-col gap-3 border-b border-border bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
+          pageBleedClass,
+        )}
+      >
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+            My requests
+          </p>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
+              {copy.title}
+              {activeTab === "actions" ? (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                  {loading ? "…" : pendingActions}
+                </span>
+              ) : null}
+            </h1>
+            {activeTab === "actions" ? (
+              <span className="flex items-center gap-1.5 text-xs tabular-nums">
+                {loading ? (
+                  <span className="text-muted-foreground">Updating…</span>
+                ) : (
+                  <>
+                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                      {doneActions} completed
+                    </span>
+                  </>
+                )}
+              </span>
             ) : null}
           </div>
-        }
-      />
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            onClick={() => void load()}
+            disabled={mounted ? loading : undefined}
+          >
+            {mounted && loading ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <RefreshCwIcon className="size-3.5" />}
+            Refresh
+          </button>
+          {activeTab === "documents" ? (
+            <button type="button" className={primaryButtonClass} onClick={() => openCreate("document")}>
+              <PlusIcon className="size-4" /> Upload a file
+            </button>
+          ) : null}
+          {activeTab === "profile-changes" ? (
+            <button type="button" className={primaryButtonClass} onClick={() => openCreate("change")}>
+              <PlusIcon className="size-4" /> Ask HR to update
+            </button>
+          ) : null}
+        </div>
+      </header>
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
           {error}
         </div>
       ) : null}
 
-      <CompactStatStrip items={summaryItems} />
+      {activeTab !== "actions" ? (
+        <CompactStatStrip items={summaryItems} />
+      ) : null}
 
       {activeTab === "resignation" ? (
         <div className={cn("space-y-4 border-y border-border bg-card px-4 py-5 sm:border-x sm:px-5", pageBleedClass)}>
@@ -771,9 +802,6 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         </div>
       ) : (
         <div className={cn("overflow-hidden border-y border-border bg-card sm:border-x", pageBleedClass)}>
-          {!loading && rows.length === 0 ? (
-            <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">{copy.empty}</p>
-          ) : null}
           <ResizableTable
             title={copy.table}
             data={rows}
@@ -782,6 +810,69 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             itemsPerPage={20}
             showExport={false}
             storageKey={`me-requests-${activeTab}`}
+            emptyContent={
+              <div className="flex flex-col items-center py-6 text-center">
+                <div className="grid size-9 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <CheckmarkCircle20Filled className="size-5" aria-hidden />
+                </div>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {activeTab === "actions" && actionFilter === "waiting"
+                    ? "You’re all caught up"
+                    : activeTab === "actions" && actionFilter === "done"
+                      ? "No completed requests"
+                      : copy.empty}
+                </p>
+                <p className="mt-0.5 max-w-sm text-xs text-muted-foreground">
+                  {activeTab === "actions" && actionFilter === "waiting"
+                    ? "There are no requests awaiting your review."
+                    : "New requests will appear here when available."}
+                </p>
+                {activeTab === "actions" && actionFilter === "waiting" && doneActions > 0 ? (
+                  <button
+                    type="button"
+                    className="mt-3 text-xs font-semibold text-primary hover:underline"
+                    onClick={() => setActionFilter("done")}
+                  >
+                    View completed requests
+                  </button>
+                ) : null}
+              </div>
+            }
+            toolbarActions={
+              activeTab === "actions" ? (
+                <div
+                  role="tablist"
+                  aria-label="Request status"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-muted/30 p-0.5"
+                >
+                  {([
+                    ["waiting", "Awaiting", pendingActions],
+                    ["all", "All", actions.length],
+                    ["done", "Completed", doneActions],
+                  ] as const).map(([filter, label, count]) => {
+                    const selected = actionFilter === filter
+                    return (
+                      <button
+                        key={filter}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        onClick={() => setActionFilter(filter)}
+                        className={cn(
+                          "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors",
+                          selected
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <span>{label}</span>
+                        <span className="tabular-nums text-muted-foreground">{loading ? "…" : count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : undefined
+            }
             onRowSelect={(_, row) => {
               if (!row) return
               setDetail(row)

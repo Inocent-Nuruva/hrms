@@ -9,10 +9,27 @@ import {
   Button as FluentButton,
   Card as FluentCard,
   CardFooter as FluentCardFooter,
+  Dialog as FluentDialog,
+  DialogActions as FluentDialogActions,
+  DialogBody as FluentDialogBody,
+  DialogContent as FluentDialogContent,
+  DialogSurface as FluentDialogSurface,
+  DialogTitle as FluentDialogTitle,
+  Dropdown as FluentDropdown,
+  Field as FluentField,
+  Input as FluentInput,
+  Option as FluentOption,
+  Textarea as FluentTextarea,
   makeStyles,
   Persona,
   Tab,
   TabList,
+  Table as FluentTable,
+  TableBody as FluentTableBody,
+  TableCell as FluentTableCell,
+  TableHeader as FluentTableHeader,
+  TableHeaderCell as FluentTableHeaderCell,
+  TableRow as FluentTableRow,
   Text as FluentText,
 } from "@fluentui/react-components"
 import {
@@ -33,17 +50,19 @@ import {
   PeopleTeam20Color,
   Person20Color,
   PersonKey20Color,
+  ArrowSync20Regular,
+  DocumentPdf20Regular,
+  Eye20Regular,
+  Send20Regular,
+  Dismiss20Regular,
+  Save20Regular,
 } from "@fluentui/react-icons"
-import {
-  ArrowLeft, ArrowRightIcon, CheckCircle2, BriefcaseIcon, Building2Icon, CalendarIcon, ClockIcon, DownloadIcon, FileTextIcon, PencilIcon, RefreshCwIcon, UserIcon, UsersIcon } from "lucide-react";
-import { ChartBar } from "@/components/animate-ui/icons/chart-bar"
-import { Settings } from "@/components/animate-ui/icons/settings"
-import { Sparkles } from "@/components/animate-ui/icons/sparkles"
+import { ArrowLeft, ArrowRightIcon, CheckCircle2, PencilIcon, RefreshCwIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { useFluentToastState } from "@/components/ui/use-fluent-toast-state"
-import { CompactStatStrip, HeroBand, TalentDoodleSprites, heroGhostButtonClass, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
+import { HeroBand, heroGhostButtonClass, heroPanelClass, pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import {
   acknowledgeMyMovement,
@@ -100,10 +119,9 @@ import {
 import { AUTH_STORAGE_KEYS, resolveApiBaseUrl } from "@/utils/constants"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -5615,6 +5633,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
   const [message, setMessage] = React.useState<string | null>(null)
   useFluentToastState(message, setMessage, "success")
+  const [actionErrorMessage, setActionErrorMessage] = React.useState<string | null>(null)
+  useFluentToastState(actionErrorMessage, setActionErrorMessage, "error")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
   const [requestToCancel, setRequestToCancel] = React.useState<number | string | null>(null)
@@ -5623,6 +5643,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [workflowRequestId, setWorkflowRequestId] = React.useState<number | string | null>(null)
   const [workflowRequestRow, setWorkflowRequestRow] = React.useState<AdminRecord | null>(null)
   const [leaveRequestStatusFilter, setLeaveRequestStatusFilter] = React.useState<string | null>(null)
+  const [holidayFilter, setHolidayFilter] = React.useState<"all" | "year" | "upcoming">("all")
 
   const [requestForm, setRequestForm] = React.useState({
     leave_type_id: "",
@@ -5979,41 +6000,42 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const onRequestLeave = React.useCallback(async (submit: boolean) => {
     if (!token || employeeId === null) {
-      setMessage("Your profile is not ready for leave requests.")
+      setActionErrorMessage("Your profile is not ready for leave requests.")
       return
     }
 
     if (!requestForm.leave_type_id || !requestForm.start_date || !requestForm.end_date) {
-      setMessage("Leave type and dates are required.")
+      setActionErrorMessage("Leave type and dates are required.")
       return
     }
 
     if (new Date(`${requestForm.start_date}T00:00:00`).getTime() > new Date(`${requestForm.end_date}T00:00:00`).getTime()) {
-      setMessage("Start date cannot be after end date.")
+      setActionErrorMessage("Start date cannot be after end date.")
       return
     }
 
     if (submit && !requestForm.reason.trim()) {
-      setMessage("A reason is required before submitting the request.")
+      setActionErrorMessage("A reason is required before submitting the request.")
       return
     }
 
     if (submit && leaveSubmissionBalanceError) {
-      setMessage(leaveSubmissionBalanceError)
+      setActionErrorMessage(leaveSubmissionBalanceError)
       return
     }
     if (submit && selectedLeaveTypeRequiresAttachment && !leaveAttachmentFile) {
-      setMessage("This leave type requires a supporting attachment before submission.")
+      setActionErrorMessage("This leave type requires a supporting attachment before submission.")
       return
     }
 
     if (availableLeaveTypes.length === 0) {
-      setMessage("Leave requests cannot be created until leave types are available to your account.")
+      setActionErrorMessage("Leave requests cannot be created until leave types are available to your account.")
       return
     }
 
     setLoading(true)
     setMessage(null)
+    setActionErrorMessage(null)
 
     try {
       // Create as draft only when explicitly requested. Submit sends submit:true so
@@ -6082,7 +6104,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         : errorObject instanceof Error
           ? errorObject.message
           : "Failed to save draft."
-      setMessage(text)
+      setActionErrorMessage(text)
     } finally {
       setLoading(false)
     }
@@ -6102,13 +6124,14 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     if (!token) return
     setLoading(true)
     setMessage(null)
+    setActionErrorMessage(null)
     try {
       await cancelMyLeaveRequest(token, id, reason)
       setMessage("Leave request cancelled.")
       await loadData()
     } catch (errorObject) {
       const text = errorObject instanceof Error ? errorObject.message : "Failed to cancel request."
-      setMessage(text)
+      setActionErrorMessage(text)
     } finally {
       setLoading(false)
     }
@@ -6144,7 +6167,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       URL.revokeObjectURL(url)
     } catch (errorObject) {
       const text = errorObject instanceof Error ? errorObject.message : "Failed to download PDF."
-      setMessage(text)
+      setActionErrorMessage(text)
     }
   }
 
@@ -6166,12 +6189,13 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     })
 
     if (balanceError) {
-      setMessage(balanceError)
+      setActionErrorMessage(balanceError)
       return
     }
 
     setLoading(true)
     setMessage(null)
+    setActionErrorMessage(null)
     try {
       const submittedRequest = await submitMyLeaveRequest(token, id)
       void notifySubmittedRequestApprovers({
@@ -6184,7 +6208,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       await loadData()
     } catch (errorObject) {
       const text = formatLeaveRequestError(errorObject, availableDays)
-      setMessage(text)
+      setActionErrorMessage(text)
     } finally {
       setLoading(false)
     }
@@ -6228,195 +6252,101 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       key: string | null
       label: string
       value: number
-      className: string
-      valueClassName: string
     }> = [
-      {
-        key: null,
-        label: "All",
-        value: leaveRequestStatusCounts.all,
-        className: !leaveRequestStatusFilter ? "bg-primary/10" : "bg-background",
-        valueClassName: "text-primary",
-      },
-      {
-        key: "pending",
-        label: "Open",
-        value: leaveRequestStatusCounts.pending,
-        className:
-          leaveRequestStatusFilter === "pending" ? "bg-amber-500/15" : "bg-background",
-        valueClassName: "text-amber-700 dark:text-amber-300",
-      },
-      {
-        key: "draft",
-        label: "Draft",
-        value: leaveRequestStatusCounts.draft,
-        className:
-          leaveRequestStatusFilter === "draft" ? "bg-slate-500/15" : "bg-background",
-        valueClassName: "text-slate-700 dark:text-slate-300",
-      },
-      {
-        key: "approved",
-        label: "Approved",
-        value: leaveRequestStatusCounts.approved,
-        className:
-          leaveRequestStatusFilter === "approved" ? "bg-emerald-500/15" : "bg-background",
-        valueClassName: "text-emerald-700 dark:text-emerald-300",
-      },
-      {
-        key: "rejected",
-        label: "Rejected",
-        value: leaveRequestStatusCounts.rejected,
-        className:
-          leaveRequestStatusFilter === "rejected" ? "bg-rose-500/15" : "bg-background",
-        valueClassName: "text-rose-700 dark:text-rose-300",
-      },
-      {
-        key: "cancelled",
-        label: "Cancelled",
-        value: leaveRequestStatusCounts.cancelled,
-        className:
-          leaveRequestStatusFilter === "cancelled" ? "bg-muted" : "bg-background",
-        valueClassName: "text-muted-foreground",
-      },
+      { key: null, label: "All", value: leaveRequestStatusCounts.all },
+      { key: "pending", label: "Open", value: leaveRequestStatusCounts.pending },
+      { key: "draft", label: "Draft", value: leaveRequestStatusCounts.draft },
+      { key: "approved", label: "Approved", value: leaveRequestStatusCounts.approved },
+      { key: "rejected", label: "Rejected", value: leaveRequestStatusCounts.rejected },
+      { key: "cancelled", label: "Cancelled", value: leaveRequestStatusCounts.cancelled },
     ]
 
     tabContent = (
-      <motion.section
-        className="w-full min-w-0 max-w-full space-y-4"
-        variants={profileTabStagger}
-        initial="hidden"
-        animate="show"
-      >
-        <motion.div
-          variants={profileTabItem}
-          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
-              Leave requests
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {requests.length === 0
-                ? "Request time off and track approval progress."
-                : leaveRequestStatusFilter
-                  ? `${filteredLeaveRequests.length} of ${requests.length} request${requests.length === 1 ? "" : "s"}`
-                  : `${requests.length} request${requests.length === 1 ? "" : "s"} on file`}
-            </p>
+      <motion.section className="w-full min-w-0 max-w-full space-y-5" variants={profileTabStagger} initial="hidden" animate="show">
+        <motion.header variants={profileTabItem} className="flex flex-col gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+              <CalendarClock20Color className="size-7" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">Leave requests</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">Request time off and follow each request through approval.</p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {leaveRequestStatusFilter ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9"
-                onClick={() => setLeaveRequestStatusFilter(null)}
-              >
-                Clear filter
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setRequestDialogOpen(true)}
-              className="h-9 bg-primary px-3 !text-white hover:bg-primary/90"
-            >
-              <CalendarIcon className="mr-1.5 size-3.5" />
-              New request
-            </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <FluentButton appearance="subtle" icon={<ArrowSync20Regular className={loading ? "animate-spin" : ""} />} onClick={() => void loadData()} disabled={loading}>Refresh</FluentButton>
+            <FluentButton appearance="primary" icon={<CalendarClock20Color />} onClick={() => setRequestDialogOpen(true)}>New request</FluentButton>
           </div>
-        </motion.div>
+        </motion.header>
 
-        <motion.div
-          variants={profileTabItem}
-          className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto rounded-lg border border-border"
-        >
-          {statusChips.map((chip, index, arr) => {
-            const isActive = leaveRequestStatusFilter === chip.key
+        <motion.div variants={profileTabItem} className="min-w-0 overflow-x-auto border-b border-border" role="presentation">
+          <TabList
+            aria-label="Filter leave requests by status"
+            selectedValue={leaveRequestStatusFilter ?? "all"}
+            onTabSelect={(_event, data) => setLeaveRequestStatusFilter(data.value === "all" ? null : String(data.value))}
+            size="small"
+            className="min-w-max"
+          >
+          {statusChips.map((chip) => {
             return (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() =>
-                  setLeaveRequestStatusFilter((prev) =>
-                    chip.key === null ? null : prev === chip.key ? null : chip.key
-                  )
-                }
-                className={cn(
-                  "flex min-w-[5.25rem] shrink-0 cursor-pointer flex-col justify-center px-3 py-2 text-left transition-colors",
-                  chip.className,
-                  isActive || (chip.key === null && !leaveRequestStatusFilter)
-                    ? "ring-inset"
-                    : "hover:bg-muted/40",
-                  index < arr.length - 1 ? "border-r border-border/60" : null
-                )}
-              >
-                <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
-                  {chip.label}
-                </span>
-                <span
-                  className={cn(
-                    "text-base font-semibold tabular-nums leading-tight",
-                    chip.valueClassName
-                  )}
-                >
-                  {chip.value}
-                </span>
-              </button>
+              <Tab key={chip.label} value={chip.key ?? "all"} className="gap-2">
+                {chip.label}<FluentBadge appearance="tint" color="informative" size="small">{chip.value}</FluentBadge>
+              </Tab>
             )
           })}
+          </TabList>
         </motion.div>
 
+        {leaveRequestStatusFilter ? (
+          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+            <span>Showing {filteredLeaveRequests.length} of {requests.length} requests</span>
+            <FluentButton appearance="subtle" size="small" onClick={() => setLeaveRequestStatusFilter(null)}>Clear filter</FluentButton>
+          </div>
+        ) : null}
+
         {loading && requests.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-10">
+          <div className="flex flex-col items-center justify-center gap-3 py-14 text-muted-foreground">
             <FluentLoadingIndicator size="large" />
-            <p className="text-sm text-muted-foreground">Loading leave requests…</p>
+            <p className="text-sm">Loading your leave requests…</p>
           </div>
         ) : null}
 
         {!loading && requests.length === 0 ? (
-          <motion.div
-            variants={profileTabItem}
-            className="overflow-hidden rounded-lg border border-dashed border-border bg-card px-4 py-10 text-center"
-          >
-            <p className="text-sm font-medium text-foreground">No leave requests yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Submit a request when you need time off. Approvals show up here.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setRequestDialogOpen(true)}
-              className="mt-4 h-9 bg-primary !text-white hover:bg-primary/90"
-            >
-              <CalendarIcon className="mr-1.5 size-3.5" />
-              New request
-            </Button>
+          <motion.div variants={profileTabItem} className="flex min-h-64 flex-col items-center justify-center px-5 py-10 text-center">
+            <span className="mb-4 flex size-16 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+              <CalendarClock20Color className="size-9" aria-hidden="true" />
+            </span>
+            <h3 className="text-lg font-semibold text-foreground">No leave requests yet</h3>
+            <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">When you need time off, create a request here. You can check its approval progress at any time.</p>
+            <FluentButton appearance="primary" icon={<CalendarClock20Color />} onClick={() => setRequestDialogOpen(true)} className="mt-5">New request</FluentButton>
           </motion.div>
         ) : null}
 
         {!loading && requests.length > 0 && filteredLeaveRequests.length === 0 ? (
-          <motion.div
-            variants={profileTabItem}
-            className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground"
-          >
-            No requests match this filter.
-            <button
-              type="button"
-              className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
-              onClick={() => setLeaveRequestStatusFilter(null)}
-            >
-              Show all
-            </button>
-          </motion.div>
+          <div className="flex flex-col items-center gap-2 py-12 text-center">
+            <p className="text-sm text-muted-foreground">No requests match this status.</p>
+            <FluentButton appearance="subtle" onClick={() => setLeaveRequestStatusFilter(null)}>Show all requests</FluentButton>
+          </div>
         ) : null}
 
         {filteredLeaveRequests.length > 0 ? (
-          <motion.div
-            variants={profileTabItem}
-            className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
-          >
-            {filteredLeaveRequests.map((row, index) => {
+          <motion.div variants={profileTabItem} className="min-w-0">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold text-foreground">Your requests</h3>
+              <span className="text-sm text-muted-foreground">{filteredLeaveRequests.length} total</span>
+            </div>
+            <div className="overflow-x-auto">
+              <FluentTable aria-label="Your leave requests" size="small" className="w-full min-w-[560px]">
+                <FluentTableHeader>
+                  <FluentTableRow>
+                    <FluentTableHeaderCell>Request</FluentTableHeaderCell>
+                    <FluentTableHeaderCell>Dates</FluentTableHeaderCell>
+                    <FluentTableHeaderCell>Status</FluentTableHeaderCell>
+                    <FluentTableHeaderCell className="text-right">Actions</FluentTableHeaderCell>
+                  </FluentTableRow>
+                </FluentTableHeader>
+                <FluentTableBody>
+                  {filteredLeaveRequests.map((row, index) => {
               const id = readNumber(row, ["id"])
               const status = readString(row, ["status"], "pending").toLowerCase()
               const canCancel = ["pending", "draft"].includes(status)
@@ -6446,149 +6376,35 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                   String(leaveNo) === String(highlightedRequestId))
 
               return (
-                <motion.article
-                  key={String(row.id ?? index)}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 380,
-                    damping: 28,
-                    delay: Math.min(index, 12) * 0.04,
-                  }}
-                  className={cn(
-                    "flex bg-background",
-                    isHighlighted ? "bg-primary/[0.04]" : null
-                  )}
-                >
-                  <div className={cn("w-1 shrink-0", statusMeta.barClassName)} />
-                  <div className="flex min-w-0 flex-1 flex-col gap-2.5 px-3 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-semibold text-foreground">{leaveType}</h3>
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                              statusMeta.badgeClassName
-                            )}
-                          >
-                            {statusMeta.label}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          <span className="font-medium text-foreground/80">{slipId}</span>
-                          {statusMeta.helperText ? (
-                            <>
-                              <span className="mx-1 text-border">·</span>
-                              {statusMeta.helperText}
-                            </>
-                          ) : null}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Days
-                        </p>
-                        <p className="text-lg font-semibold tabular-nums leading-none text-primary">
-                          {daysLabel}
-                        </p>
-                      </div>
+                <FluentTableRow key={String(row.id ?? index)} className={isHighlighted ? "bg-blue-50/70 dark:bg-blue-950/20" : undefined}>
+                  <FluentTableCell>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground">{leaveType}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{slipId} · {daysLabel} {daysLabel === "1" ? "day" : "days"}</p>
+                      {reason && reason !== "-" ? <p className="mt-1 max-w-56 truncate text-xs text-muted-foreground" title={reason}>{reason}</p> : null}
                     </div>
-
-                    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4">
-                      <div className="min-w-[5.5rem]">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          From
-                        </p>
-                        <p
-                          className={cn(
-                            "text-base font-semibold tabular-nums leading-tight",
-                            startLabel === "-" ? "text-muted-foreground/50" : "text-primary"
-                          )}
-                        >
-                          {startLabel}
-                        </p>
-                      </div>
-                      <div className="hidden text-muted-foreground/40 sm:block" aria-hidden>
-                        →
-                      </div>
-                      <div className="min-w-[5.5rem]">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          To
-                        </p>
-                        <p
-                          className={cn(
-                            "text-base font-semibold tabular-nums leading-tight",
-                            endLabel === "-" ? "text-muted-foreground/50" : "text-primary"
-                          )}
-                        >
-                          {endLabel}
-                        </p>
-                      </div>
-                      {reason && reason !== "-" ? (
-                        <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            Reason
-                          </p>
-                          <p className="truncate text-sm text-foreground">{reason}</p>
-                        </div>
-                      ) : null}
+                  </FluentTableCell>
+                  <FluentTableCell>
+                    <p className="font-medium text-foreground">{startLabel} – {endLabel}</p>
+                    {statusMeta.helperText ? <p className="mt-0.5 text-xs text-muted-foreground">{statusMeta.helperText}</p> : null}
+                  </FluentTableCell>
+                  <FluentTableCell>
+                    <FluentBadge appearance="tint" color={status === "approved" ? "success" : status === "rejected" ? "danger" : status === "cancelled" ? "subtle" : status === "pending" ? "warning" : "informative"}>{statusMeta.label}</FluentBadge>
+                  </FluentTableCell>
+                  <FluentTableCell>
+                    <div className="flex justify-end gap-1">
+                      {id ? <FluentButton appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`View workflow for ${slipId}`} title="View approval progress" disabled={loading} onClick={() => openLeaveWorkflowDialog(id, row)} /> : null}
+                      {id ? <FluentButton appearance="subtle" size="small" icon={<DocumentPdf20Regular />} aria-label={`Download PDF for ${slipId}`} title="Download request PDF" disabled={loading} onClick={() => void onDownloadPdf(id)} /> : null}
+                      {id && status === "draft" ? <FluentButton appearance="primary" size="small" icon={<Send20Regular />} disabled={loading} onClick={() => void onSubmitRequest(id)}>Submit</FluentButton> : null}
+                      {id && canCancel ? <FluentButton appearance="subtle" size="small" icon={<Dismiss20Regular />} aria-label={status === "draft" ? `Discard ${slipId}` : `Cancel ${slipId}`} title={status === "draft" ? "Discard draft" : "Cancel request"} disabled={loading} onClick={() => openCancelDialog(id)} /> : null}
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {id ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs"
-                          disabled={loading}
-                          onClick={() => openLeaveWorkflowDialog(id, row)}
-                        >
-                          Workflow
-                        </Button>
-                      ) : null}
-                      {id ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs"
-                          disabled={loading}
-                          onClick={() => void onDownloadPdf(id)}
-                        >
-                          PDF
-                        </Button>
-                      ) : null}
-                      {id && status === "draft" ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 bg-primary px-2 text-xs !text-white hover:bg-primary/90"
-                          disabled={loading}
-                          onClick={() => void onSubmitRequest(id)}
-                        >
-                          Submit
-                        </Button>
-                      ) : null}
-                      {id && canCancel ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 border-rose-300 px-2 text-xs text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
-                          disabled={loading}
-                          onClick={() => openCancelDialog(id)}
-                        >
-                          {status === "draft" ? "Discard" : "Cancel"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </motion.article>
+                  </FluentTableCell>
+                </FluentTableRow>
               )
-            })}
+                  })}
+                </FluentTableBody>
+              </FluentTable>
+            </div>
           </motion.div>
         ) : null}
 
@@ -6599,38 +6415,59 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   if (activeTab === "balances") {
     const fiscalYear = leaveBalancesFull?.current_fiscal_year || "2026"
     const showBalancesError = balancesError && balancesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
+    const balanceMetrics = [
+      { key: "allocated", label: "Total allowance", value: balanceTotals[0]?.value, hint: "Days granted" },
+      { key: "used", label: "Used", value: balanceTotals[1]?.value, hint: "Days taken" },
+      { key: "pending", label: "Awaiting approval", value: balanceTotals[2]?.value, hint: "Requested days" },
+      { key: "carried", label: "Carried over", value: balanceTotals[3]?.value, hint: "From last year" },
+      { key: "expired", label: "Expired", value: balanceTotals[4]?.value, hint: "No longer available" },
+      { key: "available", label: "Available to use", value: balanceTotals[5]?.value, hint: "Remaining days" },
+    ]
     tabContent = (
       <section className="w-full min-w-0 space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Leave Balances</h2>
-          <p className="text-sm text-muted-foreground">Fiscal Year: {fiscalYear}</p>
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border/70 pb-3">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">Your leave balance</h2>
+            <p className="text-sm text-muted-foreground">A clear view of your allowance, leave taken, and days still available.</p>
+          </div>
+          <FluentBadge appearance="outline" color="informative">Fiscal year {fiscalYear}</FluentBadge>
         </div>
         {loading ? (
-          <div className="flex items-center gap-2 py-2">
+          <div className="flex min-h-24 items-center justify-center gap-3 py-4">
             <FluentLoadingIndicator size="large" />
-            <p className="text-sm text-muted-foreground">Loading balances...</p>
+            <p className="text-sm text-muted-foreground">Loading your leave balances…</p>
           </div>
         ) : null}
-        {!loading && balances.length === 0 ? <p className="text-sm text-slate-500">No balance records found.</p> : null}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border/70 pb-3 sm:grid-cols-3 xl:grid-cols-6">
-          {balanceTotals.map((item) => (
-            <div key={item.label} className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                {item.label}
-              </p>
-              <p className="mt-0.5 text-lg font-semibold tracking-tight text-primary">
-                {formatDayValue(item.value)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">days</p>
-            </div>
+        {!loading && balances.length === 0 ? (
+          <FluentCard appearance="outline" className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center">
+            <CalendarClock20Color className="size-12" />
+            <FluentText weight="semibold">No leave balance yet</FluentText>
+            <FluentText className="max-w-lg text-muted-foreground">
+              Your leave allowance will appear here once it has been set up for this fiscal year. Contact your HR team if you think a balance is missing.
+            </FluentText>
+          </FluentCard>
+        ) : null}
+        {balances.length > 0 ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {balanceMetrics.map((item) => (
+            <FluentCard key={item.key} appearance="outline" className={`!min-h-0 min-w-0 p-3 ${item.key === "available" ? "border-primary/40 bg-primary/5" : ""}`}>
+              <div className="flex flex-col items-start gap-2">
+                <FluentText size={200} weight="semibold" className="uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </FluentText>
+                <FluentText size={400} weight="semibold" className={item.key === "available" ? "text-primary" : "text-foreground"}>
+                  {formatDayValue(item.value)} <span className="text-xs font-normal text-muted-foreground">days</span>
+                </FluentText>
+                <FluentText size={200} className="text-muted-foreground">{item.hint}</FluentText>
+              </div>
+            </FluentCard>
           ))}
-        </div>
-        <div className="space-y-2">
+        </div> : null}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {balances.map((row, index) => (
-            <div key={String(row.id ?? index)} className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ backgroundColor: 'var(--primary)' }}>
-              <Doodle name="doodle-circles" />
-              <div className="relative z-10">
-                <p className="font-medium">
+            <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <FluentText weight="semibold" className="truncate">
                   {(() => {
                     const nestedLeaveType = asRecord(row.leave_type)
                     const nestedLabel =
@@ -6648,29 +6485,29 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
                     return "Leave type"
                   })()}
-                </p>
-                <p className="text-white/80">Fiscal Year: {readString(row, ["fiscal_year"], fiscalYear)}</p>
-                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-                  {[
-                    { label: "Allocated", value: row.allocated_days },
-                    { label: "Used", value: row.used_days },
-                    { label: "Pending", value: row.pending_days },
-                    { label: "Carried forward", value: row.carried_forward_days },
-                    { label: "Expired", value: row.expired_days },
-                    { label: "Available", value: row.available_days ?? row.remaining_days },
-                  ].map((item) => (
-                    <div key={item.label} className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">
-                        {item.label}
-                      </p>
-                      <p className="mt-0.5 text-base font-semibold text-white">
-                        {formatDayValue(item.value)} <span className="text-xs font-normal text-white/70">days</span>
-                      </p>
-                    </div>
-                  ))}
+                  </FluentText>
+                  <FluentText size={200} className="text-muted-foreground">Fiscal year {readString(row, ["fiscal_year"], fiscalYear)}</FluentText>
                 </div>
+                <FluentBadge appearance="outline" color="informative">Leave</FluentBadge>
               </div>
-            </div>
+              <div className="mt-4 divide-y divide-border/70">
+                {[
+                  { label: "Allowance", value: row.allocated_days },
+                  { label: "Used", value: row.used_days },
+                  { label: "Awaiting approval", value: row.pending_days },
+                  { label: "Carried over", value: row.carried_forward_days },
+                  { label: "Expired", value: row.expired_days },
+                  { label: "Available", value: row.available_days ?? row.remaining_days },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <FluentText size={300} className="text-muted-foreground">{item.label}</FluentText>
+                    <FluentText size={300} weight={item.label === "Available" ? "semibold" : "regular"} className={item.label === "Available" ? "text-primary" : "text-foreground"}>
+                      {formatDayValue(item.value)} days
+                    </FluentText>
+                  </div>
+                ))}
+              </div>
+            </FluentCard>
           ))}
         </div>
         {showBalancesError ? <p className="text-sm text-slate-500">{balancesError}</p> : null}
@@ -6692,51 +6529,87 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       readString(row, ["holiday_date", "from_date", "start_date", "date"], "")
     const thisYearCount = sortedHolidays.filter((row) => holidayDateOf(row).startsWith(thisYear)).length
     const upcomingCount = sortedHolidays.filter((row) => holidayDateOf(row) >= todayStamp).length
+    const visibleHolidays = sortedHolidays.filter((row) => {
+      const date = holidayDateOf(row)
+      if (holidayFilter === "year") return date.startsWith(thisYear)
+      if (holidayFilter === "upcoming") return date >= todayStamp
+      return true
+    })
     tabContent = (
       <section className="w-full min-w-0 space-y-4">
-        <TalentDoodleSprites />
-        <HeroBand
-          eyebrow="My leave"
-          title="Holiday calendar"
-          description="Company holidays published for your team this year."
-          actions={
-            <button
-              type="button"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
-              onClick={() => void loadData()}
-              disabled={mounted ? loading : undefined}
-            >
-              {mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
-              Refresh
-            </button>
-          }
-        />
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <CalendarClock20Color className="size-9 shrink-0" />
+            <div className="flex min-w-0 flex-col gap-1">
+              <h2 className="text-lg font-semibold leading-6 text-foreground">Holiday calendar</h2>
+              <p className="text-sm leading-5 text-muted-foreground">Company holidays published for your team this year.</p>
+            </div>
+          </div>
+          <FluentButton
+            appearance="secondary"
+            icon={<ArrowSync20Regular className={loading ? "animate-spin" : ""} />}
+            onClick={() => void loadData()}
+            disabled={mounted ? loading : undefined}
+          >
+            Refresh
+          </FluentButton>
+        </header>
         {showHolidaysError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
+          <div role="alert" className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
             {holidaysError}
           </div>
         ) : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        <CompactStatStrip
-          items={[
-            { label: "This year", value: loading ? "…" : String(thisYearCount) },
-            { label: "Upcoming", value: loading ? "…" : String(upcomingCount) },
-            { label: "Holidays", value: loading ? "…" : String(sortedHolidays.length) },
-          ]}
-        />
-        <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { key: "year" as const, label: "This year", value: thisYearCount, detail: "Published for this year" },
+            { key: "upcoming" as const, label: "Coming up", value: upcomingCount, detail: "Today and future dates" },
+            { key: "all" as const, label: "All listed", value: sortedHolidays.length, detail: "Company holidays" },
+          ].map((item) => (
+            <FluentButton
+              key={item.key}
+              appearance="outline"
+              aria-pressed={holidayFilter === item.key}
+              onClick={() => setHolidayFilter(item.key)}
+              className={`!h-auto !w-full !justify-start !whitespace-normal !p-3 text-left ${holidayFilter === item.key ? "border-primary bg-primary/5" : ""}`}
+            >
+              <div className="flex w-full items-center justify-between gap-3 text-left">
+                <div className="flex flex-col gap-1">
+                  <FluentText size={200} weight="semibold" className="uppercase tracking-wide text-muted-foreground">{item.label}</FluentText>
+                  <FluentText size={400} weight="semibold">{loading ? "…" : item.value}</FluentText>
+                  <FluentText size={200} className="text-muted-foreground">{item.detail}</FluentText>
+                </div>
+                <PayrollCalendarIcon className="size-5 text-primary" />
+              </div>
+            </FluentButton>
+          ))}
+        </div>
+        <section aria-label="Company holidays" className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <FluentText size={400} weight="semibold">Holiday dates</FluentText>
+            <FluentText size={200} className="text-muted-foreground">Showing {visibleHolidays.length} of {sortedHolidays.length}</FluentText>
+          </div>
           {loading && sortedHolidays.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
-              <FluentLoadingIndicator className="size-4 animate-spin" />
-              Loading holidays...
+            <div className="flex min-h-36 items-center justify-center gap-3 text-sm text-muted-foreground">
+              <FluentLoadingIndicator size="large" />
+              Loading holidays…
             </div>
           ) : sortedHolidays.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            <FluentCard appearance="outline" className="flex min-h-44 flex-col items-center justify-center gap-2 p-6 text-center">
+              <CalendarClock20Color className="size-10" />
+              <FluentText weight="semibold">No holidays published</FluentText>
+              <FluentText size={300} className="text-muted-foreground">
               No company holidays have been published yet.
-            </div>
+              </FluentText>
+            </FluentCard>
+          ) : visibleHolidays.length === 0 ? (
+            <FluentCard appearance="outline" className="flex min-h-36 flex-col items-center justify-center gap-2 p-6 text-center">
+              <FluentText weight="semibold">No holidays match this filter</FluentText>
+              <FluentButton appearance="subtle" onClick={() => setHolidayFilter("all")}>Show all holidays</FluentButton>
+            </FluentCard>
           ) : (
-            <div className="divide-y divide-border/70">
-              {sortedHolidays.map((row, index) => {
+            <div className="grid gap-2 sm:grid-cols-2">
+              {visibleHolidays.map((row, index) => {
                 const holidayStart =
                   readString(row, ["holiday_date", "from_date", "start_date", "date"], "") || "-"
                 const holidayEnd = readString(row, ["to_date", "end_date"], "")
@@ -6749,29 +6622,36 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                     : formatDate(holidayStart)
 
                 return (
-                  <div
+                  <FluentCard
                     key={String(row.id ?? index)}
-                    className="flex flex-col gap-1 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
+                    appearance="outline"
+                    className="min-w-0 p-3"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-semibold text-foreground">
-                        {readString(row, ["name", "title"], "Holiday")}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{dateLabel}</p>
-                      {[holidayType, holidayBranch, holidayDescription].filter((value) => value && value !== "-").length > 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {[holidayType, holidayBranch, holidayDescription]
-                            .filter((value) => value && value !== "-")
-                            .join(" · ")}
-                        </p>
-                      ) : null}
+                    <div className="flex min-w-0 items-start gap-3">
+                      <CalendarClock20Color className="mt-0.5 size-6 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <FluentText weight="semibold" className="min-w-0">{readString(row, ["name", "title"], "Holiday")}</FluentText>
+                          {holidayType ? (
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${holidayType.toLowerCase() === "religious" ? "text-violet-700 dark:text-violet-300" : "text-primary"}`}>
+                              {holidayType}
+                            </span>
+                          ) : null}
+                        </div>
+                        <FluentText size={300} className="mt-1 block text-muted-foreground">{dateLabel}</FluentText>
+                        {[holidayBranch, holidayDescription].filter((value) => value && value !== "-").length > 0 ? (
+                          <FluentText size={200} className="mt-1 block text-muted-foreground">
+                            {[holidayBranch, holidayDescription].filter((value) => value && value !== "-").join(" · ")}
+                          </FluentText>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
+                  </FluentCard>
                 )
               })}
             </div>
           )}
-        </div>
+        </section>
       </section>
     )
   }
@@ -6812,31 +6692,27 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       <div className="flex-1 min-h-0 relative">
         {tabContent}
       </div>
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogPopup className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Request Leave</DialogTitle>
-            <DialogDescription>
-              Submit for approval immediately, or save a draft to finish later.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
+      <FluentDialog open={requestDialogOpen} onOpenChange={(_event, data) => setRequestDialogOpen(data.open)}>
+        <FluentDialogSurface className="w-[min(680px,96vw)]">
+          <FluentDialogBody className="min-h-0">
+            <FluentDialogTitle action={
+              <FluentButton appearance="subtle" aria-label="Close leave request" icon={<Dismiss20Regular />} onClick={() => setRequestDialogOpen(false)} />
+            }>Request leave</FluentDialogTitle>
+            <FluentText as="p" size={300} className="text-muted-foreground">
+              Choose the leave type and dates. Submit for approval now, or save a draft to finish later.
+            </FluentText>
+            <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-4 overflow-y-auto py-4 pr-1">
+            <FluentField label="Leave type">
+              <FluentDropdown
+                placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"}
+                selectedOptions={requestForm.leave_type_id ? [requestForm.leave_type_id] : []}
+                value={selectedLeaveTypeLabel}
+                onOptionSelect={(_event, data) => setRequestForm((prev) => ({ ...prev, leave_type_id: data.optionValue ?? "" }))}
+              >
+                {availableLeaveTypes.map((row) => <FluentOption key={row.id} value={row.id}>{row.label}</FluentOption>)}
+              </FluentDropdown>
+            </FluentField>
             <div className="space-y-1">
-              <Label>Leave Type</Label>
-              <Select value={requestForm.leave_type_id} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, leave_type_id: value ?? "" }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder={availableLeaveTypes.length > 0 ? "Select leave type" : "No leave types available"}>
-                    {selectedLeaveTypeLabel || undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableLeaveTypes.map((row) => (
-                    <SelectItem key={row.id} value={row.id}>
-                      {row.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               {availableLeaveTypes.length === 0 && leaveTypesError ? <p className="text-xs text-slate-500">{leaveTypesError}</p> : null}
               {selectedLeaveBalance?.formattedAvailable ? (
                 <p className={cn(
@@ -6864,95 +6740,59 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-rose-600">{leaveSubmissionBalanceError}</p>
               ) : null}
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="leave-duration-type">Duration</Label>
-              <Select value={requestForm.duration_type} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, duration_type: value ?? "FULL_DAY", ...(value && value !== "FULL_DAY" && prev.start_date ? { end_date: prev.start_date } : {}) }))}>
-                <SelectTrigger id="leave-duration-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FULL_DAY">Full day or multiple days</SelectItem>
-                  <SelectItem value="HALF_DAY">Half day</SelectItem>
-                  <SelectItem value="SHORT_LEAVE">Short leave by hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <FluentField label="Duration">
+              <FluentDropdown
+                selectedOptions={[requestForm.duration_type]}
+                value={requestForm.duration_type === "HALF_DAY" ? "Half day" : requestForm.duration_type === "SHORT_LEAVE" ? "Short leave by hours" : "Full day or multiple days"}
+                onOptionSelect={(_event, data) => {
+                  const value = data.optionValue ?? "FULL_DAY"
+                  setRequestForm((prev) => ({ ...prev, duration_type: value as typeof prev.duration_type, ...(value !== "FULL_DAY" && prev.start_date ? { end_date: prev.start_date } : {}) }))
+                }}
+              >
+                <FluentOption value="FULL_DAY">Full day or multiple days</FluentOption>
+                <FluentOption value="HALF_DAY">Half day</FluentOption>
+                <FluentOption value="SHORT_LEAVE">Short leave by hours</FluentOption>
+              </FluentDropdown>
+            </FluentField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="leave-start-date">Start Date</Label>
-                <DatePickerPresets
-                  id="leave-start-date"
-                  value={requestForm.start_date}
-                  onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { end_date: value }) }))}
-                  placeholder="Pick start date"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="leave-end-date">End Date</Label>
-                <DatePickerPresets
-                  id="leave-end-date"
-                  value={requestForm.end_date}
-                  onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))}
-                  placeholder="Pick end date"
-                />
-              </div>
+              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { end_date: value }) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
+              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
             </div>
             {requestForm.duration_type === "HALF_DAY" ? (
-              <div className="space-y-1">
-                <Label htmlFor="leave-half-day-session">Half-day session</Label>
-                <Select value={requestForm.half_day_session} onValueChange={(value) => setRequestForm((prev) => ({ ...prev, half_day_session: value ?? "FIRST_HALF" }))}>
-                  <SelectTrigger id="leave-half-day-session"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FIRST_HALF">First half</SelectItem>
-                    <SelectItem value="SECOND_HALF">Second half</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Half-day leave uses the same start and end date.</p>
-              </div>
+              <FluentField label="Half-day session" hint="Half-day leave uses the same start and end date.">
+                <FluentDropdown selectedOptions={[requestForm.half_day_session]} value={requestForm.half_day_session === "SECOND_HALF" ? "Second half" : "First half"} onOptionSelect={(_event, data) => setRequestForm((prev) => ({ ...prev, half_day_session: (data.optionValue ?? "FIRST_HALF") as typeof prev.half_day_session }))}>
+                  <FluentOption value="FIRST_HALF">First half</FluentOption><FluentOption value="SECOND_HALF">Second half</FluentOption>
+                </FluentDropdown>
+              </FluentField>
             ) : null}
             {requestForm.duration_type === "SHORT_LEAVE" ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1"><Label htmlFor="leave-short-start">Start time</Label><Input id="leave-short-start" type="time" value={requestForm.start_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_time: event.target.value }))} /></div>
-                <div className="space-y-1"><Label htmlFor="leave-short-end">End time</Label><Input id="leave-short-end" type="time" value={requestForm.end_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_time: event.target.value }))} /></div>
+                <FluentField label="Start time"><FluentInput type="time" value={requestForm.start_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, start_time: event.target.value }))} /></FluentField>
+                <FluentField label="End time"><FluentInput type="time" value={requestForm.end_time} onChange={(event) => setRequestForm((prev) => ({ ...prev, end_time: event.target.value }))} /></FluentField>
                 <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
               </div>
             ) : null}
-            <div className="space-y-1">
-              <Label htmlFor="leave-supporting-attachment">Supporting attachment {selectedLeaveTypeRequiresAttachment ? "(required to submit)" : "(optional)"}</Label>
-              <Input id="leave-supporting-attachment" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
-              {leaveAttachmentFile ? <p className="text-xs text-muted-foreground">Selected: {leaveAttachmentFile.name}</p> : null}
-            </div>
-            <div className="space-y-1">
-              <Label>Reason {requestForm.reason.trim() ? null : <span className="font-normal text-muted-foreground">(required to submit)</span>}</Label>
-              <Textarea
-                className="min-h-24"
+            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? "(required to submit)" : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-3 file:py-1.5" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
+            </FluentField>
+            <FluentField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>
+              <FluentTextarea
+                resize="vertical"
+                rows={4}
                 placeholder="Why are you taking leave?"
                 value={requestForm.reason}
                 onChange={(event) => setRequestForm((prev) => ({ ...prev, reason: event.target.value }))}
               />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRequestDialogOpen(false)}>
-              Close
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void onRequestLeave(false)}
-              disabled={loading || availableLeaveTypes.length === 0}
-            >
-              {loading ? "Saving…" : "Save Draft"}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void onRequestLeave(true)}
-              disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}
-              className="bg-primary !text-white hover:bg-primary/90"
-            >
-              {loading ? "Submitting…" : "Submit Request"}
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+            </FluentField>
+            </FluentDialogContent>
+            <FluentDialogActions position="end">
+              <FluentButton appearance="secondary" onClick={() => setRequestDialogOpen(false)}>Close</FluentButton>
+              <FluentButton appearance="secondary" icon={<Save20Regular />} onClick={() => void onRequestLeave(false)} disabled={loading || availableLeaveTypes.length === 0}>{loading ? "Saving…" : "Save draft"}</FluentButton>
+              <FluentButton appearance="primary" icon={<Send20Regular />} onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}>{loading ? "Submitting…" : "Submit request"}</FluentButton>
+            </FluentDialogActions>
+          </FluentDialogBody>
+        </FluentDialogSurface>
+      </FluentDialog>
       <LeaveWorkflowDialog
         open={workflowDialogOpen}
         onOpenChange={(open) => {

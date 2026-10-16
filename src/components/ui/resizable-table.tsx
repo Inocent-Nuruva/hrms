@@ -487,6 +487,8 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   toolbarClassName?: string;
   /** Optional page-specific styling for the bordered table frame. */
   frameClassName?: string;
+  /** Purpose-built content displayed when the data source is empty. */
+  emptyContent?: React.ReactNode;
   /** Use denser typography and row spacing. Defaults to the app-wide table density. */
   compact?: boolean;
   enableColumnVisibility?: boolean;
@@ -568,6 +570,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   toolbarActions,
   toolbarClassName,
   frameClassName,
+  emptyContent,
   compact = true,
   enableColumnVisibility = false,
   hiddenColumnKeys = [],
@@ -1710,7 +1713,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                       }
                       className="py-4 text-center text-xs text-muted-foreground"
                     >
-                      No records found.
+                      {emptyContent ?? "No records found."}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -1939,8 +1942,8 @@ export function ResizableTable<T = Record<string, unknown>>({
                     ))}
                   </div>
                 ) : sortedData.length === 0 ? (
-                  <div className="py-4 text-center text-xs text-muted-foreground border-b border-border">
-                    No records found.
+                  <div className="border-b border-border py-4 text-center text-xs text-muted-foreground">
+                    {emptyContent ?? "No records found."}
                   </div>
                 ) : null}
               </div>

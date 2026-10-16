@@ -155,7 +155,7 @@ const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
     description: "",
   },
   "schedule-preview": {
-    title: "Schedule Preview",
+    title: "My Schedule",
     groupTitle: "My Attendance",
     description: "",
   },
@@ -766,11 +766,6 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
           : String(workedRaw)
         : formatOptionalValue(workedRaw, "—")
 
-  const branch =
-    formatOptionalValue(
-      readWithFallback(record, ["branch_name", "branch", "location_name", "site_name"], effective),
-      "—"
-    )
   const shift =
     formatOptionalValue(
       readWithFallback(record, ["shift_name", "schedule_name", "timetable_name"], effective),
@@ -901,12 +896,6 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
                     {scheduleEnd}
                   </div>
                 </div>
-                <div className="hidden min-w-[6rem] shrink-0 text-right sm:block">
-                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Branch
-                  </div>
-                  <div className="truncate text-sm font-medium text-foreground">{branch}</div>
-                </div>
               </div>
             </div>
           </motion.div>
@@ -1013,14 +1002,6 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
                     {overtime} min
                   </div>
                 </div>
-                {branch !== "—" ? (
-                  <div className="min-w-0 sm:hidden">
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Branch
-                    </div>
-                    <div className="truncate text-sm font-medium text-foreground">{branch}</div>
-                  </div>
-                ) : null}
               </div>
             </div>
           </motion.div>
@@ -2626,8 +2607,8 @@ function TableBlock({
   )
 }
 
-const DAILY_SUMMARY_PAGE_SIZE_OPTIONS = [20, 50, 100, 200] as const
-const DEFAULT_DAILY_SUMMARY_PAGE_SIZE = 50
+const DAILY_SUMMARY_PAGE_SIZE_OPTIONS = [20, 50, 100, 130, 200] as const
+const DEFAULT_DAILY_SUMMARY_PAGE_SIZE = 130
 const PROCESSING_EXCEPTION_PAGE_SIZE_OPTIONS = [50, 100, 200] as const
 const DEFAULT_PROCESSING_EXCEPTION_PAGE_SIZE = 100
 const PROCESSING_EXCEPTION_STATUS_OPTIONS = ["OPEN", "RESOLVED", "IGNORED"] as const
@@ -3146,20 +3127,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
       }
 
       if (activeSection === "attendance-history") {
-        const result = await listMyAttendanceHistory(token, {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-          from_date: historyFilters.from_date || undefined,
-          to_date: historyFilters.to_date || undefined,
-        })
+        const [result, today] = await Promise.all([
+          listMyAttendanceHistory(token, {
+            page: 1,
+            limit: 100,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+            from_date: historyFilters.from_date || undefined,
+            to_date: historyFilters.to_date || undefined,
+          }),
+          getMyAttendanceToday(token).catch(() => null),
+        ])
         setDailySummaryRows([])
         setDailySummaryTotal(null)
         setDailySummaryTotalPages(null)
         setRows(result.rows)
         setCorrectionRequests([])
-        setSingleRecord(null)
+        setSingleRecord(today)
         return
       }
 
@@ -4433,6 +4417,35 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
         {!loading && activeSection === "attendance-history" ? (
           <div className="space-y-3">
+            <motion.section
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+              aria-label="Today at a glance"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    Today at a glance
+                  </p>
+                  <p className="mt-0.5 text-sm font-semibold text-foreground">
+                    Live attendance status
+                  </p>
+                </div>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {new Intl.DateTimeFormat("en-GB", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  }).format(new Date())}
+                </span>
+              </div>
+              <div className="p-3 sm:p-4">
+                <TodayOverview record={singleRecord} />
+              </div>
+            </motion.section>
+
             {rows.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
                 <p className="text-sm font-medium text-foreground">No attendance history</p>

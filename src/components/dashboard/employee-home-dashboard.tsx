@@ -343,39 +343,6 @@ function employeeSectionHasItems(employee: Record<string, unknown> | null | unde
   })
 }
 
-function findHttpsDocumentUrl(value: unknown, depth = 0): string | null {
-  if (depth > 5) return null
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const url = findHttpsDocumentUrl(entry, depth + 1)
-      if (url) return url
-    }
-    return null
-  }
-  const record = asRecord(value)
-  if (!record) return null
-  const directUrl = readString(record, [
-    "file_url",
-    "fileUrl",
-    "document_url",
-    "documentUrl",
-    "academic_certificate_document_url",
-    "url",
-  ])
-  if (directUrl) {
-    try {
-      if (new URL(directUrl).protocol === "https:") return directUrl
-    } catch {
-      // Continue looking through nested upload response data.
-    }
-  }
-  for (const key of ["data", "result", "document", "file", "item", "uploaded_document", "uploadedDocument"]) {
-    const url = findHttpsDocumentUrl(record[key], depth + 1)
-    if (url) return url
-  }
-  return null
-}
-
 function mergeEmployeeSectionRecords(
   base: Record<string, unknown>,
   extra: Record<string, unknown> | null,
@@ -2257,7 +2224,7 @@ function requestBrowserLocation(): Promise<BrowserLocationResult> {
       resolve({
         location: null,
         locationMessage:
-          "Location requires HTTPS. Use localhost during development or open the deployed secure site.",
+          "To check in with your location, open HRMS using your organization’s secure link.",
       })
       return
     }
