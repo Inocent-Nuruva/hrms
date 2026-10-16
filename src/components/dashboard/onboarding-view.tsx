@@ -140,7 +140,6 @@ import {
 } from "@/lib/onboarding-provisioning"
 import {
   filterAssigneesForStep,
-  collectAssigneeIds,
   findAssigneeRecord,
   flattenAssigneeRecord,
   isOnboardingActableStatus,
@@ -295,8 +294,16 @@ function collectDepartmentIds(row: AdminRecord) {
       if (departmentId !== null) ids.add(departmentId)
     })
 
-    if (Array.isArray(source.departments)) {
-      source.departments.forEach((value) => {
+    for (const collectionKey of [
+      "departments",
+      "department_assignments",
+      "departmentAssignments",
+      "employee_departments",
+      "employeeDepartments",
+    ]) {
+      const collection = source[collectionKey]
+      if (!Array.isArray(collection)) continue
+      collection.forEach((value) => {
         const directDepartmentId = readNumber({ value }, ["value"])
         if (directDepartmentId !== null) {
           ids.add(directDepartmentId)
@@ -306,7 +313,12 @@ function collectDepartmentIds(row: AdminRecord) {
         const nestedDepartment = assignment
           ? (toRecord(assignment.department) ?? toRecord(assignment.departmentDetail))
           : null
-        const departmentId = assignment ? readNumber(assignment, ["department_id", "departmentId", "id"]) : null
+        const departmentId = assignment
+          ? readNumber(
+              assignment,
+              collectionKey === "departments" ? ["department_id", "departmentId", "id"] : ["department_id", "departmentId"],
+            )
+          : null
         const nestedDepartmentId = nestedDepartment ? readNumber(nestedDepartment, ["id", "department_id"]) : null
         if (departmentId !== null) ids.add(departmentId)
         if (nestedDepartmentId !== null) ids.add(nestedDepartmentId)
@@ -315,6 +327,55 @@ function collectDepartmentIds(row: AdminRecord) {
   })
 
   return ids
+}
+
+function employeeMatchesCompanyUser(employee: AdminRecord, companyUser: AdminRecord) {
+  const employeeMembership = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
+  const employeeUser = toRecord(employeeMembership?.user) ?? toRecord(employee.user)
+  const companyMembership = toRecord(companyUser.company_user) ?? toRecord(companyUser.companyUser)
+  const companyAccount = toRecord(companyUser.user) ?? toRecord(companyMembership?.user)
+  const ids = (record: AdminRecord | null, keys: string[]) =>
+    record
+      ? keys.map((key) => readNumber(record, [key])).filter((id): id is number => id !== null)
+      : []
+
+  const companyMembershipIds = [
+    ...ids(companyUser, ["id", "company_user_id", "companyUserId"]),
+    ...ids(companyMembership, ["id", "company_user_id", "companyUserId"]),
+  ]
+  const employeeMembershipIds = [
+    ...ids(employee, ["company_user_id", "companyUserId"]),
+    ...ids(employeeMembership, ["id", "company_user_id", "companyUserId"]),
+  ]
+  if (
+    companyMembershipIds.length > 0 &&
+    employeeMembershipIds.length > 0 &&
+    companyMembershipIds.some((id) => employeeMembershipIds.includes(id))
+  ) {
+    return true
+  }
+
+  const companyAccountIds = [
+    ...ids(companyUser, ["user_id", "userId"]),
+    ...ids(companyAccount, ["id", "user_id", "userId"]),
+    ...ids(companyMembership, ["user_id", "userId"]),
+  ]
+  const employeeAccountIds = [
+    ...ids(employee, ["user_id", "userId"]),
+    ...ids(employeeUser, ["id", "user_id", "userId"]),
+    ...ids(employeeMembership, ["user_id", "userId"]),
+  ]
+  if (
+    companyAccountIds.length > 0 &&
+    employeeAccountIds.length > 0 &&
+    companyAccountIds.some((id) => employeeAccountIds.includes(id))
+  ) {
+    return true
+  }
+
+  const companyEmail = readString(companyAccount ?? companyUser, ["email"], "").trim().toLowerCase()
+  const employeeEmail = readString(employeeUser ?? employee, ["email"], "").trim().toLowerCase()
+  return Boolean(companyEmail && employeeEmail && companyEmail === employeeEmail)
 }
 
 function formatInvitationDate(value: unknown) {
@@ -1390,6 +1451,7 @@ export function OnboardingView() {
   const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
   const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
+  const stepTitleInputRef = React.useRef<HTMLInputElement>(null)
   const [checklistItemDialogOpen, setChecklistItemDialogOpen] = React.useState(false)
   const [editingChecklistItemIndex, setEditingChecklistItemIndex] = React.useState<number | null>(null)
   const [checklistItemForm, setChecklistItemForm] = React.useState({
@@ -1408,6 +1470,15 @@ export function OnboardingView() {
   const [approvalToReassign, setApprovalToReassign] = React.useState<AdminRecord | null>(null)
   const [replacementApproverId, setReplacementApproverId] = React.useState("")
   const [approvalReassignmentReason, setApprovalReassignmentReason] = React.useState("")
+
+  React.useEffect(() => {
+    if (!stepDialogOpen) {
+      return
+    }
+
+    const focusTitle = window.requestAnimationFrame(() => stepTitleInputRef.current?.focus())
+    return () => window.cancelAnimationFrame(focusTitle)
+  }, [stepDialogOpen])
 
   React.useEffect(() => {
     if (requestedTab === "invitations") {
@@ -1602,19 +1673,9 @@ export function OnboardingView() {
               ])
               const withDepartmentAssignments = companyUsers.map((companyUser) => {
                 const flattened = flattenAssigneeRecord(companyUser)
-                const ids = new Set(collectAssigneeIds(companyUser))
-                const email = readString(companyUser, ["email"], "").trim().toLowerCase()
-                const linkedEmployees = employeeDirectory.filter((employee) => {
-                  const membership = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
-                  const linkedUser = toRecord(membership?.user) ?? toRecord(employee.user)
-                  const employeeIds = [
-                    readNumber(employee, ["user_id", "company_user_id"]),
-                    membership ? readNumber(membership, ["id", "user_id", "company_user_id"]) : null,
-                    linkedUser ? readNumber(linkedUser, ["id", "user_id", "company_user_id"]) : null,
-                  ].filter((id): id is number => id !== null)
-                  const employeeEmail = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
-                  return employeeIds.some((id) => ids.has(id)) || Boolean(email && employeeEmail === email)
-                })
+                const linkedEmployees = employeeDirectory.filter((employee) =>
+                  employeeMatchesCompanyUser(employee, companyUser)
+                )
                 const departmentIds = new Set(collectDepartmentIds(flattened))
                 linkedEmployees.forEach((employee) => collectDepartmentIds(employee).forEach((id) => departmentIds.add(id)))
                 return { ...flattened, department_ids: Array.from(departmentIds) }
@@ -2311,33 +2372,9 @@ export function OnboardingView() {
   const assignableUsers = React.useMemo(() => {
     const departmentId = Number(workflowForm.assigned_department_id)
     const selectedId = Number(workflowForm.assigned_user_id)
-    const idsFrom = (record: AdminRecord | null, keys: string[]) =>
-      record
-        ? keys.map((key) => readNumber(record, [key])).filter((id): id is number => id !== null)
-        : []
     const catalog = users.map((user) => {
       const flattened = flattenAssigneeRecord(user)
-      const userCompany = toRecord(user.company_user) ?? toRecord(user.companyUser)
-      const userProfile = toRecord(user.user) ?? toRecord(userCompany?.user)
-      const userIds = new Set(
-        [
-          ...idsFrom(flattened, ["id", "user_id", "company_user_id"]),
-          ...idsFrom(userProfile, ["id", "user_id", "company_user_id"]),
-          ...idsFrom(userCompany, ["id", "user_id", "company_user_id"]),
-        ],
-      )
-      const userEmail = readString(userProfile ?? user, ["email"], "").trim().toLowerCase()
-      const linkedEmployees = employees.filter((employee) => {
-        const companyUser = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
-        const linkedUser = toRecord(companyUser?.user) ?? toRecord(employee.user)
-        const employeeIds = [
-          ...idsFrom(employee, ["user_id", "company_user_id"]),
-          ...idsFrom(companyUser, ["id", "user_id", "company_user_id"]),
-          ...idsFrom(linkedUser, ["id", "user_id", "company_user_id"]),
-        ]
-        const email = readString(linkedUser ?? employee, ["email"], "").trim().toLowerCase()
-        return employeeIds.some((id) => userIds.has(id)) || Boolean(userEmail && email === userEmail)
-      })
+      const linkedEmployees = employees.filter((employee) => employeeMatchesCompanyUser(employee, user))
       const departmentIds = new Set(collectDepartmentIds(flattened))
       linkedEmployees.forEach((employee) => {
         collectDepartmentIds(employee).forEach((id) => departmentIds.add(id))
@@ -7521,14 +7558,16 @@ export function OnboardingView() {
                 <label className="grid gap-1 text-xs font-medium text-foreground md:col-span-2">
                   Step title
                   <Input
+                    ref={stepTitleInputRef}
                     value={workflowForm.step_name}
-                    onChange={(event) =>
+                    onChange={(_, data) =>
                       setWorkflowForm((prev) => ({
                         ...prev,
-                        step_name: event.target.value,
+                        step_name: data.value,
                       }))
                     }
                     placeholder="e.g. Prepare employee workstation"
+                    autoFocus
                     className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                 </label>
