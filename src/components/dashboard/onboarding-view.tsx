@@ -76,6 +76,7 @@ import {
   listAccessControlResources,
   listAllCurrentCompanyUsers,
   listAttendanceDevices,
+  listAllEmployees,
   listBranches,
   listDepartments,
   listEmployees,
@@ -1341,6 +1342,7 @@ export function OnboardingView() {
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [users, setUsers] = React.useState<AdminRecord[]>([])
+  const [workflowDepartmentEmployees, setWorkflowDepartmentEmployees] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
@@ -1448,6 +1450,37 @@ export function OnboardingView() {
     assigned_user_id: "",
     assigned_department_id: "",
   })
+
+  React.useEffect(() => {
+    const departmentId = Number(workflowForm.assigned_department_id)
+    if (!Number.isFinite(departmentId) || departmentId <= 0) {
+      setWorkflowDepartmentEmployees([])
+      return
+    }
+
+    const accessToken = readStoredToken()
+    if (!accessToken) {
+      setWorkflowDepartmentEmployees([])
+      return
+    }
+
+    let cancelled = false
+    void listAllEmployees(
+      accessToken,
+      { department_id: departmentId, employment_status: "active" },
+      { pageSize: 100, maxPages: 50 },
+    )
+      .then((rows) => {
+        if (!cancelled) setWorkflowDepartmentEmployees(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setWorkflowDepartmentEmployees([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [workflowForm.assigned_department_id])
   const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
   const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
@@ -2374,7 +2407,9 @@ export function OnboardingView() {
     const selectedId = Number(workflowForm.assigned_user_id)
     const catalog = users.map((user) => {
       const flattened = flattenAssigneeRecord(user)
-      const linkedEmployees = employees.filter((employee) => employeeMatchesCompanyUser(employee, user))
+      const linkedEmployees = workflowDepartmentEmployees.filter((employee) =>
+        employeeMatchesCompanyUser(employee, user)
+      )
       const departmentIds = new Set(collectDepartmentIds(flattened))
       linkedEmployees.forEach((employee) => {
         collectDepartmentIds(employee).forEach((id) => departmentIds.add(id))
@@ -2395,7 +2430,36 @@ export function OnboardingView() {
       seen.add(id)
       return true
     })
-  }, [employees, users, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
+  }, [users, workflowDepartmentEmployees, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
+
+  const workflowDepartmentOptions = React.useMemo(
+    () =>
+      departments
+        .map((department) => {
+          const id = readNumber(department, ["id", "department_id"])
+          if (id === null) return null
+          const departmentName = resolveOptionLabel(
+            departments,
+            id,
+            ["id", "department_id"],
+            ["name", "title", "code"]
+          )
+          const branchId = readNumber(department, ["branch_id", "branchId"])
+          const branchName =
+            branchId === null
+              ? ""
+              : resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title", "code"])
+          return { id, label: branchName && branchName !== "-" ? `${branchName} — ${departmentName}` : departmentName }
+        })
+        .filter((option): option is { id: number; label: string } => option !== null)
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [branches, departments]
+  )
+
+  const selectedWorkflowDepartmentLabel = React.useMemo(() => {
+    const selectedId = Number(workflowForm.assigned_department_id)
+    return workflowDepartmentOptions.find((option) => option.id === selectedId)?.label ?? "Select department"
+  }, [workflowDepartmentOptions, workflowForm.assigned_department_id])
 
   const selectedStepAssigneeId = React.useMemo(() => {
     const value = Number(workflowForm.assigned_user_id)
@@ -7728,28 +7792,16 @@ export function OnboardingView() {
                     <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select department">
                         {workflowForm.assigned_department_id
-                          ? resolveOptionLabel(
-                              departments,
-                              Number(workflowForm.assigned_department_id),
-                              ["id", "department_id"],
-                              ["name", "title", "code"]
-                            )
+                          ? selectedWorkflowDepartmentLabel
                           : "Select department"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Select department</SelectItem>
-                      {departments.map((row) => {
-                        const departmentId = readNumber(row, ["id", "department_id"])
-                        if (departmentId === null) return null
+                      {workflowDepartmentOptions.map((department) => {
                         return (
-                          <SelectItem key={departmentId} value={String(departmentId)}>
-                            {resolveOptionLabel(
-                              departments,
-                              departmentId,
-                              ["id", "department_id"],
-                              ["name", "title", "code"]
-                            )}
+                          <SelectItem key={department.id} value={String(department.id)}>
+                            {department.label}
                           </SelectItem>
                         )
                       })}
@@ -7800,6 +7852,11 @@ export function OnboardingView() {
                       })}
                     </SelectContent>
                   </Select>
+                  {workflowForm.assigned_department_id && assignableUsers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No active company users are assigned to this department.
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     Choose a person from the selected department, or leave this as Whole department to assign the step
                     to its active members. Assignees can track their tasks under My Requests → To do.
