@@ -6075,7 +6075,9 @@ export function OnboardingView() {
                                   `Level ${approval.level || index + 1}`}
                               </p>
                               <span className="text-xs text-muted-foreground">
-                                {toTitleCaseWords(approval.status || "pending")}
+                                {approval.status.toLowerCase() === "pending" && !approval.isCurrent
+                                  ? "Queued"
+                                  : toTitleCaseWords(approval.status || "pending")}
                                 {approval.level > 0 ? ` • Level ${approval.level}` : ""}
                                 {approval.isCurrent ? " • Current" : ""}
                               </span>
@@ -6088,7 +6090,7 @@ export function OnboardingView() {
                             {approval.comments ? (
                               <p className="mt-1 text-xs text-muted-foreground">{approval.comments}</p>
                             ) : null}
-                            {canUpdateOnboardingRequests && approval.status.toLowerCase() === "pending" ? (
+                            {canUpdateOnboardingRequests && approval.status.toLowerCase() === "pending" && approval.isCurrent ? (
                               <button
                                 type="button"
                                 className="mt-2 text-xs font-medium text-primary"
