@@ -88,6 +88,7 @@ import {
   listOnboardingTasks,
   listOnboardingWorkflowSteps,
   listOnboardingWorkflows,
+  listPayrollSalaryStructures,
   listResource,
   listShiftResources,
   listTimetableResources,
@@ -104,6 +105,7 @@ import {
   type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
 } from "@/lib/admin-api"
+import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog"
 import {
   INVITATION_STATUS_FILTERS,
   canResendInvitation,
@@ -1314,6 +1316,14 @@ export function OnboardingView() {
     () => canPerformPermission(actorPermissions, "onboarding_requests:complete"),
     [actorPermissions]
   )
+  const canReadJoiningSalary = React.useMemo(
+    () => canPerformPermission(actorPermissions, "payroll:profiles:read"),
+    [actorPermissions]
+  )
+  const canManageJoiningSalary = React.useMemo(
+    () => canPerformPermission(actorPermissions, "payroll:profiles"),
+    [actorPermissions]
+  )
   const canCreateOnboardingWorkflows = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_workflows:create"),
     [actorPermissions]
@@ -1381,6 +1391,8 @@ export function OnboardingView() {
     attendanceDevices: false,
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
+  const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false)
+  const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>([])
   const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
   const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
@@ -3671,6 +3683,17 @@ export function OnboardingView() {
     }
   }, [employees, selectedRequestDetails, selectedRequestRow])
 
+  async function openJoiningSalary() {
+    const token = readStoredToken()
+    if (!token) return
+    try {
+      setSalaryStructures(await listPayrollSalaryStructures(token))
+      setSalaryDialogOpen(true)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Could not load salary structures.")
+    }
+  }
+
   async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
     if (!canUpdateOnboardingRequests) {
       showErrorAlert("You do not have permission to review employee details.")
@@ -3843,6 +3866,29 @@ export function OnboardingView() {
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document verification.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function rejectRequestDocument(documentRow: AdminRecord) {
+    if (!canUpdateOnboardingRequests) return
+    const reason = window.prompt("Why is this document being returned for correction?")?.trim()
+    if (!reason) return
+    const token = readStoredToken()
+    const requestId = readCurrentRequestId()
+    const documentId = readNumber(documentRow, ["id", "document_id"])
+    if (!token || requestId === null || documentId === null) return
+    setSaving(true)
+    try {
+      await verifyOnboardingDocument(token, requestId, documentId, {
+        status: "rejected",
+        review_comment: reason,
+      })
+      showSuccessAlert("Document returned for correction.")
+      await reloadCurrentRequestActivity(requestId)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to return document.")
     } finally {
       setSaving(false)
     }
@@ -6002,6 +6048,18 @@ export function OnboardingView() {
                     )}
                   </section>
 
+                  {canReadJoiningSalary ? (
+                    <section className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Assign the effective salary structure and route it for independent approval. Activation remains blocked until payroll prerequisites are ready.</p>
+                      </div>
+                      <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
+                        Review salary setup
+                      </Button>
+                    </section>
+                  ) : null}
+
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
                   <section className="space-y-2 bg-background p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Submitted request</p>
@@ -6534,6 +6592,17 @@ export function OnboardingView() {
                                       >
                                         {isVerified ? "Mark unverified" : "Verify"}
                                       </Button>
+                                      {!isVerified ? (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="h-7 px-2 text-[11px] text-rose-600"
+                                          onClick={() => void rejectRequestDocument(documentRow)}
+                                          disabled={saving}
+                                        >
+                                          Return for correction
+                                        </Button>
+                                      ) : null}
                                       <Button
                                         type="button"
                                         variant="outline"
@@ -8104,6 +8173,19 @@ export function OnboardingView() {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
+
+          <PayrollEmployeeSalaryDialog
+            open={salaryDialogOpen}
+            onOpenChange={setSalaryDialogOpen}
+            employeeId={String(readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"]))}
+            employeeLabel={selectedRequestSummary.employee}
+            structures={salaryStructures}
+            canEdit={canManageJoiningSalary}
+            onChanged={() => {
+              const row = selectedRequestRow
+              if (row) void openRequestDetails(row)
+            }}
+          />
 
           <Dialog
             open={checklistItemDialogOpen}

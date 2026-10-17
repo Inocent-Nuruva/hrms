@@ -10370,6 +10370,18 @@ export async function uploadOnboardingDocument(
   );
 }
 
+export async function uploadMyOnboardingDocument(
+  token: string,
+  requestId: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/onboarding/${requestId}/documents`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function listOnboardingDocuments(
   token: string,
   requestId: string | number,
@@ -12793,6 +12805,31 @@ export async function listEmploymentContracts(token: string, employeeId: number)
   return normalizeList(await adminRequest<unknown>(
     `/api/employment-contracts/employees/${employeeId}`, { token },
   ))
+}
+
+export async function listEmploymentLetterTemplates(token: string) {
+  return normalizeList(await adminRequest<unknown>("/api/employment-letters/templates", { token }))
+}
+
+export async function saveEmploymentLetterTemplate(token: string, body: AdminRecord) {
+  return normalizeSingle(await adminRequest<unknown>("/api/employment-letters/templates", {
+    method: "PUT", token, body, dedupe: false,
+  }))
+}
+
+export async function generateEmploymentLetter(token: string, type: "offer" | "appointment", id: number) {
+  return normalizeSingle(await adminRequest<unknown>(`/api/employment-letters/${type === "offer" ? "candidates" : "employees"}/${id}/${type}`, {
+    method: "POST", token, body: {}, dedupe: false,
+  }))
+}
+
+export async function downloadEmploymentLetter(token: string, id: number) {
+  const response = await fetch(buildUrl(`/api/employment-letters/documents/${id}/download`), {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  })
+  if (!response.ok) throw new Error(`Could not download letter (${response.status})`)
+  return response.blob()
 }
 
 export async function signEmploymentContract(token: string, contractId: number, signedName: string) {
@@ -16542,6 +16579,17 @@ export async function assignEmployeePayrollSalary(
       token,
       body: data,
     },
+  );
+  return unwrapRootRecord(payload, "employee");
+}
+
+export async function approveEmployeePayrollSalary(
+  token: string,
+  employeeId: string | number,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/payroll/employees/${employeeId}/salary/approve`,
+    { method: "POST", token },
   );
   return unwrapRootRecord(payload, "employee");
 }

@@ -14,14 +14,15 @@ import { EmployeeInviteView } from "@/components/dashboard/employee-invite-view"
 import { EmployeeRegistrationView } from "@/components/dashboard/employee-registration-view"
 import { RecruitmentPipelineView } from "@/components/dashboard/recruitment-pipeline-view"
 import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
+import { EmploymentLettersView } from "@/components/dashboard/employment-letters-view"
 import { useTheme } from "@/components/theme-provider"
 
-type RecruitmentTab = "pipeline" | "invite" | "registration" | "contracts"
+type RecruitmentTab = "pipeline" | "invite" | "registration" | "contracts" | "letters"
 
 const DEFAULT_TAB: RecruitmentTab = "pipeline"
 
 function resolveRecruitmentTab(value: string | null): RecruitmentTab {
-  if (value === "registration" || value === "invite" || value === "contracts") return value
+  if (value === "registration" || value === "invite" || value === "contracts" || value === "letters") return value
   return DEFAULT_TAB
 }
 
@@ -74,6 +75,7 @@ export function RecruitmentView() {
               { id: "invite", label: "Invite" },
               { id: "registration", label: "Registration" },
               { id: "contracts", label: "Contracts" },
+              { id: "letters", label: "Letters" },
             ] as const).map((tab) => (
               <Tab key={tab.id} value={tab.id}>
                 {tab.label}
@@ -88,6 +90,8 @@ export function RecruitmentView() {
           <EmployeeInviteView />
         ) : activeTab === "contracts" ? (
           <EmploymentContractsView />
+        ) : activeTab === "letters" ? (
+          <EmploymentLettersView />
         ) : (
           <div className="min-w-0">
             <EmployeeRegistrationView />
