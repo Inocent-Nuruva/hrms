@@ -2,6 +2,7 @@
 
 import { DateInput } from "@/components/ui/date-input"
 import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment"
+import { onboardingStepProgress } from "@/lib/onboarding-step-progress"
 import { Textarea } from "@/components/ui/textarea"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
@@ -1429,6 +1430,7 @@ export function OnboardingView() {
     deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
   })
 
+  const [workflowBranchId, setWorkflowBranchId] = React.useState("")
   const [workflowForm, setWorkflowForm] = React.useState({
     name: "",
     description: "",
@@ -2425,9 +2427,19 @@ export function OnboardingView() {
     })
   }, [users, workflowDepartmentEmployees, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
 
+  // Branch is a picker filter; the saved department already identifies its branch.
+  const selectedWorkflowBranchId = workflowBranchId || String(
+    readNumber(
+      departments.find((department) => readNumber(department, ["id", "department_id"]) === Number(workflowForm.assigned_department_id)) ?? {},
+      ["branch_id", "branchId"]
+    ) ?? ""
+  )
+
   const workflowDepartmentOptions = React.useMemo(
     () =>
       departments
+        .filter((department) => selectedWorkflowBranchId !== "" &&
+          readNumber(department, ["branch_id", "branchId"]) === Number(selectedWorkflowBranchId))
         .map((department) => {
           const id = readNumber(department, ["id", "department_id"])
           if (id === null) return null
@@ -2446,7 +2458,7 @@ export function OnboardingView() {
         })
         .filter((option): option is { id: number; label: string } => option !== null)
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [branches, departments]
+    [branches, departments, selectedWorkflowBranchId]
   )
 
   const selectedWorkflowDepartmentLabel = React.useMemo(() => {
@@ -2548,6 +2560,7 @@ export function OnboardingView() {
   }
 
   function resetWorkflowStepForm() {
+    setWorkflowBranchId("")
     setChecklistItemDialogOpen(false)
     setEditingChecklistItemIndex(null)
     setChecklistItemForm({ name: "", description: "" })
@@ -2565,6 +2578,7 @@ export function OnboardingView() {
   }
 
   function resetWorkflowForm() {
+    setWorkflowBranchId("")
     setWorkflowForm({
       name: "",
       description: "",
@@ -2689,9 +2703,23 @@ export function OnboardingView() {
     const hasAssignedUser = Number.isFinite(assignedUserId) && assignedUserId > 0
     const hasAssignedDepartment = Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0
 
+    if (!selectedWorkflowBranchId) {
+      return {
+        error: "Select a branch for this step.",
+        step: null as AdminRecord | null,
+      }
+    }
+
     if (!hasAssignedDepartment) {
       return {
         error: "Select a department for this step.",
+        step: null as AdminRecord | null,
+      }
+    }
+
+    if (!workflowDepartmentOptions.some((department) => department.id === assignedDepartmentId)) {
+      return {
+        error: "Select a department belonging to the selected branch.",
         step: null as AdminRecord | null,
       }
     }
@@ -2786,7 +2814,7 @@ export function OnboardingView() {
 
   function openCreateStepDialog() {
     void (async () => {
-      const loaded = await ensureLookups(["users", "departments"])
+      const loaded = await ensureLookups(["branches", "users", "departments"])
       if (!loaded) {
         return
       }
@@ -2803,11 +2831,12 @@ export function OnboardingView() {
 
   function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
     void (async () => {
-      const loaded = await ensureLookups(["users", "departments"])
+      const loaded = await ensureLookups(["branches", "users", "departments"])
       if (!loaded) {
         return
       }
       setEditingStepIndex(index)
+      setWorkflowBranchId("")
       const assignedUserSelectValue = await hydrateAssignedUser(
         typeof step.assigned_user_id === "number" ? step.assigned_user_id : null
       )
@@ -3377,7 +3406,11 @@ export function OnboardingView() {
     const nodes = seed.map((step, index) => {
       const stepIdKey = readString(step, ["id", "step_id", "task_id", "approval_level"]).toLowerCase()
       const stepNameKey = readString(step, ["step_name", "name", "title", "task_title"]).toLowerCase()
-      const matchedProgress = progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
+      const matchedProgress = workflowSteps.length
+        ? onboardingStepProgress(step,
+            selectedRequestTasks.length ? selectedRequestTasks : toRecordList(detailRecord.tasks),
+            toRecordList(detailRecord.approvals))
+        : progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
       const source = matchedProgress ?? step
       const stepStatus = String(
         source.status ??
@@ -3401,7 +3434,7 @@ export function OnboardingView() {
         status: stepStatus,
         owner,
         completedAt: toTimestamp(
-          source.completed_at ?? source.done_at ?? source.approved_at ?? source.updated_at ?? source.executed_at
+          source.completed_at ?? source.done_at ?? source.approved_at ?? source.executed_at
         ),
         required: String(step.is_required ?? source.is_required) === "true" || step.is_required === true,
       }
@@ -3431,6 +3464,7 @@ export function OnboardingView() {
     resolveResponsibleParty,
     selectedRequestDetails,
     selectedRequestProgress,
+    selectedRequestTasks,
     selectedRequestRow,
     selectedWorkflowSteps,
   ])
@@ -4103,6 +4137,38 @@ export function OnboardingView() {
       setRequestDetailsLoading(false)
     }
   }
+
+  const liveRequestId = requestDetailsOpen ? readNumber(selectedRequestDetails ?? {}, ["id", "request_id"]) : null
+  React.useEffect(() => {
+    if (!liveRequestId) return
+    const access = readStoredToken()
+    if (!access) return
+    let cancelled = false
+    let refreshing = false
+    const refresh = async () => {
+      if (refreshing || document.visibilityState === "hidden") return
+      refreshing = true
+      const [detail, tasks] = await Promise.allSettled([
+        getOnboardingRequest(access, liveRequestId),
+        listOnboardingTasks(access, liveRequestId),
+      ])
+      if (!cancelled) {
+        if (detail.status === "fulfilled" && detail.value) setSelectedRequestDetails(detail.value)
+        if (tasks.status === "fulfilled") setSelectedRequestTasks(tasks.value)
+      }
+      refreshing = false
+    }
+    const onFocus = () => void refresh()
+    const interval = window.setInterval(onFocus, 30_000)
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onFocus)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onFocus)
+    }
+  }, [liveRequestId])
 
   const openedHighlightedRequestRef = React.useRef("")
   React.useEffect(() => {
@@ -7350,9 +7416,9 @@ export function OnboardingView() {
           >
             <SheetContent
               side="right"
-              className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none"
+              className="w-full overflow-hidden data-[side=right]:overflow-hidden data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none"
             >
-              <SheetHeader>
+              <SheetHeader className="shrink-0">
                 <SheetTitle>
                   {editingWorkflowId === null
                     ? "Create Workflow"
@@ -7367,7 +7433,7 @@ export function OnboardingView() {
                 </SheetDescription>
               </SheetHeader>
 
-              <div className="space-y-5 px-4 pb-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-4">
                 {editingWorkflowId !== null && saving ? (
                   <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -7577,7 +7643,7 @@ export function OnboardingView() {
                 </div>
               </div>
 
-              <SheetFooter className="sm:flex-row sm:justify-end">
+              <SheetFooter className="shrink-0 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
@@ -7771,8 +7837,33 @@ export function OnboardingView() {
                     Set how many days the assignee has to complete this step (at least 1).
                   </p>
                 </div>
+                <Field label="Branch" hint="Choose a branch first to see its departments.">
+                  <Select
+                    value={selectedWorkflowBranchId || "none"}
+                    onValueChange={(value) => {
+                      setWorkflowBranchId(!value || value === "none" ? "" : value)
+                      setWorkflowDepartmentEmployees([])
+                      setWorkflowForm((prev) => ({ ...prev, assigned_department_id: "", assigned_user_id: "" }))
+                    }}
+                  >
+                    <SelectTrigger aria-label="Branch" className="w-full">
+                      <SelectValue placeholder="Select branch">
+                        {selectedWorkflowBranchId ? resolveBranchLabel(Number(selectedWorkflowBranchId)) : "Select branch"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="none">Select branch</SelectItem>
+                        {requestBranchAccessOptions.map((branch) => (
+                          <SelectItem key={branch.id} value={String(branch.id)}>{branch.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <div className="grid gap-1">
                   <Select
+                    disabled={!selectedWorkflowBranchId}
                     value={workflowForm.assigned_department_id || "none"}
                     onValueChange={(value) =>
                       setWorkflowForm((prev) => ({
@@ -7782,11 +7873,11 @@ export function OnboardingView() {
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
+                    <SelectTrigger aria-label="Department" className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select department">
                         {workflowForm.assigned_department_id
                           ? selectedWorkflowDepartmentLabel
-                          : "Select department"}
+                          : selectedWorkflowBranchId ? "Select department" : "Select branch first"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -7800,7 +7891,11 @@ export function OnboardingView() {
                       })}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Choose the department responsible for completing this step.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedWorkflowBranchId && workflowDepartmentOptions.length === 0
+                      ? "No departments are available in this branch."
+                      : "Choose the department responsible for completing this step."}
+                  </p>
                 </div>
                 <div className="grid gap-1">
                   <Select

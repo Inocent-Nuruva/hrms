@@ -782,6 +782,9 @@ async function resolveFallbackRecipientIds(
 export async function notifySubmittedRequestApprovers(
   options: NotifySubmittedRequestOptions
 ) {
+  // Onboarding notifications are sequenced by the backend alongside tasks.
+  // A client fallback must not broadcast to future approvers or unrelated HR users.
+  if (options.kind === "onboarding_request") return 0
   const config = NOTIFICATION_CONFIG[options.kind]
   const senderCompanyUserId = readCurrentCompanyUserId(options.token)
 

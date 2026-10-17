@@ -141,17 +141,34 @@ export function OnboardingSelfView() {
     if (!selectedId) return
     const access = token()
     if (!access) return
-    void Promise.allSettled([
-      getOnboardingProgress(access, selectedId)
-        .then(setProgress)
-        .catch(() => undefined),
-      listOnboardingTasks(access, selectedId)
-        .then(setTasks)
-        .catch(() => undefined),
-      listOnboardingDocuments(access, selectedId)
-        .then(setDocuments)
-        .catch(() => undefined),
-    ])
+    let cancelled = false
+    let refreshing = false
+    const refresh = async () => {
+      if (refreshing || document.visibilityState === "hidden") return
+      refreshing = true
+      const [progressResult, taskResult, documentResult] = await Promise.allSettled([
+        getOnboardingProgress(access, selectedId),
+        listOnboardingTasks(access, selectedId),
+        listOnboardingDocuments(access, selectedId),
+      ])
+      if (!cancelled) {
+        if (progressResult.status === "fulfilled") setProgress(progressResult.value)
+        if (taskResult.status === "fulfilled") setTasks(taskResult.value)
+        if (documentResult.status === "fulfilled") setDocuments(documentResult.value)
+      }
+      refreshing = false
+    }
+    void refresh()
+    const interval = window.setInterval(() => void refresh(), 30_000)
+    const onFocus = () => void refresh()
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onFocus)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onFocus)
+    }
   }, [selectedId])
 
   const motionProps = reduceMotion
@@ -163,6 +180,7 @@ export function OnboardingSelfView() {
       }
 
   const percent = readNumber(progress ?? selected, [
+    "progress_percentage",
     "percent_complete",
     "percentComplete",
     "completion_percent",
@@ -505,7 +523,7 @@ export function OnboardingSelfView() {
                               </p>
                             </div>
                           </div>
-                          {!done ? (
+                          {!done && task.is_actionable === true ? (
                             <button
                               type="button"
                               className={actionButtonClass}

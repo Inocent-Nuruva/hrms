@@ -191,6 +191,7 @@ function collectChangePayload(requestType: string, form: Record<string, string>)
 function onboardingTaskActionRef(row: AdminRecord) {
   const sourceType = readString(row, ["sourceEntityType", "source_entity_type"]).toUpperCase()
   if (sourceType !== "ONBOARDING_TASK") return null
+  if (row.is_actionable !== true) return null
 
   const metadata = row.metadata && typeof row.metadata === "object" ? (row.metadata as AdminRecord) : null
   const requestId = readString(metadata, ["onboarding_request_id", "onboardingRequestId"], "")
@@ -628,7 +629,11 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
       {
         key: "status",
         label: "Status",
-        render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} />,
+        render: (row) => {
+          const status = readString(row, ["status"], "OPEN")
+          const waiting = row.is_actionable === false && ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status.toUpperCase())
+          return <StatusChip value={waiting ? "Waiting" : status} />
+        },
       },
       {
         key: "when",
