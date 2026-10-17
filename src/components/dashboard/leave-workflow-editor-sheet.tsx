@@ -467,7 +467,7 @@ export function LeaveWorkflowEditorSheet({
           <SheetDescription className="mt-1 text-sm text-slate-500">
             {stage === "details"
               ? "Start with the name, leave type, status, and routing."
-              : "Add steps in the order requests should follow."}
+              : "Exactly two required levels: 1 uses DEPARTMENT_MANAGER (the employee’s own department manager, without filters); 2 selects the HR approver."}
           </SheetDescription>
         </header>
 

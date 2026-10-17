@@ -412,7 +412,7 @@ export function performanceFormSchema(mode: string): z.ZodType {
   if (mode === "workflow-action")
     return formObject({
       review_id: positiveId,
-      decision: z.enum(["APPROVE", "RETURN", "REJECT"]),
+      decision: z.enum(["APPROVE", "RETURN", "REJECT", "SKIP"]),
       comment: z.string().max(4000).optional(),
       adjustment_score: optionalNumber,
     }).superRefine((input, context) => {
@@ -420,7 +420,7 @@ export function performanceFormSchema(mode: string): z.ZodType {
         context.addIssue({
           code: "custom",
           path: ["comment"],
-          message: "Explain why the review is being returned or rejected.",
+          message: "Explain why the review is being returned, rejected, or skipped.",
         });
     });
   if (mode === "moderate" || mode === "reopen")

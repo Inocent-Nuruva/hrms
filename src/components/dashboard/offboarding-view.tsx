@@ -1745,6 +1745,10 @@ export function OffboardingView() {
   }
 
   async function approveFromMyQueue(row: AdminRecord, approve: boolean) {
+    if (row.is_actionable !== true) {
+      showErrorAlert("This approval is not at the current workflow level. Refresh after the preceding approvals are completed.")
+      return
+    }
     const token = readStoredToken()
     const requestId =
       readNumber(row, ["offboarding_request_id", "request_id", "offboardingRequestId"]) ??
@@ -2356,7 +2360,8 @@ export function OffboardingView() {
                           size="sm"
                           variant="outline"
                           className="h-7 px-2 text-xs"
-                          disabled={saving}
+                          disabled={saving || row.is_actionable !== true}
+                          title={row.is_actionable === true ? undefined : "Waiting for the current approval level, or already decided"}
                           onClick={(e) => {
                             e.stopPropagation()
                             void approveFromMyQueue(row, true)
@@ -2369,7 +2374,8 @@ export function OffboardingView() {
                           size="sm"
                           variant="outline"
                           className="h-7 px-2 text-xs"
-                          disabled={saving}
+                          disabled={saving || row.is_actionable !== true}
+                          title={row.is_actionable === true ? undefined : "Waiting for the current approval level, or already decided"}
                           onClick={(e) => {
                             e.stopPropagation()
                             void approveFromMyQueue(row, false)

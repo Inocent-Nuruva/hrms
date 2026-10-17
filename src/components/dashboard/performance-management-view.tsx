@@ -1975,11 +1975,11 @@ export function PerformanceManagementView({
           Number(form.review_id) < 1
         )
           throw new Error("Enter a valid review ID.");
-        if (!["APPROVE", "RETURN", "REJECT"].includes(form.decision))
+        if (!["APPROVE", "RETURN", "REJECT", "SKIP"].includes(form.decision))
           throw new Error("Choose a decision.");
         if (form.decision !== "APPROVE" && !form.comment?.trim())
           throw new Error(
-            "A comment is required when returning or rejecting a review.",
+            "A comment is required when returning, rejecting, or skipping a step.",
           );
         await actionPerformanceReviewWorkflow(token, form.review_id, {
           decision: form.decision,
@@ -6029,6 +6029,7 @@ export function PerformanceManagementView({
                             { value: "APPROVE", label: "Approve" },
                             { value: "RETURN", label: "Return" },
                             { value: "REJECT", label: "Reject" },
+                            { value: "SKIP", label: "Skip optional step" },
                           ]}
                         />
                       </Field>

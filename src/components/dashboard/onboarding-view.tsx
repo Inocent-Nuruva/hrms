@@ -1,6 +1,7 @@
 "use client"
 
 import { DateInput } from "@/components/ui/date-input"
+import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment"
 import { Textarea } from "@/components/ui/textarea"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
@@ -885,9 +886,9 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
     description: string
     step_type: string
     due_days: number
-    assigned_role_id?: number
-    assigned_user_id?: number
-    assigned_department_id?: number
+    assigned_role_id: number | null
+    assigned_user_id: number | null
+    assigned_department_id: number | null
     metadata?: AdminRecord
   } = {
     is_required: Boolean(step.is_required),
@@ -895,16 +896,8 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
     description: String(step.description ?? "").trim(),
     step_type: String(step.step_type ?? "task").trim() || "task",
     due_days: Number(step.due_days) > 0 ? Number(step.due_days) : 1,
+    ...onboardingStepAssignmentPayload(step),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-  }
-  if (typeof step.assigned_role_id === "number" && step.assigned_role_id > 0) {
-    payload.assigned_role_id = step.assigned_role_id
-  }
-  if (typeof step.assigned_user_id === "number" && step.assigned_user_id > 0) {
-    payload.assigned_user_id = step.assigned_user_id
-  }
-  if (typeof step.assigned_department_id === "number" && step.assigned_department_id > 0) {
-    payload.assigned_department_id = step.assigned_department_id
   }
   return payload
 }

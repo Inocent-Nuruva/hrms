@@ -20,6 +20,11 @@ const task = {
 };
 
 describe("wizard step validation", () => {
+  it("accepts an optional performance-step skip with an explanation", () => {
+    const schema = performanceFormSchema("workflow-action");
+    expect(schema.safeParse({ review_id: "50", decision: "SKIP", comment: "Not applicable" }).success).toBe(true);
+    expect(schema.safeParse({ review_id: "50", decision: "SKIP", comment: "" }).success).toBe(false);
+  });
   it("rejects rollover calendar dates and reversed task schedules before submission", () => {
     expect(workflowDate.safeParse("2026-02-30").success).toBe(false);
     expect(activityTaskSchema.safeParse(task).success).toBe(true);
