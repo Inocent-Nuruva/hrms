@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import {
   assignEmployeePayrollSalary,
+  approveEmployeePayrollSalary,
   getEmployeePayrollSalary,
   getPayrollSalaryStructure,
   type AdminRecord,
@@ -260,6 +261,23 @@ export function PayrollEmployeeSalaryDialog({
           ? errorObject.message
           : "Failed to assign salary.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onApprove() {
+    const token = readStoredSessionTokens().accessToken.trim();
+    if (!token) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await approveEmployeePayrollSalary(token, employeeId);
+      await load();
+      toast.success("Starting salary approved and available to payroll.");
+      onChanged?.();
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Failed to approve salary.");
     } finally {
       setSaving(false);
     }
@@ -551,6 +569,12 @@ export function PayrollEmployeeSalaryDialog({
                 </div>
               ) : null}
             </div>
+          ) : null}
+          {str(compensation, "status").toUpperCase() === "PENDING_APPROVAL" && canEdit ? (
+            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onApprove()}>
+              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
+              Approve starting salary
+            </button>
           ) : null}
 
           {history.length > 0 ? (

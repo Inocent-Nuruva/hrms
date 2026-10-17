@@ -36,7 +36,7 @@ import {
   listEmploymentContracts,
   signEmploymentContract,
   submitMyOnboardingDetails,
-  uploadOnboardingDocument,
+  uploadMyOnboardingDocument,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
@@ -83,6 +83,7 @@ export function OnboardingSelfView() {
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState("")
   const [ackNote, setAckNote] = React.useState("I have read and accept the onboarding terms.")
+  const [documentType, setDocumentType] = React.useState("other")
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   const selected = requests.find((row) => rowId(row) === selectedId) ?? requests[0] ?? null
@@ -232,9 +233,9 @@ export function OnboardingSelfView() {
     setBusy("upload")
     try {
       const payload = await fileToBase64UploadDto(file)
-      await uploadOnboardingDocument(access, requestId, {
+      await uploadMyOnboardingDocument(access, requestId, {
         file: payload,
-        document_type: "other",
+        document_type: documentType,
         title: file.name.replace(/\.[^.]+$/, ""),
       })
       toast.success("Document uploaded.")
@@ -543,6 +544,20 @@ export function OnboardingSelfView() {
               <div className="w-full overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
                   <p className="text-sm font-semibold text-foreground">Documents</p>
+                  <div className="flex items-center gap-2">
+                  <select
+                    aria-label="Document type"
+                    className="h-9 rounded-md border border-border bg-background px-2 text-xs"
+                    value={documentType}
+                    onChange={(event) => setDocumentType(event.target.value)}
+                  >
+                    <option value="other">Other document</option>
+                    <option value="identity_document">Identity document</option>
+                    <option value="academic_certificate">Academic certificate</option>
+                    <option value="professional_certificate">Professional certificate</option>
+                    <option value="bank_document">Bank document</option>
+                    <option value="medical_certificate">Medical certificate</option>
+                  </select>
                   <button
                     type="button"
                     className={actionButtonClass}
@@ -556,6 +571,7 @@ export function OnboardingSelfView() {
                     )}
                     Attach
                   </button>
+                  </div>
                   <input
                     ref={fileRef}
                     type="file"
@@ -581,7 +597,10 @@ export function OnboardingSelfView() {
                         <span className="truncate text-sm font-medium text-foreground">
                           {readString(doc, ["name", "file_name", "original_name", "document_type"], "Document")}
                         </span>
-                        <StatusChip value={readString(doc, ["status", "verification_status"], "UPLOADED")} />
+                        <span className="flex items-center gap-2">
+                          <StatusChip value={readString(doc, ["review_status", "status", "verification_status"], "UPLOADED")} />
+                          {readString(doc, ["review_comment"]) ? <span className="max-w-48 truncate text-xs text-destructive" title={readString(doc, ["review_comment"])}>{readString(doc, ["review_comment"])}</span> : null}
+                        </span>
                       </li>
                     ))}
                   </ul>
