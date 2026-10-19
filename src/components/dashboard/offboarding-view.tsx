@@ -521,6 +521,8 @@ export function OffboardingView() {
     reason: "",
     notice_date: "",
     last_working_date: "",
+    notice_period_waived: "false",
+    notice_period_waiver_reason: "",
     submit: "false",
   })
 
@@ -870,7 +872,7 @@ export function OffboardingView() {
     return name === "-" ? `Workflow #${workflowId}` : name
   }
 
-  function resetDocumentForm() {
+  const resetDocumentForm = React.useCallback(() => {
     setDocumentForm({
       title: "",
       description: "",
@@ -878,9 +880,9 @@ export function OffboardingView() {
       expiry_date: "",
     })
     setDocumentUploadFile(null)
-  }
+  }, [])
 
-  function resetTaskForm() {
+  const resetTaskForm = React.useCallback(() => {
     setTaskForm({
       title: "",
       description: "",
@@ -889,9 +891,9 @@ export function OffboardingView() {
       assigned_to_company_user_id: "",
       due_date: "",
     })
-  }
+  }, [])
 
-  function resetClearanceForm() {
+  const resetClearanceForm = React.useCallback(() => {
     setClearanceForm({
       clearance_type: "documents",
       status: "pending",
@@ -899,9 +901,9 @@ export function OffboardingView() {
       owner_company_user_id: "",
       due_date: "",
     })
-  }
+  }, [])
 
-  function resetActionForm() {
+  const resetActionForm = React.useCallback(() => {
     setActionForm({
       action_type: "email_disable",
       system_name: "",
@@ -910,9 +912,9 @@ export function OffboardingView() {
       due_date: "",
       notes: "",
     })
-  }
+  }, [])
 
-  function resetAssetForm() {
+  const resetAssetForm = React.useCallback(() => {
     setAssetForm({
       asset_type: "laptop",
       asset_label: "",
@@ -922,9 +924,9 @@ export function OffboardingView() {
       due_date: "",
       remarks: "",
     })
-  }
+  }, [])
 
-  function resetSettlementForm() {
+  const resetSettlementForm = React.useCallback(() => {
     setSettlementForm({
       item_type: "final_salary",
       title: "",
@@ -935,9 +937,9 @@ export function OffboardingView() {
       due_date: "",
       remarks: "",
     })
-  }
+  }, [])
 
-  function syncExitInterviewForm(record: AdminRecord | null) {
+  const syncExitInterviewForm = React.useCallback((record: AdminRecord | null) => {
     setExitInterviewForm({
       status: readString(record ?? {}, ["status"]) === "-" ? "draft" : readString(record ?? {}, ["status"]),
       exit_reason_category:
@@ -972,7 +974,7 @@ export function OffboardingView() {
           ? ""
           : readString(record ?? {}, ["final_notes", "finalNotes"]),
     })
-  }
+  }, [])
 
   function readCurrentRequestId() {
     return readNumber(selectedRequest ?? {}, ["id", "request_id"])
@@ -1073,6 +1075,10 @@ export function OffboardingView() {
       showErrorAlert("You can only create an offboarding request for yourself.")
       return false
     }
+    if (canManage && requestForm.notice_period_waived === "true" && !requestForm.notice_period_waiver_reason.trim()) {
+      showErrorAlert("Add a reason when waiving the notice period.")
+      return false
+    }
     setSaving(true)
     try {
       const createdRequest = await createOffboardingRequest(token, {
@@ -1086,6 +1092,11 @@ export function OffboardingView() {
         reason: requestForm.reason.trim(),
         notice_date: requestForm.notice_date || undefined,
         last_working_date: requestForm.last_working_date,
+        notice_period_waived: canManage && requestForm.notice_period_waived === "true",
+        notice_period_waiver_reason:
+          canManage && requestForm.notice_period_waived === "true"
+            ? requestForm.notice_period_waiver_reason.trim()
+            : undefined,
         submit: requestForm.submit === "true",
         metadata: {},
       })
@@ -1118,7 +1129,7 @@ export function OffboardingView() {
     }
   }
 
-  async function openRequestDetails(row: AdminRecord) {
+  const openRequestDetails = React.useCallback(async (row: AdminRecord) => {
     const token = readStoredToken()
     const id = readNumber(row, ["id"])
     if (!token || id === null) return
@@ -1178,7 +1189,16 @@ export function OffboardingView() {
       setRequestExitInterview(null)
       syncExitInterviewForm(null)
     }
-  }
+  }, [
+    ensureLookups,
+    resetActionForm,
+    resetAssetForm,
+    resetClearanceForm,
+    resetDocumentForm,
+    resetSettlementForm,
+    resetTaskForm,
+    syncExitInterviewForm,
+  ])
 
   const openedHighlightedRequestRef = React.useRef("")
   React.useEffect(() => {
@@ -1196,7 +1216,7 @@ export function OffboardingView() {
 
     openedHighlightedRequestRef.current = highlightedRequestId
     void openRequestDetails(highlightedRow)
-  }, [highlightedRequestId, requests, tab])
+  }, [highlightedRequestId, openRequestDetails, requests, tab])
 
   async function runRequestAction(
     row: AdminRecord,
@@ -2210,6 +2230,41 @@ export function OffboardingView() {
                   />
                 </label>
               </div>
+
+              {canManage ? (
+                <>
+                  <label className="grid gap-0.5 text-[11px]">
+                    <span className="font-medium text-muted-foreground">Notice period</span>
+                    <FluentSelect
+                      ariaLabel="Notice period"
+                      value={requestForm.notice_period_waived}
+                      onChange={(value) =>
+                        setRequestForm((prev) => ({
+                          ...prev,
+                          notice_period_waived: value,
+                          notice_period_waiver_reason: value === "true" ? prev.notice_period_waiver_reason : "",
+                        }))
+                      }
+                      options={[
+                        { value: "false", label: "Apply notice policy" },
+                        { value: "true", label: "Waive notice period" },
+                      ]}
+                    />
+                  </label>
+                  {requestForm.notice_period_waived === "true" ? (
+                    <label className="grid gap-0.5 text-[11px]">
+                      <span className="font-medium text-muted-foreground">Waiver reason (required)</span>
+                      <Textarea
+                        className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
+                        value={requestForm.notice_period_waiver_reason}
+                        onChange={(event) =>
+                          setRequestForm((prev) => ({ ...prev, notice_period_waiver_reason: event.target.value }))
+                        }
+                      />
+                    </label>
+                  ) : null}
+                </>
+              ) : null}
 
               {isEmployeeMode || !canManage ? (
                 <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">

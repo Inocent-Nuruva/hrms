@@ -6,6 +6,7 @@ import {
   assignOffboardingClearance,
   delegateOnboardingApproval,
   submitOnboardingRequest,
+  submitMyResignation,
   deleteOffboardingDocument,
   ensureDraftOnboardingRequest,
   listMyOffboardingRequests,
@@ -100,6 +101,29 @@ describe("documented onboarding and offboarding leftovers", () => {
     )
     expect(onboarding).toEqual([expect.objectContaining({ id: 11 })])
     expect(offboarding).toEqual([expect.objectContaining({ id: 22 })])
+  })
+
+  it("submits a self-service resignation with the expected request fields", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { id: 42, status: "pending_manager" } }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await submitMyResignation("token", {
+      last_working_date: "2026-11-30",
+      notice_date: "2026-11-01",
+      reason: "Relocating",
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/me/resignation",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          last_working_date: "2026-11-30",
+          notice_date: "2026-11-01",
+          reason: "Relocating",
+        }),
+      }),
+    )
   })
 
   it("acknowledges onboarding and delegates a pending approval", async () => {

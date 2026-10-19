@@ -32,8 +32,9 @@ import {
 import { useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
+import { resolveOffboardingProgressStage } from "./offboarding-self-view.utils"
 
-const STEPS = ["DRAFT", "SUBMITTED", "IN_PROGRESS", "CLEARANCE", "FINALIZED"]
+const STEPS = ["DRAFT", "PENDING_MANAGER", "IN_PROGRESS", "READY_FOR_TERMINATION", "COMPLETED"]
 
 function token() {
   return readStoredSessionTokens().accessToken.trim()
@@ -97,9 +98,15 @@ export function OffboardingSelfView() {
     }
   }, [leaveIfForbidden, selectedId])
 
+  const loadRef = React.useRef(load)
+
+  React.useEffect(() => {
+    loadRef.current = load
+  }, [load])
+
   React.useEffect(() => {
     setMounted(true)
-    void load()
+    void loadRef.current()
   }, [])
 
   const motionProps = reduceMotion
@@ -216,9 +223,32 @@ export function OffboardingSelfView() {
                   { label: "Status", value: loading ? "…" : prettify(statusOf(selected)) },
                   { label: "Tasks", value: loading ? "…" : `${doneTasks}/${requestTasks.length}` },
                   { label: "Clearances", value: loading ? "…" : `${doneClearances}/${requestClearances.length}` },
+                  { label: "Notice", value: selected.notice_period_waived ? "Waived" : `${readString(selected, ["notice_period_days"], "—")} days` },
                 ]}
               />
-              <CycleRail steps={STEPS} current={statusOf(selected)} />
+              <CycleRail steps={STEPS} current={resolveOffboardingProgressStage(statusOf(selected))} />
+              <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-foreground">Resignation and exit status</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Request {readString(selected, ["offboarding_code", "request_no", "id"], "—")} · Last working day {formatDate(selected.last_working_date ?? selected.lastWorkingDate ?? selected.exit_date ?? selected.exitDate)}
+                    </p>
+                  </div>
+                  {selected.progress_percentage !== undefined ? (
+                    <p className="text-xs text-muted-foreground">{String(selected.progress_percentage)}% complete</p>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {statusOf(selected) === "REJECTED"
+                    ? "HR declined this request. Contact HR for the decision details and next steps."
+                    : statusOf(selected) === "CANCELLED"
+                      ? "This exit request was cancelled. Contact HR if you need to submit a new request."
+                      : statusOf(selected) === "COMPLETED"
+                        ? "Your exit has been finalized. Contact HR for your completed letters and records."
+                        : "HR is reviewing your request. Any tasks or clearances assigned to you are listed below."}
+                </p>
+              </div>
               <ItemList
                 title="Assigned tasks"
                 empty="No exit tasks are assigned to you."
