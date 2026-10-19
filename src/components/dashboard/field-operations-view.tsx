@@ -45,6 +45,8 @@ import {
   createFieldParty,
   getHrFieldVisitsMap,
   getManagerFieldVisitDashboard,
+  getManagerFieldVisitCommercialPolicy,
+  getManagerFieldVisitCommercialSummary,
   getManagerFieldVisitExceptions,
   listActivityCategories,
   listActivityPolicies,
@@ -56,6 +58,8 @@ import {
   listManagerFieldVisits,
   reviewManagerFieldVisit,
   reviewManagerFieldVisitPlan,
+  saveManagerFieldVisitCommercialPolicy,
+  updateManagerFieldOpportunityCommercial,
   updateFieldParty,
   type AdminRecord,
 } from "@/lib/admin-api"
@@ -101,6 +105,8 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
   const [parties, setParties] = React.useState<AdminRecord[]>([])
   const [categories, setCategories] = React.useState<AdminRecord[]>([])
   const [policies, setPolicies] = React.useState<AdminRecord[]>([])
+  const [commercialPolicy, setCommercialPolicy] = React.useState<AdminRecord | null>(null)
+  const [commercialSummary, setCommercialSummary] = React.useState<AdminRecord | null>(null)
   const [logs, setLogs] = React.useState<AdminRecord[]>([])
   const [mapRecord, setMapRecord] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -108,7 +114,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
   const [search, setSearch] = React.useState("")
   const [detail, setDetail] = React.useState<AdminRecord | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"party" | "category" | "policy" | "review">("party")
+  const [createMode, setCreateMode] = React.useState<"party" | "category" | "policy" | "review" | "commercial-policy" | "opportunity-commercial">("party")
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -137,6 +143,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         listManagerFieldVisits(token).then(setManagerVisits).catch(() => setManagerVisits([])),
         listManagerFieldVisitPlans(token).then(setPlans).catch(() => setPlans([])),
         listManagerFieldPlannedVsActual(token, { limit: 50 }).then(setPlannedVsActual).catch(() => setPlannedVsActual([])),
+        getManagerFieldVisitCommercialSummary(token).then(setCommercialSummary).catch(() => setCommercialSummary(null)),
       )
     }
     if (activeTab === "map") {
@@ -153,6 +160,8 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         listActivityCategories(token).then(setCategories).catch(() => setCategories([])),
         listActivityPolicies(token).then(setPolicies).catch(() => setPolicies([])),
         listHrFieldLocationAccessLogs(token).then(setLogs).catch(() => setLogs([])),
+        getManagerFieldVisitCommercialPolicy(token).then(setCommercialPolicy).catch(() => setCommercialPolicy(null)),
+        getManagerFieldVisitCommercialSummary(token).then(setCommercialSummary).catch(() => setCommercialSummary(null)),
       )
     }
     const results = await Promise.allSettled(tasks)
@@ -216,9 +225,20 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         })
       } else if (createMode === "review") {
         if (!form.id || !form.decision || !form.comments) throw new Error("Decision and comments are required.")
-        const payload = { decision: form.decision, comments: form.comments }
+        const payload = { decision: form.decision, comments: form.comments, validate_opportunities: form.validate_opportunities === "true" }
         if (form.kind === "plan") await reviewManagerFieldVisitPlan(token, form.id, payload)
         else await reviewManagerFieldVisit(token, form.id, payload)
+      } else if (createMode === "commercial-policy") {
+        const supported = form.supported_currencies.split(",").map((code) => code.trim().toUpperCase()).filter(Boolean)
+        if (!form.default_currency || !supported.length) throw new Error("Default and supported currencies are required.")
+        await saveManagerFieldVisitCommercialPolicy(token, { default_currency: form.default_currency.toUpperCase(), supported_currencies: supported, allow_employee_opportunity_values: form.allow_employee_opportunity_values === "true" })
+      } else if (createMode === "opportunity-commercial") {
+        if (!form.id || !form.reason?.trim()) throw new Error("Opportunity and reason are required.")
+        await updateManagerFieldOpportunityCommercial(token, form.id, {
+          actual_value: form.actual_value === "" ? undefined : Number(form.actual_value),
+          status: form.status,
+          reason: form.reason.trim(),
+        })
       }
       toast.success("Saved.")
       setCreateOpen(false)
@@ -273,6 +293,11 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
         </div>
       ) },
       { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} /> },
+      { key: "commercial", label: "Opportunities / values", render: (row) => {
+        const opportunities = Array.isArray(row.opportunities) ? row.opportunities as AdminRecord[] : []
+        if (!opportunities.length) return "—"
+        return <div className="space-y-2">{opportunities.map((item, index) => <div key={rowId(item) || index} className="text-xs"><p>{readString(item, ["title"], "Opportunity")} · {readString(item, ["status"], "IDENTIFIED")}{item.potentialValue || item.potential_value ? ` · Sales ${readString(item, ["currency"], "")} ${readString(item, ["potentialValue", "potential_value"], "")}` : ""}{item.premiumValue || item.premium_value ? ` · Premium ${readString(item, ["premiumCurrency", "premium_currency"], "")} ${readString(item, ["premiumValue", "premium_value"], "")}` : ""}{item.actualValue || item.actual_value ? ` · Actual ${readString(item, ["currency"], "")} ${readString(item, ["actualValue", "actual_value"], "")}` : ""}{item.validatedByManager || item.validated_by_manager ? " · Validated" : " · Unvalidated"}</p><button type="button" className={actionButtonClass} onClick={(event) => { event.stopPropagation(); setCreateMode("opportunity-commercial"); setForm({ id: rowId(item), status: readString(item, ["status"], "IDENTIFIED"), actual_value: readString(item, ["actualValue", "actual_value"], ""), reason: "" }); setCreateOpen(true) }}>Update stage / actual value</button></div>)}</div>
+      } },
       { key: "date", label: "Date", render: (row) => formatDate(row.visitDate ?? row.visit_date ?? row.plannedDate) },
       {
         key: "actions",
@@ -281,7 +306,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
           <button type="button" className={actionButtonClass} onClick={(event) => {
             event.stopPropagation()
             setCreateMode("review")
-            setForm({ id: rowId(row), decision: "APPROVE", comments: "", kind: activeTab === "visits" ? "visit" : "visit" })
+            setForm({ id: rowId(row), decision: "APPROVE", comments: "", kind: "visit", validate_opportunities: "false" })
             setCreateOpen(true)
           }}>Review</button>
         ),
@@ -344,6 +369,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
                 <PlusIcon className="size-4" /> New
               </button>
             ) : null}
+            {activeTab === "setup" ? <button type="button" className={secondaryButtonClass} onClick={() => { setCreateMode("commercial-policy"); setForm({ default_currency: readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS"), supported_currencies: Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).join(", ") : "TZS", allow_employee_opportunity_values: String(commercialPolicy?.allowEmployeeOpportunityValues ?? commercialPolicy?.allow_employee_opportunity_values ?? true) }); setCreateOpen(true) }}>Commercial policy</button> : null}
           </div>
         </div>
       )}
@@ -357,6 +383,8 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
           ))}
         </div>
       ) : null}
+
+      {activeTab === "visits" && commercialSummary ? <div className="grid gap-3 rounded-xl border border-border bg-card p-4"><h2 className="text-sm font-semibold">Commercial values by currency</h2><div className="grid gap-2 md:grid-cols-2">{[...asRecordArray(commercialSummary.sales_by_currency), ...asRecordArray(commercialSummary.premium_by_currency)].map((item, index) => <p key={`${readString(item, ["currency"], "")}-${index}`} className="text-xs">{readString(item, ["currency"], "TZS")}: {item.potential_value !== undefined ? `Potential ${readString(item, ["potential_value"], "0")} · validated actual ${readString(item, ["validated_actual_value"], "0")}` : `Premium ${readString(item, ["premium_value"], "0")}`}</p>)}</div><p className="text-xs text-muted-foreground">Stages: {asRecordArray(commercialSummary.opportunity_status_counts).map((item) => `${prettify(readString(item, ["status"], ""))} ${readString(item, ["opportunity_count"], "0")}`).join(" · ") || "No opportunities"}</p></div> : null}
 
       {activeTab === "map" ? (
         <div className="grid gap-3 rounded-xl border border-border bg-card p-4">
@@ -414,7 +442,7 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogPopup className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>{createMode === "party" ? "Field party" : createMode === "review" ? "Review" : createMode === "policy" ? "Activity policy" : "Activity category"}</DialogTitle>
+            <DialogTitle>{createMode === "party" ? "Field party" : createMode === "review" ? "Review" : createMode === "policy" ? "Activity policy" : createMode === "commercial-policy" ? "Field visit commercial policy" : createMode === "opportunity-commercial" ? "Update opportunity stage and realized value" : "Activity category"}</DialogTitle>
             <DialogDescription>Save this field setup item.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -457,8 +485,11 @@ export function FieldOperationsView({ activeTab }: { activeTab: FieldOpsTab }) {
                   />
                 </label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Comments</span><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-sky-700" checked={form.validate_opportunities === "true"} onChange={(event) => setForm((current) => ({ ...current, validate_opportunities: event.target.checked ? "true" : "false" }))} /><span>Validate all opportunities on this visit</span></label>
               </>
             ) : null}
+            {createMode === "commercial-policy" ? <><label className="grid gap-1.5 text-sm"><span className="font-medium">Default currency</span><input maxLength={3} className={inputClass} value={form.default_currency ?? "TZS"} onChange={(event) => setForm((current) => ({ ...current, default_currency: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Supported currencies (comma separated)</span><input className={inputClass} value={form.supported_currencies ?? "TZS"} onChange={(event) => setForm((current) => ({ ...current, supported_currencies: event.target.value }))} /><span className="text-xs text-muted-foreground">Current default: {readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} · HRMS validates employee entered values against this list.</span></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-sky-700" checked={form.allow_employee_opportunity_values === "true"} onChange={(event) => setForm((current) => ({ ...current, allow_employee_opportunity_values: event.target.checked ? "true" : "false" }))} /><span>Allow employees to record opportunity forecasts</span></label></> : null}
+            {createMode === "opportunity-commercial" ? <><label className="grid gap-1.5 text-sm"><span className="font-medium">Opportunity stage</span><FluentSelect ariaLabel="Opportunity stage" value={form.status ?? "IDENTIFIED"} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={["IDENTIFIED", "FOLLOW_UP", "QUOTATION_ISSUED", "WON", "LOST", "DEFERRED", "CANCELLED"].map((item) => ({ value: item, label: prettify(item) }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Realized sales value</span><input type="number" min="0" step="0.01" className={inputClass} value={form.actual_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, actual_value: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Reason for change (audit)</span><Textarea className={textareaClass} value={form.reason ?? ""} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} /></label></> : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
           <DialogFooter>

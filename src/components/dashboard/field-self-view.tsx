@@ -42,6 +42,7 @@ import {
 import {
   addMyFieldVisitEvidence,
   addMyFieldVisitExpense,
+  addMyFieldVisitOpportunity,
   cancelMyFieldFollowUp,
   checkInMyFieldVisit,
   checkOutMyFieldVisit,
@@ -53,6 +54,7 @@ import {
   listMyFieldFollowUps,
   listMyFieldVisitPlans,
   listMyFieldVisits,
+  getMyFieldVisitCommercialPolicy,
   updateMyFieldFollowUp,
   submitMyFieldVisitPlan,
   syncMyFieldWork,
@@ -101,10 +103,11 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
   const [plans, setPlans] = React.useState<AdminRecord[]>([])
   const [followUps, setFollowUps] = React.useState<AdminRecord[]>([])
   const [parties, setParties] = React.useState<AdminRecord[]>([])
+  const [commercialPolicy, setCommercialPolicy] = React.useState<AdminRecord | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "checkout" | "evidence" | "follow-up" | "complete-follow-up">("plan")
+  const [createMode, setCreateMode] = React.useState<"plan" | "unplanned" | "expense" | "opportunity" | "checkout" | "evidence" | "follow-up" | "complete-follow-up">("plan")
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [saving, setSaving] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -124,6 +127,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         setVisits([])
         throw errorObject
       }),
+      getMyFieldVisitCommercialPolicy(token).then(setCommercialPolicy).catch(() => setCommercialPolicy(null)),
       listMyFieldVisitPlans(token).then(setPlans).catch(() => setPlans([])),
       listMyFieldFollowUps(token).then(setFollowUps).catch(() => setFollowUps([])),
       listFieldParties(token).then(setParties).catch(() => setParties([])),
@@ -204,6 +208,20 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           amount: form.amount,
           currency: form.currency || "TZS",
           description: form.description,
+        })
+      } else if (createMode === "opportunity") {
+        if (!form.id || !form.title?.trim()) throw new Error("Visit and opportunity title are required.")
+        await addMyFieldVisitOpportunity(token, form.id, {
+          opportunity_type: form.opportunity_type || "LEAD",
+          title: form.title.trim(),
+          description: form.description?.trim() || undefined,
+          potential_value: form.potential_value ? Number(form.potential_value) : undefined,
+          currency: form.currency?.trim().toUpperCase() || undefined,
+          premium_value: form.premium_value ? Number(form.premium_value) : undefined,
+          premium_currency: form.premium_value ? (form.premium_currency?.trim().toUpperCase() || form.currency?.trim().toUpperCase() || undefined) : undefined,
+          expected_close_date: form.expected_close_date || undefined,
+          source_system: form.source_system?.trim() || undefined,
+          external_reference: form.external_reference?.trim() || undefined,
         })
       } else if (createMode === "evidence") {
         if (!form.id || !form.document_id) throw new Error("Document id is required.")
@@ -360,6 +378,10 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
     return [
       { key: "visit", label: "Visit", render: (row) => prettify(readString(row, ["visitType", "visit_type", "purpose"], `Visit #${rowId(row)}`)) },
       { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} /> },
+      { key: "opportunities", label: "Opportunities", render: (row) => {
+        const opportunities = Array.isArray(row.opportunities) ? row.opportunities as AdminRecord[] : []
+        return opportunities.length ? opportunities.map((item) => `${readString(item, ["title"], "Opportunity")}${item.potentialValue || item.potential_value ? ` · ${readString(item, ["currency"], "")} ${readString(item, ["potentialValue", "potential_value"], "")}` : ""}${item.premiumValue || item.premium_value ? ` · Premium ${readString(item, ["premiumCurrency", "premium_currency"], "")} ${readString(item, ["premiumValue", "premium_value"], "")}` : ""}`).join("; ") : "—"
+      } },
       { key: "date", label: "Date", render: (row) => formatDate(row.visitDate ?? row.visit_date) },
       {
         key: "actions",
@@ -377,6 +399,13 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
                 setForm({ id, discussion_notes: "", outcome: "", follow_up_required: "false" })
                 setCreateOpen(true)
               }}>Check out</button>
+              {commercialPolicy?.allowEmployeeOpportunityValues !== false && commercialPolicy?.allow_employee_opportunity_values !== false ? <button type="button" className={actionButtonClass} onClick={(event) => {
+                event.stopPropagation()
+                setCreateMode("opportunity")
+                const defaultCurrency = readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")
+                setForm({ id, opportunity_type: "LEAD", currency: defaultCurrency, premium_currency: defaultCurrency })
+                setCreateOpen(true)
+              }}>Opportunity</button> : null}
               <button type="button" className={actionButtonClass} onClick={(event) => {
                 event.stopPropagation()
                 setCreateMode("expense")
@@ -394,7 +423,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         },
       },
     ]
-  }, [activeTab, busyId, load, onCheckIn])
+  }, [activeTab, busyId, commercialPolicy, load, onCheckIn])
 
   if (profileRequired) {
     return <EmployeeProfileRequiredState description="Field work uses your employee profile to connect visits, plans, and follow-ups to you. Finish the required details once, then return here to continue." returnLabel="My visits" completionNote="Your field work records will be available after your profile is ready." />
@@ -539,7 +568,7 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
         <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : createMode === "evidence" ? "Visit evidence" : createMode === "follow-up" ? (form.id ? "Edit follow-up" : "New follow-up") : createMode === "complete-follow-up" ? "Complete follow-up" : "Check out"}
+              {createMode === "plan" ? "New visit plan" : createMode === "unplanned" ? "Unplanned visit" : createMode === "expense" ? "Visit expense" : createMode === "opportunity" ? "Record opportunity" : createMode === "evidence" ? "Visit evidence" : createMode === "follow-up" ? (form.id ? "Edit follow-up" : "New follow-up") : createMode === "complete-follow-up" ? "Complete follow-up" : "Check out"}
             </DialogTitle>
             <DialogDescription>Add or update this field visit.</DialogDescription>
           </DialogHeader>
@@ -579,6 +608,17 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
               <>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Amount</span><input className={inputClass} value={form.amount ?? ""} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} /></label>
                 <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><input className={inputClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+              </>
+            ) : null}
+            {createMode === "opportunity" ? (
+              <>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Type</span><FluentSelect ariaLabel="Opportunity type" className="w-full" value={form.opportunity_type ?? "LEAD"} onChange={(value) => setForm((current) => ({ ...current, opportunity_type: value }))} options={["LEAD", "QUOTATION", "NEW_BUSINESS", "RENEWAL", "COLLECTION", "CROSS_SELL", "DORMANT_ACCOUNT_REVIVAL", "OTHER"].map((item) => ({ value: item, label: prettify(item) }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Title</span><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></label>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Details</span><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Potential sales value</span><input type="number" min="0" step="0.01" className={inputClass} value={form.potential_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, potential_value: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Sales currency</span><FluentSelect ariaLabel="Sales currency" className="w-full" value={form.currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></label></div>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Premium value (if applicable)</span><input type="number" min="0" step="0.01" className={inputClass} value={form.premium_value ?? ""} onChange={(event) => setForm((current) => ({ ...current, premium_value: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">Premium currency</span><FluentSelect ariaLabel="Premium currency" className="w-full" value={form.premium_currency ?? readString(commercialPolicy ?? {}, ["defaultCurrency", "default_currency"], "TZS")} onChange={(value) => setForm((current) => ({ ...current, premium_currency: value }))} options={Array.isArray(commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) ? ((commercialPolicy?.supportedCurrencies ?? commercialPolicy?.supported_currencies) as string[]).map((currency) => ({ value: currency, label: currency })) : [{ value: "TZS", label: "TZS" }]} /></label></div>
+                <label className="grid gap-1.5 text-sm"><span className="font-medium">Expected close</span><DateInput className={inputClass} value={form.expected_close_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_close_date: event.target.value }))} /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm"><span className="font-medium">Source system (optional)</span><input className={inputClass} value={form.source_system ?? ""} onChange={(event) => setForm((current) => ({ ...current, source_system: event.target.value }))} /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">External reference</span><input className={inputClass} value={form.external_reference ?? ""} onChange={(event) => setForm((current) => ({ ...current, external_reference: event.target.value }))} /></label></div>
               </>
             ) : null}
             {createMode === "evidence" ? (

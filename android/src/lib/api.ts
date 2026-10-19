@@ -96,8 +96,9 @@ function extractErrorMessage(value: unknown): string {
   return '';
 }
 
-export function formatAttendancePunchError(error: unknown, _action: 'check-in' | 'check-out') {
-  const baseFallback = 'Attendance action could not be completed right now. Please try again.';
+export function formatAttendancePunchError(error: unknown, action: 'check-in' | 'check-out') {
+  const actionLabel = action === 'check-in' ? 'check-in' : 'check-out';
+  const baseFallback = `Attendance ${actionLabel} could not be completed right now. Please try again.`;
 
   if (!(error instanceof Error)) {
     return baseFallback;
@@ -119,7 +120,7 @@ export function formatAttendancePunchError(error: unknown, _action: 'check-in' |
   }
 
   if (normalized.includes('unauthorized')) {
-    return 'Your session expired. Please sign in again, then try the attendance action once more.';
+    return `Your session expired. Please sign in again, then try the attendance ${actionLabel} once more.`;
   }
 
   if (
@@ -624,6 +625,51 @@ export const api = {
     return normalizeList(await request<unknown>('/api/me/field-visits'));
   },
 
+  async getMyFieldVisitCommercialPolicy() {
+    return request<Record<string, unknown>>('/api/me/field-visits/commercial-policy');
+  },
+
+  async listManagerFieldVisits() {
+    return normalizeList(await request<unknown>('/api/manager/field-visits'));
+  },
+
+  async getManagerFieldVisitCommercialPolicy() {
+    return request<Record<string, unknown>>('/api/manager/field-visits/commercial-policy');
+  },
+
+  async saveManagerFieldVisitCommercialPolicy(data: Record<string, unknown>) {
+    return request<unknown>('/api/manager/field-visits/commercial-policy', { method: 'POST', body: data });
+  },
+
+  async updateManagerFieldOpportunityCommercial(id: string | number, data: Record<string, unknown>) {
+    return request<unknown>(`/api/manager/field-visits/opportunities/${encodeURIComponent(String(id))}/commercial`, { method: 'POST', body: data });
+  },
+
+  async checkInMyFieldVisit(id: string | number, data: Record<string, unknown>) {
+    return request<unknown>(`/api/me/field-visits/${id}/check-in`, { method: 'POST', body: data });
+  },
+
+  async checkOutMyFieldVisit(id: string | number, data: Record<string, unknown>) {
+    return request<unknown>(`/api/me/field-visits/${id}/check-out`, { method: 'POST', body: data });
+  },
+
+  async addMyFieldVisitOpportunity(id: string | number, data: Record<string, unknown>) {
+    return request<unknown>(`/api/me/field-visits/${id}/opportunities`, { method: 'POST', body: data });
+  },
+
+  async syncMyFieldVisitAction(operation: string, payload: Record<string, unknown>) {
+    const syncRequestId = createClientRequestId();
+    const clientRequestId = typeof payload.client_request_id === 'string' ? payload.client_request_id : createClientRequestId();
+    const result = await request<Record<string, unknown>>('/api/me/field-visits/sync', { method: 'POST', body: { sync_request_id: syncRequestId, device_identifier: await getAttendanceInstallationIdentifier(), items: [{ client_request_id: clientRequestId, operation, payload }] } });
+    const items = Array.isArray(result.items) ? result.items as Record<string, unknown>[] : [];
+    if (!items.length || items[0].status !== 'COMPLETED') {
+      const error = new Error(String(items[0]?.message ?? 'Field visit action was not accepted.')) as ApiError;
+      error.status = 400;
+      throw error;
+    }
+    return result;
+  },
+
   async listMyFinanceApplications() {
     return normalizeList(await request<unknown>('/api/me/finance/applications'));
   },
@@ -970,6 +1016,20 @@ async function resolveMobileEmployeeId(): Promise<number | undefined> {
   } catch {}
 
   return undefined;
+}
+
+export async function getFieldVisitOfflineScope(): Promise<{ companyId: number; userId: string } | null> {
+  for (const key of ['hrms.user', 'hrms.employee']) {
+    try {
+      const raw = await SecureStore.getItemAsync(key);
+      if (!raw) continue;
+      const value = JSON.parse(raw) as Record<string, unknown>;
+      const companyId = readNumericCandidate(value.companyId ?? value.company_id);
+      const userId = value.id ?? value.userId ?? value.user_id;
+      if (companyId && (typeof userId === 'string' || typeof userId === 'number')) return { companyId, userId: String(userId) };
+    } catch { /* Try the other persisted identity record. */ }
+  }
+  return null;
 }
 
 async function getAttendanceInstallationIdentifier(): Promise<string> {

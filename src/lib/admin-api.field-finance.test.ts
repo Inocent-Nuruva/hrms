@@ -17,6 +17,9 @@ import {
   getEmployeeFinanceDashboard,
   getEmployeeFinanceReport,
   getManagerFieldVisitDashboard,
+  getManagerFieldVisitCommercialPolicy,
+  getManagerFieldVisitCommercialSummary,
+  getMyFieldVisitCommercialPolicy,
   importEmployeeFinancePayments,
   listEmployeeFinanceAuditTimeline,
   listEmployeeFinanceApplicationDocuments,
@@ -26,6 +29,8 @@ import {
   listMyFinanceApplications,
   listMyFinanceGuarantorRequests,
   reviewManagerFieldVisit,
+  saveManagerFieldVisitCommercialPolicy,
+  updateManagerFieldOpportunityCommercial,
   submitMyFinanceApplication,
   uploadMyFinanceApplicationDocument,
   verifyEmployeeFinanceApplicationDocument,
@@ -69,6 +74,29 @@ describe("field and finance admin API helpers", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(rows).toEqual([expect.objectContaining({ id: 9 })]);
+  });
+
+  it("reads HRMS field-visit currency policy and commercial summary and writes manager-owned changes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: { defaultCurrency: "TZS", supportedCurrencies: ["TZS"] } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { sales_by_currency: [{ currency: "TZS", potential_value: "10.00" }] } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { defaultCurrency: "TZS" } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { saved: true } }))
+      .mockResolvedValueOnce(jsonResponse({ data: { saved: true } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getManagerFieldVisitCommercialPolicy("token");
+    await getManagerFieldVisitCommercialSummary("token", { date_from: "2026-10-01" });
+    await getMyFieldVisitCommercialPolicy("token");
+    await saveManagerFieldVisitCommercialPolicy("token", { default_currency: "TZS", supported_currencies: ["TZS"] });
+    await updateManagerFieldOpportunityCommercial("token", 81, { status: "WON", actual_value: 1, reason: "Confirmed" });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8888/api/manager/field-visits/commercial-policy", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8888/api/manager/field-visits/commercial-summary?date_from=2026-10-01", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:8888/api/me/field-visits/commercial-policy", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "http://localhost:8888/api/manager/field-visits/commercial-policy", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenNthCalledWith(5, "http://localhost:8888/api/manager/field-visits/opportunities/81/commercial", expect.objectContaining({ method: "POST" }));
   });
 
   it("creates a party, a visit plan, and checks in", async () => {

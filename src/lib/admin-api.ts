@@ -18581,6 +18581,24 @@ export async function getManagerFieldVisitDashboard(token: string) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
+export async function getManagerFieldVisitCommercialPolicy(token: string) {
+  const payload = await adminRequest<unknown>("/api/manager/field-visits/commercial-policy", { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
+export async function saveManagerFieldVisitCommercialPolicy(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/manager/field-visits/commercial-policy", { method: "POST", token, body: data })
+}
+
+export async function updateManagerFieldOpportunityCommercial(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/manager/field-visits/opportunities/${id}/commercial`, { method: "POST", token, body: data })
+}
+
+export async function getManagerFieldVisitCommercialSummary(token: string, params: Record<string, string | number | undefined> = {}) {
+  const payload = await adminRequest<unknown>(`/api/manager/field-visits/commercial-summary${buildRecordQuery(params)}`, { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
+}
+
 export async function listManagerFieldVisits(token: string) {
   const payload = await adminRequest<unknown>("/api/manager/field-visits", {
     token,
@@ -18670,6 +18688,11 @@ export async function listMyFieldVisits(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function getMyFieldVisitCommercialPolicy(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/field-visits/commercial-policy", { token })
+  return normalizeSingle(payload) ?? asRecord(payload)
 }
 
 export async function getMyFieldVisit(token: string, id: string | number) {
