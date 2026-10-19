@@ -108,6 +108,7 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
       { title: "My Schedule", url: "/dashboard/attendance/schedule-preview" },
+      { title: "Work-from-home Requests", url: "/dashboard/attendance/work-from-home-requests" },
     ],
   },
 ]

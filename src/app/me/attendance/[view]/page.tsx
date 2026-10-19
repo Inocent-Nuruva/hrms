@@ -13,6 +13,7 @@ const destinationByView: Record<string, string> = {
   punches: "/dashboard/attendance/attendance-history",
   schedule: "/dashboard/attendance/schedule-preview",
   today: "/dashboard/attendance/today",
+  "work-from-home": "/dashboard/attendance/work-from-home-requests",
 }
 
 export default async function LegacyAttendanceViewPage({ params }: LegacyAttendanceViewPageProps) {

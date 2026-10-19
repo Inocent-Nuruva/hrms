@@ -1015,6 +1015,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/attendance-history": null,
   "/dashboard/attendance/schedule-preview": null,
   "/dashboard/attendance/corrections": null,
+  "/dashboard/attendance/work-from-home-requests": null,
   // Route permissions stay permission-first regardless of shell unless an
   // explicit shell requirement is defined separately.
   "/dashboard/employees": {

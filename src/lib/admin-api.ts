@@ -5850,6 +5850,48 @@ export async function rejectAttendanceMobilePunchOverride(
   );
 }
 
+export async function createAttendanceWorkFromHomeRequest(
+  token: string,
+  data: { start_date: string; end_date: string; reason: string },
+) {
+  return adminRequest<unknown>("/api/attendance/work-from-home/requests", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function listAttendanceWorkFromHomeRequests(
+  token: string,
+  mine = false,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests${mine ? "/mine" : ""}`,
+    { token },
+  );
+}
+
+export async function reviewAttendanceWorkFromHomeRequest(
+  token: string,
+  id: string | number,
+  data: { decision: "APPROVE" | "REJECT"; comment?: string },
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests/${id}/review`,
+    { method: "PATCH", token, body: data },
+  );
+}
+
+export async function cancelAttendanceWorkFromHomeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests/${id}/cancel`,
+    { method: "PATCH", token, body: {} },
+  );
+}
+
 async function listGenericCollection(
   path: string,
   token: string,

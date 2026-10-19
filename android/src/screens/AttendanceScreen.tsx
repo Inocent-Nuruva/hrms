@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Vibration,
   View,
 } from 'react-native';
@@ -19,8 +20,6 @@ import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError
 import { COLORS } from '../lib/config';
 import { DEFAULT_PROFILE_CARD_STYLE, normalizeProfileCardStyle, profilePaletteAccent } from '../lib/profile-card-background';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
-import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
 import { ScreenTransition } from '../components/ui/screen-transition';
 import type { UseAuthReturn } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
@@ -47,13 +46,13 @@ export function AttendanceScreen({ auth }: Props) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
-  const panelColor = isDark ? COLORS.surfaceDark : COLORS.surface;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;
   const lineColor = isDark ? COLORS.outlineDark : COLORS.outline;
   const [selfieModalVisible, setSelfieModalVisible] = useState(false);
   const [qrScannerVisible, setQrScannerVisible] = useState(false);
   const [qrToken, setQrToken] = useState<string | null>(null);
+  const [remoteAttendance, setRemoteAttendance] = useState(false);
   const [selfieError, setSelfieError] = useState<string | null>(null);
   const toast = useToast();
   const [fingerprintPulse] = React.useState(() => new Animated.Value(1));
@@ -75,6 +74,7 @@ export function AttendanceScreen({ auth }: Props) {
       const payload = await buildMobilePunchPayload({ overrideReason: 'New check in' });
       return api.checkIn({
         ...payload,
+        remoteAttendance,
         qrToken: qrToken ?? undefined,
         selfie: {
           fileName: selfie.fileName,
@@ -108,7 +108,7 @@ export function AttendanceScreen({ auth }: Props) {
   const checkOutMutation = useMutation({
     mutationFn: async () => {
       const payload = await buildMobilePunchPayload({ overrideReason: 'New check out' });
-      return api.checkOut({ ...payload, qrToken: qrToken ?? undefined });
+      return api.checkOut({ ...payload, qrToken: qrToken ?? undefined, remoteAttendance });
     },
     onSuccess: async () => {
       toast.success('Check-out recorded successfully.');
@@ -231,6 +231,19 @@ export function AttendanceScreen({ auth }: Props) {
         </ScreenTransition>
       </ScrollView>
       <SafeAreaView style={[styles.bottomActionArea, { backgroundColor, borderTopColor: lineColor }]} edges={['bottom']}>
+        <View style={styles.remoteAttendanceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.navigationText, { color: textColor }]}>Working remotely</Text>
+            <Text style={[styles.locationHintText, { color: mutedColor }]}>Your assigned shift must allow remote attendance.</Text>
+          </View>
+          <Switch
+            accessibilityLabel="Working remotely"
+            value={remoteAttendance}
+            onValueChange={setRemoteAttendance}
+            trackColor={{ false: lineColor, true: actionColor }}
+            disabled={actionPending}
+          />
+        </View>
         <View style={styles.locationHint}>
           <Navigation2 size={13} color={mutedColor} />
           <Text style={[styles.locationHintText, { color: mutedColor }]}>Location is included with your attendance record</Text>
@@ -556,6 +569,13 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 8,
     paddingHorizontal: 20,
+  },
+  remoteAttendanceRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
   },
   bottomButtonStage: {
     minHeight: 164,
