@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
+  TextInput,
   Vibration,
   View,
 } from 'react-native';
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowRight, Clock3, MapPin, Navigation2, QrCode } from 'lucide-react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
 
 import { api, normalizeList, buildMobilePunchPayload, formatAttendancePunchError } from '../lib/api';
 import { COLORS } from '../lib/config';
@@ -31,6 +33,16 @@ import {
   type AttendanceSelfie,
 } from '../components/attendance/AttendanceSelfieModal';
 import { AttendanceQrScannerModal } from '../components/attendance/AttendanceQrScannerModal';
+import {
+  enqueueOfflineAttendancePunch,
+  clearOfflineAttendanceNeedsReview,
+  flushOfflineAttendancePunches,
+  getOfflineAttendanceNeedsReview,
+  getOfflineAttendanceQueueStatus,
+  type OfflinePunchKind,
+  type OfflinePunchNeedsReviewItem,
+  type OfflinePunchQueueStatus,
+} from '../lib/attendance-offline-queue';
 
 type MobileRecord = Record<string, unknown>;
 
@@ -54,6 +66,14 @@ export function AttendanceScreen({ auth }: Props) {
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [remoteAttendance, setRemoteAttendance] = useState(false);
   const [selfieError, setSelfieError] = useState<string | null>(null);
+  const [selfieAction, setSelfieAction] = useState<'in' | 'out'>('in');
+  const [exceptionReason, setExceptionReason] = useState('');
+  const [offlineQueueStatus, setOfflineQueueStatus] = useState<OfflinePunchQueueStatus>({
+    queuedCount: 0,
+    needsReviewCount: 0,
+    oldestQueuedAt: null,
+  });
+  const [offlineNeedsReview, setOfflineNeedsReview] = useState<OfflinePunchNeedsReviewItem[]>([]);
   const toast = useToast();
   const [fingerprintPulse] = React.useState(() => new Animated.Value(1));
 
@@ -69,26 +89,87 @@ export function AttendanceScreen({ auth }: Props) {
     enabled: auth.isAuthenticated,
   });
 
+  const punchPolicyQuery = useQuery({
+    queryKey: ['mobileAttendancePolicy'],
+    queryFn: async () => asRecord(await api.getMyAttendanceMobilePolicy()),
+    enabled: auth.isAuthenticated,
+  });
+  const punchPolicy = punchPolicyQuery.data ?? {};
+
+  const refreshOfflineQueueStatus = React.useCallback(async () => {
+    const companyId = auth.user?.companyId;
+    const userId = auth.user?.id;
+    if (!companyId || userId === undefined || userId === null) return;
+    const status = await getOfflineAttendanceQueueStatus(companyId, userId);
+    setOfflineQueueStatus(status);
+    setOfflineNeedsReview(await getOfflineAttendanceNeedsReview(companyId, userId));
+  }, [auth.user?.companyId, auth.user?.id]);
+
+  const sendOrQueuePunch = React.useCallback(async (
+    kind: OfflinePunchKind,
+    payload: Record<string, unknown>,
+  ) => {
+    const send = () => kind === 'CHECK_IN' ? api.checkIn(payload) : api.checkOut(payload);
+    try {
+      return await send();
+    } catch (error) {
+      const networkFailure =
+        error instanceof TypeError ||
+        (error instanceof Error && /network request failed|failed to fetch|network error/i.test(error.message));
+      if (
+        !networkFailure ||
+        payload.qrToken ||
+        punchPolicy.allow_offline_punches !== true
+      ) throw error;
+      const companyId = auth.user?.companyId;
+      const userId = auth.user?.id;
+      if (!companyId || userId === undefined || userId === null) throw error;
+      const queued = await enqueueOfflineAttendancePunch({
+        companyId,
+        userId,
+        kind,
+        payload,
+      });
+      await refreshOfflineQueueStatus();
+      return { offlineQueued: true, queueId: queued.id };
+    }
+  }, [
+    auth.user?.companyId,
+    auth.user?.id,
+    punchPolicy.allow_offline_punches,
+    refreshOfflineQueueStatus,
+  ]);
+
   const checkInMutation = useMutation({
-    mutationFn: async (selfie: AttendanceSelfie) => {
-      const payload = await buildMobilePunchPayload({ overrideReason: 'New check in' });
-      return api.checkIn({
+    mutationFn: async (selfie: AttendanceSelfie | null) => {
+      const payload = await buildMobilePunchPayload({ overrideReason: exceptionReason });
+      return sendOrQueuePunch('CHECK_IN', {
         ...payload,
         remoteAttendance,
         qrToken: qrToken ?? undefined,
-        selfie: {
+        selfie: selfie ? {
           fileName: selfie.fileName,
           fileSize: selfie.fileSize,
           mimeType: selfie.mimeType,
           fileString: selfie.fileString,
-        },
+        } : undefined,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const response = asRecord(result);
+      if (response?.offlineQueued === true) {
+        toast.success('Check-in saved securely on this device. It will be submitted for manager review when you are online.');
+        setSelfieError(null);
+        setQrToken(null);
+        setSelfieModalVisible(false);
+        setExceptionReason('');
+        return;
+      }
       toast.success('Check-in recorded successfully.');
       setSelfieError(null);
       setQrToken(null);
       setSelfieModalVisible(false);
+      setExceptionReason('');
       Vibration.vibrate([0, 24, 45, 34]);
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] }),
@@ -106,12 +187,33 @@ export function AttendanceScreen({ auth }: Props) {
   });
 
   const checkOutMutation = useMutation({
-    mutationFn: async () => {
-      const payload = await buildMobilePunchPayload({ overrideReason: 'New check out' });
-      return api.checkOut({ ...payload, qrToken: qrToken ?? undefined, remoteAttendance });
+    mutationFn: async (selfie: AttendanceSelfie | null) => {
+      const payload = await buildMobilePunchPayload({ overrideReason: exceptionReason });
+      return sendOrQueuePunch('CHECK_OUT', {
+        ...payload,
+        qrToken: qrToken ?? undefined,
+        remoteAttendance,
+        selfie: selfie ? {
+          fileName: selfie.fileName,
+          fileSize: selfie.fileSize,
+          mimeType: selfie.mimeType,
+          fileString: selfie.fileString,
+        } : undefined,
+      });
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const response = asRecord(result);
+      if (response?.offlineQueued === true) {
+        toast.success('Check-out saved securely on this device. It will be submitted for manager review when you are online.');
+        setSelfieError(null);
+        setSelfieModalVisible(false);
+        setExceptionReason('');
+        setQrToken(null);
+        return;
+      }
       toast.success('Check-out recorded successfully.');
+      setSelfieModalVisible(false);
+      setExceptionReason('');
       setQrToken(null);
       Vibration.vibrate([0, 24, 45, 34]);
       await Promise.allSettled([
@@ -123,9 +225,70 @@ export function AttendanceScreen({ auth }: Props) {
       ]);
     },
     onError: (error: unknown) => {
-      toast.error(formatAttendancePunchError(error, 'check-out'));
+      const message = formatAttendancePunchError(error, 'check-out');
+      setSelfieError(message);
+      toast.error(message);
     },
   });
+
+  React.useEffect(() => {
+    let active = true;
+    let flushing = false;
+    const companyId = auth.user?.companyId;
+    const userId = auth.user?.id;
+    if (!companyId || userId === undefined || userId === null) return;
+    const refresh = async () => {
+      try {
+        const status = await getOfflineAttendanceQueueStatus(companyId, userId);
+        const needsReview = await getOfflineAttendanceNeedsReview(companyId, userId);
+        if (active) {
+          setOfflineQueueStatus(status);
+          setOfflineNeedsReview(needsReview);
+        }
+      } catch {
+        // Unsupported platforms keep the queue disabled without blocking online attendance.
+      }
+    };
+    const flush = async () => {
+      if (flushing || !active) return;
+      flushing = true;
+      try {
+        const result = await flushOfflineAttendancePunches({
+          companyId,
+          userId,
+          sender: (kind, payload) => kind === 'CHECK_IN'
+            ? api.checkIn(payload)
+            : api.checkOut(payload),
+        });
+        await refresh();
+        if (result.sent > 0) {
+          toast.success(`${result.sent} queued attendance punch(es) submitted for manager review.`);
+          await Promise.allSettled([
+            queryClient.invalidateQueries({ queryKey: ['mobileAttendancePunches'] }),
+            queryClient.invalidateQueries({ queryKey: ['mobileAttendanceToday'] }),
+            queryClient.invalidateQueries({ queryKey: ['mobileHomePunches'] }),
+            queryClient.invalidateQueries({ queryKey: ['mobileHomeAttendanceToday'] }),
+            queryClient.invalidateQueries({ queryKey: ['mobileHomeWeeklyAttendance'] }),
+          ]);
+        }
+      } catch {
+        await refresh();
+      } finally {
+        flushing = false;
+      }
+    };
+    void refresh();
+    void NetInfo.fetch().then((state) => {
+      if (state.isConnected) void flush();
+    }).catch(() => undefined);
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected) void flush();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [auth.user?.companyId, auth.user?.id, queryClient, toast]);
 
   const onRefresh = React.useCallback(async () => {
     await Promise.all([
@@ -167,6 +330,35 @@ export function AttendanceScreen({ auth }: Props) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }} edges={[]}>
       <MobileTopBar auth={auth} title="Attendance" variant="centered" />
+      {offlineQueueStatus.queuedCount > 0 || offlineNeedsReview.length > 0 ? (
+        <View style={{ marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: isDark ? '#3A2F1D' : '#FFF4D6' }}>
+          {offlineQueueStatus.queuedCount > 0 ? (
+            <Text style={{ color: textColor, fontWeight: '700' }}>
+              {offlineQueueStatus.queuedCount} offline punch(es) waiting to send. They will be held for manager review.
+            </Text>
+          ) : null}
+          {offlineNeedsReview.map((item) => (
+            <Text key={item.id} style={{ marginTop: 6, color: textColor, fontSize: 12 }}>
+              {item.kind.replace('_', ' ')} from {new Date(item.created_at).toLocaleString()} needs HR review: {item.last_error ?? 'submission rejected'}
+            </Text>
+          ))}
+          {offlineNeedsReview.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={async () => {
+                const companyId = auth.user?.companyId;
+                const userId = auth.user?.id;
+                if (!companyId || userId === undefined || userId === null) return;
+                await clearOfflineAttendanceNeedsReview(companyId, userId);
+                await refreshOfflineQueueStatus();
+              }}
+              style={{ marginTop: 8, alignSelf: 'flex-start' }}
+            >
+              <Text style={{ color: actionColor, fontWeight: '700' }}>Clear reviewed local copies</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <ScrollView
         style={{ flex: 1, backgroundColor }}
         contentContainerStyle={[styles.content, { backgroundColor }]}
@@ -248,6 +440,16 @@ export function AttendanceScreen({ auth }: Props) {
           <Navigation2 size={13} color={mutedColor} />
           <Text style={[styles.locationHintText, { color: mutedColor }]}>Location is included with your attendance record</Text>
         </View>
+        {punchPolicy.allow_location_exception_override === true ? (
+          <TextInput
+            value={exceptionReason}
+            onChangeText={setExceptionReason}
+            placeholder="Reason for a location exception (if needed)"
+            maxLength={500}
+            accessibilityLabel="Location exception reason"
+            style={{ minHeight: 42, marginTop: 10, borderWidth: 1, borderColor: lineColor, borderRadius: 12, paddingHorizontal: 12, color: textColor }}
+          />
+        ) : null}
         <View style={styles.bottomButtonStage}>
           <Pressable
             accessibilityRole="button"
@@ -264,12 +466,26 @@ export function AttendanceScreen({ auth }: Props) {
             }}
             onPress={() => {
               if (actionPending) return;
+              const selfieRequired = primaryAction === 'in'
+                ? punchPolicy.require_selfie_for_check_in === true
+                : punchPolicy.require_selfie_for_check_out === true;
               if (primaryAction === 'in') {
-                setSelfieError(null);
-                setSelfieModalVisible(true);
+                if (selfieRequired) {
+                  setSelfieAction('in');
+                  setSelfieError(null);
+                  setSelfieModalVisible(true);
+                } else {
+                  void checkInMutation.mutateAsync(null);
+                }
               } else {
                 Vibration.vibrate(18);
-                void checkOutMutation.mutateAsync();
+                if (selfieRequired) {
+                  setSelfieAction('out');
+                  setSelfieError(null);
+                  setSelfieModalVisible(true);
+                } else {
+                  void checkOutMutation.mutateAsync(null);
+                }
               }
             }}
             style={({ pressed }) => [
@@ -289,14 +505,16 @@ export function AttendanceScreen({ auth }: Props) {
       </SafeAreaView>
       <AttendanceSelfieModal
         visible={selfieModalVisible}
-        submitting={checkInMutation.isPending}
+        mode={selfieAction}
+        submitting={checkInMutation.isPending || checkOutMutation.isPending}
         errorMessage={selfieError}
         onClose={() => {
-          if (!checkInMutation.isPending) setSelfieModalVisible(false);
+          if (!checkInMutation.isPending && !checkOutMutation.isPending) setSelfieModalVisible(false);
         }}
         onSubmit={(selfie) => {
           setSelfieError(null);
-          void checkInMutation.mutateAsync(selfie);
+          if (selfieAction === 'in') void checkInMutation.mutateAsync(selfie);
+          else void checkOutMutation.mutateAsync(selfie);
         }}
       />
       <AttendanceQrScannerModal

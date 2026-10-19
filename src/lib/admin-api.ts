@@ -5232,6 +5232,119 @@ export async function listAttendanceDevices(
   return listAllAttendanceCollection("/api/attendance/devices", token, params);
 }
 
+export async function listAttendanceMobileDeviceRegistrations(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/attendance/mobile-punches/devices", {
+      token,
+      cacheTtlMs: 0,
+      dedupe: false,
+    }),
+  ) as AdminRecord[];
+}
+
+export async function getAttendanceSyncAlertReadiness(token: string) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      "/api/attendance/device-sync-alerts/readiness",
+      { token, cacheTtlMs: 0, dedupe: false },
+    ),
+  ) as AdminRecord | null;
+}
+
+export async function sendAttendanceSyncAlertTest(token: string) {
+  return adminRequest<unknown>("/api/attendance/device-sync-alerts/test", {
+    method: "POST",
+    token,
+  });
+}
+
+export async function listAttendanceMobileDeviceRegistrationAudit(
+  token: string,
+  id: string | number,
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/attendance/mobile-punches/devices/${id}/audit`,
+      { token, cacheTtlMs: 0, dedupe: false },
+    ),
+  ) as AdminRecord[];
+}
+
+export async function releaseAttendanceMobileDeviceRegistration(
+  token: string,
+  id: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/mobile-punches/devices/${id}/release`,
+    { method: "PATCH", token, body: { reason } },
+  );
+}
+
+export async function getAttendanceRetentionGovernanceReadiness(token: string) {
+  return normalizeSingle(await adminRequest<unknown>(
+    "/api/attendance/retention-governance/readiness",
+    { token },
+  ))
+}
+
+export async function listAttendanceRetentionHolds(token: string) {
+  return normalizeList(await adminRequest<unknown>(
+    "/api/attendance/retention-governance/holds",
+    { token },
+  ))
+}
+
+export async function createAttendanceRetentionHold(
+  token: string,
+  values: { category: string; recordId: number; reason: string },
+) {
+  return adminRequest<unknown>("/api/attendance/retention-governance/holds", {
+    method: "POST",
+    token,
+    body: values,
+  })
+}
+
+export async function releaseAttendanceRetentionHold(
+  token: string,
+  id: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/retention-governance/holds/${encodeURIComponent(String(id))}/release`,
+    { method: "PATCH", token, body: { reason } },
+  )
+}
+
+export async function listAttendanceRetentionPurgeApprovals(token: string) {
+  return normalizeList(await adminRequest<unknown>(
+    "/api/attendance/retention-governance/purge-approvals",
+    { token },
+  ))
+}
+
+export async function requestAttendanceRetentionPurgeApproval(
+  token: string,
+  values: { category: string; retentionDays: number; reason: string },
+) {
+  return adminRequest<unknown>(
+    "/api/attendance/retention-governance/purge-approvals",
+    { method: "POST", token, body: values },
+  )
+}
+
+export async function reviewAttendanceRetentionPurgeApproval(
+  token: string,
+  id: string | number,
+  values: { decision: "APPROVE" | "REJECT"; note: string },
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/retention-governance/purge-approvals/${encodeURIComponent(String(id))}/review`,
+    { method: "PATCH", token, body: values },
+  )
+}
+
 export async function listAttendanceDeviceEmployees(
   token: string,
   id: string | number,
@@ -5809,6 +5922,10 @@ export async function createAttendanceMobilePunchCheckIn(
   });
 }
 
+export async function getMyAttendanceMobilePunchPolicy(token: string) {
+  return adminRequest<unknown>("/api/attendance/mobile-punches/my-policy", { token });
+}
+
 export async function createAttendanceMobilePunchCheckOut(
   token: string,
   data: AdminRecord,
@@ -5818,6 +5935,18 @@ export async function createAttendanceMobilePunchCheckOut(
     token,
     body: data,
   });
+}
+
+export async function getAttendanceMobilePunchSelfie(
+  token: string,
+  id: string | number,
+): Promise<Blob> {
+  const response = await fetch(
+    buildUrl(`/api/attendance/mobile-punches/${id}/selfie`),
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+  )
+  if (!response.ok) throw new Error("No selfie is attached to this attendance punch or access was denied.")
+  return response.blob()
 }
 
 export async function approveAttendanceMobilePunchOverride(

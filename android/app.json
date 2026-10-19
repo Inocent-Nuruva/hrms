@@ -83,6 +83,12 @@
         {
           "locationWhenInUsePermission": "Allow HRMS to access your location so you can check in and check out with attendance verification."
         }
+      ],
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
       ]
     ],
     "experiments": {

@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
+import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 
 export interface ApiError extends Error {
@@ -574,6 +575,9 @@ export const api = {
   // --- ATTENDANCE (mobile punches + summaries for user)
   // Updated to pass richer context (lat/long + accuracyMeters + deviceIdentifier)
   // to match updated backend contract for /mobile-punches/check-in and check-out.
+  async getMyAttendanceMobilePolicy() {
+    return request<Record<string, unknown>>('/api/attendance/mobile-punches/my-policy');
+  },
   async checkIn(data: Record<string, unknown> = {}) {
     return request<unknown>('/api/attendance/mobile-punches/check-in', {
       method: 'POST',
@@ -968,6 +972,32 @@ async function resolveMobileEmployeeId(): Promise<number | undefined> {
   return undefined;
 }
 
+async function getAttendanceInstallationIdentifier(): Promise<string> {
+  const key = 'hrms.attendance.deviceIdentifier';
+  const existing = await SecureStore.getItemAsync(key).catch(() => null);
+  if (existing?.trim()) return existing.trim();
+  let platformIdentifier: string | null = null;
+  try {
+    if (Platform.OS === 'android') {
+      const androidId = Application.getAndroidId();
+      platformIdentifier = androidId?.trim() ? `android:${androidId.trim()}` : null;
+    } else if (Platform.OS === 'ios') {
+      const vendorId = await Application.getIosIdForVendorAsync();
+      platformIdentifier = vendorId?.trim() ? `ios:${vendorId.trim()}` : null;
+    }
+  } catch {
+    // Fall back to an app-scoped random identifier if platform APIs are unavailable.
+  }
+  if (platformIdentifier) {
+    await SecureStore.setItemAsync(key, platformIdentifier);
+    return platformIdentifier;
+  }
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  const identifier = randomUuid ?? `install-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  await SecureStore.setItemAsync(key, identifier);
+  return identifier;
+}
+
 export async function readMobilePunchContext() {
   const permission = await Location.requestForegroundPermissionsAsync();
   if (permission.status !== 'granted') {
@@ -1024,13 +1054,7 @@ export async function buildMobilePunchPayload(options: {
 } = {}): Promise<Record<string, unknown>> {
   const networkContext = await readMobilePunchContext();
 
-  const deviceIdentifier = [
-    Device.osName,
-    Device.modelName || Device.deviceName,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim() || 'mobile-device';
+  const deviceIdentifier = await getAttendanceInstallationIdentifier();
 
   const employeeId = await resolveMobileEmployeeId();
   const appVersion = readManifestVersion();
@@ -1045,6 +1069,7 @@ export async function buildMobilePunchPayload(options: {
 
   const payload = {
     clientRequestId: createClientRequestId(),
+    clientCapturedAt: new Date().toISOString(),
     employeeId,
     latitude: networkContext.latitude,
     longitude: networkContext.longitude,

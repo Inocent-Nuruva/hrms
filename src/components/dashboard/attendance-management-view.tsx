@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import {
   CircleCheckIcon,
@@ -60,6 +61,19 @@ import {
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { FluentSelect } from "@/components/ui/fluent-select"
+import type { AttendanceMapPoint } from "@/components/dashboard/attendance-location-map"
+import { AttendanceMobileDeviceRegistrations } from "@/components/dashboard/attendance-mobile-device-registrations"
+import { AttendanceRetentionGovernance } from "@/components/dashboard/attendance-retention-governance"
+import { AttendanceSyncAlertReadiness } from "@/components/dashboard/attendance-sync-alert-readiness"
+
+const AttendanceLocationMap = dynamic(
+  () => import("@/components/dashboard/attendance-location-map").then((module) => module.AttendanceLocationMap),
+  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-lg bg-muted" /> },
+)
+const AttendanceGeofenceMapEditor = dynamic(
+  () => import("@/components/dashboard/attendance-location-map").then((module) => module.AttendanceGeofenceMapEditor),
+  { ssr: false, loading: () => <div className="h-72 animate-pulse rounded-lg bg-muted" /> },
+)
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,6 +101,7 @@ import {
   deactivateAttendanceGeofence,
   deactivateAttendanceWifiNetwork,
   getAttendanceResourceById,
+  getAttendanceMobilePunchSelfie,
   listAttendanceCheckpoints,
   listAttendanceDeviceSyncLogs,
   listAttendanceDevices,
@@ -274,6 +289,48 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
     key: "allow_multi_device_login",
     label: "Allow Multiple Device Login",
     description: "Allow the same employee account to remain signed in on more than one device.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "prevent_mobile_device_sharing",
+    label: "Prevent Device Sharing Across Employees",
+    description: "When enabled, reject mobile punch submissions if the enrolled app installation has already been used by another employee in this company.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "allow_offline_punches",
+    label: "Allow Offline Mobile Punches",
+    description: "When enabled, encrypted device-queued punches within the age limit are submitted as pending manager-review exceptions. QR checkpoints remain online-only.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "offline_max_age_hours",
+    label: "Maximum Offline Punch Age (Hours)",
+    description: "Maximum time from device-captured punch to server receipt (1–72 hours). Offline punches are never auto-approved.",
+    type: "number",
+    defaultValue: "24",
+  },
+  {
+    key: "allow_location_exception_override",
+    label: "Allow Manager Review for Location Exceptions",
+    description: "When enabled, employees may submit an exception with a reason for manager review when GPS or Wi-Fi validation fails.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "require_selfie_for_check_in",
+    label: "Require Selfie at Check-In",
+    description: "Require a private selfie attachment for each mobile or web check-in.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "require_selfie_for_check_out",
+    label: "Require Selfie at Check-Out",
+    description: "Require a private selfie attachment for each mobile or web check-out.",
     type: "boolean",
     defaultValue: "false",
   },
@@ -1473,6 +1530,37 @@ function AttendanceDetailsContent({
   row: AdminRecord | null
   lookupMaps: Record<string, Map<string, string>>
 }) {
+  const punchId = section === "mobile-punches" && row
+    ? readNumberFromRecord(row, ["id", "mobile_punch_id", "mobilePunchId"])
+    : null
+  const [selfieUrl, setSelfieUrl] = React.useState<string | null>(null)
+  const [selfieUnavailable, setSelfieUnavailable] = React.useState(false)
+  React.useEffect(() => {
+    if (punchId === null) {
+      setSelfieUrl(null)
+      setSelfieUnavailable(false)
+      return
+    }
+    let objectUrl: string | null = null
+    let cancelled = false
+    const token = readStoredToken()
+    if (!token) return
+    setSelfieUnavailable(false)
+    void getAttendanceMobilePunchSelfie(token, punchId)
+      .then((blob) => {
+        if (cancelled) return
+        objectUrl = URL.createObjectURL(blob)
+        setSelfieUrl(objectUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setSelfieUnavailable(true)
+      })
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [punchId])
+
   if (!row) {
     return <p className="text-sm text-muted-foreground">No details are available for this attendance record.</p>
   }
@@ -1505,6 +1593,8 @@ function AttendanceDetailsContent({
   ].filter((entry): entry is { label: string; value: string } => Boolean(entry && entry.value && entry.value !== "-"))
   const summaryLabels = new Set(summaryCandidates.map((entry) => entry.label))
   const detailEntries = entries.filter((entry) => !summaryLabels.has(entry.label))
+  const punchLatitude = section === "mobile-punches" ? readNumberFromRecord(row, ["latitude"]) : null
+  const punchLongitude = section === "mobile-punches" ? readNumberFromRecord(row, ["longitude"]) : null
 
   return (
     <div className="max-h-[65vh] space-y-7 overflow-auto pr-1">
@@ -1527,6 +1617,30 @@ function AttendanceDetailsContent({
 
       {summaryCandidates.length > 0 ? (
         <RecordDetailList items={summaryCandidates.map((entry) => ({ ...entry, key: entry.label }))} />
+      ) : null}
+
+      {punchLatitude !== null && punchLongitude !== null ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold">Punch location</h3>
+          <AttendanceLocationMap
+            center={{ latitude: punchLatitude, longitude: punchLongitude } satisfies AttendanceMapPoint}
+            markers={[{ latitude: punchLatitude, longitude: punchLongitude }]}
+            height={250}
+          />
+        </section>
+      ) : null}
+
+      {section === "mobile-punches" ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-semibold">Attendance selfie</h3>
+          {selfieUrl ? (
+            <img src={selfieUrl} alt="Private attendance selfie for this punch" className="max-h-80 w-fit rounded-lg border border-border object-contain" />
+          ) : selfieUnavailable ? (
+            <p className="text-sm text-muted-foreground">No selfie is attached to this punch.</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading private selfie…</p>
+          )}
+        </section>
       ) : null}
 
       {detailEntries.length > 0 ? (
@@ -1977,6 +2091,30 @@ export function AttendanceManagementView({ section }: { section: string }) {
       actor.accessMode
     )
   const isReadOnlySection = READ_ONLY_SECTIONS.has(activeSection)
+  const canReadMobilePunches = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_mobile_punches:read"],
+    mode: "any",
+  })
+  const canReleaseMobileDevices = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_mobile_punches:update"],
+    mode: "any",
+  })
+  const canManageAttendanceRetention = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_processing:update"],
+    mode: "any",
+  })
+  const canReviewAttendancePurge = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_processing:execute"],
+    mode: "any",
+  })
+  const canTestAttendanceSyncAlerts = canPerformPermission(actor.permissionLabels, {
+    permissions: ["access_control_sync:execute"],
+    mode: "any",
+  })
+  const canReadAttendanceSyncAlerts = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_device_sync_logs:read"],
+    mode: "any",
+  })
   const attendanceWritePrefix: Record<string, string> = {
     policies: "attendance_policies",
     settings: "attendance_policies",
@@ -3220,6 +3358,16 @@ export function AttendanceManagementView({ section }: { section: string }) {
                         </p>
                       </div>
                     ) : null}
+                    {activeSection === "geofences" ? (
+                      <AttendanceGeofenceMapEditor
+                        type={createValues.type ?? "CIRCLE"}
+                        latitude={createValues.latitude ?? ""}
+                        longitude={createValues.longitude ?? ""}
+                        radiusMeters={createValues.radiusMeters ?? "100"}
+                        polygonCoordinates={createValues.polygonCoordinates ?? "[]"}
+                        onChange={(next) => setCreateValues((previous) => ({ ...previous, ...next }))}
+                      />
+                    ) : null}
                     {fields
                       .filter((field) => shouldShowField(activeSection, field.key, createValues))
                       .map((field) => (
@@ -3293,6 +3441,16 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       settings and router or LAN configuration.
                     </p>
                   </div>
+                ) : null}
+                {activeSection === "geofences" ? (
+                  <AttendanceGeofenceMapEditor
+                    type={editValues.type ?? "CIRCLE"}
+                    latitude={editValues.latitude ?? ""}
+                    longitude={editValues.longitude ?? ""}
+                    radiusMeters={editValues.radiusMeters ?? "100"}
+                    polygonCoordinates={editValues.polygonCoordinates ?? "[]"}
+                    onChange={(next) => setEditValues((previous) => ({ ...previous, ...next }))}
+                  />
                 ) : null}
                 {fields
                   .filter((field) => shouldShowField(activeSection, field.key, editValues))
@@ -3725,6 +3883,47 @@ export function AttendanceManagementView({ section }: { section: string }) {
             </TeachingPopoverSurface>
           </TeachingPopover>
         </div>
+      ) : null}
+
+      {isDeviceSyncLogsSection && canReadAttendanceSyncAlerts ? (
+        <AttendanceSyncAlertReadiness
+          token={readStoredToken()}
+          canTest={canTestAttendanceSyncAlerts}
+        />
+      ) : null}
+
+      {activeSection === "mobile-punches" ? (() => {
+        const locationMarkers = filteredRows.flatMap((row) => {
+          const latitude = readNumberFromRecord(row, ["latitude"])
+          const longitude = readNumberFromRecord(row, ["longitude"])
+          if (latitude === null || longitude === null) return []
+          const employee = readStringFromRecord(row, ["employee_name", "employeeName"]) ?? "Attendance punch"
+          const captured = readStringFromRecord(row, ["punchTime", "punch_time"]) ?? ""
+          return [{ latitude, longitude, label: `${employee}${captured ? ` · ${captured}` : ""}` }]
+        })
+        if (!locationMarkers.length) return null
+        return (
+          <details className="mb-4 rounded-xl border border-border bg-card p-4">
+            <summary className="cursor-pointer text-sm font-semibold">Map punch locations ({locationMarkers.length})</summary>
+            <div className="mt-3">
+              <AttendanceLocationMap center={locationMarkers[0]} markers={locationMarkers} height={380} />
+            </div>
+          </details>
+        )
+      })() : null}
+
+      {activeSection === "mobile-punches" && canReadMobilePunches ? (
+        <AttendanceMobileDeviceRegistrations
+          token={readStoredToken()}
+          canRelease={canReleaseMobileDevices}
+        />
+      ) : null}
+      {activeSection === "mobile-punches" && (canManageAttendanceRetention || canReviewAttendancePurge) ? (
+        <AttendanceRetentionGovernance
+          token={readStoredToken()}
+          canManage={canManageAttendanceRetention}
+          canReview={canReviewAttendancePurge}
+        />
       ) : null}
 
       <ResizableTable

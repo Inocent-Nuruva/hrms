@@ -27,6 +27,7 @@ export interface AttendanceSelfie {
 
 interface Props {
   visible: boolean;
+  mode?: 'in' | 'out';
   submitting?: boolean;
   errorMessage?: string | null;
   onClose: () => void;
@@ -37,11 +38,13 @@ const MAX_SELFIE_BYTES = 64 * 1024;
 
 export function AttendanceSelfieModal({
   visible,
+  mode = 'in',
   submitting = false,
   errorMessage,
   onClose,
   onSubmit,
 }: Props) {
+  const punchLabel = mode === 'in' ? 'check-in' : 'check-out';
   const { isDark } = useThemePreference();
   const accent = useAppAccent();
   const accentForeground = useAppAccentForeground();
@@ -161,7 +164,7 @@ export function AttendanceSelfieModal({
           </Pressable>
           <View style={[styles.liveBadge, { backgroundColor: isDark ? '#1D352F' : '#E6F7EF' }]}>
             <View style={styles.liveDot} />
-            <Text style={[styles.liveBadgeText, { color: isDark ? '#A4E5C1' : '#22734A' }]}>SELFIE CHECK-IN</Text>
+            <Text style={[styles.liveBadgeText, { color: isDark ? '#A4E5C1' : '#22734A' }]}>{`SELFIE ${mode === 'in' ? 'CHECK-IN' : 'CHECK-OUT'}`}</Text>
           </View>
           <View style={styles.backButtonPlaceholder} />
         </View>
@@ -169,7 +172,7 @@ export function AttendanceSelfieModal({
         <View style={styles.cameraStage}>
           {permission?.granted ? (
             selfie ? (
-              <Image source={{ uri: selfie.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <Image alt="Captured attendance selfie preview" accessibilityLabel="Captured attendance selfie preview" source={{ uri: selfie.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
             ) : (
               <CameraView
                 ref={cameraRef}
@@ -233,10 +236,10 @@ export function AttendanceSelfieModal({
 
         <View style={[styles.bottomPanel, { backgroundColor: panelColor }]}>
           <Text style={[styles.panelTitle, { color: textColor }]}>
-            {selfie ? 'Review your selfie' : 'Check in selfie'}
+            {selfie ? 'Review your selfie' : `${mode === 'in' ? 'Check-in' : 'Check-out'} selfie`}
           </Text>
           <Text style={[styles.panelSubtitle, { color: mutedColor }]}>
-            {selfie ? 'Make sure your face is clear before checking in.' : 'Use a clear, well-lit photo so your attendance can be verified.'}
+            {selfie ? `Make sure your face is clear before ${punchLabel}.` : 'Use a clear, well-lit photo so your attendance can be verified.'}
           </Text>
 
           <View style={styles.contextRow}>
@@ -282,7 +285,7 @@ export function AttendanceSelfieModal({
                 onPress={() => onSubmit(selfie)}
               >
                 {submitting ? <ActivityIndicator color={accentForeground} size="small" /> : <Check size={19} color={accentForeground} />}
-                <Text style={[styles.submitButtonText, { color: accentForeground }]}>{submitting ? 'Checking in…' : 'Check in'}</Text>
+                <Text style={[styles.submitButtonText, { color: accentForeground }]}>{submitting ? `Checking ${mode === 'in' ? 'in' : 'out'}…` : mode === 'in' ? 'Check in' : 'Check out'}</Text>
               </Pressable>
             </View>
           ) : permission?.granted ? (

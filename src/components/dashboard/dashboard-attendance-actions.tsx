@@ -23,6 +23,7 @@ import {
   createAttendanceMobilePunchCheckIn,
   createAttendanceMobilePunchCheckOut,
   getCurrentEmployee,
+  getMyAttendanceMobilePunchPolicy,
   getEmployeeDashboard,
   getMyAttendanceToday,
   type AdminRecord,
@@ -64,6 +65,47 @@ type BrowserLocationResult = Pick<
   NetworkCheckResult,
   "location" | "locationMessage"
 >
+
+type AttendanceSelfiePayload = {
+  fileName: string
+  fileSize: number
+  mimeType: string
+  fileString: string
+}
+
+async function encodeAttendanceSelfie(file: File): Promise<AttendanceSelfiePayload> {
+  const image = await createImageBitmap(file)
+  const ratio = Math.min(1, 640 / Math.max(image.width, image.height))
+  const canvas = document.createElement("canvas")
+  canvas.width = Math.max(1, Math.round(image.width * ratio))
+  canvas.height = Math.max(1, Math.round(image.height * ratio))
+  const context = canvas.getContext("2d")
+  if (!context) throw new Error("Could not prepare the selfie image.")
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  image.close()
+  let blob: Blob | null = null
+  for (const quality of [0.72, 0.58, 0.44, 0.3, 0.2]) {
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality))
+    if (blob && blob.size <= 64 * 1024) break
+  }
+  if (!blob || blob.size > 64 * 1024) throw new Error("The selfie could not be compressed below 64 KB. Try a closer, well-lit photo.")
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ""))
+    reader.onerror = () => reject(new Error("Could not read the selfie image."))
+    reader.readAsDataURL(blob!)
+  })
+  return { fileName: "attendance-selfie.jpg", fileSize: blob.size, mimeType: "image/jpeg", fileString: dataUrl.split(",", 2)[1] ?? "" }
+}
+
+function getBrowserInstallationId() {
+  const key = "hrms.attendance.installation-id"
+  const current = window.localStorage.getItem(key)?.trim()
+  if (current) return current
+  const created = crypto.randomUUID()
+  window.localStorage.setItem(key, created)
+  return created
+}
 
 const CHECK_IN_KEYS = [
   "checkInAt",
@@ -431,6 +473,9 @@ export function AttendancePunchActions({
   compact?: boolean
 }) {
   const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
+  const [selfieFile, setSelfieFile] = React.useState<File | null>(null)
+  const [exceptionReason, setExceptionReason] = React.useState("")
+  const [punchPolicy, setPunchPolicy] = React.useState<Record<string, unknown>>({})
   const [message, setMessage] = React.useState<{
     tone: "success" | "error"
     text: string
@@ -438,12 +483,28 @@ export function AttendancePunchActions({
 
   useFluentToastResultState(message, setMessage)
 
+  React.useEffect(() => {
+    const token = readStoredSessionTokens().accessToken
+    if (!token) return
+    let cancelled = false
+    void getMyAttendanceMobilePunchPolicy(token).then((value) => {
+      if (value && typeof value === "object" && !cancelled) setPunchPolicy(value as Record<string, unknown>)
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
+
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
       setMessage(null)
       setBusyAction(action)
 
       try {
+        const selfieRequired = action === "in"
+          ? punchPolicy.require_selfie_for_check_in === true
+          : punchPolicy.require_selfie_for_check_out === true
+        if (selfieRequired && !selfieFile) {
+          throw new Error("Attach a selfie before submitting this attendance punch.")
+        }
         if (!navigator.onLine) {
           throw new Error("You appear to be offline. Connect to the office network and try again.")
         }
@@ -466,11 +527,15 @@ export function AttendancePunchActions({
           latitude: locationResult.location.latitude,
           longitude: locationResult.location.longitude,
           accuracyMeters: locationResult.location.accuracy,
-          deviceIdentifier: `web-${navigator.platform || "browser"}`,
+          deviceIdentifier: `web-${getBrowserInstallationId()}`,
           deviceInfo: {
             platform: "web",
             networkType: connection?.type,
           },
+        }
+        if (selfieFile) payload.selfie = await encodeAttendanceSelfie(selfieFile)
+        if (punchPolicy.allow_location_exception_override === true && exceptionReason.trim()) {
+          payload.overrideReason = exceptionReason.trim()
         }
 
         if (action === "in") {
@@ -483,6 +548,8 @@ export function AttendancePunchActions({
           tone: "success",
           text: action === "in" ? "Check-in recorded." : "Check-out recorded.",
         })
+        setSelfieFile(null)
+        setExceptionReason("")
         await onAttendanceChanged?.().catch(() => undefined)
       } catch (errorObject) {
         setMessage({
@@ -496,11 +563,32 @@ export function AttendancePunchActions({
         setBusyAction(null)
       }
     },
-    [employeeId, onAttendanceChanged],
+    [employeeId, exceptionReason, onAttendanceChanged, punchPolicy, selfieFile],
   )
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-[11px] text-muted-foreground">
+          {punchPolicy.require_selfie_for_check_in === true || punchPolicy.require_selfie_for_check_out === true
+            ? "Attendance selfie (required by policy)"
+            : "Optional attendance selfie"}
+          <input
+            type="file"
+            accept="image/*"
+            capture="user"
+            aria-label="Attach an attendance selfie"
+            onChange={(event) => setSelfieFile(event.target.files?.[0] ?? null)}
+            className="max-w-[240px] text-xs"
+          />
+        </label>
+        {punchPolicy.allow_location_exception_override === true ? (
+          <label className="grid gap-1 text-[11px] text-muted-foreground">
+            Location exception reason
+            <input value={exceptionReason} onChange={(event) => setExceptionReason(event.target.value)} maxLength={500} placeholder="Explain why location validation failed" className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
+          </label>
+        ) : null}
+      </div>
       <div className={cn(
         "flex flex-wrap",
         compact
