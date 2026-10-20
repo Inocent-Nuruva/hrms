@@ -700,10 +700,93 @@ export const api = {
     });
   },
 
+  async updateMyFinanceApplication(id: string | number, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}`, {
+      method: 'PATCH',
+      body: data,
+    });
+  },
+
   async submitMyFinanceApplication(id: string | number) {
     return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/submit`, {
       method: 'POST',
     });
+  },
+
+  async listMyFinanceApplicationDocuments(id: string | number) {
+    return normalizeList(await request<unknown>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/documents`));
+  },
+
+  async uploadMyFinanceApplicationDocument(id: string | number, data: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/documents/upload`, {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  async listMyFinanceApplicationGuarantors(id: string | number) {
+    return normalizeList(await request<unknown>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/guarantors`));
+  },
+
+  async addMyFinanceApplicationGuarantor(id: string | number, employeeId: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/guarantors`, {
+      method: 'POST',
+      body: { guarantor_employee_id: Number(employeeId) },
+    });
+  },
+
+  async searchMyFinanceGuarantorCandidates(search: string) {
+    const query = new URLSearchParams({ search }).toString();
+    return normalizeList(await request<unknown>(`/api/me/finance/guarantor-candidates?${query}`));
+  },
+
+  async listMyFinanceGuarantorRequests() {
+    return normalizeList(await request<unknown>('/api/me/finance/guarantor-requests'));
+  },
+
+  async decideMyFinanceGuarantorRequest(id: string | number, decision: 'APPROVED' | 'REJECTED') {
+    return request<Record<string, unknown>>(`/api/me/finance/guarantor-requests/${encodeURIComponent(String(id))}/decide`, {
+      method: 'POST',
+      body: { decision },
+    });
+  },
+
+  async acceptMyFinanceApplication(id: string | number) {
+    return request<Record<string, unknown>>(`/api/me/finance/applications/${encodeURIComponent(String(id))}/accept`, { method: 'POST' });
+  },
+
+  async downloadMyFinanceSanctionLetter(id: string | number) {
+    const url = `${API_BASE_URL}/api/me/finance/applications/${encodeURIComponent(String(id))}/sanction-letter/pdf`;
+    const fetchFile = async (token: string | null) => fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    let response = await fetchFile(await getBearerToken());
+    if (response.status === 401) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) response = await fetchFile(refreshedToken);
+    }
+    if (!response.ok) throw new Error((await response.text()) || `Sanction letter download failed (${response.status}).`);
+    const contentDisposition = response.headers.get('content-disposition') ?? '';
+    const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    return { base64: globalThis.btoa(binary), filename: filenameMatch?.[1] ?? `sanction-letter-${id}.pdf` };
+  },
+
+  async downloadMyFinanceStatement(id: string | number, format: 'pdf' | 'xlsx') {
+    const url = `${API_BASE_URL}/api/me/finance/accounts/${encodeURIComponent(String(id))}/statement/download?format=${format}`;
+    const fetchFile = async (token: string | null) => fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    let response = await fetchFile(await getBearerToken());
+    if (response.status === 401) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) response = await fetchFile(refreshedToken);
+    }
+    if (!response.ok) throw new Error((await response.text()) || `Statement download failed (${response.status}).`);
+    const contentDisposition = response.headers.get('content-disposition') ?? '';
+    const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    return { base64: globalThis.btoa(binary), filename: filenameMatch?.[1] ?? `loan-statement-${id}.${format}` };
   },
 
   async getMyFinanceAccountStatement(id: string | number) {
