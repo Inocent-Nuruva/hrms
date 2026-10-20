@@ -97,6 +97,7 @@ import {
 } from "@/lib/admin-api";
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { getPublishedMonthlyPerformanceTrend } from "@/lib/performance-score-trend";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 
@@ -152,6 +153,103 @@ const PERFORMANCE_CYCLE_STEPS = [
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim();
+}
+
+function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
+  const points = getPublishedMonthlyPerformanceTrend(reviews);
+  const latest = points.at(-1);
+  const previous = points.at(-2);
+  const delta = latest && previous ? latest.score - previous.score : null;
+  const width = 720;
+  const height = 220;
+  const inset = 30;
+  const ceiling = Math.max(
+    120,
+    Math.ceil(Math.max(...points.map((point) => point.score), 0) / 20) * 20,
+  );
+  const coordinates = points.map((point, index) => {
+    const x =
+      points.length === 1
+        ? width / 2
+        : inset + (index / (points.length - 1)) * (width - inset * 2);
+    const y = height - inset - (point.score / ceiling) * (height - inset * 2);
+    return { ...point, x, y };
+  });
+  const linePoints = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <section className="border-y border-border px-4 py-4" aria-labelledby="my-performance-trend-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="my-performance-trend-title" className="text-base font-semibold text-foreground">
+            Monthly performance trend
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Published monthly review scores, up to the latest 12 periods.
+          </p>
+        </div>
+        {latest ? (
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Previous-month comparison</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
+              {delta === null
+                ? "No earlier published month"
+                : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)} points vs ${previous?.periodName}`}
+            </p>
+          </div>
+        ) : null}
+      </div>
+      {points.length ? (
+        <>
+          <div className="mt-3 overflow-x-auto">
+            <svg
+              className="h-52 min-w-[520px] w-full"
+              viewBox={`0 0 ${width} ${height}`}
+              role="img"
+              aria-labelledby="my-performance-trend-title"
+              preserveAspectRatio="none"
+            >
+              <line x1={inset} x2={width - inset} y1={height - inset} y2={height - inset} stroke="currentColor" className="text-border" />
+              <line x1={inset} x2={inset} y1={inset} y2={height - inset} stroke="currentColor" className="text-border" />
+              <text x={4} y={inset + 4} className="fill-muted-foreground text-[11px]">{ceiling}</text>
+              <text x={16} y={height - inset + 4} className="fill-muted-foreground text-[11px]">0</text>
+              {coordinates.length > 1 ? (
+                <polyline
+                  points={linePoints}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  className="text-primary"
+                />
+              ) : null}
+              {coordinates.map((point) => (
+                <g key={point.reviewId}>
+                  <circle cx={point.x} cy={point.y} r="5" fill="currentColor" className="text-primary" />
+                  <text x={point.x} y={point.y - 10} textAnchor="middle" className="fill-foreground text-[11px]">
+                    {point.score.toFixed(1)}
+                  </text>
+                  <text x={point.x} y={height - 8} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+                    {point.periodName}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+          <ul className="sr-only" aria-label="Monthly performance scores">
+            {points.map((point) => (
+              <li key={point.reviewId}>{point.periodName}: {point.score.toFixed(2)}</li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-4 rounded-md bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+          Your monthly trend will appear after a monthly review is published.
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function PerformanceSelfView({
@@ -1179,6 +1277,8 @@ export function PerformanceSelfView({
               })}
             </div>
           </div>
+
+          <PerformanceScoreTrend reviews={reviews} />
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
             <section className="min-w-0 border-t border-border pt-2">

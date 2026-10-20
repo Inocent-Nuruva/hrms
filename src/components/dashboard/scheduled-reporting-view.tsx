@@ -84,7 +84,7 @@ const TABS: Array<{ id: ReportingTab; label: string }> = [
   { id: "smtp", label: "SMTP" },
 ]
 
-const SCHEDULE_TYPES = ["DAILY", "WEEKLY", "MONTHLY", "ONE_TIME", "MANUAL"] as const
+const SCHEDULE_TYPES = ["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL", "ONE_TIME", "MANUAL"] as const
 const OUTPUT_FORMATS = ["PDF", "XLSX", "CSV"] as const
 const DATE_RANGE_STRATEGIES = [
   "CURRENT_DAY",
@@ -93,6 +93,10 @@ const DATE_RANGE_STRATEGIES = [
   "PREVIOUS_WEEK",
   "CURRENT_MONTH",
   "PREVIOUS_MONTH",
+  "CURRENT_QUARTER",
+  "PREVIOUS_QUARTER",
+  "CURRENT_YEAR",
+  "PREVIOUS_YEAR",
   "CUSTOM",
   "SCHEDULE_RELATIVE",
 ] as const
@@ -1096,7 +1100,9 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
       name: form.name.trim(),
       scheduleType: enumValue(form.scheduleType, SCHEDULE_TYPES, "DAILY"),
       executionTime: form.executionTime.trim() || undefined,
-      dayOfMonth: form.scheduleType === "MONTHLY" ? Number(form.dayOfMonth) || 1 : undefined,
+      dayOfMonth: ["MONTHLY", "QUARTERLY", "ANNUAL"].includes(form.scheduleType)
+        ? Number(form.dayOfMonth) || 1
+        : undefined,
       timezone: form.timezone.trim() || undefined,
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
@@ -2400,8 +2406,14 @@ export function ScheduledReportingView({ smtpOnly = false }: { smtpOnly?: boolea
           placeholder="08:00"
         />
       </Field>
-      {form.scheduleType === "MONTHLY" ? (
-        <Field label="Day of month">
+      {["MONTHLY", "QUARTERLY", "ANNUAL"].includes(form.scheduleType) ? (
+        <Field label={
+          form.scheduleType === "MONTHLY"
+            ? "Day of month"
+            : form.scheduleType === "QUARTERLY"
+              ? "Day in first month of quarter"
+              : "Day in January"
+        }>
           <input
             className={inputClass}
             type="number"

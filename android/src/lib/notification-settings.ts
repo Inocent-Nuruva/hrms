@@ -29,6 +29,7 @@ const CHANNEL_IDS: Record<NotificationSoundPreference, string> = {
 };
 
 export function getNotificationChannelId(_preference: NotificationSoundPreference) {
+  void _preference
   return CHANNEL_IDS['device-default'];
 }
 
@@ -38,6 +39,7 @@ export async function getNotificationSoundPreference(): Promise<NotificationSoun
 }
 
 export async function saveNotificationSoundPreference(_preference: NotificationSoundPreference) {
+  void _preference
   await SecureStore.setItemAsync(STORAGE_KEY, 'device-default');
   await ensureNotificationChannelsAsync();
 }

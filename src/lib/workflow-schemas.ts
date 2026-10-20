@@ -227,6 +227,17 @@ export function performanceFormSchema(mode: string): z.ZodType {
         name: text(100),
         start_date: workflowDate,
         end_date: workflowDate,
+        annual_aggregation_method: z
+          .enum([
+            "SIMPLE_MONTHLY_AVERAGE",
+            "WEIGHTED_MONTHLY_AVERAGE",
+            "QUARTERLY_ROLLUP",
+            "ANNUAL_TARGET_ACHIEVEMENT",
+            "MONTHLY_AVERAGE_WITH_ADJUSTMENTS",
+          ])
+          .or(z.literal(""))
+          .optional(),
+        aggregation_configuration_json: z.string().max(5000).optional(),
       },
       "start_date",
       "end_date",

@@ -143,9 +143,6 @@ const MAIL_LOG_STATUSES: NotificationMailLogStatus[] = [
   "FAILED",
 ]
 
-const inputClass =
-  "h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring/40"
-
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
 }

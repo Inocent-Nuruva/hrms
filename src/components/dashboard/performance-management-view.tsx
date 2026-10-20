@@ -222,17 +222,17 @@ const AGGREGATION_METHODS = [
 ] as const;
 
 const AGGREGATION_HELP: Record<string, string> = {
-  "": "Uses Simple Monthly Average: add the published monthly scores and divide by the number of reviews.",
+  "": "Uses Simple Monthly Average. Only published monthly reviews with a score count; missing scores are excluded.",
   SIMPLE_MONTHLY_AVERAGE:
-    "Each published monthly review counts equally toward the annual average.",
+    "Each published monthly review with a score counts equally. Months without a scored published review are excluded.",
   WEIGHTED_MONTHLY_AVERAGE:
-    "Designed for months with different importance. Currently the annual calculation gives each monthly review equal weight.",
+    'Uses monthly_weights keyed by period sequence, for example {"monthly_weights":{"1":1,"2":1.5}}. Unspecified months use weight 1; zero excludes a month.',
   QUARTERLY_ROLLUP:
-    "Averages quarterly results for the year. If no quarterly results exist, published monthly reviews are used instead.",
+    "Averages available published quarter aggregates equally. If none exist, it falls back to the scored monthly reviews.",
   ANNUAL_TARGET_ACHIEVEMENT:
-    "Designed to compare yearly results with annual targets. Currently the annual calculation averages monthly review scores.",
+    'Converts the mean monthly score to target attainment: mean score ÷ annual_target_score × 100, capped at annual_target_cap (default 120). Example: {"annual_target_score":100,"annual_target_cap":120}.',
   MONTHLY_AVERAGE_WITH_ADJUSTMENTS:
-    "Designed for monthly averages with adjustments. Currently the annual calculation averages monthly review scores without extra adjustments.",
+    "Averages published monthly final scores. Scorecard adjustments are already included in each final score and are counted once.",
 };
 
 const KPI_FIELD_HELP: Record<string, string> = {
@@ -424,6 +424,22 @@ const DEFAULT_WORKFLOW_STEPS: WorkflowStepDraft[] = [
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim();
+}
+
+function parseAnnualAggregationConfiguration(
+  raw: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!raw?.trim()) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("Aggregation configuration must be valid JSON.");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Aggregation configuration must be a JSON object.");
+  }
+  return value as Record<string, unknown>;
 }
 
 function matchesSearch(row: AdminRecord, search: string) {
@@ -1563,6 +1579,9 @@ export function PerformanceManagementView({
           end_date: form.end_date,
           annual_aggregation_method:
             form.annual_aggregation_method || undefined,
+          aggregation_configuration: parseAnnualAggregationConfiguration(
+            form.aggregation_configuration_json,
+          ),
         });
         if (!isMutationCurrent()) return;
       } else if (createMode === "period" || createMode === "period-edit") {
@@ -4437,6 +4456,22 @@ export function PerformanceManagementView({
                               description: AGGREGATION_HELP[item],
                             })),
                           ]}
+                        />
+                      </FluentField>
+                      <FluentField
+                        label="Aggregation configuration (JSON)"
+                        hint="Optional. Required fields depend on the selected method. Leave blank for equal monthly weights."
+                      >
+                        <Textarea
+                          resize="vertical"
+                          value={form.aggregation_configuration_json ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              aggregation_configuration_json: event.target.value,
+                            }))
+                          }
+                          placeholder='{"monthly_weights":{"1":1,"2":1.2}}'
                         />
                       </FluentField>
                     </>

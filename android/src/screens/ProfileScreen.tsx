@@ -100,7 +100,6 @@ export function ProfileScreen({ auth }: Props) {
   const branch = readString(employee, ['branch_name']) || readString(employee?.branch || {}, ['name']) || readString(employee?.primary_branch || {}, ['name']) || 'Not assigned';
   const department = readString(employee, ['department_name']) || readString(employee?.department || {}, ['name']) || readString(employee?.primary_department || {}, ['name']) || 'Not assigned';
   const position = readString(employee, ['position_name']) || readString(employee?.position || {}, ['name']) || readString(employee?.primary_position || {}, ['name']) || 'Not assigned';
-  const employeeNo = readString(employee, ['employee_no', 'user_no']) || readString(user, ['employeeId']) || '—';
   const email = readString(user, ['email']) || '—';
   const phoneDisplay = readString(employee, ['phone', 'phone_number'], '—');
   const employmentStatus = readString(employee, ['employment_status', 'status']) || 'Active';
@@ -134,7 +133,7 @@ export function ProfileScreen({ auth }: Props) {
   }, [auth, biometricLabel, toast]);
 
   const onChangeNotificationSound = React.useCallback(
-    async (_next: string) => {
+    async () => {
       const choice = 'device-default';
       setNotificationSound(choice);
 
@@ -258,8 +257,8 @@ export function ProfileScreen({ auth }: Props) {
                 <View style={{ height: 1, backgroundColor: borderColor, marginVertical: 8 }} />
                 <SegmentedControl
                   value={notificationSound}
-                  onChange={(next) => {
-                    void onChangeNotificationSound(next);
+                  onChange={() => {
+                    void onChangeNotificationSound();
                   }}
                   options={NOTIFICATION_SOUND_OPTIONS.map((option) => ({
                     key: option.key,

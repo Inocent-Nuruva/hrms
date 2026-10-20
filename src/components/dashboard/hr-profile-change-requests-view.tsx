@@ -486,7 +486,7 @@ export function HrProfileChangeRequestsView() {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [detailId, previewFile?.id, previewFile?.name])
+  }, [detailId, previewFile])
 
   const counts = React.useMemo(() => ({
     all: rows.length,

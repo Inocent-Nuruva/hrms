@@ -1012,20 +1012,6 @@ function readPayslipStatus(row: AdminRecord | null | undefined) {
   return readString(row ?? null, ["status"], "")
 }
 
-function resolvePayslipStatusTone(value: string) {
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
-  if (["generated", "sent", "paid", "published", "available"].includes(normalized)) {
-    return "success" as const
-  }
-  if (["pending", "queued", "processing", "draft"].includes(normalized)) {
-    return "amber" as const
-  }
-  if (["failed", "cancelled", "rejected"].includes(normalized)) {
-    return "primary" as const
-  }
-  return "muted" as const
-}
-
 function readPayslipLineItems(
   row: AdminRecord | null | undefined,
   keys: string[]
@@ -4279,7 +4265,6 @@ export function EmployeeSelfServiceProfileView() {
       setSectionSaving(false)
     }
   }, [
-    profilePhotoFileName,
     profilePhotoPreviewUrl,
     baseEditorValues,
     refresh,

@@ -14,7 +14,6 @@ import {
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
-  inputClass,
   optionLabel,
   prettify,
   primaryButtonClass,
@@ -228,7 +227,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
     }
   }
 
-  async function retry(row: AdminRecord, platform: boolean) {
+  const retry = React.useCallback(async (row: AdminRecord, platform: boolean) => {
     const token = readStoredToken()
     const id = rowId(row)
     if (!token || !id) return
@@ -243,7 +242,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
     } finally {
       setBusyId("")
     }
-  }
+  }, [load])
 
   async function onSave() {
     const token = readStoredToken()
@@ -347,7 +346,7 @@ export function SmsOperationsView({ activeTab }: { activeTab: SmsOpsTab }) {
           ]
         : []),
     ]
-  }, [activeTab, busyId, canRetryLogs, canUpdateSettings, platformKind])
+  }, [activeTab, busyId, canRetryLogs, canUpdateSettings, platformKind, retry])
 
   if (!canAccess) return null
 

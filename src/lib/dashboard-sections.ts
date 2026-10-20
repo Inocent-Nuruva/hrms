@@ -34,6 +34,7 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
     title: "My employee workspace",
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
+      { title: "Location privacy notice", url: "/dashboard/me/location-privacy" },
       { title: "Organization", url: "/dashboard/me/organization" },
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
@@ -454,6 +455,7 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Leave Types", url: "/dashboard/leave-management/types" },
       { title: "Leave Requests", url: "/dashboard/leave-management/requests" },
+      { title: "Team Calendar", url: "/dashboard/leave-management/team-calendar" },
       { title: "Leave Balances", url: "/dashboard/leave-management/balances" },
       { title: "Balance Import", url: "/dashboard/leave-management/balance-import" },
       { title: "Balance Transactions", url: "/dashboard/leave-management/transactions" },

@@ -278,6 +278,11 @@ export function ActivityOperationsView({
           effective_from: form.effective_from || undefined,
           daily_submission_required: form.daily_submission_required !== "false",
           manager_review_required: form.manager_review_required !== "false",
+          submission_cutoff_time: form.submission_cutoff_time || undefined,
+          submission_timezone: form.submission_timezone || undefined,
+          manager_review_due_hours: form.manager_review_due_hours ? Number(form.manager_review_due_hours) : undefined,
+          department_head_escalation_enabled: form.department_head_escalation_enabled === "true",
+          department_head_escalation_hours: form.department_head_escalation_hours ? Number(form.department_head_escalation_hours) : undefined,
           minimum_activity_count: form.minimum_activity_count
             ? Number(form.minimum_activity_count)
             : undefined,
@@ -339,6 +344,11 @@ export function ActivityOperationsView({
                       "effectiveFrom",
                       "effective_from",
                     ]),
+                    submission_cutoff_time: readString(row, ["submissionCutoffTime", "submission_cutoff_time"], "20:00"),
+                    submission_timezone: readString(row, ["submissionTimezone", "submission_timezone"], "UTC"),
+                    manager_review_due_hours: readString(row, ["managerReviewDueHours", "manager_review_due_hours"], "24"),
+                    department_head_escalation_enabled: String(row.departmentHeadEscalationEnabled ?? row.department_head_escalation_enabled ?? false),
+                    department_head_escalation_hours: readString(row, ["departmentHeadEscalationHours", "department_head_escalation_hours"], "48"),
                   });
                   setCreateOpen(true);
                 }}
@@ -848,6 +858,29 @@ export function ActivityOperationsView({
                           }))
                         }
                       />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Submission cut-off (local time)</span>
+                      <input type="time" className={inputClass} value={form.submission_cutoff_time ?? "20:00"} onChange={(event) => setForm((current) => ({ ...current, submission_cutoff_time: event.target.value }))} />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Cut-off timezone (IANA)</span>
+                      <input type="text" placeholder="Africa/Dar_es_Salaam" className={inputClass} value={form.submission_timezone ?? "UTC"} onChange={(event) => setForm((current) => ({ ...current, submission_timezone: event.target.value }))} />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Manager review target (hours)</span>
+                      <input type="number" min={1} className={inputClass} value={form.manager_review_due_hours ?? "24"} onChange={(event) => setForm((current) => ({ ...current, manager_review_due_hours: event.target.value }))} />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Department head escalation</span>
+                      <select className={inputClass} value={form.department_head_escalation_enabled ?? "false"} onChange={(event) => setForm((current) => ({ ...current, department_head_escalation_enabled: event.target.value }))}>
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Escalate after (hours)</span>
+                      <input type="number" min={1} className={inputClass} value={form.department_head_escalation_hours ?? "48"} onChange={(event) => setForm((current) => ({ ...current, department_head_escalation_hours: event.target.value }))} />
                     </label>
                   </>
                 ) : null}

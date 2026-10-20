@@ -1092,6 +1092,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: [
       "leave_types:read",
       "leave_requests:read",
+      "leave_requests:approve",
       "leave_balances:read",
       "leave-balances.view",
       "leave-balances.manage",
@@ -1113,6 +1114,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
       "leave_requests:approve",
       "leave_requests:update",
     ],
+    mode: "any",
+  },
+  "/dashboard/leave-management/team-calendar": {
+    permissions: ["leave_requests:read", "leave_requests:approve"],
     mode: "any",
   },
   "/dashboard/leave-management/balances": {

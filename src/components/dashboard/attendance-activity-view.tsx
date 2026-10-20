@@ -1255,13 +1255,6 @@ function getBranchOptionLabel(branch: AdminRecord) {
   )
 }
 
-function normalizeDateOnly(value: string | null) {
-  if (!value) return ""
-  const trimmed = value.trim()
-  if (!trimmed) return ""
-  return trimmed.slice(0, 10)
-}
-
 /** Client-side name search over loaded daily summary rows. */
 function filterDailySummaryRowsBySearch(rows: AdminRecord[], search: string) {
   return filterRowsByEmployeeNameSearch(rows, search)
@@ -3502,6 +3495,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   }, [
     activeSection,
     appliedDailySummaryFilters,
+    appliedProcessingExceptionFilters,
     dailySummaryPage,
     dailySummaryPageSize,
     debouncedRecordSearch,

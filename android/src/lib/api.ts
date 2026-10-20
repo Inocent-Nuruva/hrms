@@ -607,6 +607,17 @@ export const api = {
     return request<unknown>('/api/me/attendance/today');
   },
 
+  async getMyLocationPrivacyNotice() {
+    return request<unknown>('/api/location-privacy/current');
+  },
+
+  async acknowledgeMyLocationPrivacyNotice(noticeId: number) {
+    return request<unknown>('/api/location-privacy/acknowledgements', {
+      method: 'POST',
+      body: { notice_id: noticeId },
+    });
+  },
+
   // Generic list helpers (used for holidays etc.)
   async listHolidays(params: Record<string, unknown> = {}) {
     const q = buildQuery(params);

@@ -153,7 +153,6 @@ import {
   preferredAssigneeId,
   personDisplayName,
   recordMatchesId,
-  resolveApprovalOwnerLabel,
   resolveAuditActorLabel,
   resolveResponsiblePartyLabel,
   summarizeOnboardingApprovals,
@@ -2077,13 +2076,11 @@ export function OnboardingView() {
       activeTab,
       debouncedRequestSearch,
       debouncedWorkflowSearch,
-      loadLookups,
       isEmployeeMode,
       canReadEmployeeDirectory,
       canCreateOnboardingRequests,
       canViewOnboardingWorkflows,
       requestEmployeeFilter,
-      requestStatusFilter,
       workflowStatusFilter,
       invitationStatusFilter,
     ]
@@ -2124,7 +2121,7 @@ export function OnboardingView() {
     reloadAll,
   ])
 
-  function resolveEmployeeLabel(employeeId: number | null) {
+  const resolveEmployeeLabel = React.useCallback((employeeId: number | null) => {
     if (employeeId === null) {
       return "Unknown employee"
     }
@@ -2135,7 +2132,7 @@ export function OnboardingView() {
     }
 
     return formatEmployeeOptionLabel(employee, employeeId)
-  }
+  }, [employees])
 
   function resolveWorkflowLabel(workflowId: number | null) {
     if (workflowId === null) {
@@ -2642,7 +2639,7 @@ export function OnboardingView() {
     })
   }
 
-  function resetDocumentForm() {
+  const resetDocumentForm = React.useCallback(() => {
     setDocumentForm({
       title: "",
       description: "",
@@ -2650,9 +2647,9 @@ export function OnboardingView() {
       expiry_date: "",
     })
     setDocumentUploadFile(null)
-  }
+  }, [])
 
-  function resetTaskForm() {
+  const resetTaskForm = React.useCallback(() => {
     setTaskForm({
       title: "",
       asset_items: [""],
@@ -2662,7 +2659,7 @@ export function OnboardingView() {
       assigned_department_id: "",
       due_date: "",
     })
-  }
+  }, [])
 
   async function openRequestSheet() {
     const loaded = await ensureLookups(["employees", "workflows"])
@@ -3739,7 +3736,7 @@ export function OnboardingView() {
       status: readString(request, ["status", "request_status"], "Not available"),
       updated: toTimestamp(request.updated_at ?? request.modified_at ?? request.created_at),
     }
-  }, [employees, selectedRequestDetails, selectedRequestRow])
+  }, [selectedRequestDetails, selectedRequestRow, resolveEmployeeLabel])
 
   async function openJoiningSalary() {
     const token = readStoredToken()
@@ -4125,7 +4122,7 @@ export function OnboardingView() {
     }
   }
 
-  async function openRequestDetails(row: AdminRecord) {
+  const openRequestDetails = React.useCallback(async (row: AdminRecord) => {
     const requestId = readNumber(row, ["id", "request_id"])
     if (requestId === null) {
       showErrorAlert("Unable to open request details because request ID is missing.")
@@ -4206,7 +4203,16 @@ export function OnboardingView() {
     } finally {
       setRequestDetailsLoading(false)
     }
-  }
+  }, [
+    canReadRoles,
+    canReadCompanyUsers,
+    canReadOnboardingDocuments,
+    canReadOnboardingTasks,
+    canViewOnboardingWorkflows,
+    loadLookups,
+    resetDocumentForm,
+    resetTaskForm,
+  ])
 
   const liveRequestId = requestDetailsOpen ? readNumber(selectedRequestDetails ?? {}, ["id", "request_id"]) : null
   React.useEffect(() => {
@@ -4255,7 +4261,7 @@ export function OnboardingView() {
 
     openedHighlightedRequestRef.current = highlightedRequestId
     void openRequestDetails(highlightedRow)
-  }, [activeTab, highlightedRequestId, requests])
+  }, [activeTab, highlightedRequestId, requests, openRequestDetails])
 
   function openChangeWorkflowDialog(row: AdminRecord) {
     const requestId = readNumber(row, ["id", "request_id"])

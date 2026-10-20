@@ -6,13 +6,14 @@ import {
   getAttendanceRetentionGovernanceReadiness,
   listAttendanceRetentionHolds,
   listAttendanceRetentionPurgeApprovals,
+  listAttendanceLocationAccessLogs,
   releaseAttendanceRetentionHold,
   requestAttendanceRetentionPurgeApproval,
   reviewAttendanceRetentionPurgeApproval,
   type AdminRecord,
 } from "@/lib/admin-api"
 
-type Category = "RAW_HIKVISION_LOG" | "MOBILE_SELFIE"
+type Category = "RAW_HIKVISION_LOG" | "MOBILE_SELFIE" | "ATTENDANCE_LOCATION" | "FIELD_VISIT_LOCATION"
 
 function records(input: unknown): AdminRecord[] {
   return Array.isArray(input) ? input.filter((row): row is AdminRecord => typeof row === "object" && row !== null) : []
@@ -27,14 +28,19 @@ export function AttendanceRetentionGovernance({
   token,
   canManage,
   canReview,
+  canViewLocation,
+  canReadGovernance,
 }: {
   token: string
   canManage: boolean
   canReview: boolean
+  canViewLocation: boolean
+  canReadGovernance: boolean
 }) {
   const [readiness, setReadiness] = React.useState<AdminRecord>({})
   const [holds, setHolds] = React.useState<AdminRecord[]>([])
   const [approvals, setApprovals] = React.useState<AdminRecord[]>([])
+  const [locationAccessLogs, setLocationAccessLogs] = React.useState<AdminRecord[]>([])
   const [category, setCategory] = React.useState<Category>("RAW_HIKVISION_LOG")
   const [recordId, setRecordId] = React.useState("")
   const [holdReason, setHoldReason] = React.useState("")
@@ -51,25 +57,27 @@ export function AttendanceRetentionGovernance({
     setBusy(true)
     setError(null)
     try {
-      const [status, holdRows, approvalRows] = await Promise.all([
-        getAttendanceRetentionGovernanceReadiness(token),
-        listAttendanceRetentionHolds(token),
-        listAttendanceRetentionPurgeApprovals(token),
+      const [status, holdRows, approvalRows, locationRows] = await Promise.all([
+        canReadGovernance ? getAttendanceRetentionGovernanceReadiness(token) : Promise.resolve(null),
+        canReadGovernance ? listAttendanceRetentionHolds(token) : Promise.resolve([]),
+        canReadGovernance ? listAttendanceRetentionPurgeApprovals(token) : Promise.resolve([]),
+        canViewLocation ? listAttendanceLocationAccessLogs(token) : Promise.resolve([]),
       ])
       const readinessStatus = status ?? {}
       setReadiness(readinessStatus)
       setHolds(records(holdRows))
       setApprovals(records(approvalRows))
+      setLocationAccessLogs(records(locationRows))
       const defaultDays = purgeCategory === "RAW_HIKVISION_LOG"
         ? readinessStatus.raw_log_retention_days
-        : readinessStatus.selfie_retention_days
-      if (defaultDays !== null && defaultDays !== undefined) setRetentionDays(String(defaultDays))
+        : purgeCategory === "MOBILE_SELFIE" ? readinessStatus.selfie_retention_days : purgeCategory === "ATTENDANCE_LOCATION" ? readinessStatus.location_retention_days : readinessStatus.field_location_retention_days
+      if (typeof defaultDays === "number" && defaultDays > 0) setRetentionDays(String(defaultDays))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load attendance retention controls.")
     } finally {
       setBusy(false)
     }
-  }, [purgeCategory, token])
+  }, [canReadGovernance, canViewLocation, purgeCategory, token])
 
   React.useEffect(() => { void refresh() }, [refresh])
 
@@ -98,15 +106,17 @@ export function AttendanceRetentionGovernance({
         <button type="button" onClick={() => void refresh()} disabled={busy} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50">Refresh</button>
       </div>
 
-      <div className="grid gap-2 rounded-lg bg-muted/40 p-3 text-xs sm:grid-cols-2">
+      {canReadGovernance ? <div className="grid gap-2 rounded-lg bg-muted/40 p-3 text-xs sm:grid-cols-2">
         <p>Raw Hikvision period: <strong>{display(readiness, "raw_log_retention_days")} days</strong>; purge flag: <strong>{String(readiness.raw_log_purge_enabled ?? false)}</strong></p>
         <p>Mobile selfie period: <strong>{display(readiness, "selfie_retention_days")} days</strong>; purge flag: <strong>{String(readiness.selfie_purge_enabled ?? false)}</strong></p>
-      </div>
+        <p>Attendance location period: <strong>{display(readiness, "location_retention_days")} days</strong>; purge flag: <strong>{String(readiness.location_purge_enabled ?? false)}</strong></p>
+        <p>Field visit location period: <strong>{display(readiness, "field_location_retention_days")} days</strong>; purge flag: <strong>{String(readiness.field_location_purge_enabled ?? false)}</strong></p>
+      </div> : null}
 
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
       {notice ? <p role="status" className="text-sm text-emerald-700 dark:text-emerald-300">{notice}</p> : null}
 
-      {canManage ? (
+      {canManage && canReadGovernance ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <form className="grid gap-2 rounded-lg border border-border/70 p-3" onSubmit={(event) => {
             event.preventDefault()
@@ -121,6 +131,8 @@ export function AttendanceRetentionGovernance({
             <select aria-label="Retention hold category" value={category} onChange={(event) => setCategory(event.target.value as Category)} className="h-9 rounded-md border border-input bg-background px-2 text-xs">
               <option value="RAW_HIKVISION_LOG">Raw Hikvision log</option>
               <option value="MOBILE_SELFIE">Mobile punch selfie</option>
+              <option value="ATTENDANCE_LOCATION">Attendance location data</option>
+              <option value="FIELD_VISIT_LOCATION">Field visit location data</option>
             </select>
             <input type="number" min={1} value={recordId} onChange={(event) => setRecordId(event.target.value)} placeholder="Source record ID" className="h-9 rounded-md border border-input bg-background px-2 text-xs" />
             <textarea value={holdReason} onChange={(event) => setHoldReason(event.target.value)} maxLength={1000} minLength={5} required placeholder="Legal or investigation reference and reason" className="min-h-16 rounded-md border border-input bg-background p-2 text-xs" />
@@ -141,6 +153,8 @@ export function AttendanceRetentionGovernance({
             <select aria-label="Purge category" value={purgeCategory} onChange={(event) => setPurgeCategory(event.target.value as Category)} className="h-9 rounded-md border border-input bg-background px-2 text-xs">
               <option value="RAW_HIKVISION_LOG">Raw Hikvision logs</option>
               <option value="MOBILE_SELFIE">Mobile selfies</option>
+              <option value="ATTENDANCE_LOCATION">Attendance location data</option>
+              <option value="FIELD_VISIT_LOCATION">Field visit location data</option>
             </select>
             <input type="number" min={1} max={3650} value={retentionDays} onChange={(event) => setRetentionDays(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-xs" aria-label="Approved retention period in days" />
             <textarea value={purgeReason} onChange={(event) => setPurgeReason(event.target.value)} maxLength={1000} minLength={10} required placeholder="Business/privacy approval reference and requested deletion scope" className="min-h-16 rounded-md border border-input bg-background p-2 text-xs" />
@@ -149,7 +163,7 @@ export function AttendanceRetentionGovernance({
         </div>
       ) : null}
 
-      <div className="grid gap-2">
+      {canReadGovernance ? <div className="grid gap-2">
         <h4 className="text-xs font-semibold">Legal holds ({holds.length})</h4>
         {holds.length === 0 ? <p className="text-xs text-muted-foreground">No retention holds recorded.</p> : holds.map((hold) => {
           const id = String(hold.id ?? "")
@@ -161,9 +175,18 @@ export function AttendanceRetentionGovernance({
             </article>
           )
         })}
-      </div>
+      </div> : null}
 
-      <div className="grid gap-2">
+      {canViewLocation ? <div className="grid gap-2">
+        <h4 className="text-xs font-semibold">Attendance location access history ({locationAccessLogs.length})</h4>
+        {locationAccessLogs.length === 0 ? <p className="text-xs text-muted-foreground">No attendance location reads recorded.</p> : locationAccessLogs.map((row) => (
+          <article key={String(row.id)} className="rounded-md border border-border/70 p-2 text-xs">
+            <strong>{display(row, "accessType")}</strong> · actor {display(row, "actorCompanyUserId")} · employee {display(row, "employeeId")} · {display(row, "recordCount")} record(s) · {display(row, "purpose")} · {display(row, "accessedAt")}
+          </article>
+        ))}
+      </div> : null}
+
+      {canReadGovernance ? <div className="grid gap-2">
         <h4 className="text-xs font-semibold">Purge approval history ({approvals.length})</h4>
         {approvals.length === 0 ? <p className="text-xs text-muted-foreground">No purge requests recorded.</p> : approvals.map((approval) => {
           const id = String(approval.id ?? "")
@@ -175,7 +198,7 @@ export function AttendanceRetentionGovernance({
             </article>
           )
         })}
-      </div>
+      </div> : null}
     </section>
   )
 }

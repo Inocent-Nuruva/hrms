@@ -136,7 +136,7 @@ export function OnboardingSelfView() {
     setMounted(true)
     void load()
     // First load only; later refresh is explicit.
-  }, [])
+  }, [load])
 
   React.useEffect(() => {
     if (!selectedId) return

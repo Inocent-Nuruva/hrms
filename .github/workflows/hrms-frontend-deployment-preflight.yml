@@ -22,12 +22,15 @@ jobs:
       APP_PORT: ${{ vars.APP_PORT }}
       PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
       HEALTH_PATH: ${{ vars.HEALTH_PATH || '/api/health/ready' }}
+      SUPPORT_OWNER: ${{ vars.SUPPORT_OWNER }}
+      SUPPORT_CONTACT: ${{ vars.SUPPORT_CONTACT }}
+      MONITORING_URL: ${{ vars.MONITORING_URL }}
     steps:
       - name: Validate server runtime and layout
         shell: bash
         run: |
           set -Eeuo pipefail
-          for name in BASE_DIR APP_ENV APP_HOST APP_PORT PM2_APP_NAME HEALTH_PATH; do [[ -n "${!name}" ]] || { echo "Missing $name"; exit 1; }; done
+          for name in BASE_DIR APP_ENV APP_HOST APP_PORT PM2_APP_NAME HEALTH_PATH SUPPORT_OWNER SUPPORT_CONTACT MONITORING_URL; do [[ -n "${!name}" ]] || { echo "Missing $name"; exit 1; }; done
           [[ "$APP_PORT" =~ ^[0-9]+$ ]]
           [[ "$TARGET_ENV" == uat && "$APP_ENV" == uat || "$TARGET_ENV" == production && "$APP_ENV" == production ]]
           [[ "$TARGET_ENV" == uat && "$APP_PORT" == 9990 || "$TARGET_ENV" == production && "$APP_PORT" == 8880 ]]

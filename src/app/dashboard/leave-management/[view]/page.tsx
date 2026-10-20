@@ -7,6 +7,7 @@ import { LeaveManagementView } from "@/components/dashboard/leave-management-vie
 const ALLOWED_VIEWS = new Set([
   "types",
   "requests",
+  "team-calendar",
   "balances",
   "balance-import",
   "transactions",
@@ -16,7 +17,7 @@ const ALLOWED_VIEWS = new Set([
   "workflows",
 ])
 
-type LeaveView = "types" | "requests" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
+type LeaveView = "types" | "requests" | "team-calendar" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
 
 interface LeaveManagementViewPageProps {
   params: Promise<{

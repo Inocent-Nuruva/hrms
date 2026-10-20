@@ -1239,7 +1239,6 @@ export default function HrAnalyticsDashboard({
   showLeaveRequests = false,
   showHrAnalytics = false,
 }: HrAnalyticsDashboardProps) {
-  const router = useRouter()
   const actor = useDashboardActor()
   // Lazy state (not a ref) so initial warm cache can seed UI without reading refs during render.
   const [warm] = React.useState<DashboardWarmSnapshot | null>(readInitialWarmSnapshot)

@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable @next/next/no-img-element -- This view renders authenticated blob selfies and generated QR data URLs. */
+
 import * as React from "react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
@@ -7,13 +9,8 @@ import { useRouter } from "next/navigation"
 import {
   CircleCheckIcon,
   CircleHelpIcon,
-  FilterIcon,
   InfoIcon,
-  PencilIcon,
-  PlusIcon,
   QrCodeIcon,
-  RefreshCwIcon,
-  Trash2Icon,
 } from "lucide-react"
 import { Add16Regular, ArrowSync16Regular, Delete16Regular, Edit16Regular, Filter16Regular } from "@fluentui/react-icons"
 import {
@@ -110,7 +107,6 @@ import {
   listAttendanceHolidays,
   listAttendanceMobilePunches,
   listAttendancePolicies,
-  listAttendanceSettings,
   listAttendanceWifiNetworks,
   listBranches,
   listEmployees,
@@ -2107,6 +2103,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
     permissions: ["attendance_processing:execute"],
     mode: "any",
   })
+  const canReadAttendanceRetention = canPerformPermission(actor.permissionLabels, {
+    permissions: ["attendance_processing:read"],
+    mode: "any",
+  })
+  const canReadFieldLocations = canPerformPermission(actor.permissionLabels, {
+    permissions: ["field_locations:read"],
+    mode: "any",
+  })
   const canTestAttendanceSyncAlerts = canPerformPermission(actor.permissionLabels, {
     permissions: ["access_control_sync:execute"],
     mode: "any",
@@ -3918,11 +3922,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
           canRelease={canReleaseMobileDevices}
         />
       ) : null}
-      {activeSection === "mobile-punches" && (canManageAttendanceRetention || canReviewAttendancePurge) ? (
+      {activeSection === "mobile-punches" && (canManageAttendanceRetention || canReviewAttendancePurge || canReadFieldLocations) ? (
         <AttendanceRetentionGovernance
           token={readStoredToken()}
           canManage={canManageAttendanceRetention}
           canReview={canReviewAttendancePurge}
+          canViewLocation={canReadFieldLocations}
+          canReadGovernance={canReadAttendanceRetention}
         />
       ) : null}
 

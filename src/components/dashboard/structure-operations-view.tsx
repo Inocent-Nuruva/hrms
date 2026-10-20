@@ -171,7 +171,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
     }
   }
 
-  async function onDelete(row: AdminRecord) {
+  const onDelete = React.useCallback(async (row: AdminRecord) => {
     const token = readStoredToken()
     const id = rowId(row)
     if (!token || !id) return
@@ -186,7 +186,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
     } finally {
       setBusyId("")
     }
-  }
+  }, [activeTab, load])
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "grades") {
@@ -253,7 +253,7 @@ export function StructureOperationsView({ activeTab }: { activeTab: StructureOps
         ),
       },
     ]
-  }, [activeTab, busyId])
+  }, [activeTab, busyId, onDelete])
 
   if (!canAccess) return null
 

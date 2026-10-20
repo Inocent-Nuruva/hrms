@@ -124,8 +124,6 @@ import {
 } from "@/lib/company-modules";
 import {
   canAccessDashboardRoute,
-  clearDashboardActorSnapshot,
-  persistDashboardAccessToken,
   requestDashboardAccessRefresh,
 } from "@/lib/dashboard-permissions";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
@@ -506,10 +504,6 @@ export default function AdminDashboardView({
   const clearStoredSession = React.useCallback(clearSharedSession, []);
   const persistSessionTokens = React.useCallback(persistSharedTokens, []);
 
-  const hydrateTokenFromStorage = React.useCallback(() => {
-    return resolveStoredTokens().accessToken;
-  }, [resolveStoredTokens]);
-
   const attemptRefreshToken = React.useCallback(async () => {
     const { refreshToken, accessToken: previousAccessToken } =
       resolveStoredTokens();
@@ -653,7 +647,6 @@ export default function AdminDashboardView({
       resolvedActiveResource,
       resolvedUseApis,
       router,
-      token,
       usersQuery,
       catalogByResource,
     ],
@@ -697,7 +690,7 @@ export default function AdminDashboardView({
     const accessToken = resolveStoredTokens().accessToken;
 
     await loadData(accessToken);
-  }, [loadData, resolveStoredTokens, token]);
+  }, [loadData, resolveStoredTokens]);
 
   const handleHeaderRefresh = React.useCallback(async () => {
     if (resolvedShowOverview) {
@@ -802,7 +795,7 @@ export default function AdminDashboardView({
     await loadData(accessToken);
   };
 
-  const handleChangeMyPassword = async (
+  const handleChangeMyPassword = React.useCallback(async (
     oldPassword: string,
     newPassword: string,
   ) => {
@@ -813,7 +806,7 @@ export default function AdminDashboardView({
 
     const api = await loadAdminApi();
     await api.changeCurrentUserPassword(accessToken, oldPassword, newPassword);
-  };
+  }, [resolveStoredTokens]);
 
   const handleForcedPasswordReset = React.useCallback(
     async (payload: {
@@ -839,7 +832,7 @@ export default function AdminDashboardView({
         setForcePasswordResetBusy(false);
       }
     },
-    [clearStoredSession, handleChangeMyPassword, router],
+    [clearStoredSession, handleChangeMyPassword],
   );
 
   const handleUseDifferentAccountForForcedReset = React.useCallback(() => {
@@ -1006,7 +999,7 @@ export default function AdminDashboardView({
       window.removeEventListener("focus", syncFromStoredUser);
       window.removeEventListener(FORCE_PASSWORD_RESET_EVENT, openFromApiGuard);
     };
-  }, [token]);
+  }, [token, authSession.user?.requiresPasswordChange]);
 
   const adminName =
     getStringValue(currentAdmin, ["full_name", "fullName", "name"]) ??

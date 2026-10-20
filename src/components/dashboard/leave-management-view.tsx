@@ -23,6 +23,7 @@ import { LeaveTypesCatalog } from "@/components/dashboard/leave-types-catalog"
 import { LeavePoliciesCatalog } from "@/components/dashboard/leave-policies-catalog"
 import { LeaveWorkflowsCatalog } from "@/components/dashboard/leave-workflows-catalog"
 import { LeaveWorkflowStepDialog } from "@/components/dashboard/leave-workflow-step-dialog"
+import { LeaveTeamCalendar } from "@/components/dashboard/leave-team-calendar"
 import { canSeeHrLeaveRequestsQueue } from "@/lib/dashboard-home"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { LEAVE_BALANCE_IMPORT_PERMISSIONS } from "@/lib/leave-balance-import"
@@ -142,21 +143,6 @@ import {
   DialogPopup,
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { WorkflowChoiceCard, WorkflowSelect } from "@/components/dashboard/leave-workflow-ui"
 import { MarkCheckbox } from "@/components/ui/mark-checkbox"
 import {
@@ -201,7 +187,7 @@ function clearWorkflowCreateDraft() {
   window.localStorage.removeItem(WORKFLOW_CREATE_DRAFT_KEY)
 }
 
-type LeaveTab = "types" | "requests" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
+type LeaveTab = "types" | "requests" | "team-calendar" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
 type LeaveLookupKey = "types" | "employees" | "departments" | "positions" | "branches" | "roles" | "grades"
 type LeaveManagementViewProps = {
   activeTab?: LeaveTab
@@ -374,6 +360,7 @@ function formatTransactionType(value: string) {
 const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   types: [],
   requests: ["employees", "types"],
+  "team-calendar": [],
   balances: ["employees", "types"],
   transactions: ["employees", "types"],
   holidays: [],
@@ -1110,6 +1097,10 @@ export function LeaveManagementView({
     permissionLabels: actor.permissionLabels,
     roleNames: actor.roleNames,
   })
+  const canReadTeamCalendar = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_requests:read", "leave_requests:approve"],
+    mode: "any",
+  })
   const canReadBalances = canPerformPermission(actor.permissionLabels, {
     permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
     mode: "any",
@@ -1323,6 +1314,7 @@ export function LeaveManagementView({
       [
         { key: "types" as LeaveTab, label: "Leave Types", visible: canReadTypes },
         { key: "requests" as LeaveTab, label: "Leave Requests", visible: canReadRequests },
+        { key: "team-calendar" as LeaveTab, label: "Team Calendar", visible: canReadTeamCalendar },
         { key: "balances" as LeaveTab, label: "Leave Balances", visible: canReadBalances },
         { key: "transactions" as LeaveTab, label: "Balance Transactions", visible: canReadBalances },
         { key: "holidays" as LeaveTab, label: "Holidays", visible: canReadHolidays },
@@ -1334,6 +1326,7 @@ export function LeaveManagementView({
       canReadHolidays,
       canReadPolicies,
       canReadRequests,
+      canReadTeamCalendar,
       canReadTypes,
       canReadWorkflows,
     ],
@@ -1538,6 +1531,9 @@ export function LeaveManagementView({
         case "requests": {
           const result = await listLeaveRequests(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
           setRequests(result.rows)
+          break
+        }
+        case "team-calendar": {
           break
         }
         case "balances": {
@@ -1834,9 +1830,9 @@ export function LeaveManagementView({
     return employeeNameById.get(employeeId) ?? `#${employeeId}`
   }
 
-  const employeeLabelFromRow = (row: AdminRecord) => {
+  const employeeLabelFromRow = React.useCallback((row: AdminRecord) => {
     return resolveLeaveBalanceEmployeeName(row, employeeNameById)
-  }
+  }, [employeeNameById])
 
   const leaveTypeLabelFromRequest = (row: AdminRecord) => {
     const nestedType = asRecord(row.leave_type) ?? asRecord(row.leaveType)
@@ -1870,7 +1866,7 @@ export function LeaveManagementView({
     }
   }, [])
 
-  const leaveTypeLabel = (leaveTypeId: number | null) => {
+  const leaveTypeLabel = React.useCallback((leaveTypeId: number | null) => {
     if (leaveTypeId === null) {
       return "-"
     }
@@ -1879,9 +1875,9 @@ export function LeaveManagementView({
       return `#${leaveTypeId}`
     }
     return readString(match, ["name", "leave_type_name", "leaveTypeName", "type_name", "typeName", "title"])
-  }
+  }, [types])
 
-  const leaveTypeLabelFromRow = (row: AdminRecord) => {
+  const leaveTypeLabelFromRow = React.useCallback((row: AdminRecord) => {
     const nestedLeaveType =
       asRecord(row.leave_type) ??
       asRecord(row.leaveType) ??
@@ -1912,11 +1908,11 @@ export function LeaveManagementView({
     return leaveTypeLabel(
       readNumber(row, ["leave_type_id", "leaveTypeId", "type_id", "typeId", "leave_type", "leaveType"])
     )
-  }
+  }, [leaveTypeLabel])
 
   const groupedBalances = React.useMemo(
     () => groupLeaveBalancesByEmployee(balances, (row) => employeeLabelFromRow(row)),
-    [balances, employees]
+    [balances, employeeLabelFromRow]
   )
 
   const balanceGroupColumns = React.useMemo(
@@ -1981,7 +1977,7 @@ export function LeaveManagementView({
       selectedBalanceGroup
         ? sortLeaveBalanceRows(selectedBalanceGroup.rows, (row) => leaveTypeLabelFromRow(row))
         : [],
-    [selectedBalanceGroup, types]
+    [selectedBalanceGroup, leaveTypeLabelFromRow]
   )
 
   const resetBalanceForm = React.useCallback(() => {
@@ -2172,7 +2168,7 @@ export function LeaveManagementView({
         readString(row, ["reason", "description"]),
       ].join(" ").toLowerCase().includes(query)
     })
-  }, [balanceTransactions, transactionSearch, transactionTypeFilter])
+  }, [balanceTransactions, transactionSearch, transactionTypeFilter, employeeLabelFromRow])
 
   async function importCountryHolidays() {
     const token = readStoredToken()
@@ -4475,6 +4471,8 @@ export function LeaveManagementView({
           </Dialog>
         </div>
       ) : null}
+
+      {tab === "team-calendar" ? <LeaveTeamCalendar /> : null}
 
       <Dialog
         open={requestImportOpen}

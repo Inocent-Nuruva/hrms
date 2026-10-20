@@ -2,6 +2,7 @@ import React from 'react';
 import * as Location from 'expo-location';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Pressable,
   RefreshControl,
@@ -10,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Globe2, MapPin, Navigation, Radio, ShieldCheck, Wifi } from 'lucide-react-native';
 
 import { api, normalizeList, readMobilePunchContext } from '../lib/api';
@@ -31,6 +32,7 @@ interface Props {
 type RecordValue = Record<string, unknown>;
 
 export function MyLocationScreen({ auth }: Props) {
+  const queryClient = useQueryClient();
   const { isDark } = useThemePreference();
   const paletteQuery = useQuery({ queryKey: ['dashboardCardStyle'], queryFn: () => api.getMyDashboardCardStyle(), enabled: auth.isAuthenticated });
   const selectedStyle = normalizeProfileCardStyle(paletteQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
@@ -41,14 +43,21 @@ export function MyLocationScreen({ auth }: Props) {
   const cardColor = isDark ? COLORS.surfaceDark : COLORS.surface;
   const [locationLive, setLocationLive] = React.useState(false);
   const [permissionMessage, setPermissionMessage] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let active = true;
-    void Location.getForegroundPermissionsAsync().then((permission) => {
-      if (active && permission.granted) setLocationLive(true);
-    }).catch(() => {});
-    return () => { active = false; };
-  }, []);
+  const privacyQuery = useQuery({
+    queryKey: ['mobileLocationPrivacyNotice'],
+    queryFn: () => api.getMyLocationPrivacyNotice(),
+    enabled: auth.isAuthenticated,
+  });
+  const privacyMutation = useMutation({
+    mutationFn: (noticeId: number) => api.acknowledgeMyLocationPrivacyNotice(noticeId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['mobileLocationPrivacyNotice'] });
+      Alert.alert('Acknowledgement recorded', 'Your acknowledgement of the current location notice has been recorded.');
+    },
+  });
+  const privacyResult = asRecord(privacyQuery.data);
+  const privacyNotice = asRecord(privacyResult?.notice);
+  const privacyAcknowledged = privacyResult?.acknowledged === true;
 
   const locationQuery = useQuery({
     queryKey: ['mobileWorkLocationContext'],
@@ -80,15 +89,23 @@ export function MyLocationScreen({ auth }: Props) {
     staleTime: 1000 * 60,
   });
 
-  const refreshing = locationQuery.isFetching || todayQuery.isFetching || historyQuery.isFetching || punchesQuery.isFetching;
+  const refreshing = privacyQuery.isFetching || locationQuery.isFetching || todayQuery.isFetching || historyQuery.isFetching || punchesQuery.isFetching;
   const onRefresh = React.useCallback(async () => {
-    await Promise.all([locationLive ? locationQuery.refetch() : Promise.resolve(), todayQuery.refetch(), historyQuery.refetch(), punchesQuery.refetch()]);
-  }, [historyQuery, locationLive, locationQuery, punchesQuery, todayQuery]);
+    await Promise.all([privacyQuery.refetch(), locationLive ? locationQuery.refetch() : Promise.resolve(), todayQuery.refetch(), historyQuery.refetch(), punchesQuery.refetch()]);
+  }, [historyQuery, locationLive, locationQuery, privacyQuery, punchesQuery, todayQuery]);
 
   const toggleLocation = React.useCallback(async () => {
     if (locationLive) {
       setLocationLive(false);
       setPermissionMessage(null);
+      return;
+    }
+    if (privacyQuery.isLoading || privacyQuery.isFetching || privacyQuery.isError) {
+      setPermissionMessage('Confirm your current company location notice is available before turning on live location. Retry when online.');
+      return;
+    }
+    if (privacyNotice && privacyNotice.require_acknowledgement === true && !privacyAcknowledged) {
+      setPermissionMessage('Review and acknowledge the location privacy notice before turning on live location.');
       return;
     }
     const permission = await Location.requestForegroundPermissionsAsync();
@@ -98,7 +115,7 @@ export function MyLocationScreen({ auth }: Props) {
     }
     setPermissionMessage(null);
     setLocationLive(true);
-  }, [locationLive]);
+  }, [locationLive, privacyAcknowledged, privacyNotice, privacyQuery.isError, privacyQuery.isFetching, privacyQuery.isLoading]);
 
   const currentLocation = locationQuery.data;
   const today = asRecord(todayQuery.data);
@@ -117,11 +134,18 @@ export function MyLocationScreen({ auth }: Props) {
       ['present', 'late', 'checked-in', 'checked_in', 'complete', 'completed'].includes(status);
   }).length;
 
-  const openMap = React.useCallback(async () => {
+  const openMap = React.useCallback(() => {
     const latitude = currentLocation?.latitude;
     const longitude = currentLocation?.longitude;
     if (typeof latitude !== 'number' || typeof longitude !== 'number') return;
-    await Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+    Alert.alert(
+      'Share location with Google Maps?',
+      'Google receives these coordinates when Maps opens. Continue only if you want to share this location with Google.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => { void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`); } },
+      ],
+    );
   }, [currentLocation]);
 
   return (
@@ -138,6 +162,24 @@ export function MyLocationScreen({ auth }: Props) {
             <Text style={[styles.pageTitle, { color: textColor }]}>Work location</Text>
             <Text style={[styles.pageDescription, { color: mutedColor }]}>Your live device location and attendance location details.</Text>
           </View>
+
+          {privacyNotice ? (
+            <Card variant="elevated" style={[styles.privacyCard, { backgroundColor: cardColor, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
+              <View style={styles.locationCardHeader}>
+                <ShieldCheck size={20} color={accent} />
+                <Text style={[styles.sectionTitle, { color: textColor, flex: 1 }]}>{readString(privacyNotice, ['title']) || 'Location privacy notice'}</Text>
+              </View>
+              {privacyNotice.demo === true ? <Text style={[styles.demoLabel, { color: isDark ? '#FFCC80' : '#8A4B08' }]}>UAT DEMO — NOT COMPANY OR LEGAL APPROVAL</Text> : null}
+              <Text style={[styles.privacyBody, { color: mutedColor }]}>{readString(privacyNotice, ['body'])}</Text>
+              <Text style={[styles.privacyVersion, { color: mutedColor }]}>Version {String(privacyNotice.version ?? '')}. Acknowledging confirms you have received and reviewed this notice.</Text>
+              {privacyAcknowledged ? <Text style={[styles.privacyVersion, { color: '#107C10' }]}>Acknowledgement recorded for this version.</Text> : (
+                <FluentButton appearance="primary" centered onPress={() => privacyMutation.mutate(Number(privacyNotice.id))} disabled={privacyMutation.isPending || !Number(privacyNotice.id)} style={[styles.mapButton, { backgroundColor: accent, borderColor: accent }]}>
+                  {privacyMutation.isPending ? 'Recording…' : privacyNotice.require_acknowledgement === true ? 'Acknowledge notice' : 'Acknowledge (optional)'}
+                </FluentButton>
+              )}
+              {privacyMutation.isError ? <Text style={[styles.errorText, { color: isDark ? '#FFB4AB' : '#B42318' }]}>Could not record acknowledgement. Check your connection and retry.</Text> : null}
+            </Card>
+          ) : null}
 
           <Card variant="elevated" style={[styles.locationCard, { backgroundColor: cardColor, borderColor: isDark ? COLORS.outlineDark : COLORS.outline }]}>
             <View style={styles.locationCardHeader}>
@@ -315,6 +357,10 @@ const styles = StyleSheet.create({
   pageTitle: { marginTop: 4, fontSize: 25, lineHeight: 33, fontWeight: '600', letterSpacing: -0.5 },
   pageDescription: { marginTop: 5, fontSize: 13, lineHeight: 19 },
   locationCard: { marginHorizontal: 16, padding: 16, borderRadius: 18 },
+  privacyCard: { marginHorizontal: 16, marginBottom: 14, padding: 16, borderRadius: 18 },
+  privacyBody: { marginTop: 12, fontSize: 13, lineHeight: 20 },
+  privacyVersion: { marginTop: 10, fontSize: 11, lineHeight: 16 },
+  demoLabel: { marginTop: 10, fontSize: 10, lineHeight: 14, fontWeight: '800', letterSpacing: 0.5 },
   locationCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   locationIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   locationHeading: { flex: 1, minWidth: 0 },

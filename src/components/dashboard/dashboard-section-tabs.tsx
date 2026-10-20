@@ -7,7 +7,6 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 import { Tabs2 } from "@/components/ui/tabs-2"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
-import { useForbiddenPrefixes } from "@/hooks/use-forbidden-route-guard"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 
@@ -28,7 +27,6 @@ export function DashboardSectionTabs({
   const currentPath = pathname ?? ""
   const actor = useDashboardActor()
   const identity = useDashboardIdentity()
-  const forbiddenVersion = useForbiddenPrefixes()
   // Defer permission-filtered UI until after mount so SSR and the first client
   // paint both render the same placeholder (avoids hydration mismatch).
   const [mounted, setMounted] = React.useState(false)
@@ -65,7 +63,6 @@ export function DashboardSectionTabs({
     actor.ready,
     actor.roleNames,
     actor.scope,
-    forbiddenVersion,
     groups,
     identity.homeDashboardKind,
     mounted,

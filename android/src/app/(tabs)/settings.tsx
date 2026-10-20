@@ -80,7 +80,6 @@ export default function SettingsTab() {
     enabled: auth.isAuthenticated,
   });
   const selectedStyle = normalizeProfileCardStyle(styleQuery.data ?? DEFAULT_PROFILE_CARD_STYLE);
-  const selectedPalette = PROFILE_CARD_PALETTES.find((palette) => palette.id === selectedStyle.palette) ?? PROFILE_CARD_PALETTES[0];
   const backgroundColor = isDark ? COLORS.backgroundDark : COLORS.background;
   const textColor = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
   const mutedColor = isDark ? COLORS.onSurfaceVariantDark : COLORS.onSurfaceVariant;

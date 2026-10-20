@@ -431,10 +431,10 @@ export function MovementOperationsView({
     }
   }
 
-  async function runAction(
+  const runAction = React.useCallback(async (
     row: AdminRecord,
     action: "submit" | "cancel" | "apply",
-  ) {
+  ) => {
     const token = readStoredToken()
     const id = rowId(row)
     if (!token || !id) return
@@ -454,7 +454,7 @@ export function MovementOperationsView({
     } finally {
       setBusyId("")
     }
-  }
+  }, [load])
 
   async function generateLetter(row: AdminRecord) {
     const token = readStoredToken()
@@ -503,7 +503,7 @@ export function MovementOperationsView({
     }
   }
 
-  async function deleteMovement(row: AdminRecord) {
+  const deleteMovement = React.useCallback(async (row: AdminRecord) => {
     const token = readStoredToken()
     const id = rowId(row)
     if (!token || !id) return
@@ -523,7 +523,7 @@ export function MovementOperationsView({
     } finally {
       setBusyId("")
     }
-  }
+  }, [load])
 
   async function onSave() {
     const token = readStoredToken()
@@ -795,6 +795,8 @@ export function MovementOperationsView({
       canDecideMovement,
       canGenerateLetter,
       canSubmitMovement,
+      deleteMovement,
+      runAction,
     ],
   )
 

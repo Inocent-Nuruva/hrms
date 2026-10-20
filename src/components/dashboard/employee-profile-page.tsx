@@ -93,7 +93,6 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   filterEmployeesByDirectorySearch,
   getEmployeeDirectoryContactSummary,
-  isHistoricalEmployeeStatus,
 } from "@/lib/employee-directory-search"
 import { AnimatePresence, motion } from "framer-motion"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
@@ -4883,7 +4882,8 @@ export function EmployeeProfilePage({
       }
     }, [employeeNo])
 
-  const loadOrganizationOptions = React.useCallback(async (_selectedBranchId = "", selectedDepartmentId = "") => {
+  const loadOrganizationOptions = React.useCallback(async (selectedBranchId = "", selectedDepartmentId = "") => {
+    void selectedBranchId
     const token = readStoredToken()
     if (!token) return
     setOrganizationOptionsLoading(true)

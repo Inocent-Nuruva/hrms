@@ -30,7 +30,7 @@ import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import type {
   AdminRecord, AdminResourceKey, SortOrder, UsersQueryParams, } from "@/lib/admin-api";
 import {
-  RESOURCE_LABELS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listResourcePage, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
+  RESOURCE_LABELS, assignPermissionToCurrentCompanyUser, assignPermissionToRole, assignUserToRole, assignUserAvatar, disableUserTwoFactor, enableUserTwoFactor, readForceTwoFactor, setUserForceTwoFactor, extractDefaultAvatarImageUrl, getPermissionById, getRoleById, isSelectableDefaultAvatar, listAllCurrentCompanyUsers, listDefaultAvatars, listResource, listRolePermissions, readDefaultAvatarId, listRoleUsers, readTwoFactorEnabled, revokePermissionFromCurrentCompanyUser, revokePermissionFromRole, revokeUserFromRole, } from "@/lib/admin-api";
 import {
   PermissionPicker, canonicalizePermissionNames, isPermissionSelected, permissionGroupFromName, permissionTokenFromAssignment, toPermissionOptions, type PermissionOption, } from "@/components/dashboard/permission-picker";
 import { RoleSuggestionStrip } from "@/components/dashboard/role-suggestion-strip";
@@ -1097,7 +1097,7 @@ export function DataTable({
   /** Filters the assign-user picker list (not the assigned people list). */
   const [assignPickerQuery, setAssignPickerQuery] = React.useState("");
   const [membersRefreshKey, setMembersRefreshKey] = React.useState(0);
-  const [rolePermissionNamesFromApi, setRolePermissionNamesFromApi] =
+  const [, setRolePermissionNamesFromApi] =
     React.useState<string[] | null>(null);
   const [rolePermissionsLoading, setRolePermissionsLoading] =
     React.useState(false);
@@ -1345,7 +1345,6 @@ export function DataTable({
     editingEntity,
     editingRolePermissionNames,
     initialEditingRolePermissionNames,
-    rolePermissionNamesFromApi,
   ]);
 
   React.useEffect(() => {
@@ -1910,7 +1909,7 @@ export function DataTable({
     setPeopleDialogOpen(false);
     // Intentionally keyed on id/resource (not the whole editingEntity object) so that
     // in-place label updates don't reset the detail sheet's tab/search/picker state.
-  }, [editingEntity?.id, editingEntity?.resource]);
+  }, [editingEntity, editingEntity?.id, editingEntity?.resource]);
 
   const roleSheetTab: DetailSheetTab =
     !canUsePermissionCatalog && detailSheetTab === "permissions"
@@ -2121,7 +2120,7 @@ export function DataTable({
       cancelled = true;
       controller.abort();
     };
-  }, [editingEntity?.id, editingEntity?.resource, token, membersRefreshKey]);
+  }, [editingEntity, editingEntity?.id, editingEntity?.resource, token, membersRefreshKey]);
 
   const assignedMembers = React.useMemo((): AssignedMemberUser[] => {
     const query = memberSearch.trim().toLowerCase();

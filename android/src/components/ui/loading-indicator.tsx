@@ -1,7 +1,6 @@
 import React from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-import { COLORS } from '../../lib/config';
 import { useThemePreference } from '../../hooks/useThemePreference';
 import { useAppAccent } from '../../hooks/useAppAccent';
 

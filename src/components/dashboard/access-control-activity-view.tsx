@@ -184,9 +184,6 @@ async function withCompanyNames(rows: AdminRecord[], token: string) {
 }
 
 async function withCommandLogNames(rows: AdminRecord[], token: string) {
-  const branchIds = Array.from(new Set(rows
-    .map((row) => readNumberFromRecord(row, ["branch_id", "branchId"]))
-    .filter((id): id is number => id !== null)))
   const creatorIds = Array.from(new Set(rows
     .map((row) => readNumberFromRecord(row, ["created_by_company_user_id", "createdByCompanyUserId", "created_by_user_id", "createdByUserId"]))
     .filter((id): id is number => id !== null)))
@@ -304,16 +301,6 @@ function resolveCredentialActionLabel(action: CredentialLifecycleAction) {
   if (action === "block") return "Block"
   if (action === "lost") return "Mark Lost"
   return "Revoke"
-}
-
-function buildDetailRows(record: AdminRecord | null) {
-  if (!record) {
-    return []
-  }
-
-  return Object.entries(record)
-    .filter(([, value]) => value !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
 }
 
 function DetailField({

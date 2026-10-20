@@ -762,7 +762,6 @@ export function ShiftWeeklyScheduler({
   const schedulesPerDay = React.useMemo(
     () => weekDays.map((day) => {
       const key = dateKey(day)
-      const visibleEmployeeIds = new Set(filteredEmployeeViews.map((employee) => employee.id))
       return filteredEmployeeViews.filter((employee) => {
         if (leaveByCell.has(`${employee.id}:${key}`)) return false
         const schedule = schedulesByCell.get(`${employee.id}:${key}`)

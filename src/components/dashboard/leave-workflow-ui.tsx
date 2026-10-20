@@ -8,7 +8,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { cn } from "@/lib/utils"

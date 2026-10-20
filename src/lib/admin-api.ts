@@ -174,6 +174,18 @@ export interface LeaveRequestsQueryParams extends UsersQueryParams {
   to_date?: string;
 }
 
+export interface LeaveTeamCalendarEntry {
+  request_id: number;
+  employee_id: number;
+  employee_name: string;
+  leave_type: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  duration_type: string;
+  status: string;
+}
+
 export interface LeaveBalancesQueryParams extends UsersQueryParams {
   employee_id?: number;
   leave_type_id?: number;
@@ -4655,6 +4667,29 @@ export async function listLeaveRequests(
   return { rows, ...pagination };
 }
 
+export async function listLeaveTeamCalendar(
+  token: string,
+  fromDate: string,
+  toDate: string,
+): Promise<LeaveTeamCalendarEntry[]> {
+  const searchParams = new URLSearchParams({ from_date: fromDate, to_date: toDate });
+  const payload = await adminRequest<unknown>(
+    `/api/leave/team-calendar?${searchParams.toString()}`,
+    { token, cacheTtlMs: 0 },
+  );
+  return normalizeList(payload).map((row) => ({
+    request_id: Number(row.request_id ?? row.id),
+    employee_id: Number(row.employee_id),
+    employee_name: String(row.employee_name ?? "Employee"),
+    leave_type: String(row.leave_type ?? "Leave"),
+    start_date: String(row.start_date ?? ""),
+    end_date: String(row.end_date ?? ""),
+    total_days: Number(row.total_days ?? 0),
+    duration_type: String(row.duration_type ?? "full_day"),
+    status: String(row.status ?? "in_review"),
+  }));
+}
+
 export async function listLeaveBalances(
   token: string,
   params: LeaveBalancesQueryParams = {},
@@ -5326,6 +5361,13 @@ export async function listAttendanceRetentionPurgeApprovals(token: string) {
   ))
 }
 
+export async function listAttendanceLocationAccessLogs(token: string) {
+  return normalizeList(await adminRequest<unknown>(
+    "/api/attendance/mobile-punches/location-access-logs",
+    { token, cacheTtlMs: 0, dedupe: false },
+  ))
+}
+
 export async function requestAttendanceRetentionPurgeApproval(
   token: string,
   values: { category: string; retentionDays: number; reason: string },
@@ -5926,6 +5968,28 @@ export async function createAttendanceMobilePunchCheckIn(
 
 export async function getMyAttendanceMobilePunchPolicy(token: string) {
   return adminRequest<unknown>("/api/attendance/mobile-punches/my-policy", { token });
+}
+
+export async function getCurrentLocationPrivacyNotice(token: string) {
+  return adminRequest<unknown>("/api/location-privacy/current", { token });
+}
+
+export async function acknowledgeLocationPrivacyNotice(token: string, noticeId: number) {
+  return adminRequest<unknown>("/api/location-privacy/acknowledgements", {
+    method: "POST", token, body: { notice_id: noticeId },
+  });
+}
+
+export async function listLocationPrivacyNotices(token: string) {
+  return adminRequest<unknown[]>("/api/location-privacy/notices", { token });
+}
+
+export async function publishLocationPrivacyNotice(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/location-privacy/notices", { method: "POST", token, body: data });
+}
+
+export async function listLocationPrivacyAcknowledgements(token: string, noticeId: number) {
+  return adminRequest<unknown[]>(`/api/location-privacy/notices/${noticeId}/acknowledgements`, { token });
 }
 
 export async function createAttendanceMobilePunchCheckOut(
@@ -9526,6 +9590,54 @@ export async function listMyLeaveRequests(
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+export async function listMyLeaveEncashmentRequests(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/leave/encashments/me", { token }),
+  );
+}
+
+export async function createMyLeaveEncashmentRequest(
+  token: string,
+  data: { leave_type_id: number; fiscal_year: string; requested_days: number; reason: string },
+) {
+  return adminRequest<unknown>("/api/leave/encashments", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function cancelMyLeaveEncashmentRequest(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/encashments/${id}/cancel`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function decideLeaveEncashmentRequest(
+  token: string,
+  id: string | number,
+  data: { approve: boolean; approved_days?: number; comments?: string },
+) {
+  return adminRequest<unknown>(`/api/leave/encashments/${id}/decision`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function recordLeaveEncashmentPayrollHandoff(
+  token: string,
+  id: string | number,
+  reference: string,
+) {
+  return adminRequest<unknown>(`/api/leave/encashments/${id}/payroll-handoff`, {
+    method: "POST",
+    token,
+    body: { reference },
+  });
 }
 
 export async function getMyLeaveRequest(token: string, id: string | number) {

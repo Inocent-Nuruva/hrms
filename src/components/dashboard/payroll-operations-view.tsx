@@ -1854,14 +1854,14 @@ export function PayrollOperationsView() {
     React.useState("");
   const [mappings, setMappings] = React.useState<AdminRecord[]>([]);
   const [groups, setGroups] = React.useState<AdminRecord[]>([]);
-  const [groupAssignments, setGroupAssignments] = React.useState<AdminRecord[]>(
+  const [, setGroupAssignments] = React.useState<AdminRecord[]>(
     [],
   );
-  const [overtimePolicies, setOvertimePolicies] = React.useState<AdminRecord[]>(
+  const [, setOvertimePolicies] = React.useState<AdminRecord[]>(
     [],
   );
-  const [bonusSchemes, setBonusSchemes] = React.useState<AdminRecord[]>([]);
-  const [leaveRules, setLeaveRules] = React.useState<AdminRecord[]>([]);
+  const [, setBonusSchemes] = React.useState<AdminRecord[]>([]);
+  const [, setLeaveRules] = React.useState<AdminRecord[]>([]);
   const [recentRuns, setRecentRuns] = React.useState<AdminRecord[]>([]);
   const [offboardingRequests, setOffboardingRequests] = React.useState<
     AdminRecord[]
@@ -2613,7 +2613,7 @@ export function PayrollOperationsView() {
                                       ? "Generate sources"
                                       : "New adjustment";
 
-  const columns = React.useMemo<Column<AdminRecord>[]>(() => {
+  const columns: Column<AdminRecord>[] = (() => {
     if (tab === "runs") {
       return [
         {
@@ -2954,7 +2954,7 @@ export function PayrollOperationsView() {
           key: "actions",
           label: "Actions",
           render: (row) => {
-            const id = rowId(row);
+            const id = rowId(row)
             return (
               <div className="flex gap-1">
                 <button
@@ -3167,7 +3167,6 @@ export function PayrollOperationsView() {
           key: "actions",
           label: "Actions",
           render: (row) => {
-            const id = rowId(row);
             return (
               <div className="flex flex-wrap gap-1">
                 <button
@@ -3860,21 +3859,7 @@ export function PayrollOperationsView() {
           readString(row, ["credit_account_code", "creditAccountCode"], "—"),
       },
     ];
-  }, [
-    approvingInputId,
-    bankingRunId,
-    configTab,
-    journalRunId,
-    lockingRunId,
-    payslipRunId,
-    canApprovePayroll,
-    canMutatePayroll,
-    editingCalendar,
-    processingRunId,
-    sourceActionId,
-    structureActionId,
-    tab,
-  ]);
+  })();
 
   async function openDetail(row: AdminRecord) {
     const token = readStoredToken();

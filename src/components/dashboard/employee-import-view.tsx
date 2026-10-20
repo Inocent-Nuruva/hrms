@@ -1391,12 +1391,6 @@ function overviewHasProblems(overview: ImportOverview): boolean {
 }
 
 /** At least one row is ready to import. */
-function overviewCanImport(overview: ImportOverview): boolean {
-  const ready = overviewReadyCount(overview);
-  if (ready === null) return true;
-  return ready > 0;
-}
-
 function batchHasErrorSignal(batch: BatchDetails): boolean {
   const tone = statusTone(batch.status);
   if (tone === "partial" || tone === "danger") return true;
