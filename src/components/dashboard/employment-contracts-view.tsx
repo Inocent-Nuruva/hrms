@@ -73,31 +73,42 @@ function employeeOptionLabel(employee: AdminRecord) {
   return `Employee #${String(employee.id ?? "")}`
 }
 
-export function EmploymentContractsView() {
+export function EmploymentContractsView({ employee, canManage = true }: { employee?: AdminRecord; canManage?: boolean } = {}) {
   const [access, setAccess] = React.useState("")
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [employeeId, setEmployeeId] = React.useState(0)
+  const scopedEmployeeId = Number(employee?.id ?? 0)
+  const [employeeId, setEmployeeId] = React.useState(scopedEmployeeId)
   const [contracts, setContracts] = React.useState<AdminRecord[]>([])
   const [form, setForm] = React.useState<Record<string, string>>({})
   const [busy, setBusy] = React.useState(false)
   const [showForm, setShowForm] = React.useState(false)
 
-  const selected = employees.find((employee) => Number(employee.id) === employeeId)
+  const selected = employee ?? employees.find((employee) => Number(employee.id) === employeeId)
 
   React.useEffect(() => {
     const next = token()
     setAccess(next)
     if (!next) return
+    if (scopedEmployeeId) return
     void listEmployees(next, { page: 1, limit: 200 })
       .then((result) => setEmployees(result.rows))
       .catch((cause: unknown) => toast.error(cause instanceof Error ? cause.message : "Employees could not be loaded"))
-  }, [])
+  }, [scopedEmployeeId])
 
   const refresh = React.useCallback(async (id: number) => {
     if (!access || !id) return
     try { setContracts(await listEmploymentContracts(access, id)) }
     catch (cause) { toast.error(cause instanceof Error ? cause.message : "Contracts could not be loaded") }
   }, [access])
+
+  React.useEffect(() => {
+    if (!scopedEmployeeId || !access) return
+    setEmployeeId(scopedEmployeeId)
+    setContracts([])
+    setShowForm(false)
+    setForm({})
+    void refresh(scopedEmployeeId)
+  }, [access, scopedEmployeeId, refresh])
 
   function selectEmployee(id: number) {
     setEmployeeId(id)
@@ -111,7 +122,7 @@ export function EmploymentContractsView() {
 
   async function issue(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!access || !employeeId) return
+    if (!access || !employeeId || !canManage) return
     setBusy(true)
     try {
       await issueEmploymentContract(access, {
@@ -138,7 +149,7 @@ export function EmploymentContractsView() {
   }
 
   async function attach(id: number, file?: File) {
-    if (!file || !access) return
+    if (!file || !access || !canManage) return
     if (file.type !== "application/pdf") { toast.error("Select a PDF contract"); return }
     setBusy(true)
     try {
@@ -173,11 +184,11 @@ export function EmploymentContractsView() {
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-lg font-semibold">Employment contracts</h2><p className="text-sm text-muted-foreground">Alliance Insurance Corporation Limited</p></div>
+      <div><h2 className="text-lg font-semibold">Employment contracts</h2><p className="text-sm text-muted-foreground">{employee ? employeeOptionLabel(employee) : "Issue and review employee contract versions"}</p></div>
       <div className="flex items-end gap-2">
-        <Field title="Employee"><FluentSelect ariaLabel="Employee" className="w-full min-w-52" value={employeeId ? String(employeeId) : ""} onChange={(value) => selectEmployee(Number(value))} placeholder="Select employee" options={[{ value: "", label: "Select employee" }, ...employees.map((employee) => ({ value: String(Number(employee.id)), label: employeeOptionLabel(employee) }))]} /></Field>
+        {!scopedEmployeeId ? <Field title="Employee"><FluentSelect ariaLabel="Employee" className="w-full min-w-52" value={employeeId ? String(employeeId) : ""} onChange={(value) => selectEmployee(Number(value))} placeholder="Select employee" options={[{ value: "", label: "Select employee" }, ...employees.map((employee) => ({ value: String(Number(employee.id)), label: employeeOptionLabel(employee) }))]} /></Field> : null}
         <Button size="sm" variant="outline" disabled={!employeeId} onClick={() => void refresh(employeeId)} title="Refresh"><RefreshCw className="size-4" /></Button>
-        <Button size="sm" disabled={!employeeId} onClick={() => { setForm({ start_date: String(selected?.hire_date ?? "").slice(0, 10), contract_type: "UNSPECIFIED" }); setShowForm(true) }}><Plus className="size-4" /> Contract</Button>
+        {canManage ? <Button size="sm" disabled={!employeeId} onClick={() => { setForm({ start_date: String(selected?.hire_date ?? "").slice(0, 10), contract_type: "UNSPECIFIED" }); setShowForm(true) }}><Plus className="size-4" /> Contract</Button> : null}
       </div>
     </div>
 
@@ -187,7 +198,7 @@ export function EmploymentContractsView() {
         <div><p className="font-medium">Version {String(contract.version)} · {String(contract.contractType).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{String(contract.startDate)}{contract.endDate ? ` to ${String(contract.endDate)}` : ""} · {String(contract.status)}</p></div>
         <div className="flex gap-2">
           {contract.documentId ? <Button size="sm" variant="outline" onClick={() => void open(Number(contract.id))}><FileText className="size-4" /> Open</Button> : null}
-          {contract.status === "ISSUED" ? <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-1.5 text-sm"><Upload className="size-4" /> Attach PDF<input className="sr-only" type="file" accept=".pdf" disabled={busy} onChange={(event) => void attach(Number(contract.id), event.target.files?.[0])} /></label> : null}
+          {canManage && contract.status === "ISSUED" ? <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-1.5 text-sm"><Upload className="size-4" /> Attach PDF<input className="sr-only" type="file" accept=".pdf" disabled={busy} onChange={(event) => void attach(Number(contract.id), event.target.files?.[0])} /></label> : null}
         </div>
       </div>) : <p className="py-6 text-sm text-muted-foreground">No contract versions yet.</p>}
     </section> : null}

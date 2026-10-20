@@ -108,6 +108,8 @@ import {
   type OnboardingProvisioning,
 } from "@/lib/admin-api"
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog"
+import { OnboardingReadinessOverview } from "@/components/dashboard/onboarding-readiness-overview"
+import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
 import {
   INVITATION_STATUS_FILTERS,
   canResendInvitation,
@@ -5860,7 +5862,7 @@ export function OnboardingView() {
               <DialogHeader className="z-20 grid shrink-0 gap-2.5 border-b border-border bg-background px-3 py-2.5 pr-14 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center">
                 <div className="min-w-0">
                   <DialogTitle className="truncate text-sm font-semibold tracking-tight text-foreground">
-                    Onboarding request
+                    Employee onboarding workspace
                   </DialogTitle>
                   <DialogDescription className="mt-0.5 text-[10px] text-muted-foreground">
                     Review employee details and track the remaining onboarding work.
@@ -5893,7 +5895,31 @@ export function OnboardingView() {
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto text-foreground [&_.border-slate-200]:border-border [&_.border-slate-300]:border-border [&_.bg-slate-50]:bg-muted/20 [&_.bg-white]:bg-background [&_.text-slate-500]:text-muted-foreground [&_.text-slate-600]:text-muted-foreground [&_.text-slate-700]:text-foreground [&_.text-slate-800]:text-foreground [&_.text-slate-900]:text-foreground">
 
-                  <section className="overflow-hidden border-b border-border bg-background">
+                  {readCurrentRequestId() ? (
+                    <div className="p-3">
+                      <OnboardingReadinessOverview
+                        key={readCurrentRequestId()}
+                        token={readStoredToken() ?? ""}
+                        requestId={readCurrentRequestId()!}
+                        employeeName={selectedRequestSummary.employee}
+                        canActivate={canCompleteOnboardingRequests}
+                        saving={saving}
+                        onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
+                        onNavigate={(action, requirementId) => {
+                          if (requirementId === "independently approved starting salary") {
+                            if (canReadJoiningSalary) void openJoiningSalary()
+                            else showErrorAlert("Payroll access is required. Ask the payroll team to complete this requirement.")
+                            return
+                          }
+                          const target = document.getElementById(`onboarding-workspace-${action}`)
+                          target?.scrollIntoView({ behavior: "smooth", block: "start" })
+                          target?.focus({ preventScroll: true })
+                        }}
+                      />
+                    </div>
+                  ) : null}
+
+                  <section id="onboarding-workspace-details" tabIndex={-1} className="overflow-hidden border-b border-border bg-background">
                     <div className="flex flex-col gap-2 border-b border-border bg-muted/[0.12] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Employee details review</p>
@@ -6144,17 +6170,32 @@ export function OnboardingView() {
                     )}
                   </section>
 
-                  {canReadJoiningSalary ? (
-                    <section className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
+                  <section id="onboarding-workspace-contracts" tabIndex={-1} className="border-b p-3">
+                    {readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? (
+                      <EmploymentContractsView
+                        key={readNumber(selectedRequestDetails ?? {}, ["employee_id"])}
+                        employee={{
+                          ...(toRecord(selectedRequestDetails?.employee) ?? {}),
+                          id: readNumber(selectedRequestDetails ?? {}, ["employee_id"]),
+                          full_name: selectedRequestSummary.employee,
+                        }}
+                        canManage={canPerformPermission(actorPermissions, "employees:update")}
+                      />
+                    ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
+                  </section>
+
+                    <section id="onboarding-workspace-payroll" tabIndex={-1} className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
                         <p className="mt-1 text-xs text-muted-foreground">Assign the effective salary structure and route it for independent approval. Activation remains blocked until payroll prerequisites are ready.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Payroll owns the enabled profile, TIN, pension and health enrollment, and verified bank account. These are separate from salary approval; use the activation overview to see exactly which are missing.</p>
                       </div>
+                      {canReadJoiningSalary ? (
                       <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
                         Review salary setup
                       </Button>
+                      ) : <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p>}
                     </section>
-                  ) : null}
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
                   <section className="space-y-2 bg-background p-3">
@@ -6259,7 +6300,7 @@ export function OnboardingView() {
                     )
                   })()}
 
-                  <section className="space-y-2 bg-background p-3">
+                  <section id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Approval trail</p>
                       {approvalSummary.pending.length > 0 ? (
@@ -6743,7 +6784,7 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div className="space-y-2 bg-background p-3 xl:col-span-2">
+                  <div id="onboarding-workspace-tasks" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Tasks</p>
                       {canUpdateOnboardingRequests ? (
