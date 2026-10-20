@@ -169,6 +169,26 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
     enabled: auth.isAuthenticated,
   });
 
+  const evidenceUploadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png'], copyToCacheDirectory: true });
+      if (result.canceled) return false;
+      const file = result.assets[0];
+      const base64 = await readAsStringAsync(file.uri, { encoding: EncodingType.Base64 });
+      await api.uploadMyLeaveRequestDocument(id, { fileName: file.name, mimeType: file.mimeType || 'application/octet-stream', fileSize: file.size || Math.floor(base64.length * 0.75), fileString: base64 });
+      return true;
+    },
+    onSuccess: async (uploaded) => {
+      if (!uploaded) return;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['mobileLeaveRequestDetail'] }),
+        queryClient.invalidateQueries({ queryKey: ['mobileLeaveRequests'] }),
+      ]);
+      toast.success('Supporting document uploaded.');
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const submitMutation = useMutation({
     mutationFn: async (input: { payload: Record<string, unknown>; submit: boolean; attachment: DocumentPicker.DocumentPickerAsset | null }) => {
       const createdPayload = await api.createMyLeaveRequest({ ...input.payload, submit: input.submit && !input.attachment });
@@ -359,7 +379,7 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
       return;
     }
     const selectedType = leaveTypes.find((item) => String(item.id ?? '') === form.leave_type_id);
-    if ((selectedType?.requires_attachment === true || selectedType?.requires_attachment === 'true') && !leaveAttachment) {
+    if ((selectedType?.requires_attachment === true || selectedType?.requires_attachment === 'true') && selectedType?.allow_deferred_attachment !== true && selectedType?.allow_deferred_attachment !== 'true' && !leaveAttachment) {
       toast.error('This leave type requires a supporting attachment before submission.');
       return;
     }
@@ -1034,7 +1054,7 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
             />
 
             <View style={{ gap: 6 }}>
-              <Text style={[styles.inputLabel, { color: textColor }]}>Supporting attachment{(selectedLeaveType?.requires_attachment === true || selectedLeaveType?.requires_attachment === 'true') ? ' (required)' : ' (optional)'}</Text>
+              <Text style={[styles.inputLabel, { color: textColor }]}>Supporting attachment{(selectedLeaveType?.requires_attachment === true || selectedLeaveType?.requires_attachment === 'true') ? ((selectedLeaveType?.allow_deferred_attachment === true || selectedLeaveType?.allow_deferred_attachment === 'true') ? ` (due ${selectedLeaveType?.attachment_grace_days ?? 3} days after submission)` : ' (required before submission)') : ' (optional)'}</Text>
               <FluentButtonV1 appearance="outline" onClick={() => void pickLeaveAttachment()}>
                 <FluentText>{leaveAttachment?.name ?? 'Choose PDF or image'}</FluentText>
               </FluentButtonV1>
@@ -1346,6 +1366,17 @@ export function LeaveScreen({ auth, requestId, initialTab }: Props) {
                     },
                   ]}
                 >
+                  {selectedRequest.routing_required === true ? <Text style={{ color: textColor }}>Awaiting manager assignment. HR must correct routing before approval begins.</Text> : null}
+                  {['awaiting_evidence', 'overdue', 'received'].includes(String(selectedRequest.evidence_status)) ? (
+                    <Text style={{ color: textColor }}>
+                      {selectedRequest.evidence_status === 'received' ? 'Supporting evidence received.' : `Supporting evidence ${selectedRequest.evidence_status === 'overdue' ? 'is overdue' : 'is needed'}. Due ${formatDateTime(String(selectedRequest.evidence_due_at || ''))}.`}
+                    </Text>
+                  ) : null}
+                  {!['cancelled', 'rejected'].includes(selectedRequestStatus) ? (
+                    <Pressable accessibilityRole="button" disabled={evidenceUploadMutation.isPending} onPress={() => evidenceUploadMutation.mutate(selectedRequestId)}>
+                      <Text style={{ color: accentColor, paddingVertical: 12 }}>{evidenceUploadMutation.isPending ? 'Uploading…' : 'Upload supporting document'}</Text>
+                    </Pressable>
+                  ) : null}
                   <Text style={[styles.detailSectionTitle, { color: textColor }]}>Reason</Text>
                   <Text style={[styles.detailBodyText, { color: mutedColor }]}>{selectedRequestReason}</Text>
                 </View>

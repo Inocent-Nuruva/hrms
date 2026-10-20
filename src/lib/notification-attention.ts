@@ -46,8 +46,35 @@ export function isUnreadNotification(row: AdminRecord) {
   return !readString(row, ["read_at", "readAt"])
 }
 
+/** Resolve both current and historical leave links to routes that actually exist. */
+export function resolveLeaveNotificationUrl(row: AdminRecord): string | null {
+  const metadata = readMetadata(row)
+  const type = readString(row, ["type"]).toUpperCase()
+  const ownTypes = new Set(["LEAVE_SUBMITTED", "LEAVE_APPROVED", "LEAVE_REJECTED", "LEAVE_RETURNED_FOR_CORRECTION", "LEAVE_EVIDENCE_REQUIRED"])
+  const reviewerTypes = new Set(["LEAVE_APPROVAL_REQUIRED", "LEAVE_ROUTING_REQUIRED"])
+  const requestId = readString(row, ["entity_id", "entityId", "request_id", "requestId"]) || readString(metadata, ["request_id", "requestId"])
+  const ownPath = "/dashboard/me/leave/requests"
+  const reviewPath = "/dashboard/leave-management/requests"
+  for (const value of [readString(row, ["action_url", "actionUrl", "url", "link"]), readString(metadata, ["action_url", "actionUrl", "url", "link"])]) {
+    if (!value) continue
+    try {
+      const parsed = new URL(value, "https://hrms.invalid")
+      const legacy = parsed.pathname.match(/^\/leave\/(\d+)(\/review)?\/?$/)
+      if (legacy) return appendRequestHighlight(ownTypes.has(type) || (!legacy[2] && !reviewerTypes.has(type)) ? ownPath : reviewPath, requestId || legacy[1])
+      if (parsed.pathname === ownPath || parsed.pathname === reviewPath) {
+        return appendRequestHighlight(`${parsed.pathname}${parsed.search}${parsed.hash}`, requestId)
+      }
+    } catch { /* Fall back to the event type for malformed historical links. */ }
+  }
+  if (ownTypes.has(type)) return appendRequestHighlight(ownPath, requestId)
+  if (reviewerTypes.has(type)) return appendRequestHighlight(reviewPath, requestId)
+  return null
+}
+
 export function resolveNotificationUrl(row: AdminRecord) {
   if (isTestNotification(row)) return "/dashboard"
+  const leaveDestination = resolveLeaveNotificationUrl(row)
+  if (leaveDestination) return leaveDestination
 
   const direct = readString(row, ["action_url", "actionUrl", "url", "link"])
   const metadata = readMetadata(row)

@@ -1,5 +1,7 @@
 "use client"
 
+import { resolveLeaveNotificationUrl } from "@/lib/notification-attention"
+
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -330,6 +332,8 @@ function notificationPriorityLabel(row: AdminRecord | null | undefined) {
 }
 
 function resolveNotificationUrl(row: AdminRecord) {
+  const leaveDestination = resolveLeaveNotificationUrl(row)
+  if (leaveDestination) return leaveDestination
   const direct = readString(row, ["action_url", "actionUrl", "url", "link"])
   const metadata = readMetadata(row)
   const requestId =

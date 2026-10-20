@@ -288,6 +288,8 @@ export type NotificationPreferenceType =
   | "LEAVE_REJECTED"
   | "LEAVE_RETURNED_FOR_CORRECTION"
   | "LEAVE_CANCELLED"
+  | "LEAVE_EVIDENCE_REQUIRED"
+  | "LEAVE_ROUTING_REQUIRED"
   | "ONBOARDING_SUBMITTED"
   | "ONBOARDING_APPROVAL_REQUIRED"
   | "ONBOARDING_APPROVED"
@@ -9065,6 +9067,23 @@ export async function listMyRequests(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function listAllMyActionItems(token: string) {
+  const records: AdminRecord[] = [];
+  for (let page = 1; ; page += 1) {
+    const rows = await listMyActionItems(token, { page, limit: 100 });
+    records.push(...rows);
+    if (rows.length < 100) return records;
+  }
+}
+
+export async function reportMyActionItemIssue(token: string, id: string | number, comment: string) {
+  return adminRequest<unknown>(`/api/me/action-items/${id}/comments`, {
+    method: "POST",
+    token,
+    body: { comment },
+  });
 }
 
 export async function listMyDocuments(token: string) {
@@ -21782,4 +21801,71 @@ export async function rollbackIdentityChange(
     `/api/identity-audit/${encodeURIComponent(changeSetId)}/rollback`,
     { method: "POST", token, body: { reason: reason || undefined } },
   );
+}
+
+export async function extendLeaveEvidenceDeadline(token: string, id: number, evidence_due_at: string, reason: string) {
+  return adminRequest<AdminRecord>(`/api/leave/requests/${id}/evidence-deadline`, { token, method: "POST", body: { evidence_due_at, reason } })
+}
+export async function retryLeaveRouting(token: string, id: number) {
+  return adminRequest<AdminRecord>(`/api/leave/requests/${id}/retry-routing`, { token, method: "POST" })
+}
+
+export async function downloadMyLeaveRequestDocument(
+  token: string,
+  leaveRequestId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
+  const response = await fetch(
+    buildUrl(
+      `/api/me/leave/requests/${leaveRequestId}/documents/${documentId}/download`,
+    ),
+    {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = { message: text };
+      }
+    }
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
+      status?: number;
+      payload?: unknown;
+    };
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i,
+  );
+  const rawFilename =
+    filenameMatch?.[1] ?? filenameMatch?.[2] ?? `leave-document-${documentId}`;
+  const filename = decodeURIComponent(rawFilename);
+
+  return {
+    blob,
+    filename,
+    contentType: response.headers.get("content-type"),
+  };
+}
+
+export async function patchMyLeaveRequestMedicalDetail(token: string, id: string | number, data: AdminRecord) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/medical-detail`, { method: "PATCH", token, body: data })
 }

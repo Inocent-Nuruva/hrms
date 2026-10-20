@@ -326,128 +326,6 @@ function readCompanyUserId(record: AdminRecord | null) {
   return readNumber(record, ["id"])
 }
 
-function readNestedCompanyUserId(record: AdminRecord | null) {
-  if (!record) {
-    return null
-  }
-
-  const direct = readNumber(record, [
-    "requester_company_user_id",
-    "requesterCompanyUserId",
-    "employee_company_user_id",
-    "employeeCompanyUserId",
-    "owner_company_user_id",
-    "ownerCompanyUserId",
-    "created_by_company_user_id",
-    "createdByCompanyUserId",
-    "company_user_id",
-    "companyUserId",
-    "membership_id",
-    "membershipId",
-  ])
-  if (direct !== null) {
-    return direct
-  }
-
-  for (const key of [
-    "requester",
-    "requested_by",
-    "requestedBy",
-    "employee_company_user",
-    "employeeCompanyUser",
-    "company_user",
-    "companyUser",
-    "membership",
-    "member",
-  ]) {
-    const nestedId = readCompanyUserId(asRecord(record[key]))
-    if (nestedId !== null) {
-      return nestedId
-    }
-  }
-
-  return null
-}
-
-function readRequestEmployeeId(record: AdminRecord | null) {
-  if (!record) {
-    return null
-  }
-
-  const nestedEmployee = asRecord(record.employee)
-  return (
-    readNumber(record, ["employee_id", "employeeId", "requester_employee_id", "requesterEmployeeId"]) ??
-    readNumber(nestedEmployee, ["id", "employee_id", "employeeId"])
-  )
-}
-
-function readRequesterEmail(record: AdminRecord | null) {
-  if (!record) {
-    return ""
-  }
-
-  const nestedEmployee = asRecord(record.employee)
-  const nestedUser = asRecord(nestedEmployee?.user)
-  const nestedRequester = asRecord(record.requester) ?? asRecord(record.requested_by) ?? asRecord(record.requestedBy)
-
-  return (
-    readString(record, ["requester_email", "requesterEmail", "employee_email", "employeeEmail", "email"]) ||
-    readString(nestedEmployee, ["email", "work_email", "workEmail"]) ||
-    readString(nestedUser, ["email"]) ||
-    readString(nestedRequester, ["email"])
-  ).toLowerCase()
-}
-
-async function resolveRequesterCompanyUserId(token: string, request: AdminRecord | null) {
-  if (!request) {
-    return null
-  }
-
-  const nestedEmployee = asRecord(request.employee)
-  const explicit =
-    readNestedCompanyUserId(request) ??
-    readNestedCompanyUserId(nestedEmployee)
-  if (explicit !== null) {
-    return explicit
-  }
-
-  const employeeId = readRequestEmployeeId(request)
-  const requesterEmail = readRequesterEmail(request)
-  if (employeeId === null && !requesterEmail) {
-    return null
-  }
-
-  try {
-    const companyUsers = await listAllCurrentCompanyUsers(token)
-    const match = companyUsers.find((companyUser) => {
-      const companyUserEmployee = asRecord(companyUser.employee)
-      const companyUserUser = asRecord(companyUser.user)
-      const candidateEmployeeId =
-        readNumber(companyUser, ["employee_id", "employeeId"]) ??
-        readNumber(companyUserEmployee, ["id", "employee_id", "employeeId"])
-      if (employeeId !== null && candidateEmployeeId === employeeId) {
-        return true
-      }
-
-      if (!requesterEmail) {
-        return false
-      }
-
-      const candidateEmail = (
-        readString(companyUser, ["email"]) ||
-        readString(companyUserUser, ["email"]) ||
-        readString(companyUserEmployee, ["email", "work_email", "workEmail"])
-      ).toLowerCase()
-      return Boolean(candidateEmail && candidateEmail === requesterEmail)
-    })
-
-    return readCompanyUserId(match ?? null)
-  } catch (errorObject) {
-    console.warn("[notifications] Failed to resolve requester company user.", errorObject)
-    return null
-  }
-}
-
 function readNestedRequesterName(record: AdminRecord | null) {
   if (!record) {
     return ""
@@ -782,9 +660,9 @@ async function resolveFallbackRecipientIds(
 export async function notifySubmittedRequestApprovers(
   options: NotifySubmittedRequestOptions
 ) {
-  // Onboarding notifications are sequenced by the backend alongside tasks.
+  // Leave and onboarding notifications are sequenced by the backend alongside tasks.
   // A client fallback must not broadcast to future approvers or unrelated HR users.
-  if (options.kind === "onboarding_request") return 0
+  if (options.kind === "onboarding_request" || options.kind === "leave_request") return 0
   const config = NOTIFICATION_CONFIG[options.kind]
   const senderCompanyUserId = readCurrentCompanyUserId(options.token)
 
@@ -891,74 +769,8 @@ export async function notifySubmittedRequestApprovers(
   }
 }
 
-export async function notifyLeaveRequestRequester(
-  options: NotifyLeaveRequestRequesterOptions
-) {
-  const senderCompanyUserId = readCurrentCompanyUserId(options.token)
-  const actionLabel =
-    options.action === "approve"
-      ? "approved"
-      : options.action === "reject"
-        ? "rejected"
-        : "returned for correction"
-
-  try {
-    let request = unwrapRequestRecord(options.request)
-    let requestId = readRequestId(request)
-
-    if (options.loadRequest) {
-      try {
-        const loaded = unwrapRequestRecord(await options.loadRequest())
-        if (loaded) {
-          request = loaded
-          requestId = readRequestId(loaded) ?? requestId
-        }
-      } catch (errorObject) {
-        console.warn("[notifications] Failed to load leave request detail before notifying requester.", errorObject)
-      }
-    }
-
-    if (requestId === null) {
-      console.warn("[notifications] Skipping leave requester notification — request id could not be resolved.")
-      return 0
-    }
-
-    const receiverCompanyUserId = await resolveRequesterCompanyUserId(options.token, request)
-    if (receiverCompanyUserId === null || receiverCompanyUserId === senderCompanyUserId) {
-      console.warn(
-        `[notifications] Skipping leave request ${String(requestId)} ${actionLabel} notification — requester recipient could not be resolved or is the actor.`
-      )
-      return 0
-    }
-
-    const actorLabel = options.actorName?.trim() || "An approver"
-    const leaveNo = readString(request, ["leave_no", "leaveNo", "request_no", "requestNo"])
-    const requestLabel = leaveNo || `leave request #${requestId}`
-    await createTestNotification(options.token, {
-      receiver_company_user_id: receiverCompanyUserId,
-      title: `Your leave request was ${actionLabel}`,
-      message: `${actorLabel} ${actionLabel} ${requestLabel}.`,
-      type: `leave_request_${options.action === "return_for_correction" ? "returned" : actionLabel}`,
-      category: "HR",
-      priority: options.action === "approve" ? "MEDIUM" : "HIGH",
-      related_module: "leave_management",
-      entity_type: "leave_request",
-      entity_id: String(requestId),
-      action_url: appendRequestHighlight("/dashboard/me/leave/requests", requestId),
-      dedupe_key: `leave_request:${requestId}:${options.action}:requester:${receiverCompanyUserId}:${Date.now()}`,
-      metadata: {
-        entity_type: "leave_request",
-        related_module: "leave_management",
-        request_id: requestId,
-        highlight: requestId,
-        action: options.action,
-        actor_name: actorLabel,
-      },
-    })
-
-    return 1
-  } catch (errorObject) {
-    console.warn("[notifications] Failed to notify requester for leave approval action.", errorObject)
-    return 0
-  }
+/** @deprecated Leave outcomes are delivered by the backend after the workflow commits. */
+export async function notifyLeaveRequestRequester(options: NotifyLeaveRequestRequesterOptions) {
+  void options
+  return 0
 }

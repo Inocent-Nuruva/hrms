@@ -474,6 +474,7 @@ export function AttendancePunchActions({
 }) {
   const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
   const [selfieFile, setSelfieFile] = React.useState<File | null>(null)
+  const [pendingAction, setPendingAction] = React.useState<"in" | "out" | null>(null)
   const [exceptionReason, setExceptionReason] = React.useState("")
   const [punchPolicy, setPunchPolicy] = React.useState<Record<string, unknown>>({})
   const [message, setMessage] = React.useState<{
@@ -550,6 +551,7 @@ export function AttendancePunchActions({
         })
         setSelfieFile(null)
         setExceptionReason("")
+        setPendingAction(null)
         await onAttendanceChanged?.().catch(() => undefined)
       } catch (errorObject) {
         setMessage({
@@ -568,27 +570,52 @@ export function AttendancePunchActions({
 
   return (
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="grid gap-1 text-[11px] text-muted-foreground">
-          {punchPolicy.require_selfie_for_check_in === true || punchPolicy.require_selfie_for_check_out === true
-            ? "Attendance selfie (required by policy)"
-            : "Optional attendance selfie"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="user"
-            aria-label="Attach an attendance selfie"
-            onChange={(event) => setSelfieFile(event.target.files?.[0] ?? null)}
-            className="max-w-[240px] text-xs"
-          />
-        </label>
-        {punchPolicy.allow_location_exception_override === true ? (
-          <label className="grid gap-1 text-[11px] text-muted-foreground">
-            Location exception reason
-            <input value={exceptionReason} onChange={(event) => setExceptionReason(event.target.value)} maxLength={500} placeholder="Explain why location validation failed" className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
-          </label>
-        ) : null}
-      </div>
+      <Dialog open={pendingAction !== null} onOpenChange={(open) => {
+        if (!open && busyAction === null) {
+          setPendingAction(null)
+          setSelfieFile(null)
+          setExceptionReason("")
+        }
+      }}>
+        <DialogPopup from="center" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pendingAction === "out" ? "Check out" : "Check in"}</DialogTitle>
+            <DialogDescription>Confirm your attendance and attach a selfie if required by your attendance policy.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 px-5 pb-2 sm:px-6">
+            <label className="grid gap-1 text-[11px] text-muted-foreground">
+              {(pendingAction === "in" ? punchPolicy.require_selfie_for_check_in : punchPolicy.require_selfie_for_check_out) === true
+                ? "Attendance selfie (required by policy)"
+                : "Optional attendance selfie"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="user"
+                aria-label="Attach an attendance selfie"
+                disabled={busyAction !== null}
+                onChange={(event) => setSelfieFile(event.target.files?.[0] ?? null)}
+                className="max-w-[240px] text-xs"
+              />
+            </label>
+            {punchPolicy.allow_location_exception_override === true ? (
+              <label className="grid gap-1 text-[11px] text-muted-foreground">
+                Location exception reason
+                <input value={exceptionReason} disabled={busyAction !== null} onChange={(event) => setExceptionReason(event.target.value)} maxLength={500} placeholder="Explain why location validation failed" className="h-8 rounded-md border border-input bg-background px-2 text-xs" />
+              </label>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busyAction !== null} onClick={() => {
+              setPendingAction(null)
+              setSelfieFile(null)
+              setExceptionReason("")
+            }}>Cancel</Button>
+            <Button type="button" disabled={busyAction !== null || (pendingAction === "in" ? !canCheckIn : !canCheckOut)} onClick={() => {
+              if (pendingAction) void submitPunch(pendingAction)
+            }}>{busyAction !== null ? "Submitting…" : pendingAction === "out" ? "Confirm check out" : "Confirm check in"}</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
       <div className={cn(
         "flex flex-wrap",
         compact
@@ -602,7 +629,7 @@ export function AttendancePunchActions({
             ? "h-8 min-h-8 min-w-[5.25rem] gap-1.5 rounded-md px-2.5 text-xs font-semibold shadow-none disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
-          onClick={() => void submitPunch("in")}
+          onClick={() => setPendingAction("in")}
         >
           {busyAction === "in" ? (
             <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
@@ -619,7 +646,7 @@ export function AttendancePunchActions({
             ? "h-8 min-h-8 min-w-[5.5rem] gap-1.5 rounded-md border-border/70 bg-background px-2.5 text-xs font-semibold shadow-none hover:border-primary/30 hover:bg-primary/5 disabled:opacity-45"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
-          onClick={() => void submitPunch("out")}
+          onClick={() => setPendingAction("out")}
         >
           {busyAction === "out" ? (
             <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />

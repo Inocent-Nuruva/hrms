@@ -470,7 +470,7 @@ export function LeaveTypesCatalog({
                     },
                     {
                       label: "Attachment",
-                      value: readBool(selected, ["requires_attachment", "requiresAttachment"]) ? "Required" : "Optional",
+                      value: readBool(selected, ["requires_attachment", "requiresAttachment"]) ? (readBool(selected, ["allow_deferred_attachment"]) ? `Due ${selected.attachment_grace_days ?? 3} days after submission` : "Required before submission") : "Optional",
                     },
                     {
                       label: "Carry forward",

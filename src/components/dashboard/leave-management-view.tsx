@@ -1,5 +1,10 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { leaveEvidenceMessage } from "@/lib/leave-evidence"
+import { extendLeaveEvidenceDeadline, retryLeaveRouting } from "@/lib/admin-api"
+
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -160,10 +165,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  notifyLeaveRequestRequester,
-  notifySubmittedRequestApprovers,
-} from "@/lib/request-notifications"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const WORKFLOW_CREATE_DRAFT_KEY = "hrms.leaveWorkflow.createDraft.v1"
@@ -292,6 +293,8 @@ function createEmptyLeaveTypeForm() {
     status: "active",
     is_paid: "true",
     requires_attachment: "false",
+    allow_deferred_attachment: "false",
+    attachment_grace_days: "3",
     is_carry_forward_allowed: "false",
     max_carry_forward_days: "0",
     max_days_per_year: "0",
@@ -883,6 +886,7 @@ function getLeaveRequestPermissions(row: AdminRecord, actor: LeaveActor | null) 
     : undefined
 
   const canApproveOrReject =
+    row.routing_required !== true &&
     !isTerminal &&
     Boolean(myPending) &&
     isLeaveRequestApprovalOpenStatus(status)
@@ -1176,6 +1180,8 @@ export function LeaveManagementView({
   const [types, setTypes] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [requestSearch, setRequestSearch] = React.useState("")
+  const [evidenceDeadline, setEvidenceDeadline] = React.useState("")
+  const [evidenceReason, setEvidenceReason] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [transactionSearch, setTransactionSearch] = React.useState("")
   const [transactionTypeFilter, setTransactionTypeFilter] = React.useState("all")
@@ -1375,6 +1381,8 @@ export function LeaveManagementView({
   }, [selectedLeaveRequestRow])
 
   React.useEffect(() => {
+    setEvidenceDeadline("")
+    setEvidenceReason("")
     hydrateLeaveMedicalForm(selectedLeaveRequestRow)
     setLeaveMedicalAttachmentFile(null)
     if (leaveMedicalAttachmentInputRef.current) {
@@ -1621,6 +1629,8 @@ export function LeaveManagementView({
       status: readString(row, ["status"]) === "inactive" ? "inactive" : "active",
       is_paid: readBoolean(row, ["is_paid"]) ? "true" : "false",
       requires_attachment: readBoolean(row, ["requires_attachment"]) ? "true" : "false",
+      allow_deferred_attachment: readBoolean(row, ["allow_deferred_attachment"]) ? "true" : "false",
+      attachment_grace_days: String(readNumber(row, ["attachment_grace_days"]) ?? 3),
       is_carry_forward_allowed: readBoolean(row, ["is_carry_forward_allowed"]) ? "true" : "false",
       max_carry_forward_days:
         readDisplayValue(row, ["max_carry_forward_days"]) === "-"
@@ -2118,7 +2128,10 @@ export function LeaveManagementView({
 
   const filteredRequests = requests.filter((row) => {
     const status = readString(row, ["status"]).toLowerCase()
-    if (requestStatusFilter !== "all" && status !== requestStatusFilter) {
+    if (requestStatusFilter === "evidence_overdue" && row.evidence_status !== "overdue") return false
+    if (requestStatusFilter === "evidence_pending" && row.evidence_status !== "awaiting_evidence") return false
+    if (requestStatusFilter === "routing_required" && row.routing_required !== true) return false
+    if (!["all", "evidence_overdue", "evidence_pending", "routing_required"].includes(requestStatusFilter) && status !== requestStatusFilter) {
       return false
     }
     const query = requestSearch.trim().toLowerCase()
@@ -2317,6 +2330,8 @@ export function LeaveManagementView({
         status: typeForm.status,
         is_paid: typeForm.is_paid === "true",
         requires_attachment: typeForm.requires_attachment === "true",
+        allow_deferred_attachment: typeForm.allow_deferred_attachment === "true",
+        attachment_grace_days: Number(typeForm.attachment_grace_days),
         is_carry_forward_allowed: typeForm.is_carry_forward_allowed === "true",
         max_carry_forward_days: Number(typeForm.max_carry_forward_days || "0"),
         max_days_per_year: Number(typeForm.max_days_per_year || "0"),
@@ -2389,7 +2404,7 @@ export function LeaveManagementView({
     setSaving(true)
     setError(null)
     try {
-      const createdRequest = await createLeaveRequest(token, {
+      await createLeaveRequest(token, {
         employee_id: Number(requestForm.employee_id),
         leave_type_id: Number(requestForm.leave_type_id),
         start_date: requestForm.start_date,
@@ -2397,37 +2412,6 @@ export function LeaveManagementView({
         reason: requestForm.reason.trim(),
         submit: requestForm.submit === "true",
       })
-      if (requestForm.submit === "true") {
-        const createdRecord = asRecord(createdRequest)
-        const nestedLeaveRequest = asRecord(createdRecord?.leave_request)
-        const nestedLeaveRequestCamel = asRecord(createdRecord?.leaveRequest)
-        const createdRequestId =
-          (createdRecord
-            ? readNumber(createdRecord, ["id", "request_id", "leave_request_id", "leaveRequestId"])
-            : null) ??
-          (nestedLeaveRequest ? readNumber(nestedLeaveRequest, ["id"]) : null) ??
-          (nestedLeaveRequestCamel ? readNumber(nestedLeaveRequestCamel, ["id"]) : null)
-        void notifySubmittedRequestApprovers({
-          kind: "leave_request",
-          token,
-          request: createdRequest,
-          loadRequest:
-            createdRequestId === null
-              ? undefined
-              : () => getLeaveRequest(token, createdRequestId),
-          requesterName:
-            employees.find((row) =>
-              readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
-            )
-              ? employeeLabelFromRow(
-                  employees.find((row) =>
-                    readNumber(row, ["id", "employee_id", "user_id"]) ===
-                    Number(requestForm.employee_id)
-                  ) as AdminRecord
-                )
-              : undefined,
-        })
-      }
       setRequestForm(emptyLeaveRequestForm())
       setRequestDialogStep("who")
       setRequestDialogOpen(false)
@@ -3371,17 +3355,11 @@ export function LeaveManagementView({
         action,
         comments: defaultComment,
       })
-      void notifyLeaveRequestRequester({
-        action,
-        actorName: permissions.myPending?.name,
-        token,
-        request: actionResult ?? row,
-        loadRequest: () => getLeaveRequest(token, id),
-      })
+
 
       const successMessage =
         action === "approve"
-          ? "Leave request approved."
+          ? (readString(asRecord(actionResult) ?? {}, ["status"]) === "approved" ? "Leave request fully approved." : "Your approval was recorded. The request is awaiting the next reviewer.")
           : action === "reject"
             ? "Leave request rejected."
             : "Leave request returned for correction."
@@ -3499,6 +3477,25 @@ export function LeaveManagementView({
     } finally {
       setSaving(false)
     }
+  }
+
+  async function manageLeaveFollowUp(row: AdminRecord, action: "routing" | "deadline") {
+    const token = readStoredToken()
+    const id = readNumber(row, ["id"])
+    if (!token || id === null) return
+    setSaving(true)
+    try {
+      if (action === "routing") await retryLeaveRouting(token, id)
+      else {
+        if (!evidenceDeadline || !evidenceReason.trim()) throw new Error("Enter a new deadline and a reason.")
+        await extendLeaveEvidenceDeadline(token, id, new Date(evidenceDeadline).toISOString(), evidenceReason.trim())
+      }
+      await refreshLeaveRequestDetail(row)
+      setEvidenceDeadline("")
+      setEvidenceReason("")
+      showSuccessAlert(action === "routing" ? "Manager routing restored." : "Evidence deadline extended.")
+    } catch (error) { showErrorAlert(error instanceof Error ? error.message : "Could not update leave request.") }
+    finally { setSaving(false) }
   }
 
   async function uploadLeaveDocument(row: AdminRecord) {
@@ -3719,6 +3716,11 @@ export function LeaveManagementView({
                 onChange={setRequestStatusFilter}
                 options={[
                   { value: "all", label: "All statuses" },
+                      { value: "pending_department_manager", label: "Manager review" },
+                      { value: "pending_hr", label: "HR review" },
+                      { value: "routing_required", label: "Routing correction" },
+                      { value: "evidence_overdue", label: "Evidence overdue" },
+                      { value: "evidence_pending", label: "Evidence pending" },
                   { value: "draft", label: "draft" },
                   { value: "submitted", label: "submitted" },
                   { value: "in_review", label: "in_review" },
@@ -3938,6 +3940,11 @@ export function LeaveManagementView({
                     onChange={setRequestStatusFilter}
                     options={[
                       { value: "all", label: "All statuses" },
+                      { value: "pending_department_manager", label: "Manager review" },
+                      { value: "pending_hr", label: "HR review" },
+                      { value: "routing_required", label: "Routing correction" },
+                      { value: "evidence_overdue", label: "Evidence overdue" },
+                      { value: "evidence_pending", label: "Evidence pending" },
                       { value: "draft", label: "draft" },
                       { value: "submitted", label: "submitted" },
                       { value: "in_review", label: "in_review" },
@@ -4390,6 +4397,19 @@ export function LeaveManagementView({
                     </div>
                   </div>
 
+                  <p role="status" className="text-sm text-muted-foreground">{leaveEvidenceMessage(selectedLeaveRequestRow)}</p>
+                  {selectedLeaveRequestRow.routing_required === true ? (
+                    <Button disabled={saving} onClick={() => void manageLeaveFollowUp(selectedLeaveRequestRow, "routing")}>Retry routing after correcting manager assignment</Button>
+                  ) : null}
+                  {["awaiting_evidence", "overdue"].includes(String(selectedLeaveRequestRow.evidence_status)) ? (
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="leave-evidence-deadline">Extend evidence deadline (HR reviewer)</label>
+                      <Input id="leave-evidence-deadline" type="datetime-local" value={evidenceDeadline} onChange={event => setEvidenceDeadline(event.target.value)} />
+                      <label htmlFor="leave-evidence-reason">Reason for extension</label>
+                      <Input id="leave-evidence-reason" value={evidenceReason} onChange={event => setEvidenceReason(event.target.value)} />
+                      <Button disabled={saving || !evidenceDeadline || !evidenceReason.trim()} onClick={() => void manageLeaveFollowUp(selectedLeaveRequestRow, "deadline")}>Extend deadline</Button>
+                    </div>
+                  ) : null}
                   <ApprovalChain row={selectedLeaveRequestRow} actor={currentActor} />
 
                   {(() => {
@@ -4921,6 +4941,19 @@ export function LeaveManagementView({
                   label="Carry unused days"
                   description="Unused days can move into the next year instead of expiring."
                 />
+                {typeForm.requires_attachment === "true" ? (
+                  <>
+                    <MarkCheckbox checked={typeForm.allow_deferred_attachment === "true"}
+                      onCheckedChange={(checked) => setTypeForm(prev => ({ ...prev, allow_deferred_attachment: checked ? "true" : "false" }))}
+                      label="Allow documents after submission" description="Approval can continue while the employee obtains evidence. Missing documents trigger reminders." />
+                    {typeForm.allow_deferred_attachment === "true" ? (
+                      <LeaveTypeField label="Evidence due after submission (calendar days)" help="The employee is reminded when evidence is overdue, then every three days.">
+                        <Input type="number" min={1} max={365} value={typeForm.attachment_grace_days}
+                          onChange={event => setTypeForm(prev => ({ ...prev, attachment_grace_days: event.target.value }))} />
+                      </LeaveTypeField>
+                    ) : null}
+                  </>
+                ) : null}
                 {typeForm.is_carry_forward_allowed === "true" ? (
                   <LeaveTypeField label="Days that can move forward" help="The most unused days an employee can keep for next year.">
                     <input

@@ -40,6 +40,9 @@ import {
   getOffboardingExitInterview,
   getOffboardingProgress,
   listBranches,
+  listResource,
+  listPositions,
+  listAllCurrentCompanyUsers,
   listDepartments,
   listEmployees,
   listOffboardingActions,
@@ -423,6 +426,7 @@ export function OffboardingView() {
 
   const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
   const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
+  const [stepAssignees, setStepAssignees] = React.useState<Record<string, AdminRecord[]>>({ role: [], position: [], company_user: [] })
   const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
   const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
 
@@ -1838,9 +1842,22 @@ export function OffboardingView() {
     )
   }, [selectedWorkflow])
 
-  function openAddStepDialog() {
+  async function openAddStepDialog() {
     if (!canManage || !selectedWorkflowId) {
       showErrorAlert("Select a workflow first.")
+      return
+    }
+    const token = readStoredToken()
+    if (!token) return
+    try {
+      const [roles, positions, users] = await Promise.all([
+        listResource("roles", token),
+        listPositions(token, { limit: 200 }),
+        listAllCurrentCompanyUsers(token),
+      ])
+      setStepAssignees({ role: roles, position: positions.rows, company_user: users })
+    } catch (failure) {
+      showErrorAlert(failure instanceof Error ? failure.message : "Could not load assignment options.")
       return
     }
     const nextLevel = String(
@@ -1859,6 +1876,10 @@ export function OffboardingView() {
       action_type: "verify",
       is_required: "true",
       expected_duration_days: "2",
+      approver_type: "role",
+      role_id: "",
+      position_id: "",
+      company_user_id: "",
     }))
     setStepDialogOpen(true)
   }
@@ -1868,6 +1889,11 @@ export function OffboardingView() {
     if (!token || !selectedWorkflowId) return
     if (!stepForm.step_name.trim() || !stepForm.task_title.trim()) {
       showErrorAlert("Step name and task title are required.")
+      return
+    }
+    const target = stepForm.approver_type === "role" ? stepForm.role_id : stepForm.approver_type === "position" ? stepForm.position_id : stepForm.company_user_id
+    if (!target || !Number.isInteger(Number(target)) || Number(target) <= 0) {
+      showErrorAlert("Select a person, role, or position to assign this step to.")
       return
     }
     setSaving(true)
@@ -3018,6 +3044,15 @@ export function OffboardingView() {
                   />
                 </label>
               </div>
+              <FluentSelect label="Assign step to" value={stepForm.approver_type} onChange={(value) => setStepForm((prev) => ({ ...prev, approver_type: value, role_id: "", position_id: "", company_user_id: "" }))} options={[
+                { value: "company_user", label: "Person" }, { value: "role", label: "Role" }, { value: "position", label: "Position" },
+              ]} />
+              <FluentSelect label="Assignee" value={stepForm.approver_type === "role" ? stepForm.role_id : stepForm.approver_type === "position" ? stepForm.position_id : stepForm.company_user_id} onChange={(value) => setStepForm((prev) => ({
+                ...prev, [prev.approver_type === "role" ? "role_id" : prev.approver_type === "position" ? "position_id" : "company_user_id"]: value,
+              }))} options={(stepAssignees[stepForm.approver_type] ?? []).map((row) => ({
+                value: String(readNumber(row, ["company_user_id", "id"])),
+                label: readString(row, ["full_name", "name", "email"]) !== "-" ? readString(row, ["full_name", "name", "email"]) : (readTokenString(asRecord(row.user), ["email"]) ?? "Company member"),
+              }))} />
               <label className="grid gap-1 text-xs">
                 <span className="font-medium text-muted-foreground">Required?</span>
                 <FluentSelect

@@ -140,7 +140,12 @@ export function buildLeaveWorkflowSummary(row: MobileRecord | null): LeaveWorkfl
           return asRecordList(row.approvalChain);
         })();
 
+  const currentCycle = readNumber(row, ['approval_cycle', 'approvalCycle']);
   const approvals = approvalsSource
+    .filter(approval => {
+      const cycle = readNumber(approval, ['approval_cycle', 'approvalCycle']);
+      return currentCycle === null || cycle === null || cycle === currentCycle;
+    })
     .map((approval) => {
       const approver =
         asRecord(approval.approver) ??
@@ -214,6 +219,6 @@ export function buildLeaveWorkflowSummary(row: MobileRecord | null): LeaveWorkfl
     pendingCount,
     totalCount,
     progressPercent,
-    waitingLabel,
+    waitingLabel: row.routing_required === true ? 'Awaiting manager assignment' : waitingLabel,
   };
 }

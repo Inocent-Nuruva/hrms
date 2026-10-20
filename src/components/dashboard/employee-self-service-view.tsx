@@ -1,5 +1,7 @@
 "use client"
 
+import { requiresEvidenceBeforeSubmission } from "@/lib/leave-evidence"
+
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
 import * as React from "react"
@@ -97,7 +99,6 @@ import {
   submitMyProfileUpdateRequest,
   cancelMyLeaveRequest,
   downloadMyLeaveRequestPdf,
-  getMyLeaveRequest,
   getMyPayslip,
   getMyPayrollSummary,
   submitMyLeaveRequest,
@@ -6023,7 +6024,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setActionErrorMessage(leaveSubmissionBalanceError)
       return
     }
-    if (submit && selectedLeaveTypeRequiresAttachment && !leaveAttachmentFile) {
+    if (submit && requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) && !leaveAttachmentFile) {
       setActionErrorMessage("This leave type requires a supporting attachment before submission.")
       return
     }
@@ -6074,14 +6075,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         if (!leaveAttachmentFile && createdId !== null && (createdStatus === "draft" || createdStatus === "" || createdStatus === "-")) {
           await submitMyLeaveRequest(token, createdId)
         }
-        if (createdId !== null) {
-          void notifySubmittedRequestApprovers({
-            kind: "leave_request",
-            token,
-            request: payload,
-            loadRequest: () => getMyLeaveRequest(token, createdId),
-          })
-        }
+
       }
 
       setRequestForm({
@@ -6115,7 +6109,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     loadData,
     requestForm,
     leaveAttachmentFile,
-    selectedLeaveTypeRequiresAttachment,
+    selectedLeaveTypeRecord,
     selectedLeaveBalance?.availableDays,
     token,
   ])
@@ -6197,13 +6191,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     setMessage(null)
     setActionErrorMessage(null)
     try {
-      const submittedRequest = await submitMyLeaveRequest(token, id)
-      void notifySubmittedRequestApprovers({
-        kind: "leave_request",
-        token,
-        request: submittedRequest ?? { id },
-        loadRequest: () => getMyLeaveRequest(token, id),
-      })
+      await submitMyLeaveRequest(token, id)
       setMessage("Leave request submitted.")
       await loadData()
     } catch (errorObject) {
@@ -6729,7 +6717,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 </p>
               ) : null}
               {selectedLeaveTypeRequiresAttachment ? (
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">A supporting attachment is required to submit this leave type.</p>
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "A supporting attachment is required before submission." : `You can submit now and upload evidence within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.`}</p>
               ) : null}
               {requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
                 <p className="text-xs text-muted-foreground">
@@ -6772,7 +6760,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
               </div>
             ) : null}
-            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? "(required to submit)" : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
+            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "(required to submit)" : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-3 file:py-1.5" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
             </FluentField>
             <FluentField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>

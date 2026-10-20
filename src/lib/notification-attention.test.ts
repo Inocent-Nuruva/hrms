@@ -31,6 +31,16 @@ describe("notification attention routing", () => {
     })).toBe("/dashboard/me/activities/today")
   })
 
+  it("keeps absolute evidence links on the employee request page", () => {
+    expect(resolveNotificationUrl({ type: "LEAVE_EVIDENCE_REQUIRED", entity_type: "LEAVE_REQUEST", entity_id: 7, action_url: "https://hr.example/dashboard/me/leave/requests?highlight=7" })).toBe("/dashboard/me/leave/requests?highlight=7")
+  })
+  it("repairs historical leave links without opening nonexistent pages", () => {
+    expect(resolveNotificationUrl({ type: "LEAVE_APPROVAL_REQUIRED", action_url: "https://hr.example/leave/7/review" })).toBe("/dashboard/leave-management/requests?highlight=7")
+    expect(resolveNotificationUrl({ type: "LEAVE_APPROVED", action_url: "/leave/7" })).toBe("/dashboard/me/leave/requests?highlight=7")
+    expect(resolveNotificationUrl({ type: "LEAVE_SUBMITTED", action_url: "/leave/7/review" })).toBe("/dashboard/me/leave/requests?highlight=7")
+    expect(resolveNotificationUrl({ type: "LEAVE_ROUTING_REQUIRED", entity_id: 7 })).toBe("/dashboard/leave-management/requests?highlight=7")
+  })
+
   it("only exposes unread notification destinations", () => {
     expect(notificationAttentionRoutes([
       { status: "UNREAD", action_url: "/dashboard/me/onboarding" },

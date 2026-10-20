@@ -1,5 +1,7 @@
 "use client"
 
+import { leaveEvidenceMessage } from "@/lib/leave-evidence"
+
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import {
@@ -14,13 +16,11 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
- addLeaveRequestDocument,
- downloadLeaveRequestDocument,
+ uploadMyLeaveRequestDocument,
+ downloadMyLeaveRequestDocument,
  downloadMyLeaveRequestPdf,
- fileToBase64UploadDto,
  getMyLeaveRequest,
- patchLeaveRequestMedicalDetail,
- resolveBackendMediaUrl,
+ patchMyLeaveRequestMedicalDetail,
  type AdminRecord,
 } from "@/lib/admin-api"
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind"
@@ -427,7 +427,7 @@ export function buildLeaveWorkflowSummary(row: AdminRecord | null): LeaveWorkflo
  pendingCount,
  totalCount,
  progressPercent,
- waitingLabel,
+ waitingLabel: row.routing_required === true ? "Awaiting manager assignment" : waitingLabel,
  }
 }
 
@@ -1171,9 +1171,8 @@ export function LeaveWorkflowDialog({
   try {
    let attachmentUrl = medicalForm.attachment_url.trim()
    if (medicalAttachmentFile) {
-    const file = await fileToBase64UploadDto(medicalAttachmentFile)
     const uploadedDocument = asRecord(
-     await addLeaveRequestDocument(token, requestId, { file })
+     await uploadMyLeaveRequestDocument(token, requestId, medicalAttachmentFile)
     )
     attachmentUrl = readString(uploadedDocument, ["file_url"])
     if (!attachmentUrl) {
@@ -1185,7 +1184,7 @@ export function LeaveWorkflowDialog({
      medicalAttachmentInputRef.current.value = ""
     }
    }
-   await patchLeaveRequestMedicalDetail(token, requestId, {
+   await patchMyLeaveRequestMedicalDetail(token, requestId, {
     sickness_nature: medicalForm.sickness_nature.trim() || undefined,
     doctor_name: medicalForm.doctor_name.trim() || undefined,
     doctor_phone: medicalForm.doctor_phone.trim() || undefined,
@@ -1219,8 +1218,7 @@ export function LeaveWorkflowDialog({
   setActionError(null)
   setActionMessage(null)
   try {
-   const file = await fileToBase64UploadDto(documentFile)
-   await addLeaveRequestDocument(token, requestId, { file })
+   await uploadMyLeaveRequestDocument(token, requestId, documentFile)
    await refreshDetail()
    setDocumentFile(null)
    setActionMessage("Supporting document uploaded.")
@@ -1248,23 +1246,11 @@ export function LeaveWorkflowDialog({
   setActionError(null)
   setActionMessage(null)
   try {
-   const result = await downloadLeaveRequestDocument(token, requestId, documentId)
+   const result = await downloadMyLeaveRequestDocument(token, requestId, documentId)
    downloadBlob(result.blob, result.filename)
    setActionMessage("Supporting document downloaded.")
   } catch (errorObject) {
-   const rawUrl =
-    readString(documentRow, ["file_url"]) ||
-    resolveBackendMediaUrl(readString(documentRow, ["file_url"]))
-   if (rawUrl) {
-    window.open(resolveBackendMediaUrl(rawUrl) ?? rawUrl, "_blank", "noopener,noreferrer")
-    setActionMessage("Opened supporting document.")
-   } else {
-    setActionError(
-     errorObject instanceof Error
-      ? errorObject.message
-      : "Failed to download supporting document."
-    )
-   }
+   setActionError(errorObject instanceof Error ? errorObject.message : "Failed to download supporting document.")
   } finally {
    setBusyAction(null)
   }
@@ -1298,6 +1284,7 @@ export function LeaveWorkflowDialog({
  </DialogHeader>
 
  <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto py-2">
+ <p role="status" className="text-sm text-muted-foreground">{leaveEvidenceMessage(detail)}</p>
  {loading ? (
  <div className="flex min-h-28 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
  <FluentLoadingIndicator className="h-5 w-5 animate-spin text-primary" />
@@ -1517,7 +1504,6 @@ export function LeaveWorkflowDialog({
  </div>
  ) : (
  documents.map((documentRow, index) => {
- const fileUrl = resolveBackendMediaUrl(readString(documentRow, ["file_url"]))
  return (
  <div
  key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
@@ -1542,16 +1528,7 @@ export function LeaveWorkflowDialog({
  >
  {busyAction === "document-download" ? "Downloading…" : "Download"}
  </Button>
- {fileUrl ? (
- <Button
- type="button"
- variant="outline"
- size="sm"
- onClick={() => window.open(fileUrl, "_blank", "noopener,noreferrer")}
- >
- Open
- </Button>
- ) : null}
+
  </div>
  </div>
  )

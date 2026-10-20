@@ -91,6 +91,7 @@ import {
   listOnboardingWorkflows,
   listPayrollSalaryStructures,
   listResource,
+  listPositions,
   listShiftResources,
   listTimetableResources,
   patchOnboardingRequest,
@@ -188,6 +189,7 @@ type OnboardingLookupKey =
   | "workflows"
   | "users"
   | "roles"
+  | "positions"
   | "branches"
   | "departments"
   | "shifts"
@@ -900,7 +902,7 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
     step_type: String(step.step_type ?? "task").trim() || "task",
     due_days: Number(step.due_days) > 0 ? Number(step.due_days) : 1,
     ...onboardingStepAssignmentPayload(step),
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    metadata,
   }
   return payload
 }
@@ -1348,6 +1350,9 @@ export function OnboardingView() {
   const [users, setUsers] = React.useState<AdminRecord[]>([])
   const [workflowDepartmentEmployees, setWorkflowDepartmentEmployees] = React.useState<AdminRecord[]>([])
   const [roles, setRoles] = React.useState<AdminRecord[]>([])
+  const [workflowPositions, setWorkflowPositions] = React.useState<AdminRecord[]>([])
+  const [workflowAssignmentKind, setWorkflowAssignmentKind] = React.useState<"user" | "role" | "position">("user")
+  const [workflowAssignmentTarget, setWorkflowAssignmentTarget] = React.useState("")
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
@@ -1382,6 +1387,7 @@ export function OnboardingView() {
     workflows: false,
     users: false,
     roles: false,
+    positions: false,
     branches: false,
     departments: false,
     shifts: false,
@@ -1733,6 +1739,8 @@ export function OnboardingView() {
             }
             case "roles":
               return { key, result: await listResource("roles", token) }
+            case "positions":
+              return { key, result: await listPositions(token, { limit: 200 }) }
             case "branches":
               return {
                 key,
@@ -1831,6 +1839,9 @@ export function OnboardingView() {
             break
           case "roles":
             setRoles(entry.result)
+            break
+          case "positions":
+            setWorkflowPositions(entry.result.rows)
             break
           case "branches":
             setBranches(entry.result.rows)
@@ -2572,6 +2583,8 @@ export function OnboardingView() {
   }
 
   function resetWorkflowStepForm() {
+    setWorkflowAssignmentKind("user")
+    setWorkflowAssignmentTarget("")
     setWorkflowBranchId("")
     setChecklistItemDialogOpen(false)
     setEditingChecklistItemIndex(null)
@@ -2715,28 +2728,28 @@ export function OnboardingView() {
     const hasAssignedUser = Number.isFinite(assignedUserId) && assignedUserId > 0
     const hasAssignedDepartment = Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0
 
-    if (!selectedWorkflowBranchId) {
+    if (workflowAssignmentKind === "user" && !selectedWorkflowBranchId) {
       return {
         error: "Select a branch for this step.",
         step: null as AdminRecord | null,
       }
     }
 
-    if (!hasAssignedDepartment) {
+    if (workflowAssignmentKind === "user" && !hasAssignedDepartment) {
       return {
         error: "Select a department for this step.",
         step: null as AdminRecord | null,
       }
     }
 
-    if (!workflowDepartmentOptions.some((department) => department.id === assignedDepartmentId)) {
+    if (workflowAssignmentKind === "user" && !workflowDepartmentOptions.some((department) => department.id === assignedDepartmentId)) {
       return {
         error: "Select a department belonging to the selected branch.",
         step: null as AdminRecord | null,
       }
     }
 
-    if (hasAssignedUser && selectedStepAssigneeMissingPermission) {
+    if (workflowAssignmentKind === "user" && hasAssignedUser && selectedStepAssigneeMissingPermission) {
       return {
         error: `${selectedStepAssigneeLabel} needs ${requiredStepPermission} before this step can be assigned to them.`,
         step: null as AdminRecord | null,
@@ -2750,12 +2763,20 @@ export function OnboardingView() {
       checklist_items: checklistItems,
       step_type: workflowForm.step_type.trim() || "task",
       due_days: dueDays,
+      metadata: { ...(editingStepIndex !== null ? workflowSteps[editingStepIndex]?.metadata : {}) },
     }
+    delete stepPayload.metadata!.assigned_position_id
 
-    if (hasAssignedUser) {
+    if (workflowAssignmentKind !== "user") {
+      const targetId = Number(workflowAssignmentTarget)
+      if (!Number.isInteger(targetId) || targetId <= 0) return { error: `Select a ${workflowAssignmentKind} for this step.`, step: null }
+      if (workflowAssignmentKind === "role") stepPayload.assigned_role_id = targetId
+      else stepPayload.metadata = { ...stepPayload.metadata, assigned_position_id: targetId }
+    }
+    if (workflowAssignmentKind === "user" && hasAssignedUser) {
       stepPayload.assigned_user_id = assignedUserId
     }
-    if (hasAssignedDepartment) {
+    if (workflowAssignmentKind === "user" && hasAssignedDepartment) {
       stepPayload.assigned_department_id = assignedDepartmentId
     }
 
@@ -2826,7 +2847,7 @@ export function OnboardingView() {
 
   function openCreateStepDialog() {
     void (async () => {
-      const loaded = await ensureLookups(["branches", "users", "departments"])
+      const loaded = await ensureLookups(["branches", "users", "departments", "roles", "positions"])
       if (!loaded) {
         return
       }
@@ -2843,11 +2864,14 @@ export function OnboardingView() {
 
   function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
     void (async () => {
-      const loaded = await ensureLookups(["branches", "users", "departments"])
+      const loaded = await ensureLookups(["branches", "users", "departments", "roles", "positions"])
       if (!loaded) {
         return
       }
       setEditingStepIndex(index)
+      const positionId = readNumber(step.metadata ?? {}, ["assigned_position_id"])
+      setWorkflowAssignmentKind(positionId ? "position" : step.assigned_role_id ? "role" : "user")
+      setWorkflowAssignmentTarget(positionId ? String(positionId) : step.assigned_role_id ? String(step.assigned_role_id) : "")
       setWorkflowBranchId("")
       const assignedUserSelectValue = await hydrateAssignedUser(
         typeof step.assigned_user_id === "number" ? step.assigned_user_id : null
@@ -7665,7 +7689,9 @@ export function OnboardingView() {
                                       : step.assigned_department_id
                                         ? "Whole department"
                                         : step.assigned_role_id
-                                          ? "Legacy role assignment"
+                                          ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
+                                          : step.metadata?.assigned_position_id
+                                            ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
                                           : "Unassigned"
                                   }
                                 >
@@ -7906,6 +7932,20 @@ export function OnboardingView() {
                     Set how many days the assignee has to complete this step (at least 1).
                   </p>
                 </div>
+                <Field label="Assign step to" hint="Role and position assignments reach their active company members.">
+                  <FluentSelect ariaLabel="Assign step to" value={workflowAssignmentKind} onChange={(value) => {
+                    setWorkflowAssignmentKind(value as "user" | "role" | "position")
+                    setWorkflowAssignmentTarget("")
+                  }} options={[{ value: "user", label: "Person or department" }, { value: "role", label: "Role" }, { value: "position", label: "Position" }]} />
+                </Field>
+                {workflowAssignmentKind !== "user" ? (
+                  <Field label={workflowAssignmentKind === "role" ? "Role" : "Position"}>
+                    <FluentSelect ariaLabel={workflowAssignmentKind === "role" ? "Assigned role" : "Assigned position"} value={workflowAssignmentTarget} onChange={setWorkflowAssignmentTarget} placeholder={`Select ${workflowAssignmentKind}`} options={(workflowAssignmentKind === "role" ? roles : workflowPositions).map((row) => ({
+                      value: String(readNumber(row, ["id"])), label: readString(row, ["name", "title"]),
+                    }))} />
+                  </Field>
+                ) : null}
+                <div className={workflowAssignmentKind === "user" ? "contents" : "hidden"}>
                 <Field label="Branch" hint="Choose a branch first to see its departments.">
                   <Select
                     value={selectedWorkflowBranchId || "none"}
@@ -8059,6 +8099,7 @@ export function OnboardingView() {
                     </Alert>
                   ) : null}
                 </div>
+                </div>
               </div>
               <DialogFooter>
                 <Button
@@ -8075,7 +8116,7 @@ export function OnboardingView() {
                 <Button
                   type="button"
                   onClick={addWorkflowStep}
-                  disabled={selectedStepAssigneeMissingPermission}
+                  disabled={workflowAssignmentKind === "user" && selectedStepAssigneeMissingPermission}
                   className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                 >
                   <Plus className="h-4 w-4" />

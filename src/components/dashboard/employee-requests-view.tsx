@@ -34,13 +34,11 @@ import {
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   cancelMyProfileChangeRequest,
-  completeOnboardingTask,
   createMyProfileChangeRequest,
   deleteMyProfileChangeRequest,
   downloadMyDocument,
   fileToBase64UploadDto,
   getMyProfileChangeRequest,
-  listMyActionItems,
   listMyDocuments,
   listMyProfileChangeRequestHistory,
   listMyProfileChangeRequests,
@@ -58,9 +56,11 @@ import { readStoredSessionTokens } from "@/lib/session-client"
 import { cn } from "@/lib/utils"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+import { RequestActionInbox } from "./request-action-inbox"
+import { listAllMyActionItems } from "@/lib/admin-api"
+import { isOpenAction } from "./request-inbox-utils"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
-type ActionFilter = "waiting" | "all" | "done"
 
 const TAB_COPY: Record<
   RequestsSelfTab,
@@ -188,22 +188,10 @@ function collectChangePayload(requestType: string, form: Record<string, string>)
   return payload
 }
 
-function onboardingTaskActionRef(row: AdminRecord) {
-  const sourceType = readString(row, ["sourceEntityType", "source_entity_type"]).toUpperCase()
-  if (sourceType !== "ONBOARDING_TASK") return null
-  if (row.is_actionable !== true) return null
-
-  const metadata = row.metadata && typeof row.metadata === "object" ? (row.metadata as AdminRecord) : null
-  const requestId = readString(metadata, ["onboarding_request_id", "onboardingRequestId"], "")
-  const taskId = readString(row, ["sourceEntityId", "source_entity_id"], "")
-  return requestId && taskId ? { requestId, taskId } : null
-}
-
 export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab }) {
   const leaveIfForbidden = useLeaveIfForbidden()
   const copy = TAB_COPY[activeTab]
   const [actions, setActions] = React.useState<AdminRecord[]>([])
-  const [actionFilter, setActionFilter] = React.useState<ActionFilter>("all")
   const [timeline, setTimeline] = React.useState<AdminRecord[]>([])
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [changes, setChanges] = React.useState<AdminRecord[]>([])
@@ -234,7 +222,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     const tasks: Array<Promise<unknown>> = []
     if (activeTab === "actions") {
       tasks.push(
-        listMyActionItems(token, { limit: 50 })
+        listAllMyActionItems(token)
           .then(setActions)
           .catch((errorObject) => {
             setActions([])
@@ -354,44 +342,11 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     }
   }
 
-  async function completeAssignedOnboardingTask(row: AdminRecord) {
-    const accessToken = readStoredToken()
-    const reference = onboardingTaskActionRef(row)
-    if (!accessToken || !reference) return
-
-    const actionId = rowId(row)
-    setBusyId(`onboarding-${actionId}`)
-    try {
-      await completeOnboardingTask(accessToken, reference.requestId, reference.taskId, {
-        completion_notes: "Completed from My Requests",
-      })
-      toast.success("Onboarding task marked complete.")
-      await load()
-    } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not complete the task.")
-    } finally {
-      setBusyId("")
-    }
-  }
-
-  const isWaitingAction = React.useCallback((row: AdminRecord) => {
-    const status = readString(row, ["status"]).toUpperCase()
-    return !status || ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)
-  }, [])
-
-  const pendingActions = actions.filter(isWaitingAction).length
-  const doneActions = Math.max(actions.length - pendingActions, 0)
-  const filteredActions = React.useMemo(() => {
-    if (actionFilter === "all") return actions
-    return actions.filter((row) =>
-      actionFilter === "waiting" ? isWaitingAction(row) : !isWaitingAction(row),
-    )
-  }, [actionFilter, actions, isWaitingAction])
+  const pendingActions = actions.filter(isOpenAction).length
+  const doneActions = actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length
 
   const rows =
-    activeTab === "actions"
-      ? filteredActions
-      : activeTab === "timeline"
+    activeTab === "timeline"
         ? timeline
         : activeTab === "documents"
           ? documents
@@ -640,26 +595,6 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         label: "Due",
         render: (row) => formatDate(row.dueAt ?? row.due_at ?? row.updatedAt ?? row.updated_at),
       },
-      {
-        key: "actions",
-        label: "",
-        render: (row) => {
-          const reference = onboardingTaskActionRef(row)
-          const status = readString(row, ["status"], "OPEN").toUpperCase()
-          if (!reference || !["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(status)) return null
-          const actionId = rowId(row)
-          return (
-            <button
-              type="button"
-              className={actionButtonClass}
-              disabled={busyId === `onboarding-${actionId}`}
-              onClick={() => void completeAssignedOnboardingTask(row)}
-            >
-              {busyId === `onboarding-${actionId}` ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : "Mark done"}
-            </button>
-          )
-        },
-      },
     ]
   }, [activeTab, busyId, load])
 
@@ -757,7 +692,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         <CompactStatStrip items={summaryItems} />
       ) : null}
 
-      {activeTab === "resignation" ? (
+      {activeTab === "actions" ? (
+        <RequestActionInbox actions={actions} loading={loading} onRefresh={load} />
+      ) : activeTab === "resignation" ? (
         <div className={cn("space-y-4 border-y border-border bg-card px-4 py-5 sm:border-x sm:px-5", pageBleedClass)}>
           <div>
             <h2 className="text-base font-semibold tracking-tight">Send a resignation</h2>
@@ -821,62 +758,12 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                   <CheckmarkCircle20Filled className="size-5" aria-hidden />
                 </div>
                 <p className="mt-2 text-sm font-semibold text-foreground">
-                  {activeTab === "actions" && actionFilter === "waiting"
-                    ? "You’re all caught up"
-                    : activeTab === "actions" && actionFilter === "done"
-                      ? "No completed requests"
-                      : copy.empty}
+                  {copy.empty}
                 </p>
                 <p className="mt-0.5 max-w-sm text-xs text-muted-foreground">
-                  {activeTab === "actions" && actionFilter === "waiting"
-                    ? "There are no requests awaiting your review."
-                    : "New requests will appear here when available."}
+                  New requests will appear here when available.
                 </p>
-                {activeTab === "actions" && actionFilter === "waiting" && doneActions > 0 ? (
-                  <button
-                    type="button"
-                    className="mt-3 text-xs font-semibold text-primary hover:underline"
-                    onClick={() => setActionFilter("done")}
-                  >
-                    View completed requests
-                  </button>
-                ) : null}
               </div>
-            }
-            toolbarActions={
-              activeTab === "actions" ? (
-                <div
-                  role="tablist"
-                  aria-label="Request status"
-                  className="inline-flex h-8 items-center rounded-md border border-border bg-muted/30 p-0.5"
-                >
-                  {([
-                    ["waiting", "Awaiting", pendingActions],
-                    ["all", "All", actions.length],
-                    ["done", "Completed", doneActions],
-                  ] as const).map(([filter, label, count]) => {
-                    const selected = actionFilter === filter
-                    return (
-                      <button
-                        key={filter}
-                        type="button"
-                        role="tab"
-                        aria-selected={selected}
-                        onClick={() => setActionFilter(filter)}
-                        className={cn(
-                          "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors",
-                          selected
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <span>{label}</span>
-                        <span className="tabular-nums text-muted-foreground">{loading ? "…" : count}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : undefined
             }
             onRowSelect={(_, row) => {
               if (!row) return
