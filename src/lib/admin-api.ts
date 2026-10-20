@@ -10866,6 +10866,36 @@ export async function completeOnboardingTask(
   );
 }
 
+export type OnboardingReadinessRequirement = {
+  id: string
+  label: string
+  group: string
+  owner: string
+  required: boolean
+  status: "complete" | "pending" | "blocked" | "skipped"
+  action: "details" | "tasks" | "approvals" | "payroll" | "contracts"
+}
+
+export type OnboardingReadiness = {
+  employee_id: number
+  employee_status: string
+  request_status: string
+  ready_to_activate: boolean
+  closed: boolean
+  blocker_count: number
+  completed_required: number
+  total_required: number
+  next_action: OnboardingReadinessRequirement | null
+  requirements: OnboardingReadinessRequirement[]
+}
+
+export async function getOnboardingReadiness(token: string, requestId: string | number) {
+  return adminRequest<OnboardingReadiness>(
+    `/api/onboarding/requests/${requestId}/readiness`,
+    { token },
+  )
+}
+
 export async function getOnboardingProgress(
   token: string,
   requestId: string | number,
