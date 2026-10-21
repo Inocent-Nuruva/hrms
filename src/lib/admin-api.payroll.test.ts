@@ -8,6 +8,9 @@ import {
   downloadPayrollBankingBatch,
   generatePayrollBankingBatch,
   generatePayrollBankReadyBatch,
+  simulatePayrollRunPayment,
+  payrollFinalSettlementAction,
+  downloadPayrollFinalSettlementStatement,
   getPayrollInternalLedger,
   getPayrollPaymentHistory,
   exportPayrollAccountingJournal,
@@ -39,6 +42,37 @@ describe("payroll admin API helpers", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("uses demo-only payment and final-settlement lifecycle endpoints", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "MATCHED" }))
+      .mockResolvedValueOnce(jsonResponse({ id: 15, status: "SUBMITTED" }))
+      .mockResolvedValueOnce(new Response("%PDF-demo", {
+        status: 200,
+        headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="SETTLEMENT-15.pdf"' },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await simulatePayrollRunPayment("token", 8, "PENDING", 1);
+    await payrollFinalSettlementAction("token", 15, "decision", {
+      decision: "APPROVE",
+      comments: "Demo approval",
+    });
+    const file = await downloadPayrollFinalSettlementStatement("token", 15);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8888/api/payroll/banking/runs/8/simulate-payment",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ outcome: "PENDING", attempt: 1 }) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8888/api/payroll/reports/final-settlements/15/decision",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ decision: "APPROVE", comments: "Demo approval" }) }),
+    );
+    expect(file.filename).toBe("SETTLEMENT-15.pdf");
+    expect(file.blob.type).toBe("application/pdf");
   });
 
   it("lists payroll runs with supported filters and pagination", async () => {
