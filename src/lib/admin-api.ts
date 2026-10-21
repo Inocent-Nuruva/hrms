@@ -16423,6 +16423,38 @@ export async function calculatePayrollFinalSettlement(
   );
 }
 
+export async function payrollFinalSettlementAction(
+  token: string,
+  settlementId: string | number,
+  action: "submit" | "decision" | "simulate-payment" | "reconcile" | "close",
+  body?: Record<string, unknown>,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/final-settlements/${settlementId}/${action}`,
+    { method: "POST", token, body },
+  );
+}
+
+export async function downloadPayrollFinalSettlementStatement(
+  token: string,
+  settlementId: string | number,
+) {
+  const response = await fetch(
+    buildUrl(`/api/payroll/reports/final-settlements/${settlementId}/statement`),
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    let payload: unknown = null;
+    try { payload = text ? JSON.parse(text) as unknown : null; } catch { payload = { message: text }; }
+    throw new Error(extractMessage(payload, response.status));
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+    ?? `DEMO-SETTLEMENT-${settlementId}.pdf`;
+  return { blob: await response.blob(), filename };
+}
+
 export async function runPayrollReconciliation(token: string) {
   return adminRequest<unknown>("/api/payroll/reports/reconciliation/run", {
     method: "POST",
@@ -17158,6 +17190,22 @@ export async function getPayrollPaymentHistory(
     method: "GET",
     token,
   });
+}
+
+export async function simulatePayrollRunPayment(
+  token: string,
+  runId: string | number,
+  outcome: "SUCCESS" | "PENDING" | "FAILED" = "SUCCESS",
+  attempt = 1,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/banking/runs/${runId}/simulate-payment`,
+    {
+      method: "POST",
+      token,
+      body: { outcome, attempt },
+    },
+  );
 }
 
 export async function downloadPayrollBankingBatch(

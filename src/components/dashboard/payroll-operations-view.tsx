@@ -70,6 +70,8 @@ import {
   generatePayrollPeriod,
   getPayrollReport,
   calculatePayrollFinalSettlement,
+  payrollFinalSettlementAction,
+  downloadPayrollFinalSettlementStatement,
   getPayrollDashboard,
   getPayrollIntegrationCatalog,
   getPayrollInternalLedger,
@@ -113,6 +115,7 @@ import {
   validatePayrollRun,
   runPayrollReconciliation,
   runPayrollRunVariance,
+  simulatePayrollRunPayment,
   type AdminRecord,
   upsertEmployeePayrollProfile,
 } from "@/lib/admin-api";
@@ -1973,6 +1976,7 @@ export function PayrollOperationsView() {
   const [lockingRunId, setLockingRunId] = React.useState("");
   const [validatingRunId, setValidatingRunId] = React.useState("");
   const [paidRunId, setPaidRunId] = React.useState("");
+  const [simulatingPaymentRunId, setSimulatingPaymentRunId] = React.useState("");
   const [closingRunId, setClosingRunId] = React.useState("");
   const [reconcilingRunId, setReconcilingRunId] = React.useState("");
   const [payslipRunId, setPayslipRunId] = React.useState("");
@@ -2701,6 +2705,30 @@ export function PayrollOperationsView() {
                 >
                   View
                 </button>
+                {canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={actionButtonClass}
+                    disabled={simulatingPaymentRunId === id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void onSimulateRunPayment(row, "SUCCESS", 1);
+                    }}
+                  >
+                    {simulatingPaymentRunId === id ? (
+                      <FluentLoadingIndicator className="size-3.5 animate-spin" />
+                    ) : (
+                      "Simulate payment"
+                    )}
+                  </button>
+                ) : null}
+                {canMutatePayroll ? (
+                  <>
+                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "PENDING", 1); }}>Pending demo</button>
+                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "FAILED", 1); }}>Failed demo</button>
+                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "SUCCESS", 2); }}>Retry demo</button>
+                  </>
+                ) : null}
                 {canMutatePayroll ? (
                   <button
                     type="button"
@@ -3997,6 +4025,31 @@ export function PayrollOperationsView() {
     }
   }
 
+  async function onSimulateRunPayment(
+    row: AdminRecord,
+    outcome: "SUCCESS" | "PENDING" | "FAILED",
+    attempt: number,
+  ) {
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setSimulatingPaymentRunId(id);
+    try {
+      const result = await simulatePayrollRunPayment(token, id, outcome, attempt);
+      const recordedStatus = readString(
+        asRecord(asRecord(result)?.import),
+        ["status"],
+        outcome,
+      );
+      toast.success(`Demo payment result recorded (${recordedStatus}). No external transfer was sent.`);
+      await loadRows({ refreshLookups: true });
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Demo payment simulation failed.");
+    } finally {
+      setSimulatingPaymentRunId("");
+    }
+  }
+
   async function onCloseRun(row: AdminRecord) {
     const token = readStoredToken();
     const id = rowId(row);
@@ -4217,6 +4270,49 @@ export function PayrollOperationsView() {
       );
     } finally {
       setReportBusy("");
+    }
+  }
+
+  async function onFinalSettlementAction(
+    action: "submit" | "decision" | "simulate-payment" | "reconcile" | "close",
+    body?: Record<string, unknown>,
+  ) {
+    const token = readStoredToken();
+    const settlementId = readString(reportResult, ["id"], "");
+    if (!token || !settlementId) return;
+    setReportBusy("settlement-action");
+    try {
+      const result = await payrollFinalSettlementAction(
+        token,
+        settlementId,
+        action,
+        body,
+      );
+      const actionResult = asRecord(result);
+      const normalized = asRecord(actionResult?.settlement) ?? actionResult;
+      setReportResult(normalized ?? { status: "updated", id: settlementId });
+      toast.success(`Final settlement ${action.replaceAll("-", " ")} completed.`);
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Final settlement action failed.");
+    } finally {
+      setReportBusy("");
+    }
+  }
+
+  async function onDownloadSettlementStatement() {
+    const token = readStoredToken();
+    const settlementId = readString(reportResult, ["id"], "");
+    if (!token || !settlementId) return;
+    try {
+      const file = await downloadPayrollFinalSettlementStatement(token, settlementId);
+      const url = URL.createObjectURL(file.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (errorObject) {
+      toast.error(errorObject instanceof Error ? errorObject.message : "Could not download settlement statement.");
     }
   }
 
@@ -8689,6 +8785,43 @@ export function PayrollOperationsView() {
                   ) : null}
                   Calculate final pay
                 </button>
+                {reportKind === "settlement" && readString(reportResult, ["id"], "") ? (
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span>Settlement #{readString(reportResult, ["id"], "-")}</span>
+                      <Badge variant="outline">{prettify(readString(reportResult, ["status"], "unknown"))}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Gross {readString(reportResult, ["grossSettlement", "gross_settlement"], "0.00")} ·
+                      Deductions {readString(reportResult, ["deductionTotal", "deduction_total"], "0.00")} ·
+                      Net {readString(reportResult, ["netSettlement", "net_settlement"], "0.00")}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {readString(reportResult, ["status"], "") === "CALCULATED" || readString(reportResult, ["status"], "") === "REJECTED" ? (
+                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("submit")}>Submit for approval</button>
+                      ) : null}
+                      {readString(reportResult, ["status"], "") === "SUBMITTED" ? (
+                        <>
+                          <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("decision", { decision: "APPROVE", comments: "Demo Finance approval" })}>Approve</button>
+                          <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("decision", { decision: "REJECT", comments: "Returned for demo correction" })}>Reject</button>
+                        </>
+                      ) : null}
+                      {readString(reportResult, ["status"], "") === "APPROVED" || readString(reportResult, ["status"], "").startsWith("PAYMENT_") ? (
+                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("simulate-payment", { outcome: "SUCCESS", attempt: readString(reportResult, ["status"], "") === "APPROVED" ? 1 : 2 })}>{readString(reportResult, ["status"], "") === "APPROVED" ? "Simulate payment" : "Retry simulated payment"}</button>
+                      ) : null}
+                      {readString(reportResult, ["status"], "") === "PAID" ? (
+                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("reconcile")}>Reconcile payment</button>
+                      ) : null}
+                      {readString(reportResult, ["status"], "") === "RECONCILED" ? (
+                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("close")}>Close settlement</button>
+                      ) : null}
+                      { ["APPROVED", "PAID", "RECONCILED", "CLOSED"].includes(readString(reportResult, ["status"], "")) ? (
+                        <button type="button" className={actionButtonClass} onClick={() => void onDownloadSettlementStatement()}>Download statement</button>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Payments are simulated only when backend PAYROLL_DEMO_MODE=true. Finance approval requires a different user from the preparer.</p>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
