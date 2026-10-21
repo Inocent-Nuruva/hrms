@@ -930,6 +930,24 @@ export const api = {
     return request<Record<string, unknown>>('/api/me/activities/tasks', { method: 'POST', body: data });
   },
 
+  async syncMyActivityTask(syncRequestId: string, clientRequestId: string, data: Record<string, unknown>) {
+    const result = await request<Record<string, unknown>>('/api/me/activities/sync', {
+      method: 'POST',
+      body: {
+        sync_request_id: syncRequestId,
+        device_identifier: await getAttendanceInstallationIdentifier(),
+        items: [{ client_request_id: clientRequestId, operation: 'UPSERT_SELF_TASK', payload: data }],
+      },
+    });
+    const items = Array.isArray(result.items) ? result.items as Record<string, unknown>[] : [];
+    if (!items.length || items[0].status !== 'COMPLETED') {
+      const error = new Error(String(items[0]?.message ?? 'Activity task was not accepted.')) as ApiError;
+      error.status = 400;
+      throw error;
+    }
+    return result;
+  },
+
   async createMyActivityReport(data: Record<string, unknown>) {
     return request<Record<string, unknown>>('/api/me/activities/reports', { method: 'POST', body: data });
   },

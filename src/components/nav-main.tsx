@@ -304,10 +304,17 @@ function AttentionLabel({
         />
       ) : null}
       {onTogglePin ? (
-        <button
-          type="button"
+        <span
+          role="button"
+          tabIndex={0}
           className={`${pinButtonClassName ?? ""} ${pinned ? pinButtonPinnedClassName ?? "" : ""}`}
           onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onTogglePin()
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return
             event.preventDefault()
             event.stopPropagation()
             onTogglePin()
@@ -316,7 +323,7 @@ function AttentionLabel({
           aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
         >
           {pinned ? <Pin20Filled /> : <Pin20Regular />}
-        </button>
+        </span>
       ) : null}
       {fixedPinned ? (
         <span
