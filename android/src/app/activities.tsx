@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobileTopBar } from '../components/layout/MobileTopBar';
 import { Text } from '../components/ui/text';
@@ -9,7 +10,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useThemePreference } from '../hooks/useThemePreference';
 import { useAppAccent } from '../hooks/useAppAccent';
 import { COLORS } from '../lib/config';
-import { api } from '../lib/api';
+import { api, getFieldVisitOfflineScope } from '../lib/api';
+import { enqueueActivityTask, flushActivityTaskOutbox, listActivityTaskOutbox, removeActivityTaskOutboxItem, type QueuedActivityTask } from '../lib/activity-offline-queue';
 
 type Row = Record<string, unknown>;
 const str = (v: unknown, fallback = '') => typeof v === 'string' ? v : typeof v === 'number' ? String(v) : fallback;
@@ -30,6 +32,23 @@ export default function ActivitiesScreen() {
   const [dueDate, setDueDate] = React.useState(new Date().toISOString().slice(0, 10));
   const [summary, setSummary] = React.useState('');
   const [report, setReport] = React.useState<Row | null>(null);
+  const [queuedTasks, setQueuedTasks] = React.useState<QueuedActivityTask[]>([]);
+  const [queueMessage, setQueueMessage] = React.useState('');
+
+  const refreshQueue = React.useCallback(async () => {
+    const scope = await getFieldVisitOfflineScope();
+    if (scope) setQueuedTasks(await listActivityTaskOutbox(scope));
+  }, []);
+  const flushQueue = React.useCallback(async () => {
+    const scope = await getFieldVisitOfflineScope();
+    if (!scope || !(await NetInfo.fetch()).isConnected) return;
+    const result = await flushActivityTaskOutbox(scope, async (task) => {
+      await api.syncMyActivityTask(task.id, task.id, task.payload);
+    });
+    await refreshQueue();
+    if (result.sent) setQueueMessage(`Synced ${result.sent} saved activity task${result.sent === 1 ? '' : 's'}.`);
+    else if (result.needsReview) setQueueMessage(`${result.needsReview} activity task${result.needsReview === 1 ? '' : 's'} need review.`);
+  }, [refreshQueue]);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -47,6 +66,11 @@ export default function ActivitiesScreen() {
   }, [view]);
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
+    void refreshQueue(); void flushQueue();
+    const unsubscribe = NetInfo.addEventListener((state) => { if (state.isConnected) void flushQueue(); });
+    return unsubscribe;
+  }, [flushQueue, refreshQueue]);
+  React.useEffect(() => {
     if (params.view === 'reports' || params.view === 'tasks') setView(params.view);
   }, [params.view]);
 
@@ -56,14 +80,28 @@ export default function ActivitiesScreen() {
     if (!title.trim() || !description.trim()) { Alert.alert('Required fields', 'Enter a title and description.'); return; }
     setBusy(true);
     try {
+      const payload = { activity_date: new Date().toISOString().slice(0, 10), title: title.trim(), description: description.trim(), due_date: dueDate };
       if (view === 'tasks' && edit) {
         const reportId = str(edit.report_id ?? edit.reportId);
         const entryId = str(edit.id);
         await api.updateMyActivityEntry(reportId, entryId, { title: title.trim(), description: description.trim(), due_date: dueDate, status: 'PLANNED' });
       } else if (view === 'tasks') {
-        await api.createMyActivityTask({ activity_date: new Date().toISOString().slice(0, 10), title: title.trim(), description: description.trim(), due_date: dueDate });
+        const requestId = globalThis.crypto?.randomUUID?.();
+        if (!requestId) throw new Error('Secure request identifiers are unavailable.');
+        try {
+          if (!(await NetInfo.fetch()).isConnected) throw new Error('Offline; queue this task for sync.');
+          await api.syncMyActivityTask(requestId, requestId, payload);
+        } catch (error) {
+          const status = typeof error === 'object' && error !== null && 'status' in error ? Number((error as { status?: unknown }).status) : undefined;
+          if (status && status >= 400 && status < 500 && status !== 401 && status !== 429) throw error;
+          const scope = await getFieldVisitOfflineScope();
+          if (!scope) throw error;
+          await enqueueActivityTask(scope, payload, requestId);
+          setQueueMessage('Activity saved securely on this device and will sync when connected.');
+          await refreshQueue();
+        }
       } else {
-        await api.createMyActivityTask({ activity_date: new Date().toISOString().slice(0, 10), title: title.trim(), description: description.trim(), due_date: dueDate });
+        await api.createMyActivityTask(payload);
       }
       setForm(false); await refresh();
     } catch (error) { Alert.alert('Could not save activity', error instanceof Error ? error.message : 'Try again.'); }
@@ -85,6 +123,12 @@ export default function ActivitiesScreen() {
     catch (error) { Alert.alert('Could not submit report', error instanceof Error ? error.message : 'Try again.'); }
     finally { setBusy(false); }
   };
+  const discardQueuedTask = async (id: string) => {
+    const scope = await getFieldVisitOfflineScope();
+    if (!scope) return;
+    await removeActivityTaskOutboxItem(scope, id);
+    await refreshQueue();
+  };
 
   const bg = isDark ? COLORS.backgroundDark : COLORS.background;
   const fg = isDark ? COLORS.onSurfaceDark : COLORS.onSurface;
@@ -97,6 +141,12 @@ export default function ActivitiesScreen() {
         {(['reports', 'tasks'] as const).map((item) => <Pressable key={item} onPress={() => { setForm(false); setView(item); }} style={[styles.tab, view === item && { backgroundColor: accent }]}><Text style={[styles.tabText, view === item && styles.selectedText]}>{item === 'reports' ? 'Reports' : 'Tasks'}</Text></Pressable>)}
       </View>
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void refresh()} />}>
+        {queuedTasks.length > 0 ? <View style={styles.queueBox}>
+          <Text style={[styles.copy, { color: fg }]}>{queuedTasks.filter((task) => task.status === 'QUEUED').length} task(s) waiting to sync; {queuedTasks.filter((task) => task.status === 'NEEDS_REVIEW').length} need review.</Text>
+          {queuedTasks.some((task) => task.status === 'QUEUED') ? <Pressable onPress={() => void flushQueue()}><Text style={[styles.actionText, { color: accent }]}>Sync now</Text></Pressable> : null}
+          {queueMessage ? <Text style={[styles.copy, { color: muted }]}>{queueMessage}</Text> : null}
+          {queuedTasks.filter((task) => task.status === 'NEEDS_REVIEW').map((task) => <View key={task.id} style={styles.rowActions}><Text style={[styles.copy, { color: COLORS.error, flex: 1 }]}>{task.lastError ?? 'This task could not be synced.'}</Text><Pressable onPress={() => void discardQueuedTask(task.id)}><Text style={[styles.actionText, { color: COLORS.error }]}>Discard</Text></Pressable></View>)}
+        </View> : queueMessage ? <Text style={[styles.copy, { color: muted }]}>{queueMessage}</Text> : null}
         <View style={styles.actions}>
           <Pressable onPress={startCreate} style={[styles.button, { backgroundColor: accent }]}><Text style={styles.buttonText}>{view === 'reports' ? 'Add report entry' : 'New task'}</Text></Pressable>
         </View>
@@ -125,5 +175,5 @@ export default function ActivitiesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 }, content: { padding: 16, paddingBottom: 40 }, tabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 }, tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#E9EFF5' }, tabText: { color: '#334155', fontSize: 13, fontWeight: '600' }, selectedText: { color: '#FFFFFF' }, actions: { alignItems: 'flex-end', marginBottom: 10 }, button: { alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 9 }, buttonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' }, card: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 }, cardTitle: { fontSize: 15, fontWeight: '700' }, copy: { marginTop: 5, fontSize: 12 }, rowActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 14 }, actionText: { fontSize: 13, fontWeight: '700' }, form: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 14, gap: 10 }, heading: { fontSize: 16, fontWeight: '700' }, label: { fontSize: 13, fontWeight: '700', marginBottom: 6 }, input: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 }, multiline: { minHeight: 86, textAlignVertical: 'top' }, submitBox: { marginBottom: 16, padding: 14, borderRadius: 12, backgroundColor: '#0877B914', gap: 8 }, empty: { paddingVertical: 20, fontSize: 14, textAlign: 'center' },
+  safe: { flex: 1 }, content: { padding: 16, paddingBottom: 40 }, tabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 }, tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#E9EFF5' }, tabText: { color: '#334155', fontSize: 13, fontWeight: '600' }, selectedText: { color: '#FFFFFF' }, actions: { alignItems: 'flex-end', marginBottom: 10 }, button: { alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 9 }, buttonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' }, card: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 }, cardTitle: { fontSize: 15, fontWeight: '700' }, copy: { marginTop: 5, fontSize: 12 }, rowActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 14 }, actionText: { fontSize: 13, fontWeight: '700' }, form: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 14, gap: 10 }, heading: { fontSize: 16, fontWeight: '700' }, label: { fontSize: 13, fontWeight: '700', marginBottom: 6 }, input: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 }, multiline: { minHeight: 86, textAlignVertical: 'top' }, submitBox: { marginBottom: 16, padding: 14, borderRadius: 12, backgroundColor: '#0877B914', gap: 8 }, empty: { paddingVertical: 20, fontSize: 14, textAlign: 'center' }, queueBox: { marginBottom: 14, padding: 12, borderRadius: 10, backgroundColor: '#0877B914', gap: 8 },
 });

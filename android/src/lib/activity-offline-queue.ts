@@ -1,0 +1,77 @@
+import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
+import * as SecureStore from './secure-store';
+
+export interface QueuedActivityTask {
+  id: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  status: 'QUEUED' | 'NEEDS_REVIEW';
+  lastError: string | null;
+}
+
+let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+async function database() {
+  if (Platform.OS === 'web') throw new Error('Offline activities require the native app.');
+  if (databasePromise) return databasePromise;
+  databasePromise = (async () => {
+    let key = await SecureStore.getItemAsync('daily.activity.queue.key');
+    if (!key) {
+      const cryptoApi = globalThis.crypto as { getRandomValues?: (bytes: Uint8Array) => Uint8Array } | undefined;
+      if (!cryptoApi?.getRandomValues) throw new Error('Secure random generation is unavailable.');
+      key = Array.from(cryptoApi.getRandomValues(new Uint8Array(32)), (value) => value.toString(16).padStart(2, '0')).join('');
+      await SecureStore.setItemAsync('daily.activity.queue.key', key);
+    }
+    const db = await SQLite.openDatabaseAsync('daily-activities-offline.db');
+    await db.execAsync(`PRAGMA key = "x'${key}'"; CREATE TABLE IF NOT EXISTS daily_activity_outbox (id TEXT PRIMARY KEY, company_id TEXT NOT NULL, user_id TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED', last_error TEXT)`);
+    await db.execAsync('CREATE INDEX IF NOT EXISTS idx_daily_activity_outbox_scope ON daily_activity_outbox(company_id, user_id, created_at)');
+    return db;
+  })().catch((error) => { databasePromise = null; throw error; });
+  return databasePromise;
+}
+
+function uuid() {
+  const cryptoApi = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  if (!cryptoApi?.randomUUID) throw new Error('Secure request identifiers are unavailable.');
+  return cryptoApi.randomUUID();
+}
+
+export async function enqueueActivityTask(scope: { companyId: string | number; userId: string | number }, payload: Record<string, unknown>, requestId = uuid()) {
+  const db = await database();
+  const id = requestId;
+  const createdAt = new Date().toISOString();
+  await db.runAsync('INSERT INTO daily_activity_outbox (id, company_id, user_id, payload_json, created_at) VALUES (?, ?, ?, ?, ?)', id, String(scope.companyId), String(scope.userId), JSON.stringify(payload), createdAt);
+  return { id, createdAt };
+}
+
+export async function listActivityTaskOutbox(scope: { companyId: string | number; userId: string | number }): Promise<QueuedActivityTask[]> {
+  const db = await database();
+  const rows = await db.getAllAsync<{ id: string; payload_json: string; created_at: string; status: 'QUEUED' | 'NEEDS_REVIEW'; last_error: string | null }>('SELECT id, payload_json, created_at, status, last_error FROM daily_activity_outbox WHERE company_id = ? AND user_id = ? ORDER BY created_at ASC', String(scope.companyId), String(scope.userId));
+  return rows.map((row) => ({ id: row.id, payload: JSON.parse(row.payload_json) as Record<string, unknown>, createdAt: row.created_at, status: row.status, lastError: row.last_error }));
+}
+
+export async function flushActivityTaskOutbox(scope: { companyId: string | number; userId: string | number }, sender: (task: QueuedActivityTask) => Promise<void>) {
+  const db = await database();
+  const tasks = (await listActivityTaskOutbox(scope)).filter((task) => task.status === 'QUEUED');
+  let sent = 0;
+  for (const task of tasks) {
+    try {
+      await sender(task);
+      await db.runAsync('DELETE FROM daily_activity_outbox WHERE id = ? AND company_id = ? AND user_id = ?', task.id, String(scope.companyId), String(scope.userId));
+      sent += 1;
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error ? Number((error as { status?: unknown }).status) : undefined;
+      if (status && status >= 400 && status < 500 && status !== 401 && status !== 429) {
+        await db.runAsync("UPDATE daily_activity_outbox SET status = 'NEEDS_REVIEW', last_error = ? WHERE id = ? AND company_id = ? AND user_id = ?", (error instanceof Error ? error.message : 'Server rejected this activity.').slice(0, 1000), task.id, String(scope.companyId), String(scope.userId));
+      } else break;
+    }
+  }
+  const remaining = await listActivityTaskOutbox(scope);
+  return { sent, queued: remaining.filter((task) => task.status === 'QUEUED').length, needsReview: remaining.filter((task) => task.status === 'NEEDS_REVIEW').length };
+}
+
+export async function removeActivityTaskOutboxItem(scope: { companyId: string | number; userId: string | number }, id: string) {
+  const db = await database();
+  await db.runAsync("DELETE FROM daily_activity_outbox WHERE id = ? AND company_id = ? AND user_id = ? AND status = 'NEEDS_REVIEW'", id, String(scope.companyId), String(scope.userId));
+}
