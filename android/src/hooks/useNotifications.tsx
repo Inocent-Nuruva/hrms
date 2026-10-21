@@ -6,6 +6,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api, normalizeList } from '../lib/api';
 import { useAuth } from './useAuth';
 import { ensureNotificationPermissionsAsync, registerRemotePushDeviceAsync, presentHrmsNotification } from '../lib/notification-settings';
+import { resolveNotificationDestination, resolveNotificationResponseDestination, serializeNotificationDestination } from '../lib/mobile-notification-routing';
 
 export type AppNotification = Record<string, unknown> & {
   id: string | number;
@@ -56,7 +57,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   });
   const seenNotificationIds = useRef<Set<string> | null>(null);
   const locallyPresentedNotificationIds = useRef<Set<string>>(new Set());
+  const latestRowsRef = useRef<AppNotification[]>([]);
+  const handledNotificationResponses = useRef<Set<string>>(new Set());
   const latestRows = query.data?.pages[0]?.rows;
+  useEffect(() => {
+    latestRowsRef.current = latestRows ?? [];
+  }, [latestRows]);
 
   useEffect(() => {
     if (!auth.isAuthenticated || (Platform.OS !== 'android' && Platform.OS !== 'ios')) return;
@@ -78,9 +84,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+    const handleResponse = (response: DeviceNotifications.NotificationResponse) => {
+      const requestId = response.notification.request.identifier;
+      const responseKey = `${requestId}:${response.actionIdentifier}`;
+      if (handledNotificationResponses.current.has(responseKey)) return;
+      handledNotificationResponses.current.add(responseKey);
+      const payload = response.notification.request.content.data;
+      const destination = resolveNotificationResponseDestination(payload, latestRowsRef.current);
+      router.push((destination ?? '/notifications') as never);
+      void DeviceNotifications.clearLastNotificationResponseAsync().catch(() => {});
+    };
     const subscription = DeviceNotifications.addNotificationResponseReceivedListener(
-      () => router.push('/notifications' as never),
+      handleResponse,
     );
+    void DeviceNotifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleResponse(response);
+    }).catch(() => {});
     return () => subscription.remove();
   }, [router]);
 
@@ -113,7 +132,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       void presentHrmsNotification({
         title,
         body: body || 'You have a new notification.',
-        data: { notificationId: item.id },
+        data: {
+          notificationId: item.id,
+          ...serializeNotificationDestination(resolveNotificationDestination(item)),
+        },
       }).catch((error) => {
         console.warn('Could not show Android notification', error);
       });

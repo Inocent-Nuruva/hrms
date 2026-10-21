@@ -5,7 +5,13 @@ export type NotificationDestinationPath =
   | '/(tabs)/home'
   | '/(tabs)/leave'
   | '/(tabs)/profile'
+  | '/(tabs)/performance'
   | '/activities'
+  | '/documents'
+  | '/field'
+  | '/finance'
+  | '/payroll'
+  | '/promotions'
   | '/my-attendance';
 
 export type NotificationDestination = {
@@ -233,6 +239,22 @@ function resolveFromActionUrl(
     return buildDestination('/(tabs)/profile', { section: resolveProfileSection(row, metadata) });
   }
 
+  if (parsedAction.normalizedPath.includes('/payroll') || parsedAction.normalizedPath.includes('/payslip')) {
+    return buildDestination('/payroll');
+  }
+  if (parsedAction.normalizedPath.includes('/finance')) return buildDestination('/finance');
+  if (parsedAction.normalizedPath.includes('/performance') || parsedAction.normalizedPath.includes('/probation')) {
+    return buildDestination('/(tabs)/performance');
+  }
+  if (parsedAction.normalizedPath.includes('/field') || parsedAction.normalizedPath.includes('/visit')) {
+    return buildDestination('/field');
+  }
+  if (parsedAction.normalizedPath.includes('/activit')) return buildDestination('/activities');
+  if (parsedAction.normalizedPath.includes('/document')) return buildDestination('/documents');
+  if (parsedAction.normalizedPath.includes('/movement') || parsedAction.normalizedPath.includes('/promotion')) {
+    return buildDestination('/promotions');
+  }
+
   if (parsedAction.normalizedPath === '/dashboard' || parsedAction.normalizedPath.startsWith('/dashboard/')) {
     return buildDestination('/(tabs)/home');
   }
@@ -257,6 +279,13 @@ export function resolveNotificationDestination(row: MobileRecord): NotificationD
   if (hintValues.some((value) => /daily activity|activity report/.test(value))) {
     return buildDestination('/activities', { view: 'reports' });
   }
+
+  if (hintValues.some((value) => /payroll|payslip|salary/.test(value))) return buildDestination('/payroll');
+  if (hintValues.some((value) => /finance|loan|advance/.test(value))) return buildDestination('/finance');
+  if (hintValues.some((value) => /performance|kpi|probation/.test(value))) return buildDestination('/(tabs)/performance');
+  if (hintValues.some((value) => /field visit|field activity/.test(value))) return buildDestination('/field');
+  if (hintValues.some((value) => /document|letter/.test(value))) return buildDestination('/documents');
+  if (hintValues.some((value) => /movement|promotion|transfer/.test(value))) return buildDestination('/promotions');
 
   if (actionUrl) {
     const actionDestination = resolveFromActionUrl(row, metadata, actionUrl);
@@ -310,6 +339,36 @@ export function resolveNotificationDestination(row: MobileRecord): NotificationD
   return buildDestination('/(tabs)/home');
 }
 
+export function resolveNotificationResponseDestination(
+  payload: unknown,
+  notifications: MobileRecord[] = [],
+): NotificationDestination | null {
+  const record = asNotificationRecord(payload);
+  if (!record) return null;
+
+  const hasSerializedDestination = ['destinationPathname', 'pathname', 'route'].some(
+    (key) => Boolean(readNotificationString(record, [key])),
+  );
+  if (hasSerializedDestination) return parseNotificationDestinationPayload(record);
+
+  const notificationId = readNotificationString(record, ['notificationId', 'notification_id', 'id']);
+  if (notificationId) {
+    const matchingNotification = notifications.find(
+      (item) => readNotificationString(item, ['id', 'notificationId']) === notificationId,
+    );
+    if (matchingNotification) return resolveNotificationDestination(matchingNotification);
+  }
+
+  const nestedNotification = asNotificationRecord(record.notification);
+  if (nestedNotification) return resolveNotificationDestination(nestedNotification);
+
+  const hasNotificationContent = [
+    'action_url', 'actionUrl', 'url', 'entity_type', 'entityType', 'related_module',
+    'relatedModule', 'title', 'subject', 'message', 'body', 'content', 'category',
+  ].some((key) => Boolean(readNotificationString(record, [key])));
+  return hasNotificationContent ? resolveNotificationDestination(record) : null;
+}
+
 export function serializeNotificationDestination(destination: NotificationDestination) {
   return {
     destinationPathname: destination.pathname,
@@ -329,7 +388,13 @@ export function parseNotificationDestinationPayload(payload: unknown): Notificat
     '/(tabs)/home',
     '/(tabs)/leave',
     '/(tabs)/profile',
+    '/(tabs)/performance',
     '/my-attendance',
+    '/documents',
+    '/field',
+    '/finance',
+    '/payroll',
+    '/promotions',
   ].includes(rawPathname)
     ? (rawPathname as NotificationDestinationPath)
     : '/(tabs)/home';
