@@ -1,4 +1,5 @@
 "use client"
+import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import * as React from "react"
 import { Field } from "@fluentui/react-components"
@@ -97,17 +98,19 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     setBusy(true)
     setError("")
     try {
+      let onboardingResult: unknown
       const data = { comments: comment.trim(), approve: mode === "approve" }
       if (mode === "issue") {
         await reportMyActionItemIssue(token, selectedId, comment.trim())
       } else if (mode === "complete") {
         const complete = reference.type === "ONBOARDING_TASK" ? completeOnboardingTask : completeOffboardingTask
-        await complete(token, reference.requestId, reference.id, {
+        const result = await complete(token, reference.requestId, reference.id, {
           ...(reference.type === "ONBOARDING_TASK" ? { completion_notes: comment.trim() } : { remarks: comment.trim() }),
           ...(evidenceId ? { evidence_document_id: Number(evidenceId) } : {}),
         })
+        if (reference.type === "ONBOARDING_TASK") onboardingResult = result
       } else if (reference.type === "ONBOARDING_REQUEST") {
-        await (mode === "approve" ? approveOnboardingRequest : rejectOnboardingRequest)(token, reference.requestId, data)
+        onboardingResult = await (mode === "approve" ? approveOnboardingRequest : rejectOnboardingRequest)(token, reference.requestId, data)
       } else if (reference.type === "OFFBOARDING_REQUEST") {
         await (mode === "approve" ? approveOffboardingRequest : rejectOffboardingRequest)(token, reference.requestId, data)
       } else if (reference.type === "LEAVE_REQUEST") {
@@ -115,7 +118,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       } else {
         throw new Error("Open the full request to review this action.")
       }
-      toast.success(mode === "issue" ? "Issue saved and sent to HR. The item remains open." : mode === "complete" ? "Checklist item completed." : mode === "approve" ? "Request approved." : "Request declined.")
+      toast.success(onboardingActionMessage(onboardingResult, mode === "issue" ? "Issue saved and sent to HR. The item remains open." : mode === "complete" ? "Checklist item completed." : mode === "approve" ? "Request approved." : "Request declined."))
       setComment("")
       setEvidenceId("")
       await onRefresh()

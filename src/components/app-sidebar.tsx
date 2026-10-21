@@ -245,6 +245,8 @@ const adminData: SidebarData = {
         "/dashboard/employees/all",
         "/dashboard/employees/inactive",
         "/dashboard/employees/registration",
+        "/dashboard/employees/invite",
+        "/dashboard/employees/contracts",
         "/dashboard/employees/offboarding",
         "/dashboard/employees/onboarding",
         "/dashboard/employees/profile-update-approvals",

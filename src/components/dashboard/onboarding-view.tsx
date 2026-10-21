@@ -45,6 +45,7 @@ import {
 } from "lucide-react"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
+import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -109,6 +110,7 @@ import {
 } from "@/lib/admin-api"
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog"
 import { OnboardingReadinessOverview } from "@/components/dashboard/onboarding-readiness-overview"
+import { OnboardingHrOverview } from "@/components/dashboard/onboarding-hr-overview"
 import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
 import {
   INVITATION_STATUS_FILTERS,
@@ -1369,6 +1371,7 @@ export function OnboardingView() {
     React.useState<EmployeeInvitationHistoryStatus>("pending")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
+  const [requestPresentation, setRequestPresentation] = React.useState("overview")
   const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("")
   const [workflowSearch, setWorkflowSearch] = React.useState("")
   const [workflowStatusFilter, setWorkflowStatusFilter] = React.useState("all")
@@ -3339,6 +3342,7 @@ export function OnboardingView() {
     setSaving(true)
     setError(null)
     try {
+      let approvalResult: unknown
       if (action === "submit") {
         const sourceRow =
           requests.find((row) => readNumber(row, ["id", "request_id"]) === requestId) ??
@@ -3354,7 +3358,7 @@ export function OnboardingView() {
           loadRequest: () => getOnboardingRequest(token, requestId),
         })
       } else if (action === "approve") {
-        await approveOnboardingRequest(token, requestId, {
+        approvalResult = await approveOnboardingRequest(token, requestId, {
           approve: true,
           comments: "Approved",
         })
@@ -3373,7 +3377,7 @@ export function OnboardingView() {
       }
 
       if (action === "approve") {
-        showSuccessAlert("Approval recorded for this level.")
+        showSuccessAlert(onboardingActionMessage(approvalResult, "Approval recorded for this level."))
       } else if (action === "submit") {
         showSuccessAlert("Onboarding request submitted. It can now be approved.")
       } else {
@@ -3835,14 +3839,14 @@ export function OnboardingView() {
     setSaving(true)
     try {
       const file = await fileToBase64UploadDto(documentUploadFile)
-      await uploadOnboardingDocument(token, requestId, {
+      const result = await uploadOnboardingDocument(token, requestId, {
         title: documentForm.title.trim(),
         description: documentForm.description.trim() || undefined,
         document_type: documentForm.document_type || undefined,
         expiry_date: documentForm.expiry_date || undefined,
         file,
       })
-      showSuccessAlert("Onboarding document uploaded.")
+      showSuccessAlert(onboardingActionMessage(result, "Onboarding document uploaded."))
       resetDocumentForm()
       setShowDocumentComposer(false)
       await reloadCurrentRequestActivity(requestId)
@@ -3916,10 +3920,10 @@ export function OnboardingView() {
 
     setSaving(true)
     try {
-      await verifyOnboardingDocument(token, requestId, documentId, {
+      const result = await verifyOnboardingDocument(token, requestId, documentId, {
         is_verified: isVerified,
       })
-      showSuccessAlert(isVerified ? "Document verified." : "Document marked unverified.")
+      showSuccessAlert(onboardingActionMessage(result, isVerified ? "Document verified." : "Document marked unverified."))
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document verification.")
@@ -3938,11 +3942,11 @@ export function OnboardingView() {
     if (!token || requestId === null || documentId === null) return
     setSaving(true)
     try {
-      await verifyOnboardingDocument(token, requestId, documentId, {
+      const result = await verifyOnboardingDocument(token, requestId, documentId, {
         status: "rejected",
         review_comment: reason,
       })
-      showSuccessAlert("Document returned for correction.")
+      showSuccessAlert(onboardingActionMessage(result, "Document returned for correction."))
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to return document.")
@@ -4056,10 +4060,10 @@ export function OnboardingView() {
 
     setSaving(true)
     try {
-      await completeOnboardingTask(token, requestId, taskId, {
+      const result = await completeOnboardingTask(token, requestId, taskId, {
         completion_notes: "Completed from onboarding workspace",
       })
-      showSuccessAlert("Onboarding task completed.")
+      showSuccessAlert(onboardingActionMessage(result, "Onboarding task completed."))
       await reloadCurrentRequestActivity(requestId)
     } catch (errorObject) {
       showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
@@ -5020,6 +5024,15 @@ export function OnboardingView() {
         </div>
       ) : activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
+          {!isEmployeeMode ? (
+            <div className="flex flex-wrap items-center gap-3 p-3">
+              <FluentSelect ariaLabel="Onboarding view" className="max-w-xs" value={requestPresentation} onChange={setRequestPresentation} options={[{ value: "overview", label: "HR readiness overview" }, { value: "requests", label: "All requests" }]} />
+              {requestPresentation === "overview" && canCreateOnboardingRequests ? <Button size="sm" onClick={() => void openRequestSheet()}>Create Request</Button> : null}
+            </div>
+          ) : null}
+          {!isEmployeeMode && requestPresentation === "overview" ? (
+            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id) => void openRequestDetails({ id })} />
+          ) : (
           <ResizableTable
             title="Onboarding Requests"
             data={filteredRequests}
@@ -5112,7 +5125,7 @@ export function OnboardingView() {
               </>
             }
           />
-
+          )}
           <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
             <SheetContent
               side="right"

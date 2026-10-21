@@ -1,4 +1,5 @@
 "use client"
+import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
@@ -194,11 +195,11 @@ export function OnboardingSelfView() {
     if (!access || !id) return
     setBusy("ack")
     try {
-      await acknowledgeOnboardingRequest(access, id, {
+      const result = await acknowledgeOnboardingRequest(access, id, {
         accepted: true,
         acknowledgement_version: "1.0",
       })
-      toast.success("Onboarding acknowledged.")
+      toast.success(onboardingActionMessage(result, "Onboarding acknowledged."))
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not acknowledge.")
@@ -214,10 +215,10 @@ export function OnboardingSelfView() {
     if (!access || !requestId || !taskId) return
     setBusy(`task-${taskId}`)
     try {
-      await completeOnboardingTask(access, requestId, taskId, {
+      const result = await completeOnboardingTask(access, requestId, taskId, {
         completion_notes: "Completed by employee",
       })
-      toast.success("Task marked complete.")
+      toast.success(onboardingActionMessage(result, "Task marked complete."))
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not complete the task.")
@@ -233,12 +234,12 @@ export function OnboardingSelfView() {
     setBusy("upload")
     try {
       const payload = await fileToBase64UploadDto(file)
-      await uploadMyOnboardingDocument(access, requestId, {
+      const result = await uploadMyOnboardingDocument(access, requestId, {
         file: payload,
         document_type: documentType,
         title: file.name.replace(/\.[^.]+$/, ""),
       })
-      toast.success("Document uploaded.")
+      toast.success(onboardingActionMessage(result, "Document uploaded."))
       await load()
     } catch (errorObject) {
       toast.error(errorObject instanceof Error ? errorObject.message : "Could not upload the document.")

@@ -60,6 +60,8 @@ const ACCESS_CONTROL_TAB_ICONS = {
   "/dashboard/employees/all": [PeopleTeam20Regular, ""],
   "/dashboard/employees/inactive": [PersonProhibited20Regular, ""],
   "/dashboard/employees/registration": [PersonAdd20Regular, ""],
+  "/dashboard/employees/invite": [PersonAdd20Regular, ""],
+  "/dashboard/employees/contracts": [Document20Regular, ""],
   "/dashboard/employees/onboarding": [DocumentAdd20Regular, ""],
   "/dashboard/employees/profile-update-approvals": [DocumentEdit20Regular, ""],
   "/dashboard/employees/profile-change-requests": [PersonFeedback20Regular, ""],
@@ -159,7 +161,7 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
       )}
     >
       <div className="tab-rail-scroll min-w-0 flex-1">
-        {showGroupNavigation && groups.length > 1 ? <nav aria-label="Performance and activity areas" className="flex min-w-max items-center gap-1 border-b border-border/70 py-1">
+        {showGroupNavigation && groups.length > 1 ? <nav aria-label="Workspace areas" className="flex min-w-max items-center gap-1 border-b border-border/70 py-1">
           {groups.map((group) => {
             const first = group.items[0]
             if (!first) return null

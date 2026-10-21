@@ -99,6 +99,7 @@ describe("employee section navigation", () => {
     expect(employeeSectionTabGroups.map((group) => group.title)).toEqual([
       "My employee workspace",
       "Employee management",
+      "Joining & onboarding",
     ])
     expect(employeeSectionTabGroups[0]?.items).toContainEqual({
       title: "Profile",
@@ -108,10 +109,12 @@ describe("employee section navigation", () => {
       title: "All Employees",
       url: "/dashboard/employees/all",
     })
-    expect(employeeSectionTabGroups[1]?.items).toContainEqual({
-      title: "Invite & Register",
-      url: "/dashboard/operations/recruitment",
-    })
+    expect(employeeSectionTabGroups[2]?.items).toEqual([
+      { title: "Invite", url: "/dashboard/employees/invite" },
+      { title: "Registration", url: "/dashboard/employees/registration" },
+      { title: "Onboarding", url: "/dashboard/employees/onboarding" },
+      { title: "Contracts", url: "/dashboard/employees/contracts" },
+    ])
   })
 
   it("keeps promotion outside the employee tab groups", () => {

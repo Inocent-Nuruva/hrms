@@ -1038,6 +1038,8 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/all": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/inactive": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
+  "/dashboard/employees/invite": "employees:create",
+  "/dashboard/employees/contracts": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
   "/dashboard/employees/offboarding": {
     permissions: ["offboarding_requests:read", "offboarding_workflows:read"],
     mode: "any",

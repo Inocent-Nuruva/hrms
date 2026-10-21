@@ -8,6 +8,22 @@ Production starter for the Employee Self-Service onboarding portal.
 - React 19 + TypeScript
 - CSS in `src/styles/globals.css`
 
+## Onboarding regression checks
+
+Run `npx playwright install chromium` once, then
+`npx playwright test e2e/onboarding-workspace.spec.ts`. The suite uses isolated
+API fixtures, not real employee records or credentials. It verifies joining-tab
+navigation, desktop/mobile readiness, search and ownership filters, recovery from
+API errors, activation permissions, and activation rejection/retry. It does not
+replace authenticated UAT acceptance testing against the deployed backend.
+
+`PLAYWRIGHT_BASE_URL` selects the frontend under test. When using an installed
+local Chromium instead of the Playwright download, set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium` (or its actual path).
+Do not run a production build while the test server is serving the same `.next`
+directory. Frontend CI runs this suite in a separate job and requires it to pass
+before deployment; failures retain browser traces and screenshots for seven days.
+
 ## Project structure
 
 ```text

@@ -9,6 +9,7 @@ import {
   submitMyResignation,
   deleteOffboardingDocument,
   ensureDraftOnboardingRequest,
+  getOnboardingOverview,
   listMyOffboardingRequests,
   listMyOnboardingRequests,
   updateOffboardingAction,
@@ -28,6 +29,14 @@ describe("documented onboarding and offboarding leftovers", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("preserves overview batches and their cursor", async () => {
+    const payload = { data: [{ id: 51, stage: "Contract" }], next_cursor: 51 }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(payload))
+    vi.stubGlobal("fetch", fetchMock)
+    expect(await getOnboardingOverview("token", 50)).toEqual(payload)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/onboarding/requests/overview?after=50", expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer token" }) }))
   })
 
   it("creates a draft onboarding request and treats an existing one as success", async () => {

@@ -85,7 +85,7 @@ export function OnboardingReadinessOverview({
                 <h3 className="text-sm font-semibold">{group}</h3>
                 {requirements.map((requirement) => (
                   <div key={requirement.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
                       <p className="text-sm font-medium">{requirement.label}</p>
                       <p className="text-xs text-muted-foreground">Responsible: {requirement.owner}</p>
                     </div>

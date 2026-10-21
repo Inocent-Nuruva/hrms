@@ -10896,6 +10896,29 @@ export async function getOnboardingReadiness(token: string, requestId: string | 
   )
 }
 
+export type OnboardingOverviewRow = {
+  id: number
+  employee_id: number
+  employee_name: string
+  employee_no: string
+  onboarding_no: string
+  department: string
+  stage: string
+  overdue: boolean
+  overdue_task_count: number
+  planned_completion_date: string | null
+  owners: string[]
+  blockers: OnboardingReadinessRequirement[]
+  readiness: OnboardingReadiness
+}
+
+export async function getOnboardingOverview(token: string, after = 0) {
+  return adminRequest<{ data: OnboardingOverviewRow[]; next_cursor: number | null }>(
+    `/api/onboarding/requests/overview?after=${after}`,
+    { token },
+  )
+}
+
 export async function getOnboardingProgress(
   token: string,
   requestId: string | number,
