@@ -26,6 +26,7 @@ export interface AdminRequestOptions {
   signal?: AbortSignal;
   cacheTtlMs?: number;
   dedupe?: boolean;
+  invalidateCache?: boolean;
 }
 
 type CachedAdminResponse = {
@@ -3009,6 +3010,7 @@ export async function adminRequest<T>(
     signal,
     cacheTtlMs = 0,
     dedupe = true,
+    invalidateCache = true,
   } = options;
   const requestKey = getAdminRequestKey(path, method, token, body);
   const canReuseGetRequest = method === "GET" && body === undefined;
@@ -3018,7 +3020,7 @@ export async function adminRequest<T>(
     throw createAbortError();
   }
 
-  if (method !== "GET") {
+  if (method !== "GET" && invalidateCache) {
     invalidateAdminGetCache();
   }
 
@@ -10624,13 +10626,14 @@ export async function reviewOnboardingEmployeeDetails(
     status: "approved" | "changes_requested";
     comment?: string;
   }>,
+  expectedVersion?: number,
 ) {
   return adminRequest<unknown>(
     `/api/onboarding/requests/${id}/employee-details/review`,
     {
       method: "POST",
       token,
-      body: { sections },
+      body: { sections, ...(expectedVersion ? { expected_version: expectedVersion } : {}) },
     },
   );
 }
@@ -10874,6 +10877,9 @@ export type OnboardingReadinessRequirement = {
   required: boolean
   status: "complete" | "pending" | "blocked" | "skipped"
   action: "details" | "tasks" | "approvals" | "payroll" | "contracts"
+  waiting_reason?: string | null
+  due_date?: string | null
+  actionable?: boolean
 }
 
 export type OnboardingReadiness = {
@@ -10910,6 +10916,22 @@ export type OnboardingOverviewRow = {
   owners: string[]
   blockers: OnboardingReadinessRequirement[]
   readiness: OnboardingReadiness
+  planned_start_date?: string | null
+  attention_reasons?: string[]
+}
+
+export type OnboardingWorkspaceNote = { id: number; requirement_id: string; visibility: "internal" | "employee"; body: string; author_name: string; created_at: string }
+
+export function getOnboardingWorkspaceNotes(token: string, requestId: number, employeeView = false) {
+  return adminRequest<OnboardingWorkspaceNote[]>(`/api/onboarding/requests/${requestId}/workspace/${employeeView ? "my-notes" : "notes"}`, { token })
+}
+
+export function addOnboardingWorkspaceNote(token: string, requestId: number, data: { requirement_id: string; visibility: "internal" | "employee"; body: string; client_key: string }) {
+  return adminRequest(`/api/onboarding/requests/${requestId}/workspace/notes`, { token, method: "POST", body: data })
+}
+
+export function visitOnboardingWorkspace(token: string, requestId: number) {
+  return adminRequest<{ previous_viewed_at: string | null; viewed_at: string }>(`/api/onboarding/requests/${requestId}/workspace/visit`, { token, method: "POST", invalidateCache: false })
 }
 
 export async function getOnboardingOverview(token: string, after = 0) {

@@ -33,7 +33,7 @@ async function render(detailsOpen = false) {
   await act(async () => root.render(<OnboardingHrOverview token="token" detailsOpen={detailsOpen} onOpen={open} />))
 }
 function button(label: string) {
-  return [...container.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
+  return [...container.querySelectorAll("button")].find((entry) => (entry.getAttribute("aria-label") ?? entry.textContent?.trim()) === label)!
 }
 describe("HR onboarding overview", () => {
   it("loads every batch before showing complete counts and opens the existing request dialog", async () => {
@@ -67,5 +67,20 @@ describe("HR onboarding overview", () => {
     await render()
     expect(container.textContent).toContain("pagination did not advance")
     expect(getOverview).toHaveBeenCalledTimes(1)
+  })
+  it("renders only one page of a thousand employees and clamps the page after refresh", async () => {
+    getOverview.mockResolvedValue({ data: Array.from({ length: 1000 }, (_, index) => ({ ...row, id: index + 1, employee_name: `Employee ${index + 1}` })), next_cursor: null })
+    await render()
+    expect(container.querySelectorAll('button[aria-label^="Review onboarding for"]')).toHaveLength(25)
+    expect(container.textContent).toContain("Showing 1–25 of 1000 · Page 1 of 40")
+    expect(button("Previous page").disabled).toBe(true)
+    await act(async () => button("Next page").click())
+    expect(container.textContent).toContain("Showing 26–50 of 1000 · Page 2 of 40")
+    await act(async () => button("Review onboarding for Employee 26").click())
+    expect(open).toHaveBeenCalledWith(26)
+    getOverview.mockResolvedValue({ data: [row], next_cursor: null })
+    await act(async () => button("Refresh overview").click())
+    expect(button("Review onboarding for Amina Ali")).toBeDefined()
+    expect(button("Next page")).toBeUndefined()
   })
 })
