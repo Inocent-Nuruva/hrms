@@ -21,8 +21,12 @@ replace authenticated UAT acceptance testing against the deployed backend.
 local Chromium instead of the Playwright download, set
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium` (or its actual path).
 Do not run a production build while the test server is serving the same `.next`
-directory. Frontend CI runs this suite in a separate job and requires it to pass
-before deployment; failures retain browser traces and screenshots for seven days.
+directory. Frontend CI builds the standalone production server before running this
+suite, avoiding cold development-compilation timeouts. To use the same mode locally,
+run `npm run build`, copy `public` and `.next/static` into `.next/standalone/` and
+`.next/standalone/.next/` respectively, then set `PLAYWRIGHT_SERVER_MODE=production`
+when running Playwright. CI requires this suite to pass before deployment; failures
+retain browser traces and screenshots for seven days.
 
 ## Project structure
 

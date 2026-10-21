@@ -123,6 +123,7 @@ jobs:
       CI: true
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8888
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      PLAYWRIGHT_SERVER_MODE: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -131,6 +132,11 @@ jobs:
         run: npm pkg delete devDependencies.electron devDependencies.electron-builder --package-lock=false
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
+      - name: Build production browser-test server
+        run: |
+          npm run build
+          cp -r public .next/standalone/
+          cp -r .next/static .next/standalone/.next/
       - run: npx playwright test e2e/onboarding-workspace.spec.ts
       - name: Upload browser failure evidence
         if: failure()

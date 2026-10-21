@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test"
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000"
 const localURL = new URL(baseURL)
 const runLocalServer = ["localhost", "127.0.0.1"].includes(localURL.hostname)
+const useProductionServer = process.env.PLAYWRIGHT_SERVER_MODE === "production"
 
 export default defineConfig({
   testDir: "./e2e",
@@ -19,7 +20,12 @@ export default defineConfig({
   outputDir: "test-results",
   webServer: runLocalServer
     ? {
-        command: `npx next dev --webpack --disable-source-maps -p ${localURL.port || "3000"}`,
+        command: useProductionServer
+          ? "node .next/standalone/server.js"
+          : `npx next dev --webpack --disable-source-maps -p ${localURL.port || "3000"}`,
+        env: useProductionServer
+          ? { PORT: localURL.port || "3000", HOSTNAME: localURL.hostname }
+          : undefined,
         url: new URL("/login", baseURL).toString(),
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
