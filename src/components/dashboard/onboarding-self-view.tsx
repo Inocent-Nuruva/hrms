@@ -1,5 +1,7 @@
 "use client"
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
+import { OnboardingEmployeeMessages } from "./onboarding-workspace-collaboration"
+import { Card, CardHeader, Text, Button as FluentButton } from "@fluentui/react-components"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
@@ -76,6 +78,7 @@ export function OnboardingSelfView() {
   const [selectedId, setSelectedId] = React.useState("")
   const [progress, setProgress] = React.useState<AdminRecord | null>(null)
   const [tasks, setTasks] = React.useState<AdminRecord[]>([])
+  const [taskFilter, setTaskFilter] = React.useState("all")
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [contracts, setContracts] = React.useState<AdminRecord[]>([])
   const [signedName, setSignedName] = React.useState("")
@@ -301,6 +304,9 @@ export function OnboardingSelfView() {
   }
 
   const doneCount = tasks.filter((task) => /complete|done|verified/i.test(readString(task, ["status"]))).length
+  const actionableTasks = tasks.filter((task) => task.is_actionable === true && !/complete|done|verified/i.test(readString(task, ["status"])))
+  const waitingTasks = tasks.filter((task) => task.is_actionable !== true && !/complete|done|verified/i.test(readString(task, ["status"])))
+  const visibleTasks = taskFilter === "actions" ? actionableTasks : taskFilter === "waiting" ? waitingTasks : taskFilter === "completed" ? tasks.filter((task) => /complete|done|verified/i.test(readString(task, ["status"]))) : tasks
   const employeeDetailsReview = React.useMemo(() => {
     const direct = asRecord(selected?.employee_details_review)
     const metadata = asRecord(selected?.metadata)
@@ -362,6 +368,12 @@ export function OnboardingSelfView() {
         </div>
       ) : null}
 
+      {selected && Number(rowId(selected)) > 0 ? <OnboardingEmployeeMessages key={rowId(selected)} token={token()} requestId={Number(rowId(selected))} /> : null}
+      {selected ? <div className="grid gap-3 md:grid-cols-3">
+        <Card><CardHeader header={<Text weight="semibold">Your actions</Text>} description={`${actionableTasks.length} tasks ready for you`} /><p className="text-sm">{needsAck(selected) ? "Acknowledge your onboarding request. " : ""}{contracts.some((contract) => readString(contract, ["status"]).toLowerCase() === "issued") ? "An issued contract is awaiting your review. " : ""}{returnedDetailSections.length ? `${returnedDetailSections.length} sections need correction.` : "Approved sections do not need to be reviewed again."}</p><FluentButton onClick={() => setTaskFilter("actions")}>Show my actionable tasks</FluentButton></Card>
+        <Card><CardHeader header={<Text weight="semibold">Waiting on your company or workflow</Text>} description={`${waitingTasks.length} tasks not yet actionable for you`} /><p className="text-sm">Some work belongs to another team or waits for an earlier step. HR manages activation after all mandatory checks pass.</p><FluentButton onClick={() => setTaskFilter("waiting")}>Show waiting tasks</FluentButton></Card>
+        <Card><CardHeader header={<Text weight="semibold">Completed</Text>} description={`${doneCount} checklist tasks completed`} /><p className="text-sm">{statusOf(selected) === "COMPLETED" ? "Your onboarding has been finalized. Any optional work remains separate." : "Completed tasks stay here for reference."}</p><FluentButton onClick={() => setTaskFilter("completed")}>Show completed tasks</FluentButton></Card>
+      </div> : null}
       {returnedDetailSections.length > 0 ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
           <p className="text-sm font-semibold">HR returned some details for correction</p>
@@ -396,11 +408,11 @@ export function OnboardingSelfView() {
         </div>
       ) : employeeDetailsReview.status === "submitted" || employeeDetailsReview.status === "in_review" ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
-          Your employee details are with HR for review. The workflow has not started yet.
+          Your employee details are with HR for review. Other work follows the configured workflow.
         </div>
       ) : employeeDetailsReview.status === "approved" ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
-          HR verified your employee details. The onboarding workflow can now be started.
+          HR verified your employee details. You do not need to resubmit approved sections.
         </div>
       ) : null}
 
@@ -489,8 +501,8 @@ export function OnboardingSelfView() {
                     No tasks have been assigned to you on this request.
                   </div>
                 ) : (
-                  <ul className="divide-y divide-border/70">
-                    {tasks.map((task) => {
+                  <div><FluentButton appearance="subtle" onClick={() => setTaskFilter("all")}>Show all tasks</FluentButton>{!visibleTasks.length ? <p className="p-4 text-sm">No tasks in this group.</p> : null}<ul className="divide-y divide-border/70">
+                    {visibleTasks.map((task) => {
                       const id = rowId(task)
                       const done = /complete|done|verified/i.test(readString(task, ["status"]))
                       return (
@@ -538,7 +550,7 @@ export function OnboardingSelfView() {
                         </li>
                       )
                     })}
-                  </ul>
+                  </ul></div>
                 )}
               </div>
 

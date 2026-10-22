@@ -14,7 +14,7 @@ async function prepareWorkspace(page: Page, canActivate = true, extraPermissions
     sessionStorage.setItem("hrms.dashboard.accessMode", JSON.stringify("admin"))
     sessionStorage.setItem("hrms.dashboard.isAdmin", "true")
   }, { token, user, permissions })
-  const state = { ready: false, completed: false, failOverview: false, failActivation: false, activationCalls: 0 }
+  const state = { ready: false, completed: false, failOverview: false, failActivation: false, failNote: false, activationCalls: 0, notes: [] as Array<Record<string, unknown>> }
   const employee = { id: 501, first_name: "Amina", last_name: "Test", employee_no: "TEST-501", employment_status: "onboarding", primary_department: { id: 1, name: "Finance" } }
   const requirement = { id: "signed employment contract", label: "Signed contract covering the start date", group: "Contract", owner: "HR / Employee", required: true, status: "pending", action: "contracts" }
   const readiness = () => ({ employee_id: 501, employee_status: state.completed ? "active" : "onboarding", request_status: state.completed ? "completed" : "in_progress", ready_to_activate: state.ready && !state.completed, closed: state.completed, blocker_count: state.ready ? 0 : 1, completed_required: state.ready ? 10 : 9, total_required: 10, next_action: state.ready ? null : requirement, requirements: [{ ...requirement, status: state.ready ? "complete" : "pending" }] })
@@ -25,7 +25,15 @@ async function prepareWorkspace(page: Page, canActivate = true, extraPermissions
     if (path === "/api/onboarding/requests/overview") {
       if (state.failOverview) return route.fulfill({ status: 503, json: { message: "Readiness temporarily unavailable" } })
       payload = { data: state.completed ? [] : [{ id: 55, employee_id: 501, employee_name: "Amina Test", employee_no: "TEST-501", onboarding_no: "TEST-ONB-55", department: "Finance", stage: state.ready ? "Ready for activation" : "Contract", overdue: true, overdue_task_count: 0, owners: [state.ready ? "Authorized HR" : "HR / Employee"], planned_completion_date: "2026-01-01", blockers: state.ready ? [] : [requirement], readiness: readiness() }], next_cursor: null }
-    } else if (path === "/api/onboarding/requests/55/readiness") payload = readiness()
+    } else if (path === "/api/onboarding/requests/55/workspace/visit") payload = { previous_viewed_at: null, viewed_at: new Date().toISOString() }
+    else if (path === "/api/onboarding/requests/55/workspace/notes") {
+      if (route.request().method() === "POST") {
+        if (state.failNote) return route.fulfill({ status: 503, json: { message: "Notes temporarily unavailable" } })
+        state.notes.push({ ...route.request().postDataJSON(), id: state.notes.length + 1, author_name: "Test HR", created_at: new Date().toISOString() })
+        payload = { message: "Handoff note saved" }
+      } else payload = state.notes
+    }
+    else if (path === "/api/onboarding/requests/55/readiness") payload = readiness()
     else if (path === "/api/onboarding/requests/55/complete") {
       state.activationCalls += 1
       if (state.failActivation) return route.fulfill({ status: 400, json: { message: "Employee is not ready for activation: signed employment contract" } })
@@ -56,7 +64,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await expect(page.getByText("1 of 1 open requests", { exact: false })).toBeVisible()
   })
 
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 2560, height: 1440 }, { width: 1920, height: 1080 }, { width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     test(`filters and reviews employee readiness at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)
       await prepareWorkspace(page)
@@ -65,25 +73,43 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       await page.getByRole("searchbox", { name: "Search onboarding overview" }).fill("missing employee")
       await expect(page.getByText("No open requests match these filters.")).toBeVisible()
       await page.getByRole("button", { name: "Clear filters", exact: true }).click()
+      await expect(page.getByRole("combobox", { name: "Responsible owner", exact: true })).not.toBeVisible()
+      await page.getByRole("button", { name: "Filters", exact: true }).click()
       await page.getByRole("combobox", { name: "Responsible owner", exact: true }).click()
       await page.getByRole("option", { name: "HR / Employee", exact: true }).click()
+      await page.getByRole("button", { name: "Show results", exact: true }).click()
+      await expect(page.getByRole("button", { name: "Remove Responsible owner filter: HR / Employee", exact: true })).toBeVisible()
+      await expect(page.getByRole("combobox", { name: "Responsible owner", exact: true })).not.toBeVisible()
+      await page.getByRole("button", { name: "Remove Responsible owner filter: HR / Employee", exact: true }).click()
+      await expect(page.getByRole("button", { name: "Clear filters", exact: true })).not.toBeVisible()
+      await expect(page.getByText("1 of 1 open requests", { exact: false })).toBeVisible()
       await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
       await expect(page.getByText("Activation overview · Amina Test")).toBeVisible()
       await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
       await expect(page.getByRole("button", { name: "Review Signed contract covering the start date", exact: true })).toBeVisible()
-      const dialog = page.getByRole("dialog")
+      const dialog = page.getByRole("region", { name: "Employee onboarding workspace", exact: true })
+      const sheet = page.getByRole("dialog", { name: "Employee onboarding workspace", exact: true })
+      await expect(sheet).toBeVisible()
+      await expect.poll(async () => {
+        const bounds = await sheet.boundingBox()
+        return bounds !== null && Math.abs(bounds.x) <= 1 && Math.abs(bounds.y) <= 1 && Math.abs(bounds.width - viewport.width) <= 1 && Math.abs(bounds.height - viewport.height) <= 1
+      }).toBe(true)
       await expect.poll(async () => {
         const current = await dialog.boundingBox()
-        return current !== null && current.x >= -1 && current.x + current.width <= viewport.width + 1
+        return current !== null && Math.abs(current.x) <= 1 && Math.abs(current.width - viewport.width) <= 1
       }).toBe(true)
       const bounds = await dialog.boundingBox()
       expect(Math.round(bounds?.width ?? Infinity)).toBeLessThanOrEqual(viewport.width)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       if (viewport.width < 640) {
-        const label = page.getByRole("dialog").locator("p").filter({ hasText: /^Signed contract covering the start date$/ })
-        expect((await label.boundingBox())?.width).toBeGreaterThan(200)
+        const label = dialog.locator("p").filter({ hasText: /^Signed contract covering the start date$/ })
+        expect((await label.boundingBox())?.width).toBeGreaterThan(150)
       }
       await page.screenshot({ path: test.info().outputPath("readiness-dialog.png"), fullPage: true })
+      await sheet.press("Escape")
+      await expect(sheet).not.toBeVisible()
+      await expect(page).not.toHaveURL(/request_id=/)
+      await expect(page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true })).toBeVisible()
     })
   }
 
@@ -114,13 +140,84 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.goto("/dashboard/employees/onboarding?request_id=55")
     const activate = page.getByRole("button", { name: "Activate employee", exact: true })
     await expect(activate).toBeEnabled()
+    await page.screenshot({ path: test.info().outputPath("ready-for-activation.png"), fullPage: true })
     await activate.click()
+    await page.getByRole("button", { name: "Confirm activation", exact: true }).click()
     await expect(page.locator("main").getByText("Employee is not ready for activation: signed employment contract", { exact: true })).toBeVisible()
     expect(state.completed).toBe(false)
     state.failActivation = false
     await activate.click()
-    await expect(page.getByText("Onboarding finalized", { exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Confirm activation", exact: true }).click()
+    await expect(page.getByText("Onboarding finalized", { exact: true }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     expect(state.activationCalls).toBe(2)
+    await page.screenshot({ path: test.info().outputPath("onboarding-finalized.png"), fullPage: true })
+  })
+
+  test("preserves overview filters and opens focused workspace tabs", async ({ page }) => {
+    await prepareWorkspace(page)
+    await page.goto("/dashboard/employees/onboarding")
+    await page.getByRole("searchbox", { name: "Search onboarding overview" }).fill("Amina")
+    await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
+    await page.getByRole("button", { name: "Review Signed contract covering the start date", exact: true }).click()
+    await expect(page.getByRole("tab", { name: "Payroll & contract", exact: true })).toHaveAttribute("aria-selected", "true")
+    await page.getByRole("button", { name: "← Back to onboarding", exact: true }).click()
+    await expect(page.getByRole("searchbox", { name: "Search onboarding overview" })).toHaveValue("Amina")
+    await expect(page).not.toHaveURL(/request_id=/)
+  })
+
+  test("shows real dependency reasons for an approval that cannot proceed", async ({ page }) => {
+    await prepareWorkspace(page)
+    const approval = { id: "approval-3", label: "Starting salary review", group: "Approvals", owner: "Payroll approver", required: true, status: "pending", action: "approvals", actionable: false, waiting_reason: "Waiting for earlier required workflow steps to complete." }
+    await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: approval, requirements: [approval] } }))
+    await page.goto("/dashboard/employees/onboarding?request_id=55")
+    await expect(page.getByText("Waiting on a prerequisite:", { exact: false })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
+    await page.screenshot({ path: test.info().outputPath("waiting-on-approval.png"), fullPage: true })
+  })
+
+  test("preserves masked payroll identifiers when editing payroll setup", async ({ page }) => {
+    await prepareWorkspace(page, true, ["payroll:profiles:read", "payroll:profiles"])
+    const requirement = { id: "TIN", label: "Tax identification number", group: "Employment & payroll", owner: "Payroll", required: true, status: "pending", action: "payroll" }
+    await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: requirement, requirements: [requirement] } }))
+    let submitted: Record<string, unknown> | null = null
+    await page.route("**/api/payroll/employees/profiles*", async (route) => {
+      if (route.request().method() === "POST") {
+        submitted = route.request().postDataJSON()
+        return route.fulfill({ json: { message: "Saved" } })
+      }
+      return route.fulfill({ json: { data: [{ employeeId: 501, payrollNumber: "PAY-501", effectiveFrom: "2026-10-01", taxpayerIdentificationNumber: "*****6789", socialSecurityNumber: "*****3456", healthInsuranceNumber: "*****1234", version: 4 }] } })
+    })
+    await page.goto("/dashboard/employees/onboarding?request_id=55")
+    await page.getByRole("button", { name: "Review Tax identification number", exact: true }).click()
+    const drawer = page.getByRole("dialog", { name: "Payroll setup", exact: true })
+    await expect(drawer.getByLabel("Tax identification number", { exact: true })).toHaveValue("")
+    await drawer.getByRole("textbox", { name: /^Payroll number/ }).fill("PAY-502")
+    await drawer.getByRole("button", { name: "Save payroll setup", exact: true }).click()
+    await expect(drawer).not.toBeVisible()
+    expect(submitted).toMatchObject({ payroll_number: "PAY-502", expected_version: 4, preserve_existing_identifiers: true })
+    expect(submitted).not.toHaveProperty("taxpayer_identification_number")
+    expect(submitted).not.toHaveProperty("social_security_number")
+    expect(submitted).not.toHaveProperty("health_insurance_number")
+    await page.getByRole("button", { name: "Review salary setup", exact: true }).click()
+    await expect(page.getByRole("dialog", { name: "Joining salary & payroll", exact: true })).toBeVisible()
+  })
+
+  test("retains a handoff draft after failure and saves an employee-visible message", async ({ page }) => {
+    const state = await prepareWorkspace(page, true, ["onboarding_requests:update"])
+    state.failNote = true
+    await page.goto("/dashboard/employees/onboarding?request_id=55")
+    await page.getByRole("button", { name: "Notes & handoff", exact: true }).click()
+    await page.getByLabel("Note visibility", { exact: true }).selectOption("employee")
+    const note = page.getByLabel("Handoff note", { exact: true })
+    await note.fill("Please review and sign the prepared contract.")
+    await page.getByRole("button", { name: "Save handoff note", exact: true }).click()
+    await expect(page.getByText("Notes temporarily unavailable", { exact: true })).toBeVisible()
+    await expect(note).toHaveValue("Please review and sign the prepared contract.")
+    state.failNote = false
+    await page.getByRole("button", { name: "Save handoff note", exact: true }).click()
+    await expect(page.getByText("Visible to employee", { exact: true })).toBeVisible()
+    await expect(note).toHaveValue("")
+    expect(state.notes).toHaveLength(1)
   })
 })

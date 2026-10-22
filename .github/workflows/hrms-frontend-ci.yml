@@ -13,6 +13,8 @@ on:
       - "package-lock.json"
       - "next.config.ts"
       - "tsconfig.json"
+      - "vitest.config.ts"
+      - "android/src/lib/mobile-notification-routing.ts"
       - "eslint.config.mjs"
       - ".github/workflows/hrms-frontend-ci.yml"
       - ".github/workflows/hrms-frontend-deployment-preflight.yml"

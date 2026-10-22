@@ -11,6 +11,12 @@ import { useSearchParams } from "next/navigation"
 import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import {
   Button as FluentButton,
+  Avatar as FluentAvatar,
+  Badge as FluentBadge,
+  Tab as FluentTab,
+  TabList as FluentTabList,
+  OverlayDrawer,
+  DrawerHeaderTitle,
   Field,
   Table as FluentTable,
   TableBody as FluentTableBody,
@@ -46,6 +52,8 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
+import { OnboardingHandoffDrawer, OnboardingWorkspaceUpdates, onboardingActivityLabel } from "./onboarding-workspace-collaboration"
+import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -131,7 +139,6 @@ import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
-  DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -1402,7 +1409,15 @@ export function OnboardingView() {
     attendanceDevices: false,
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
+  const [workspaceTab, setWorkspaceTab] = React.useState("overview")
+  const [workflowMapVisible, setWorkflowMapVisible] = React.useState(false)
+  const [handoffRequirement, setHandoffRequirement] = React.useState<{ id: string; label: string } | null>(null)
+  const workspaceRequestRef = React.useRef<number | null>(null)
+  const workspaceLoadSequence = React.useRef(0)
+  const reviewDraftVersions = React.useRef<Record<string, number>>({})
+  const dirtyReviewKeys = React.useRef(new Set<string>())
   const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false)
+  const [payrollDrawerOpen, setPayrollDrawerOpen] = React.useState(false)
   const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>([])
   const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
@@ -2418,8 +2433,8 @@ export function OnboardingView() {
   }
 
   const resolveResponsibleParty = React.useCallback(
-    (step: AdminRecord) => resolveResponsiblePartyLabel(step, roles, users) || "-",
-    [roles, users]
+    (step: AdminRecord) => resolveResponsiblePartyLabel(step, roles, users, departments) || "-",
+    [roles, users, departments]
   )
 
   const assignableUsers = React.useMemo(() => {
@@ -3647,6 +3662,9 @@ export function OnboardingView() {
 
   const resolveRequestTaskOwner = React.useCallback(
     (task: AdminRecord) => {
+      const step = toRecord(task.workflow_step) ?? selectedWorkflowSteps.find((entry) => readNumber(entry, ["id"]) === readNumber(task, ["workflow_step_id"]))
+      const party = resolveResponsiblePartyLabel(task, roles, users, departments) || resolveResponsiblePartyLabel(step ?? null, roles, users, departments)
+      if (party) return party
       const nestedUser = toRecord(task.assigned_company_user) ?? toRecord(task.assignee) ?? toRecord(task.user) ?? null
       const nestedPerson = personDisplayName(nestedUser)
       if (nestedPerson) {
@@ -3689,7 +3707,7 @@ export function OnboardingView() {
 
       return "-"
     },
-    [departments, users]
+    [departments, users, roles, selectedWorkflowSteps]
   )
 
   function readCurrentRequestId() {
@@ -3784,7 +3802,9 @@ export function OnboardingView() {
           status,
           comment: comment || undefined,
         },
-      ])
+      ], reviewDraftVersions.current[sectionKey] ?? readNumber(selectedRequestDetails ?? {}, ["version"]) ?? undefined)
+      dirtyReviewKeys.current.delete(sectionKey)
+      delete reviewDraftVersions.current[sectionKey]
       showSuccessAlert(
         status === "approved" ? "Section verified." : "Section returned to the employee with your reason."
       )
@@ -4143,6 +4163,19 @@ export function OnboardingView() {
 
     setSelectedRequestRow(row)
     setRequestDetailsOpen(true)
+    const loadSequence = ++workspaceLoadSequence.current
+    const switchingRequest = workspaceRequestRef.current !== requestId
+    workspaceRequestRef.current = requestId
+    openedHighlightedRequestRef.current = String(requestId)
+    const url = new URL(window.location.href)
+    url.searchParams.set("request_id", String(requestId))
+    window.history.replaceState(null, "", url)
+    if (switchingRequest) {
+    const initialTab = url.searchParams.get("workspace_tab") ?? "overview"
+    setWorkspaceTab(["overview", "details", "payroll", "tasks", "activity"].includes(initialTab) ? initialTab : "overview")
+    dirtyReviewKeys.current.clear()
+    reviewDraftVersions.current = {}
+    setHandoffRequirement(url.searchParams.get("handoff") ? { id: url.searchParams.get("handoff")!, label: url.searchParams.get("handoff")! } : null)
     setRequestDetailsLoading(true)
     setSelectedRequestDetails(null)
     setSelectedRequestProgress(null)
@@ -4157,6 +4190,7 @@ export function OnboardingView() {
     setShowTaskComposer(false)
     resetDocumentForm()
     resetTaskForm()
+    }
 
     try {
       const lookupKeys: OnboardingLookupKey[] = []
@@ -4171,6 +4205,7 @@ export function OnboardingView() {
         canReadOnboardingTasks ? listOnboardingTasks(token, requestId) : Promise.resolve([]),
       ])
       await lookupsPromise
+      if (loadSequence !== workspaceLoadSequence.current) return
       setSelectedRequestDetails(detail)
       setSelectedRequestProgress(progress)
       setSelectedRequestAuditLogs(auditLogs)
@@ -4178,15 +4213,15 @@ export function OnboardingView() {
       setSelectedRequestTasks(tasks)
       const detailReview = toRecord(detail?.employee_details_review)
       const detailSections = toRecordList(detailReview?.sections)
-      setEmployeeReviewComments(
-        Object.fromEntries(
+      setEmployeeReviewComments((current) => ({ ...current,
+        ...Object.fromEntries(
           detailSections.map((section) => {
             const key = readString(section, ["key"])
             const comment = readString(section, ["comment"], "")
-            return [key, comment === "-" ? "" : comment]
+            return [key, dirtyReviewKeys.current.has(key) ? current[key] : comment === "-" ? "" : comment]
           })
         )
-      )
+      }))
 
       const assignedWorkflow = detail ? toRecord(detail.workflow ?? detail.assigned_workflow) : null
       const workflowId =
@@ -4195,7 +4230,7 @@ export function OnboardingView() {
         (assignedWorkflow ? readNumber(assignedWorkflow, ["id", "workflow_id"]) : null)
       if (workflowId !== null && canViewOnboardingWorkflows) {
         const workflow = await getOnboardingWorkflow(token, workflowId)
-        if (workflow) {
+        if (workflow && loadSequence === workspaceLoadSequence.current) {
           const workflowSteps = toRecordList(
             workflow.steps ?? workflow.workflow_steps ?? workflow.tasks ?? workflow.activities
           )
@@ -4203,11 +4238,12 @@ export function OnboardingView() {
         }
       }
     } catch (errorObject) {
+      if (loadSequence !== workspaceLoadSequence.current) return
       const message = errorObject instanceof Error ? errorObject.message : "Failed to load request details."
       setError(message)
       showErrorAlert(message)
     } finally {
-      setRequestDetailsLoading(false)
+      if (loadSequence === workspaceLoadSequence.current) setRequestDetailsLoading(false)
     }
   }, [
     canReadRoles,
@@ -4230,13 +4266,15 @@ export function OnboardingView() {
     const refresh = async () => {
       if (refreshing || document.visibilityState === "hidden") return
       refreshing = true
-      const [detail, tasks] = await Promise.allSettled([
+      const [detail, tasks, activity] = await Promise.allSettled([
         getOnboardingRequest(access, liveRequestId),
         listOnboardingTasks(access, liveRequestId),
+        getOnboardingAuditLogs(access, liveRequestId),
       ])
       if (!cancelled) {
         if (detail.status === "fulfilled" && detail.value) setSelectedRequestDetails(detail.value)
         if (tasks.status === "fulfilled") setSelectedRequestTasks(tasks.value)
+        if (activity.status === "fulfilled") setSelectedRequestAuditLogs(activity.value)
       }
       refreshing = false
     }
@@ -4251,6 +4289,32 @@ export function OnboardingView() {
       document.removeEventListener("visibilitychange", onFocus)
     }
   }, [liveRequestId])
+
+  React.useEffect(() => {
+    if (!requestDetailsOpen) return
+    const url = new URL(window.location.href)
+    url.searchParams.set("workspace_tab", workspaceTab)
+    window.history.replaceState(null, "", url)
+  }, [requestDetailsOpen, workspaceTab])
+
+  React.useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (dirtyReviewKeys.current.size) { event.preventDefault(); event.returnValue = "" } }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [])
+
+  function closeWorkspace() {
+    if (dirtyReviewKeys.current.size && !window.confirm("Discard unsaved review notes and return to onboarding?")) return
+    dirtyReviewKeys.current.clear()
+    workspaceRequestRef.current = null
+    workspaceLoadSequence.current += 1
+    setRequestDetailsOpen(false)
+    const url = new URL(window.location.href)
+    url.searchParams.delete("request_id")
+    url.searchParams.delete("workspace_tab")
+    url.searchParams.delete("handoff")
+    window.history.replaceState(null, "", url)
+  }
 
   const openedHighlightedRequestRef = React.useRef("")
   React.useEffect(() => {
@@ -4767,8 +4831,8 @@ export function OnboardingView() {
   ]
 
   return (
-    <section className="overflow-hidden border border-border bg-background shadow-sm">
-      <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+    <section className="min-w-0 overflow-hidden border border-border bg-background shadow-sm">
+      <div hidden={requestDetailsOpen} className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
             Onboarding
@@ -4783,7 +4847,7 @@ export function OnboardingView() {
           {canViewOnboardingWorkflows ? <span>{filteredWorkflows.length} workflows</span> : null}
         </div>
       </div>
-      <div className="tab-rail-scroll bg-muted/[0.12] px-3">
+      <div hidden={requestDetailsOpen} className="tab-rail-scroll bg-muted/[0.12] px-3">
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {canViewPendingInvitations ? (
             <button
@@ -5024,9 +5088,10 @@ export function OnboardingView() {
         </div>
       ) : activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
+          <div hidden={requestDetailsOpen}>
           {!isEmployeeMode ? (
-            <div className="flex flex-wrap items-center gap-3 p-3">
-              <FluentSelect ariaLabel="Onboarding view" className="max-w-xs" value={requestPresentation} onChange={setRequestPresentation} options={[{ value: "overview", label: "HR readiness overview" }, { value: "requests", label: "All requests" }]} />
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+              <div className="w-56 max-w-full"><FluentSelect ariaLabel="Onboarding view" value={requestPresentation} onChange={setRequestPresentation} options={[{ value: "overview", label: "HR readiness overview" }, { value: "requests", label: "All requests" }]} /></div>
               {requestPresentation === "overview" && canCreateOnboardingRequests ? <Button size="sm" onClick={() => void openRequestSheet()}>Create Request</Button> : null}
             </div>
           ) : null}
@@ -5862,44 +5927,20 @@ export function OnboardingView() {
             </SheetContent>
           </Sheet>
 
-          <Dialog open={requestDetailsOpen} onOpenChange={setRequestDetailsOpen}>
-            <DialogPopup
-              from="bottom"
-              showCloseButton={false}
-              className="flex h-[calc(100vh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none max-w-none flex-col overflow-hidden border border-border bg-background p-0 shadow-sm sm:h-[calc(100vh-1rem)] sm:w-[calc(100vw-1rem)] sm:max-w-none"
-            >
-              <DialogClose className="absolute right-3 top-3 z-30 inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-foreground shadow-sm transition hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                <X className="size-4" aria-hidden="true" />
-                <span className="sr-only">Close onboarding request</span>
-              </DialogClose>
-              <DialogHeader className="z-20 grid shrink-0 gap-2.5 border-b border-border bg-background px-3 py-2.5 pr-14 md:grid-cols-[minmax(180px,1fr)_auto] md:items-center">
+          </div>
+          <OverlayDrawer open={requestDetailsOpen} onOpenChange={(_, data) => { if (!data.open) closeWorkspace() }} position="end" size="full" className="!h-dvh !max-w-none !overflow-hidden !rounded-none !border-0 !p-0">
+            <DrawerHeaderTitle className="sr-only">Employee onboarding workspace</DrawerHeaderTitle>
+            <section aria-label="Employee onboarding workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-4">
+              <FluentButton appearance="subtle" className="self-start" onClick={closeWorkspace}>← Back to onboarding</FluentButton>
+              <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
                 <div className="min-w-0">
-                  <DialogTitle className="truncate text-sm font-semibold tracking-tight text-foreground">
-                    Employee onboarding workspace
-                  </DialogTitle>
-                  <DialogDescription className="mt-0.5 text-[10px] text-muted-foreground">
-                    Review employee details and track the remaining onboarding work.
-                  </DialogDescription>
+                  <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
                 </div>
-                <div className="hidden shrink-0 items-center divide-x divide-border md:flex">
-                  <div className="px-3 text-right">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Employee</p>
-                    <p className="mt-0.5 max-w-56 truncate text-[11px] font-semibold text-foreground">
-                      {selectedRequestSummary.employee}
-                    </p>
-                  </div>
-                  <div className="px-3 text-right">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Status</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-foreground">
-                      {toTitleCaseWords(selectedRequestSummary.status)}
-                    </p>
-                  </div>
-                  <div className="pl-3 text-right">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Updated</p>
-                    <p className="mt-0.5 text-[11px] font-semibold text-foreground">{selectedRequestSummary.updated}</p>
-                  </div>
-                </div>
-              </DialogHeader>
+                <div className="flex flex-col items-start gap-2"><FluentBadge appearance="tint" color={selectedRequestSummary.status === "completed" ? "success" : "informative"}>{toTitleCaseWords(readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employment_status"], "onboarding"))}</FluentBadge><p className="text-xs text-muted-foreground">Request {toTitleCaseWords(selectedRequestSummary.status)} · Updated {selectedRequestSummary.updated}</p></div>
+              </header>
+              <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
+                <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">Payroll & contract</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
+              </FluentTabList></div>
 
               {requestDetailsLoading ? (
                 <div className="m-3 border border-border p-4 text-sm text-muted-foreground">
@@ -5909,7 +5950,8 @@ export function OnboardingView() {
                 <div className="min-h-0 flex-1 overflow-y-auto text-foreground [&_.border-slate-200]:border-border [&_.border-slate-300]:border-border [&_.bg-slate-50]:bg-muted/20 [&_.bg-white]:bg-background [&_.text-slate-500]:text-muted-foreground [&_.text-slate-600]:text-muted-foreground [&_.text-slate-700]:text-foreground [&_.text-slate-800]:text-foreground [&_.text-slate-900]:text-foreground">
 
                   {readCurrentRequestId() ? (
-                    <div className="p-3">
+                    <div hidden={workspaceTab !== "overview"} className="pb-4">
+                      <div className="mb-4"><OnboardingWorkspaceUpdates key={readCurrentRequestId()} token={readStoredToken() ?? ""} requestId={readCurrentRequestId()!} activity={selectedRequestAuditLogs} onActivity={() => setWorkspaceTab("activity")} /></div>
                       <OnboardingReadinessOverview
                         key={readCurrentRequestId()}
                         token={readStoredToken() ?? ""}
@@ -5917,22 +5959,37 @@ export function OnboardingView() {
                         employeeName={selectedRequestSummary.employee}
                         canActivate={canCompleteOnboardingRequests}
                         saving={saving}
+                        refreshKey={String(selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? "")}
+                        onDiscuss={(id, label) => setHandoffRequirement({ id, label })}
                         onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
                         onNavigate={(action, requirementId) => {
+                          if (requirementId === "employee-profile") {
+                            const employeeNo = readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employee_no"], "")
+                            if (employeeNo) window.location.assign(`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`)
+                            else setWorkspaceTab("details")
+                            return
+                          }
+                          setWorkspaceTab(action === "contracts" || action === "payroll" ? "payroll" : action === "approvals" ? "tasks" : action)
                           if (requirementId === "independently approved starting salary") {
                             if (canReadJoiningSalary) void openJoiningSalary()
                             else showErrorAlert("Payroll access is required. Ask the payroll team to complete this requirement.")
                             return
                           }
-                          const target = document.getElementById(`onboarding-workspace-${action}`)
-                          target?.scrollIntoView({ behavior: "smooth", block: "start" })
-                          target?.focus({ preventScroll: true })
+                          if (action === "payroll" && canReadJoiningSalary) {
+                            setPayrollDrawerOpen(true)
+                            return
+                          }
+                          window.setTimeout(() => {
+                            const target = document.getElementById(`onboarding-workspace-${action}`)
+                            target?.scrollIntoView({ behavior: "smooth", block: "start" })
+                            target?.focus({ preventScroll: true })
+                          }, 0)
                         }}
                       />
                     </div>
                   ) : null}
 
-                  <section id="onboarding-workspace-details" tabIndex={-1} className="overflow-hidden border-b border-border bg-background">
+                  <section hidden={workspaceTab !== "details"} id="onboarding-workspace-details" tabIndex={-1} className="overflow-hidden border-b border-border bg-background">
                     <div className="flex flex-col gap-2 border-b border-border bg-muted/[0.12] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Employee details review</p>
@@ -6058,6 +6115,8 @@ export function OnboardingView() {
                               {toRecordList(currentEmployeeReviewSection.fields).map((reviewField, index) => (
                                 (() => {
                                   const value = readString(reviewField, ["value"])
+                                  const previousField = toRecordList(currentEmployeeReviewSection.previous_fields).find((field) => readString(field, ["label"]) === readString(reviewField, ["label"]))
+                                  const previousValue = previousField ? readString(previousField, ["value"]) : null
                                   const isFilled = hasEmployeeReviewValue(value)
                                   return (
                                     <div
@@ -6087,6 +6146,7 @@ export function OnboardingView() {
                                       >
                                         {value}
                                       </p>
+                                      {previousValue !== null && previousValue !== value ? <p className="mt-1 text-xs text-muted-foreground">Changed since review · Previously: <span className="whitespace-pre-wrap">{previousValue}</span></p> : null}
                                     </div>
                                   )
                                 })()
@@ -6133,6 +6193,19 @@ export function OnboardingView() {
                               </div>
                             ) : null}
 
+                            <FluentButton disabled={saving} onClick={async () => {
+                              if (!window.confirm("Reload the latest employee details while keeping your review notes? Review any changes before saving your decision.")) return
+                              const requestId = readCurrentRequestId()
+                              const token = readStoredToken()
+                              if (!requestId || !token) return
+                              try {
+                                const latest = await getOnboardingRequest(token, requestId)
+                                if (workspaceRequestRef.current !== requestId) return
+                                setSelectedRequestDetails(latest)
+                                reviewDraftVersions.current = {}
+                                showSuccessAlert("Latest details loaded. Your notes are retained; review the changes before saving.")
+                              } catch (cause) { showErrorAlert(cause instanceof Error ? cause.message : "Could not reload details. Your notes are retained.") }
+                            }}>Reload latest review details</FluentButton>
                             <label className="grid gap-1.5 text-xs font-medium text-foreground">
                               Review note
                               <Textarea
@@ -6142,6 +6215,8 @@ export function OnboardingView() {
                                 }
                                 onChange={(event) => {
                                   const key = readString(currentEmployeeReviewSection, ["key"], "")
+                                  dirtyReviewKeys.current.add(key)
+                                  reviewDraftVersions.current[key] ??= readNumber(selectedRequestDetails ?? {}, ["version"]) ?? 0
                                   setEmployeeReviewComments((current) => ({
                                     ...current,
                                     [key]: event.target.value,
@@ -6183,7 +6258,7 @@ export function OnboardingView() {
                     )}
                   </section>
 
-                  <section id="onboarding-workspace-contracts" tabIndex={-1} className="border-b p-3">
+                  <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-contracts" tabIndex={-1} className="border-b p-3">
                     {readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? (
                       <EmploymentContractsView
                         key={readNumber(selectedRequestDetails ?? {}, ["employee_id"])}
@@ -6197,22 +6272,24 @@ export function OnboardingView() {
                     ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
                   </section>
 
-                    <section id="onboarding-workspace-payroll" tabIndex={-1} className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
+                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
                         <p className="mt-1 text-xs text-muted-foreground">Assign the effective salary structure and route it for independent approval. Activation remains blocked until payroll prerequisites are ready.</p>
                         <p className="mt-1 text-xs text-muted-foreground">Payroll owns the enabled profile, TIN, pension and health enrollment, and verified bank account. These are separate from salary approval; use the activation overview to see exactly which are missing.</p>
                       </div>
                       {canReadJoiningSalary ? (
+                      <div className="flex flex-wrap gap-2"><FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton>
                       <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
                         Review salary setup
                       </Button>
+                      </div>
                       ) : <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p>}
                     </section>
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
-                  <section className="space-y-2 bg-background p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Submitted request</p>
+                  <details hidden={workspaceTab !== "overview"} className="bg-background p-3">
+                    <summary className="cursor-pointer text-sm font-semibold">Request details</summary>
                     <div className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
                       <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request Code</p>
@@ -6277,9 +6354,9 @@ export function OnboardingView() {
                         </p>
                       </div>
                     </div>
-                  </section>
+                  </details>
 
-                  {isOnboardingActableStatus(
+                  {workspaceTab === "tasks" && isOnboardingActableStatus(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
                   ) && approvalSummary.pending.length > 0 ? (
                     <div className="border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/25">
@@ -6298,7 +6375,7 @@ export function OnboardingView() {
                     ])
                     const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
                     return (
-                      <section className="space-y-2 bg-background p-3">
+                      <section hidden={workspaceTab !== "overview"} className="space-y-2 bg-background p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-semibold text-foreground">Employee acknowledgement</p>
@@ -6313,7 +6390,7 @@ export function OnboardingView() {
                     )
                   })()}
 
-                  <section id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3">
+                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Approval trail</p>
                       {approvalSummary.pending.length > 0 ? (
@@ -6372,7 +6449,7 @@ export function OnboardingView() {
                   </section>
 
                   {selectedRequestProvisioningSummary ? (
-                    <details className="group bg-background xl:col-span-2">
+                    <details hidden={workspaceTab !== "overview"} className="group bg-background xl:col-span-2">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
                         <span>Provisioning summary</span>
                         <span className="text-[10px] font-medium text-muted-foreground group-open:hidden">
@@ -6535,7 +6612,7 @@ export function OnboardingView() {
                     </details>
                   ) : null}
 
-                  <div className="space-y-2 bg-background p-3 xl:col-span-2">
+                  <div hidden={workspaceTab !== "tasks"} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Documents</p>
                       {canUpdateOnboardingRequests ? (
@@ -6797,7 +6874,7 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <div id="onboarding-workspace-tasks" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
+                  <div hidden={workspaceTab !== "tasks"} id="onboarding-workspace-tasks" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-slate-900">Tasks</p>
                       {canUpdateOnboardingRequests ? (
@@ -7160,9 +7237,9 @@ export function OnboardingView() {
                     )}
                   </div>
 
-                  <section className="space-y-2 bg-background p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Workflow map</p>
-                    <div className="divide-y divide-border overflow-hidden border border-border">
+                  <section hidden={workspaceTab !== "tasks"} className="flex flex-col gap-3 bg-background p-3 xl:col-span-2">
+                    <FluentButton aria-expanded={workflowMapVisible} onClick={() => setWorkflowMapVisible((value) => !value)}>{workflowMapVisible ? "Hide workflow map" : "Show workflow map"}</FluentButton>
+                    <div hidden={!workflowMapVisible} className="divide-y divide-border overflow-hidden border border-border">
                       {requestTimelineNodes.map((node, idx) => {
                         const isDone =
                           node.status.includes("complete") ||
@@ -7228,7 +7305,7 @@ export function OnboardingView() {
                     </div>
                   </section>
 
-                  <section className="space-y-2 bg-background p-3">
+                  <section hidden={workspaceTab !== "activity"} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Activity record</p>
                     {selectedRequestAuditLogs.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No activity record available for this request.</p>
@@ -7241,9 +7318,7 @@ export function OnboardingView() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="text-sm font-medium text-slate-900">
-                                {toTitleCaseWords(
-                                  readString(entry, ["action", "event", "type", "activity"]) || "Updated"
-                                )}
+                                {onboardingActivityLabel(readString(entry, ["action", "event", "type", "activity"]) || "Updated")}
                               </p>
                               <p className="text-xs text-slate-500">
                                 {toTimestamp(
@@ -7266,7 +7341,7 @@ export function OnboardingView() {
                 </div>
               )}
 
-              <DialogFooter className="z-20 shrink-0 border-t border-border bg-background/95 px-3 py-2 backdrop-blur">
+              <footer className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-border bg-background pt-3">
                 {(() => {
                   const selectedStatus = String(
                     readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
@@ -7331,13 +7406,28 @@ export function OnboardingView() {
                     </>
                   )
                 })()}
-                <Button type="button" variant="outline" size="sm" onClick={() => setRequestDetailsOpen(false)}>
+                <Button type="button" variant="outline" size="sm" onClick={closeWorkspace}>
                   Close
                 </Button>
-              </DialogFooter>
-            </DialogPopup>
-          </Dialog>
+              </footer>
+            </section>
 
+          {handoffRequirement && requestDetailsOpen && readCurrentRequestId() ? <OnboardingHandoffDrawer key={`${readCurrentRequestId()}-${handoffRequirement.id}`} token={readStoredToken() ?? ""} requestId={readCurrentRequestId()!} employeeName={selectedRequestSummary.employee} requirement={handoffRequirement} canWrite={canUpdateOnboardingRequests && !["completed", "cancelled", "activating"].includes(selectedRequestSummary.status)} onClose={() => setHandoffRequirement(null)} /> : null}
+          <PayrollEmployeeSalaryDialog
+            drawer
+            open={salaryDialogOpen}
+            onOpenChange={setSalaryDialogOpen}
+            employeeId={String(readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"]))}
+            employeeLabel={selectedRequestSummary.employee}
+            structures={salaryStructures}
+            canEdit={canManageJoiningSalary}
+            onChanged={() => {
+              const row = selectedRequestRow
+              if (row) void openRequestDetails(row)
+            }}
+          />
+          {payrollDrawerOpen && readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? <OnboardingPayrollDrawer token={readStoredToken() ?? ""} employeeId={readNumber(selectedRequestDetails ?? {}, ["employee_id"])!} employeeName={selectedRequestSummary.employee} employeeNo={readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employee_no"], "")} canEdit={canManageJoiningSalary} onClose={() => setPayrollDrawerOpen(false)} onChanged={() => { if (selectedRequestRow) void openRequestDetails(selectedRequestRow) }} /> : null}
+          </OverlayDrawer>
           <Dialog open={changeWorkflowDialogOpen} onOpenChange={setChangeWorkflowDialogOpen}>
             <DialogPopup from="bottom" className="sm:max-w-[560px]">
               <DialogHeader>
@@ -8369,19 +8459,6 @@ export function OnboardingView() {
               </DialogFooter>
             </DialogPopup>
           </Dialog>
-
-          <PayrollEmployeeSalaryDialog
-            open={salaryDialogOpen}
-            onOpenChange={setSalaryDialogOpen}
-            employeeId={String(readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"]))}
-            employeeLabel={selectedRequestSummary.employee}
-            structures={salaryStructures}
-            canEdit={canManageJoiningSalary}
-            onChanged={() => {
-              const row = selectedRequestRow
-              if (row) void openRequestDetails(row)
-            }}
-          />
 
           <Dialog
             open={checklistItemDialogOpen}

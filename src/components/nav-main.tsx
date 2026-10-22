@@ -13,8 +13,8 @@ import {
   NavCategory,
   NavCategoryItem,
   NavItem,
-  NavSubItem,
   NavSubItemGroup,
+  SplitNavItem,
   makeStyles,
   tokens,
 } from "@fluentui/react-components"
@@ -155,8 +155,14 @@ const useStyles = makeStyles({
     width: "100%",
     alignItems: "center",
     columnGap: tokens.spacingHorizontalXS,
-    "&:hover button": {
-      opacity: 1,
+  },
+  splitItem: {
+    backgroundColor: "var(--sidebar)",
+    ":hover": {
+      backgroundColor: "var(--sidebar-accent)",
+    },
+    ":active": {
+      backgroundColor: "var(--sidebar-accent)",
     },
   },
   pinButton: {
@@ -274,20 +280,14 @@ function AttentionLabel({
   title,
   attention,
   className,
-  pinned = false,
-  onTogglePin,
   pinButtonClassName,
-  pinButtonPinnedClassName,
   fixedPinned = false,
   pinButtonFixedClassName,
 }: {
   title: string
   attention: boolean
   className: string
-  pinned?: boolean
-  onTogglePin?: () => void
   pinButtonClassName?: string
-  pinButtonPinnedClassName?: string
   fixedPinned?: boolean
   pinButtonFixedClassName?: string
 }) {
@@ -302,28 +302,6 @@ function AttentionLabel({
           aria-label={`${title} needs attention`}
           title="Unread attention — clears when its page is opened"
         />
-      ) : null}
-      {onTogglePin ? (
-        <span
-          role="button"
-          tabIndex={0}
-          className={`${pinButtonClassName ?? ""} ${pinned ? pinButtonPinnedClassName ?? "" : ""}`}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onTogglePin()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return
-            event.preventDefault()
-            event.stopPropagation()
-            onTogglePin()
-          }}
-          title={pinned ? `Unpin ${title}` : `Pin ${title}`}
-          aria-label={pinned ? `Unpin ${title}` : `Pin ${title}`}
-        >
-          {pinned ? <Pin20Filled /> : <Pin20Regular />}
-        </span>
       ) : null}
       {fixedPinned ? (
         <span
@@ -374,7 +352,7 @@ function renderSubItems(
   pinnedUrls: string[],
   togglePin: (url: string) => void,
   pinButtonClassName: string,
-  pinButtonPinnedClassName: string,
+  splitItemClassName: string,
 ): React.ReactNode {
   return nodes.map((node) => {
     const key = `${node.title}-${node.url ?? "section"}`
@@ -388,7 +366,7 @@ function renderSubItems(
         pinnedUrls,
         togglePin,
         pinButtonClassName,
-        pinButtonPinnedClassName,
+        splitItemClassName,
       )
     }
 
@@ -396,21 +374,25 @@ function renderSubItems(
     if (pinnedUrls.includes(node.url)) return null
 
     return (
-      <NavSubItem
+      <SplitNavItem
         key={key}
-        value={node.url}
-        disabled={node.disabled}
-        className={subItemClassName}
+        className={splitItemClassName}
+        navItem={{ value: node.url, disabled: node.disabled, className: subItemClassName }}
+        toggleButton={{
+          checked: false,
+          icon: <Pin20Regular />,
+          className: pinButtonClassName,
+          "aria-label": `Pin ${node.title}`,
+          title: `Pin ${node.title}`,
+          onClick: () => togglePin(node.url!),
+        }}
       >
         <AttentionLabel
           title={node.title}
           attention={nodeNeedsAttention(node, attentionUrls)}
           className={labelClassName}
-          onTogglePin={() => togglePin(node.url!)}
-          pinButtonClassName={pinButtonClassName}
-          pinButtonPinnedClassName={pinButtonPinnedClassName}
         />
-      </NavSubItem>
+      </SplitNavItem>
     )
   })
 }
@@ -656,7 +638,7 @@ export function NavMain({
                 pinnedUrls,
                 togglePin,
                 styles.pinButton,
-                styles.pinButtonPinned,
+                styles.splitItem,
               )}
             </NavSubItemGroup>
           </NavCategory>
@@ -664,22 +646,30 @@ export function NavMain({
       })() : null}
 
       {pinnedItems.map((item) => (
-        <NavItem
+        <SplitNavItem
           key={`pinned-${item.url}`}
-          value={item.url}
-          icon={<span className={styles.iconBadge} style={{ color: tokens.colorBrandForeground1 }} aria-hidden="true"><Pin20Filled /></span>}
-          className={styles.item}
+          className={styles.splitItem}
+          navItem={{
+            value: item.url,
+            disabled: item.disabled,
+            icon: <span className={styles.iconBadge} style={{ color: tokens.colorBrandForeground1 }} aria-hidden="true"><Pin20Filled /></span>,
+            className: styles.item,
+          }}
+          toggleButton={{
+            checked: true,
+            icon: <Pin20Filled />,
+            className: styles.pinButtonPinned,
+            "aria-label": `Unpin ${item.title}`,
+            title: `Unpin ${item.title}`,
+            onClick: () => togglePin(item.url),
+          }}
         >
           <AttentionLabel
             title={item.title}
             attention={nodeNeedsAttention(item, attentionUrls)}
             className={styles.label}
-            pinned
-            onTogglePin={() => togglePin(item.url!)}
-            pinButtonClassName={styles.pinButton}
-            pinButtonPinnedClassName={styles.pinButtonPinned}
           />
-        </NavItem>
+        </SplitNavItem>
       ))}
 
       <div className={styles.arranger}>
@@ -735,7 +725,7 @@ export function NavMain({
                   pinnedUrls,
                   togglePin,
                   styles.pinButton,
-                  styles.pinButtonPinned,
+                  styles.splitItem,
                 )}
               </NavSubItemGroup>
             </NavCategory>
@@ -746,22 +736,30 @@ export function NavMain({
         if (pinnedUrls.includes(item.url)) return null
 
         return (
-          <NavItem
+          <SplitNavItem
             key={`${item.title}-${item.url}`}
-            value={item.url}
-            icon={Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined}
-            disabled={item.disabled}
-            className={styles.item}
+            className={styles.splitItem}
+            navItem={{
+              value: item.url,
+              icon: Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined,
+              disabled: item.disabled,
+              className: styles.item,
+            }}
+            toggleButton={{
+              checked: false,
+              icon: <Pin20Regular />,
+              className: styles.pinButton,
+              "aria-label": `Pin ${item.title}`,
+              title: `Pin ${item.title}`,
+              onClick: () => togglePin(item.url!),
+            }}
           >
             <AttentionLabel
               title={item.title}
               attention={nodeNeedsAttention(item, attentionUrls)}
               className={styles.label}
-              onTogglePin={() => togglePin(item.url!)}
-              pinButtonClassName={styles.pinButton}
-              pinButtonPinnedClassName={styles.pinButtonPinned}
             />
-          </NavItem>
+          </SplitNavItem>
         )
       })}
     </Nav>

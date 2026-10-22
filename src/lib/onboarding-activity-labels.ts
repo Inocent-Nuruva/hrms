@@ -251,7 +251,7 @@ function nestedParty(record: AdminRecord, keys: string[]) {
   return null
 }
 
-export function resolveResponsiblePartyLabel(step: AdminRecord | null, roles: AdminRecord[], users: AdminRecord[]) {
+export function resolveResponsiblePartyLabel(step: AdminRecord | null, roles: AdminRecord[], users: AdminRecord[], departments: AdminRecord[] = []) {
   if (!step) return ""
 
   const explicitPerson = readText(step, [
@@ -302,6 +302,21 @@ export function resolveResponsiblePartyLabel(step: AdminRecord | null, roles: Ad
     parts.push(`User: ${userName}`)
   }
 
+  const department = nestedParty(step, ["assigned_department", "department"])
+  const departmentId = readNumber(step, ["assigned_department_id", "department_id"])
+  const departmentName = readText(department, ["name", "title"]) || readText(departments.find((item) => readNumber(item, ["id"]) === departmentId) ?? null, ["name", "title"])
+  if (departmentName) parts.push(`Department: ${departmentName}`)
+  else if (departmentId) parts.push(`Department #${departmentId}`)
+  const metadata = nestedParty(step, ["metadata"])
+  const position = nestedParty(step, ["assigned_position", "position"])
+  const positionId = readNumber(metadata, ["assigned_position_id"]) ?? readNumber(step, ["assigned_position_id"])
+  if (positionId) parts.push(`Position: ${readText(position, ["name", "title"]) || `#${positionId}`}`)
+  if (!parts.length) {
+    const workflowStep = nestedParty(step, ["workflow_step"])
+    if (workflowStep) return resolveResponsiblePartyLabel({ ...workflowStep, workflow_step: undefined }, roles, users, departments)
+    if (userId) return "Assigned team member"
+    if (roleId) return "Assigned role"
+  }
   return parts.join(" • ")
 }
 

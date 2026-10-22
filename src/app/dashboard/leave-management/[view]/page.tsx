@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation"
+import { redirect } from "next/navigation";
 
-import { AttendanceBusinessTripsView } from "@/components/dashboard/attendance-business-trips-view"
-import { LeaveBalanceImportView } from "@/components/dashboard/leave-balance-import-view"
-import { LeaveManagementView } from "@/components/dashboard/leave-management-view"
+import { AttendanceBusinessTripsView } from "@/components/dashboard/attendance-business-trips-view";
+import { LeaveBalanceImportView } from "@/components/dashboard/leave-balance-import-view";
+import { LeaveManagementView } from "@/components/dashboard/leave-management-view";
 
 const ALLOWED_VIEWS = new Set([
   "types",
@@ -11,37 +11,52 @@ const ALLOWED_VIEWS = new Set([
   "balances",
   "balance-import",
   "transactions",
+  "reports",
   "business-trips",
   "holidays",
   "policies",
   "workflows",
-])
+]);
 
-type LeaveView = "types" | "requests" | "team-calendar" | "balances" | "transactions" | "holidays" | "policies" | "workflows"
+type LeaveView =
+  | "types"
+  | "requests"
+  | "team-calendar"
+  | "balances"
+  | "transactions"
+  | "reports"
+  | "holidays"
+  | "policies"
+  | "workflows";
 
 interface LeaveManagementViewPageProps {
   params: Promise<{
-    view: string
-  }>
+    view: string;
+  }>;
 }
 
 export default async function LeaveManagementViewPage({
   params,
 }: LeaveManagementViewPageProps) {
-  const { view } = await params
-  const normalized = view?.toLowerCase()
+  const { view } = await params;
+  const normalized = view?.toLowerCase();
 
   if (!ALLOWED_VIEWS.has(normalized)) {
-    redirect("/dashboard/leave-management")
+    redirect("/dashboard/leave-management");
   }
 
   if (normalized === "business-trips") {
-    return <AttendanceBusinessTripsView />
+    return <AttendanceBusinessTripsView />;
   }
 
   if (normalized === "balance-import") {
-    return <LeaveBalanceImportView />
+    return <LeaveBalanceImportView />;
   }
 
-  return <LeaveManagementView activeTab={normalized as LeaveView} showTabButtons={false} />
+  return (
+    <LeaveManagementView
+      activeTab={normalized as LeaveView}
+      showTabButtons={false}
+    />
+  );
 }

@@ -7,10 +7,11 @@ export type OnboardingOverviewFilters = {
   owner: string
   blocker: string
   overdue: string
+  attention?: string
 }
 
 export const emptyOnboardingOverviewFilters: OnboardingOverviewFilters = {
-  search: "", stage: "", department: "", owner: "", blocker: "", overdue: "",
+  search: "", stage: "", department: "", owner: "", blocker: "", overdue: "", attention: "",
 }
 
 export function filterOnboardingOverview(rows: OnboardingOverviewRow[], filters: OnboardingOverviewFilters) {
@@ -21,13 +22,18 @@ export function filterOnboardingOverview(rows: OnboardingOverviewRow[], filters:
     (!filters.department || row.department === filters.department) &&
     (!filters.owner || row.owners.includes(filters.owner)) &&
     (!filters.blocker || row.blockers.some((item) => item.group === filters.blocker)) &&
+    (!filters.attention || (filters.attention === "any" ? Boolean(row.attention_reasons?.length) : row.attention_reasons?.includes(filters.attention))) &&
     (!filters.overdue || (filters.overdue === "overdue" ? row.overdue : !row.overdue)),
   )
 }
 
 export function groupOnboardingOverview(rows: OnboardingOverviewRow[]) {
   const groups = new Map<string, OnboardingOverviewRow[]>()
-  for (const row of rows) groups.set(row.stage, [...(groups.get(row.stage) ?? []), row])
+  for (const row of rows) {
+    const group = groups.get(row.stage)
+    if (group) group.push(row)
+    else groups.set(row.stage, [row])
+  }
   return [...groups].sort(([first], [second]) =>
     first === "Ready for activation" ? -1 : second === "Ready for activation" ? 1 : first.localeCompare(second),
   )
