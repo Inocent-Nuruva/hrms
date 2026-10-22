@@ -13524,6 +13524,41 @@ export async function generateEmploymentLetter(
   );
 }
 
+export async function generateEmployeeTemplateLetter(
+  token: string,
+  employeeId: number,
+  letterType: "JOINING_FORM" | "OTHER",
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employment-letters/employees/${employeeId}/generate`,
+      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+    ),
+  );
+}
+
+export async function previewEmployeeTemplateLetter(
+  token: string,
+  employeeId: number,
+  letterType: "JOINING_FORM" | "OTHER",
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employment-letters/employees/${employeeId}/preview`,
+      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+    ),
+  );
+}
+
+export async function listEmployeeLetterHistory(token: string, employeeId: number) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/employment-letters/employees/${employeeId}/history`,
+      { token },
+    ),
+  );
+}
+
 export async function downloadEmploymentLetter(token: string, id: number) {
   const response = await fetch(
     buildUrl(`/api/employment-letters/documents/${id}/download`),
@@ -13535,6 +13570,28 @@ export async function downloadEmploymentLetter(token: string, id: number) {
   if (!response.ok)
     throw new Error(`Could not download letter (${response.status})`);
   return response.blob();
+}
+
+export async function downloadEmployeeLetterPreview(
+  token: string,
+  employeeId: number,
+  letterType: "JOINING_FORM" | "OTHER",
+) {
+  const response = await fetch(
+    buildUrl(`/api/employment-letters/employees/${employeeId}/preview`),
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ letter_type: letterType }),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) throw new Error(`Could not preview letter (${response.status})`);
+  const payload = (await response.json()) as { content_base64?: string };
+  if (!payload.content_base64) throw new Error("Preview response did not include a PDF.");
+  const binary = atob(payload.content_base64);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: "application/pdf" });
 }
 
 export async function signEmploymentContract(

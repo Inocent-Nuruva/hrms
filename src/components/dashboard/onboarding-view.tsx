@@ -184,6 +184,8 @@ const ONBOARDING_DOCUMENT_TYPES = [
   { value: "curriculum_vitae", label: "CV / résumé", section: "experience" },
   { value: "employment_contract", label: "Employment contract", section: "assignment" },
   { value: "offer_letter", label: "Offer letter", section: "assignment" },
+  { value: "joining_form", label: "Joining form", section: "assignment" },
+  { value: "other", label: "Other onboarding document", section: "assignment" },
   { value: "bank_document", label: "Bank document", section: "banking" },
   { value: "medical_document", label: "Medical document", section: "personal" },
   { value: "other", label: "Other", section: "personal" },
