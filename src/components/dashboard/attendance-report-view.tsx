@@ -532,6 +532,9 @@ function AttendanceReportDialog({
   const [shiftId, setShiftId] = React.useState<number | null>(null)
   const [timetableId, setTimetableId] = React.useState<number | null>(null)
   const [status, setStatus] = React.useState("")
+  const [lateOnly, setLateOnly] = React.useState(false)
+  const [earlyDepartureOnly, setEarlyDepartureOnly] = React.useState(false)
+  const [overtimeOnly, setOvertimeOnly] = React.useState(false)
   const [format, setFormat] = React.useState<"xlsx" | "csv" | "pdf">("xlsx")
 
   const [branches, setBranches] = React.useState<AdminRecord[]>([])
@@ -660,6 +663,9 @@ function AttendanceReportDialog({
     setShiftId(null)
     setTimetableId(null)
     setStatus("")
+    setLateOnly(false)
+    setEarlyDepartureOnly(false)
+    setOvertimeOnly(false)
     setFormat("xlsx")
   }
 
@@ -693,6 +699,9 @@ function AttendanceReportDialog({
         shift_id: shiftId ?? undefined,
         timetable_id: timetableId ?? undefined,
         status: status || undefined,
+        late_only: lateOnly || undefined,
+        early_departure_only: earlyDepartureOnly || undefined,
+        overtime_only: overtimeOnly || undefined,
         format,
       })
 
@@ -728,6 +737,21 @@ function AttendanceReportDialog({
         </DialogHeader>
 
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="md:col-span-2 flex flex-wrap gap-x-6 gap-y-3 rounded-md border p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={lateOnly} onChange={(event) => setLateOnly(event.target.checked)} />
+              Late only
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={earlyDepartureOnly} onChange={(event) => setEarlyDepartureOnly(event.target.checked)} />
+              Early departure only
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={overtimeOnly} onChange={(event) => setOvertimeOnly(event.target.checked)} />
+              Overtime only
+            </label>
+            <p className="basis-full text-xs text-muted-foreground">Select multiple options to include records that meet every selected condition.</p>
+          </div>
           <Field label="From date">
             <DatePickerPresets
               value={fromDate}

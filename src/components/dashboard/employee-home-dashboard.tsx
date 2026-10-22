@@ -51,8 +51,8 @@ import {
   patchEmployeeStatus,
   listMyOnboardingRequests,
   submitMyOnboardingDetails,
-  createAttendanceMobilePunchCheckIn,
-  createAttendanceMobilePunchCheckOut,
+  createMyAttendanceCheckIn,
+  createMyAttendanceCheckOut,
   type AdminRecord,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
@@ -2400,12 +2400,10 @@ function NetworkCheckButton() {
 }
 
 function AttendancePunchActions({
-  employeeId,
   canCheckIn,
   canCheckOut,
   onAttendanceChanged,
 }: {
-  employeeId: number
   canCheckIn: boolean
   canCheckOut: boolean
   onAttendanceChanged?: () => Promise<void>
@@ -2444,7 +2442,6 @@ function AttendancePunchActions({
         const connection = getBrowserConnection()
         const payload: AdminRecord = {
           clientRequestId: crypto.randomUUID(),
-          employeeId,
           latitude: locationResult.location.latitude,
           longitude: locationResult.location.longitude,
           accuracyMeters: locationResult.location.accuracy,
@@ -2456,9 +2453,9 @@ function AttendancePunchActions({
         }
 
         if (action === "in") {
-          await createAttendanceMobilePunchCheckIn(token, payload)
+          await createMyAttendanceCheckIn(token, payload)
         } else {
-          await createAttendanceMobilePunchCheckOut(token, payload)
+          await createMyAttendanceCheckOut(token, payload)
         }
 
         setMessage({
@@ -2478,7 +2475,7 @@ function AttendancePunchActions({
         setBusyAction(null)
       }
     },
-    [employeeId, onAttendanceChanged],
+    [onAttendanceChanged],
   )
 
   return (
@@ -2901,7 +2898,6 @@ export function EmployeeDashboardView({
             Here&apos;s your day at a glance.
           </motion.p>
           <AttendancePunchActions
-            employeeId={dashboardData.employee.id}
             canCheckIn={canCheckIn}
             canCheckOut={canCheckOut}
             onAttendanceChanged={onAttendanceChanged}

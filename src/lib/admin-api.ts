@@ -253,6 +253,9 @@ export interface AttendanceQueryParams extends UsersQueryParams {
 }
 
 export interface AttendanceReportDownloadParams extends AttendanceQueryParams {
+  late_only?: boolean;
+  early_departure_only?: boolean;
+  overtime_only?: boolean;
   format: "xlsx" | "csv" | "pdf";
 }
 
@@ -1829,6 +1832,9 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim());
   }
+  if (params.late_only) searchParams.set("late_only", "true");
+  if (params.early_departure_only) searchParams.set("early_departure_only", "true");
+  if (params.overtime_only) searchParams.set("overtime_only", "true");
   if (params.exception_type && params.exception_type.trim()) {
     searchParams.set("exception_type", params.exception_type.trim());
   }
@@ -14329,6 +14335,17 @@ export async function createMyAttendanceCorrectionRequest(
   });
 }
 
+export async function addMyAttendanceCorrectionDocument(
+  token: string,
+  id: string | number,
+  file: Base64FileDto,
+) {
+  return adminRequest<unknown>(
+    `/api/me/attendance/correction-requests/${id}/documents`,
+    { method: "POST", token, body: { file } },
+  );
+}
+
 export async function listMyAttendanceCorrectionRequests(
   token: string,
   params: SelfServiceRequestQueryParams = {},
@@ -15004,6 +15021,27 @@ export async function getHrAttendanceCorrectionApprovalRequest(
     { token },
   );
   return normalizeSingle(payload);
+}
+
+export async function downloadHrAttendanceCorrectionEvidence(
+  token: string,
+  requestId: string | number,
+  documentId: string | number,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    buildUrl(`/api/hr/self-service/approvals/attendance-corrections/${requestId}/documents/${documentId}/download`),
+    { headers: { Authorization: `Bearer ${token}`, accept: "*/*" }, cache: "no-store" },
+  )
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    throw new Error(extractMessage(payload, response.status))
+  }
+  const disposition = response.headers.get("content-disposition") ?? ""
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+  return {
+    blob: await response.blob(),
+    filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? `attendance-evidence-${documentId}`),
+  }
 }
 
 export async function approveHrAttendanceCorrectionRequest(
