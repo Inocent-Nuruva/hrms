@@ -156,6 +156,15 @@ const useStyles = makeStyles({
     alignItems: "center",
     columnGap: tokens.spacingHorizontalXS,
   },
+  splitItem: {
+    backgroundColor: "var(--sidebar)",
+    ":hover": {
+      backgroundColor: "var(--sidebar-accent)",
+    },
+    ":active": {
+      backgroundColor: "var(--sidebar-accent)",
+    },
+  },
   pinButton: {
     display: "inline-flex",
     marginLeft: "auto",
@@ -343,6 +352,7 @@ function renderSubItems(
   pinnedUrls: string[],
   togglePin: (url: string) => void,
   pinButtonClassName: string,
+  splitItemClassName: string,
 ): React.ReactNode {
   return nodes.map((node) => {
     const key = `${node.title}-${node.url ?? "section"}`
@@ -356,6 +366,7 @@ function renderSubItems(
         pinnedUrls,
         togglePin,
         pinButtonClassName,
+        splitItemClassName,
       )
     }
 
@@ -365,6 +376,7 @@ function renderSubItems(
     return (
       <SplitNavItem
         key={key}
+        className={splitItemClassName}
         navItem={{ value: node.url, disabled: node.disabled, className: subItemClassName }}
         toggleButton={{
           checked: false,
@@ -626,6 +638,7 @@ export function NavMain({
                 pinnedUrls,
                 togglePin,
                 styles.pinButton,
+                styles.splitItem,
               )}
             </NavSubItemGroup>
           </NavCategory>
@@ -635,6 +648,7 @@ export function NavMain({
       {pinnedItems.map((item) => (
         <SplitNavItem
           key={`pinned-${item.url}`}
+          className={styles.splitItem}
           navItem={{
             value: item.url,
             disabled: item.disabled,
@@ -711,6 +725,7 @@ export function NavMain({
                   pinnedUrls,
                   togglePin,
                   styles.pinButton,
+                  styles.splitItem,
                 )}
               </NavSubItemGroup>
             </NavCategory>
@@ -723,6 +738,7 @@ export function NavMain({
         return (
           <SplitNavItem
             key={`${item.title}-${item.url}`}
+            className={styles.splitItem}
             navItem={{
               value: item.url,
               icon: Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined,
