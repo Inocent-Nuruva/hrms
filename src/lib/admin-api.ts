@@ -43,7 +43,9 @@ let adminCacheGeneration = 0;
 function notifyPasswordChangeRequired(message: string) {
   if (
     typeof window !== "undefined" &&
-    /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(message)
+    /temporary password|must change.+password|change.+password before continuing|before you can continue/i.test(
+      message,
+    )
   ) {
     window.dispatchEvent(new CustomEvent(FORCE_PASSWORD_RESET_EVENT));
   }
@@ -71,7 +73,10 @@ export function invalidateAdminGetCache() {
   adminCacheGeneration += 1;
   adminResponseCache.clear();
   inflightAdminRequests.clear();
-  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.dispatchEvent === "function"
+  ) {
     window.dispatchEvent(new Event(ADMIN_CACHE_INVALIDATED_EVENT));
   }
 }
@@ -3002,7 +3007,7 @@ export async function adminRequest<T>(
   const schema = schemaOrOptions instanceof z.ZodType ? schemaOrOptions : null;
   const options: AdminRequestOptions = schema
     ? schemaOptions
-    : schemaOrOptions as AdminRequestOptions;
+    : (schemaOrOptions as AdminRequestOptions);
   const {
     method = "GET",
     token,
@@ -3027,7 +3032,9 @@ export async function adminRequest<T>(
   if (canReuseGetRequest && cacheTtlMs > 0) {
     const cached = adminResponseCache.get(requestKey);
     if (cached && cached.expiresAt > Date.now()) {
-      return (schema ? parseAdminContract(schema, cached.value) : cached.value) as T;
+      return (
+        schema ? parseAdminContract(schema, cached.value) : cached.value
+      ) as T;
     }
     if (cached) {
       adminResponseCache.delete(requestKey);
@@ -3116,7 +3123,10 @@ export async function adminRequest<T>(
   }
 }
 
-function parseAdminContract<S extends z.ZodType>(schema: S, payload: unknown): z.output<S> {
+function parseAdminContract<S extends z.ZodType>(
+  schema: S,
+  payload: unknown,
+): z.output<S> {
   const result = schema.safeParse(payload);
   if (!result.success) {
     throw new ContractError(
@@ -3134,14 +3144,19 @@ export type PerformanceKpiCategory = {
 };
 
 function unwrapPerformanceKpiCategory(value: unknown): PerformanceKpiCategory {
-  const record = value && typeof value === "object" ? value as AdminRecord : {};
+  const record =
+    value && typeof value === "object" ? (value as AdminRecord) : {};
   const item = record.data ?? record.result ?? record.item ?? record;
   return item as PerformanceKpiCategory;
 }
 
 export async function listPerformanceKpiCategories(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpi-categories", { token });
-  const record = payload && typeof payload === "object" ? payload as AdminRecord : {};
+  const payload = await adminRequest<unknown>(
+    "/api/performance/kpi-categories",
+    { token },
+  );
+  const record =
+    payload && typeof payload === "object" ? (payload as AdminRecord) : {};
   const items = Array.isArray(payload)
     ? payload
     : Array.isArray(record.data)
@@ -4650,6 +4665,52 @@ export async function listLeaveTypes(
   return { rows, ...pagination };
 }
 
+export async function listAllLeaveTypes(
+  token: string,
+  params: LeaveTypesQueryParams = {},
+  options: ListRequestOptions & { pageSize?: number; maxPages?: number } = {},
+): Promise<PaginatedUsersResult> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? 100),
+    env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100,
+  );
+  const maxPages = Math.max(1, options.maxPages ?? 50);
+  const rows: AdminRecord[] = [];
+  let total: number | null = null;
+  let totalPages: number | null = null;
+  let reachedEnd = false;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await listLeaveTypes(token, {
+      ...params,
+      page,
+      limit: pageSize,
+    });
+    rows.push(...result.rows);
+    total ??= result.total;
+    totalPages ??= result.totalPages;
+    if (
+      result.rows.length === 0 ||
+      result.rows.length < pageSize ||
+      (result.totalPages !== null && page >= result.totalPages) ||
+      (result.total !== null && rows.length >= result.total)
+    ) {
+      reachedEnd = true;
+      break;
+    }
+  }
+  if (!reachedEnd)
+    throw new Error(
+      `Leave type catalog exceeds the ${pageSize * maxPages} row fetch limit.`,
+    );
+  return {
+    rows,
+    page: 1,
+    limit: pageSize,
+    total: total ?? rows.length,
+    totalPages: totalPages ?? 1,
+  };
+}
+
 export async function listLeaveRequests(
   token: string,
   params: LeaveRequestsQueryParams = {},
@@ -4669,17 +4730,66 @@ export async function listLeaveRequests(
   return { rows, ...pagination };
 }
 
+export async function listAllLeaveRequests(
+  token: string,
+  params: LeaveRequestsQueryParams = {},
+  options: ListRequestOptions & { pageSize?: number; maxPages?: number } = {},
+): Promise<PaginatedUsersResult> {
+  const pageSize = Math.min(
+    Math.max(1, options.pageSize ?? 100),
+    env.NEXT_PUBLIC_MAX_PAGE_SIZE || 100,
+  );
+  const maxPages = Math.max(1, options.maxPages ?? 50);
+  const rows: AdminRecord[] = [];
+  let total: number | null = null;
+  let totalPages: number | null = null;
+  let reachedEnd = false;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const result = await listLeaveRequests(token, {
+      ...params,
+      page,
+      limit: pageSize,
+    });
+    rows.push(...result.rows);
+    total ??= result.total;
+    totalPages ??= result.totalPages;
+    if (
+      result.rows.length === 0 ||
+      result.rows.length < pageSize ||
+      (result.totalPages !== null && page >= result.totalPages) ||
+      (result.total !== null && rows.length >= result.total)
+    ) {
+      reachedEnd = true;
+      break;
+    }
+  }
+  if (!reachedEnd)
+    throw new Error(
+      `Leave request report exceeds the ${pageSize * maxPages} row export limit. Narrow the date range and try again.`,
+    );
+  return {
+    rows,
+    page: 1,
+    limit: pageSize,
+    total: total ?? rows.length,
+    totalPages: totalPages ?? 1,
+  };
+}
+
 export async function listLeaveTeamCalendar(
   token: string,
   fromDate: string,
   toDate: string,
-): Promise<LeaveTeamCalendarEntry[]> {
-  const searchParams = new URLSearchParams({ from_date: fromDate, to_date: toDate });
+): Promise<{ entries: LeaveTeamCalendarEntry[]; teamMemberCount: number }> {
+  const searchParams = new URLSearchParams({
+    from_date: fromDate,
+    to_date: toDate,
+  });
   const payload = await adminRequest<unknown>(
     `/api/leave/team-calendar?${searchParams.toString()}`,
     { token, cacheTtlMs: 0 },
   );
-  return normalizeList(payload).map((row) => ({
+  const rows = normalizeList(payload).map((row) => ({
     request_id: Number(row.request_id ?? row.id),
     employee_id: Number(row.employee_id),
     employee_name: String(row.employee_name ?? "Employee"),
@@ -4690,6 +4800,12 @@ export async function listLeaveTeamCalendar(
     duration_type: String(row.duration_type ?? "full_day"),
     status: String(row.status ?? "in_review"),
   }));
+  const root = asRecord(payload);
+  const meta = asRecord(root?.meta);
+  return {
+    entries: rows,
+    teamMemberCount: Number(meta?.team_member_count ?? 0),
+  };
 }
 
 export async function listLeaveBalances(
@@ -4728,6 +4844,7 @@ export async function listAllLeaveBalances(
   const collected: AdminRecord[] = [];
   let total: number | null = null;
   let totalPages: number | null = null;
+  let completedAllPages = false;
 
   for (let page = 1; page <= maxPages; page += 1) {
     const result = await listLeaveBalances(
@@ -4752,9 +4869,14 @@ export async function listAllLeaveBalances(
       (result.totalPages !== null && page >= result.totalPages) ||
       (result.total !== null && collected.length >= result.total);
     if (reachedEnd) {
+      completedAllPages = true;
       break;
     }
   }
+  if (!completedAllPages)
+    throw new Error(
+      `Leave balance report exceeds the ${pageSize * maxPages} employee export limit. Narrow the filters and try again.`,
+    );
 
   const rows = collected.flatMap((row) => {
     const nestedBalances = asArray(row.leave_balances ?? row.leaveBalances);
@@ -5321,17 +5443,20 @@ export async function releaseAttendanceMobileDeviceRegistration(
 }
 
 export async function getAttendanceRetentionGovernanceReadiness(token: string) {
-  return normalizeSingle(await adminRequest<unknown>(
-    "/api/attendance/retention-governance/readiness",
-    { token },
-  ))
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      "/api/attendance/retention-governance/readiness",
+      { token },
+    ),
+  );
 }
 
 export async function listAttendanceRetentionHolds(token: string) {
-  return normalizeList(await adminRequest<unknown>(
-    "/api/attendance/retention-governance/holds",
-    { token },
-  ))
+  return normalizeList(
+    await adminRequest<unknown>("/api/attendance/retention-governance/holds", {
+      token,
+    }),
+  );
 }
 
 export async function createAttendanceRetentionHold(
@@ -5342,7 +5467,7 @@ export async function createAttendanceRetentionHold(
     method: "POST",
     token,
     body: values,
-  })
+  });
 }
 
 export async function releaseAttendanceRetentionHold(
@@ -5353,21 +5478,25 @@ export async function releaseAttendanceRetentionHold(
   return adminRequest<unknown>(
     `/api/attendance/retention-governance/holds/${encodeURIComponent(String(id))}/release`,
     { method: "PATCH", token, body: { reason } },
-  )
+  );
 }
 
 export async function listAttendanceRetentionPurgeApprovals(token: string) {
-  return normalizeList(await adminRequest<unknown>(
-    "/api/attendance/retention-governance/purge-approvals",
-    { token },
-  ))
+  return normalizeList(
+    await adminRequest<unknown>(
+      "/api/attendance/retention-governance/purge-approvals",
+      { token },
+    ),
+  );
 }
 
 export async function listAttendanceLocationAccessLogs(token: string) {
-  return normalizeList(await adminRequest<unknown>(
-    "/api/attendance/mobile-punches/location-access-logs",
-    { token, cacheTtlMs: 0, dedupe: false },
-  ))
+  return normalizeList(
+    await adminRequest<unknown>(
+      "/api/attendance/mobile-punches/location-access-logs",
+      { token, cacheTtlMs: 0, dedupe: false },
+    ),
+  );
 }
 
 export async function requestAttendanceRetentionPurgeApproval(
@@ -5377,7 +5506,7 @@ export async function requestAttendanceRetentionPurgeApproval(
   return adminRequest<unknown>(
     "/api/attendance/retention-governance/purge-approvals",
     { method: "POST", token, body: values },
-  )
+  );
 }
 
 export async function reviewAttendanceRetentionPurgeApproval(
@@ -5388,7 +5517,7 @@ export async function reviewAttendanceRetentionPurgeApproval(
   return adminRequest<unknown>(
     `/api/attendance/retention-governance/purge-approvals/${encodeURIComponent(String(id))}/review`,
     { method: "PATCH", token, body: values },
-  )
+  );
 }
 
 export async function listAttendanceDeviceEmployees(
@@ -5969,16 +6098,23 @@ export async function createAttendanceMobilePunchCheckIn(
 }
 
 export async function getMyAttendanceMobilePunchPolicy(token: string) {
-  return adminRequest<unknown>("/api/attendance/mobile-punches/my-policy", { token });
+  return adminRequest<unknown>("/api/attendance/mobile-punches/my-policy", {
+    token,
+  });
 }
 
 export async function getCurrentLocationPrivacyNotice(token: string) {
   return adminRequest<unknown>("/api/location-privacy/current", { token });
 }
 
-export async function acknowledgeLocationPrivacyNotice(token: string, noticeId: number) {
+export async function acknowledgeLocationPrivacyNotice(
+  token: string,
+  noticeId: number,
+) {
   return adminRequest<unknown>("/api/location-privacy/acknowledgements", {
-    method: "POST", token, body: { notice_id: noticeId },
+    method: "POST",
+    token,
+    body: { notice_id: noticeId },
   });
 }
 
@@ -5986,12 +6122,25 @@ export async function listLocationPrivacyNotices(token: string) {
   return adminRequest<unknown[]>("/api/location-privacy/notices", { token });
 }
 
-export async function publishLocationPrivacyNotice(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/location-privacy/notices", { method: "POST", token, body: data });
+export async function publishLocationPrivacyNotice(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/location-privacy/notices", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
-export async function listLocationPrivacyAcknowledgements(token: string, noticeId: number) {
-  return adminRequest<unknown[]>(`/api/location-privacy/notices/${noticeId}/acknowledgements`, { token });
+export async function listLocationPrivacyAcknowledgements(
+  token: string,
+  noticeId: number,
+) {
+  return adminRequest<unknown[]>(
+    `/api/location-privacy/notices/${noticeId}/acknowledgements`,
+    { token },
+  );
 }
 
 export async function createAttendanceMobilePunchCheckOut(
@@ -6012,9 +6161,12 @@ export async function getAttendanceMobilePunchSelfie(
   const response = await fetch(
     buildUrl(`/api/attendance/mobile-punches/${id}/selfie`),
     { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
-  )
-  if (!response.ok) throw new Error("No selfie is attached to this attendance punch or access was denied.")
-  return response.blob()
+  );
+  if (!response.ok)
+    throw new Error(
+      "No selfie is attached to this attendance punch or access was denied.",
+    );
+  return response.blob();
 }
 
 export async function approveAttendanceMobilePunchOverride(
@@ -6129,8 +6281,10 @@ function timetableResourcePath(resource: TimetableResourceKey) {
   const resourcePathMap: Partial<Record<TimetableResourceKey, string>> = {
     timetables: "/api/attendance/schedule-definitions/timetables",
     "timetable-days": "/api/attendance/schedule-definitions/timetable-days",
-    "timetable-shift-rules": "/api/attendance/schedule-definitions/timetable-day-shift-options",
-    "timetable-generated-schedules": "/api/attendance/schedules/generated-schedules",
+    "timetable-shift-rules":
+      "/api/attendance/schedule-definitions/timetable-day-shift-options",
+    "timetable-generated-schedules":
+      "/api/attendance/schedules/generated-schedules",
     "timetable-holiday-rules":
       "/api/attendance/schedule-definitions/timetable-holiday-rules",
     "timetable-rotations":
@@ -7621,26 +7775,44 @@ export async function createTimetableResource(
   });
 }
 
-export async function publishGeneratedSchedule(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/attendance/schedules/generated-schedules/${id}/publish`, {
-    method: "PATCH",
-    token,
-  });
+export async function publishGeneratedSchedule(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/schedules/generated-schedules/${id}/publish`,
+    {
+      method: "PATCH",
+      token,
+    },
+  );
 }
 
-export async function unpublishGeneratedSchedule(token: string, id: string | number) {
-  return adminRequest<unknown>(`/api/attendance/schedules/generated-schedules/${id}/unpublish`, {
-    method: "PATCH",
-    token,
-  });
+export async function unpublishGeneratedSchedule(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/schedules/generated-schedules/${id}/unpublish`,
+    {
+      method: "PATCH",
+      token,
+    },
+  );
 }
 
-export async function createGeneratedSchedulesBulk(token: string, schedules: AdminRecord[]) {
-  return adminRequest<unknown>("/api/attendance/schedules/generated-schedules/bulk", {
-    method: "POST",
-    token,
-    body: schedules,
-  });
+export async function createGeneratedSchedulesBulk(
+  token: string,
+  schedules: AdminRecord[],
+) {
+  return adminRequest<unknown>(
+    "/api/attendance/schedules/generated-schedules/bulk",
+    {
+      method: "POST",
+      token,
+      body: schedules,
+    },
+  );
 }
 
 export async function patchTimetableResourceById(
@@ -8658,10 +8830,7 @@ export type LeaveBalanceImportBatchStatus =
 export type LeaveBalanceImportMode = "STRICT" | "VALID_ROWS_ONLY";
 
 export type LeaveBalanceImportValidationStatus =
-  | "VALID"
-  | "WARNING"
-  | "INVALID"
-  | "NO_CHANGE";
+  "VALID" | "WARNING" | "INVALID" | "NO_CHANGE";
 
 export type LeaveBalanceImportResultStatus = "IMPORTED" | "SKIPPED" | "FAILED";
 
@@ -8709,7 +8878,11 @@ export type LeaveBalanceImportBatch = {
   cancelled_at: string | null;
 };
 
-export type LeaveBalanceImportFacet = { id: number; name: string; code?: string };
+export type LeaveBalanceImportFacet = {
+  id: number;
+  name: string;
+  code?: string;
+};
 
 export type LeaveBalanceImportBatchDetail = LeaveBalanceImportBatch & {
   summary: {
@@ -8815,7 +8988,10 @@ function toLeaveBalanceImportPage<T>(
     page: Number(meta?.currentPage ?? fallbackPage) || fallbackPage,
     limit,
     total: Number.isFinite(total) ? total : rows.length,
-    totalPages: Math.max(1, Number(meta?.totalPages ?? Math.ceil(total / limit)) || 1),
+    totalPages: Math.max(
+      1,
+      Number(meta?.totalPages ?? Math.ceil(total / limit)) || 1,
+    ),
   };
 }
 
@@ -8836,8 +9012,17 @@ async function fetchLeaveBalanceWorkbook(
   const contentType = response.headers.get("content-type");
   const buffer = await response.arrayBuffer();
 
-  if (!response.ok || !(isBinaryContentType(contentType) || isZipOrXlsxMagic(new Uint8Array(buffer)))) {
-    const payload = parseResponseBodyText(new TextDecoder().decode(buffer), contentType);
+  if (
+    !response.ok ||
+    !(
+      isBinaryContentType(contentType) ||
+      isZipOrXlsxMagic(new Uint8Array(buffer))
+    )
+  ) {
+    const payload = parseResponseBodyText(
+      new TextDecoder().decode(buffer),
+      contentType,
+    );
     const error = new Error(
       response.ok
         ? "Unexpected response while downloading the workbook."
@@ -8895,7 +9080,9 @@ export async function uploadLeaveBalanceImport(
   const contentType = response.headers.get("content-type");
   const payload = parseResponseBodyText(await response.text(), contentType);
   if (!response.ok) {
-    const error = new Error(extractMessage(payload, response.status)) as Error & {
+    const error = new Error(
+      extractMessage(payload, response.status),
+    ) as Error & {
       status?: number;
       payload?: unknown;
       code?: string;
@@ -8935,12 +9122,14 @@ export async function listLeaveBalanceImportRows(
   const page = params.page ?? 1;
   const limit = params.limit ?? 50;
   const payload = await adminRequest<unknown>(
-    `/api/leave/balances/import/${encodeURIComponent(batchId)}/rows${buildLeaveBalanceImportQuery({
-      ...params,
-      page,
-      limit,
-      status: params.status === "ALL" ? undefined : params.status,
-    })}`,
+    `/api/leave/balances/import/${encodeURIComponent(batchId)}/rows${buildLeaveBalanceImportQuery(
+      {
+        ...params,
+        page,
+        limit,
+        status: params.status === "ALL" ? undefined : params.status,
+      },
+    )}`,
     { token },
   );
   return toLeaveBalanceImportPage<LeaveBalanceImportRow>(payload, page, limit);
@@ -8973,7 +9162,11 @@ export async function cancelLeaveBalanceImport(
 
 export async function listLeaveBalanceImportHistory(
   token: string,
-  params: { page?: number; limit?: number; status?: LeaveBalanceImportBatchStatus } = {},
+  params: {
+    page?: number;
+    limit?: number;
+    status?: LeaveBalanceImportBatchStatus;
+  } = {},
 ): Promise<LeaveBalanceImportPage<LeaveBalanceImportBatch>> {
   const page = params.page ?? 1;
   const limit = params.limit ?? 20;
@@ -8981,7 +9174,11 @@ export async function listLeaveBalanceImportHistory(
     `/api/leave/balances/import/history${buildLeaveBalanceImportQuery({ ...params, page, limit })}`,
     { token },
   );
-  return toLeaveBalanceImportPage<LeaveBalanceImportBatch>(payload, page, limit);
+  return toLeaveBalanceImportPage<LeaveBalanceImportBatch>(
+    payload,
+    page,
+    limit,
+  );
 }
 
 /** Uploaded rows plus database balance, status, error code and description. */
@@ -9035,12 +9232,15 @@ async function uploadLeaveRequestImport(
   const body = new FormData();
   body.set("file", file, file.name || "leave-import.xlsx");
   const endpoint = stage === "preview" ? "preview" : "confirm";
-  const response = await fetch(buildUrl(`/api/leave/requests/import/${endpoint}`), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body,
-    cache: "no-store",
-  });
+  const response = await fetch(
+    buildUrl(`/api/leave/requests/import/${endpoint}`),
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body,
+      cache: "no-store",
+    },
+  );
   const text = await response.text();
   const payload = parseResponseBodyText(
     text,
@@ -9144,7 +9344,11 @@ export async function listAllMyActionItems(token: string) {
   }
 }
 
-export async function reportMyActionItemIssue(token: string, id: string | number, comment: string) {
+export async function reportMyActionItemIssue(
+  token: string,
+  id: string | number,
+  comment: string,
+) {
   return adminRequest<unknown>(`/api/me/action-items/${id}/comments`, {
     method: "POST",
     token,
@@ -9602,7 +9806,12 @@ export async function listMyLeaveEncashmentRequests(token: string) {
 
 export async function createMyLeaveEncashmentRequest(
   token: string,
-  data: { leave_type_id: number; fiscal_year: string; requested_days: number; reason: string },
+  data: {
+    leave_type_id: number;
+    fiscal_year: string;
+    requested_days: number;
+    reason: string;
+  },
 ) {
   return adminRequest<unknown>("/api/leave/encashments", {
     method: "POST",
@@ -9611,7 +9820,10 @@ export async function createMyLeaveEncashmentRequest(
   });
 }
 
-export async function cancelMyLeaveEncashmentRequest(token: string, id: string | number) {
+export async function cancelMyLeaveEncashmentRequest(
+  token: string,
+  id: string | number,
+) {
   return adminRequest<unknown>(`/api/leave/encashments/${id}/cancel`, {
     method: "POST",
     token,
@@ -9822,6 +10034,42 @@ export async function listLeaveBalanceTransactions(
     { token },
   );
   return normalizeList(payload);
+}
+
+export async function listAllLeaveBalanceReconciliation(
+  token: string,
+  fiscalYear: string,
+): Promise<AdminRecord[]> {
+  const rows: AdminRecord[] = [];
+  const pageSize = 100;
+  for (let page = 1; page <= 50; page += 1) {
+    const query = buildRecordQuery({
+      fiscal_year: fiscalYear,
+      page,
+      limit: pageSize,
+    });
+    const payload = await adminRequest<unknown>(
+      `/api/leave/balances/reconciliation${query}`,
+      {
+        token,
+        cacheTtlMs: 0,
+      },
+    );
+    const pageRows = normalizeList(payload);
+    rows.push(...pageRows);
+    const root = asRecord(payload);
+    const meta = asRecord(root?.meta);
+    const total = Number(meta?.total ?? 0);
+    const totalPages = Number(meta?.totalPages ?? meta?.total_pages ?? 0);
+    if (
+      pageRows.length === 0 ||
+      pageRows.length < pageSize ||
+      (totalPages > 0 && page >= totalPages) ||
+      (total > 0 && rows.length >= total)
+    )
+      break;
+  }
+  return rows;
 }
 
 export async function submitLeaveRequest(token: string, id: string | number) {
@@ -10633,7 +10881,10 @@ export async function reviewOnboardingEmployeeDetails(
     {
       method: "POST",
       token,
-      body: { sections, ...(expectedVersion ? { expected_version: expectedVersion } : {}) },
+      body: {
+        sections,
+        ...(expectedVersion ? { expected_version: expectedVersion } : {}),
+      },
     },
   );
 }
@@ -10870,75 +11121,108 @@ export async function completeOnboardingTask(
 }
 
 export type OnboardingReadinessRequirement = {
-  id: string
-  label: string
-  group: string
-  owner: string
-  required: boolean
-  status: "complete" | "pending" | "blocked" | "skipped"
-  action: "details" | "tasks" | "approvals" | "payroll" | "contracts"
-  waiting_reason?: string | null
-  due_date?: string | null
-  actionable?: boolean
-}
+  id: string;
+  label: string;
+  group: string;
+  owner: string;
+  required: boolean;
+  status: "complete" | "pending" | "blocked" | "skipped";
+  action: "details" | "tasks" | "approvals" | "payroll" | "contracts";
+  waiting_reason?: string | null;
+  due_date?: string | null;
+  actionable?: boolean;
+};
 
 export type OnboardingReadiness = {
-  employee_id: number
-  employee_status: string
-  request_status: string
-  ready_to_activate: boolean
-  closed: boolean
-  blocker_count: number
-  completed_required: number
-  total_required: number
-  next_action: OnboardingReadinessRequirement | null
-  requirements: OnboardingReadinessRequirement[]
-}
+  employee_id: number;
+  employee_status: string;
+  request_status: string;
+  ready_to_activate: boolean;
+  closed: boolean;
+  blocker_count: number;
+  completed_required: number;
+  total_required: number;
+  next_action: OnboardingReadinessRequirement | null;
+  requirements: OnboardingReadinessRequirement[];
+};
 
-export async function getOnboardingReadiness(token: string, requestId: string | number) {
+export async function getOnboardingReadiness(
+  token: string,
+  requestId: string | number,
+) {
   return adminRequest<OnboardingReadiness>(
     `/api/onboarding/requests/${requestId}/readiness`,
     { token },
-  )
+  );
 }
 
 export type OnboardingOverviewRow = {
-  id: number
-  employee_id: number
-  employee_name: string
-  employee_no: string
-  onboarding_no: string
-  department: string
-  stage: string
-  overdue: boolean
-  overdue_task_count: number
-  planned_completion_date: string | null
-  owners: string[]
-  blockers: OnboardingReadinessRequirement[]
-  readiness: OnboardingReadiness
-  planned_start_date?: string | null
-  attention_reasons?: string[]
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_no: string;
+  onboarding_no: string;
+  department: string;
+  stage: string;
+  overdue: boolean;
+  overdue_task_count: number;
+  planned_completion_date: string | null;
+  owners: string[];
+  blockers: OnboardingReadinessRequirement[];
+  readiness: OnboardingReadiness;
+  planned_start_date?: string | null;
+  attention_reasons?: string[];
+};
+
+export type OnboardingWorkspaceNote = {
+  id: number;
+  requirement_id: string;
+  visibility: "internal" | "employee";
+  body: string;
+  author_name: string;
+  created_at: string;
+};
+
+export function getOnboardingWorkspaceNotes(
+  token: string,
+  requestId: number,
+  employeeView = false,
+) {
+  return adminRequest<OnboardingWorkspaceNote[]>(
+    `/api/onboarding/requests/${requestId}/workspace/${employeeView ? "my-notes" : "notes"}`,
+    { token },
+  );
 }
 
-export type OnboardingWorkspaceNote = { id: number; requirement_id: string; visibility: "internal" | "employee"; body: string; author_name: string; created_at: string }
-
-export function getOnboardingWorkspaceNotes(token: string, requestId: number, employeeView = false) {
-  return adminRequest<OnboardingWorkspaceNote[]>(`/api/onboarding/requests/${requestId}/workspace/${employeeView ? "my-notes" : "notes"}`, { token })
-}
-
-export function addOnboardingWorkspaceNote(token: string, requestId: number, data: { requirement_id: string; visibility: "internal" | "employee"; body: string; client_key: string }) {
-  return adminRequest(`/api/onboarding/requests/${requestId}/workspace/notes`, { token, method: "POST", body: data })
+export function addOnboardingWorkspaceNote(
+  token: string,
+  requestId: number,
+  data: {
+    requirement_id: string;
+    visibility: "internal" | "employee";
+    body: string;
+    client_key: string;
+  },
+) {
+  return adminRequest(`/api/onboarding/requests/${requestId}/workspace/notes`, {
+    token,
+    method: "POST",
+    body: data,
+  });
 }
 
 export function visitOnboardingWorkspace(token: string, requestId: number) {
-  return adminRequest<{ previous_viewed_at: string | null; viewed_at: string }>(`/api/onboarding/requests/${requestId}/workspace/visit`, { token, method: "POST", invalidateCache: false })
+  return adminRequest<{ previous_viewed_at: string | null; viewed_at: string }>(
+    `/api/onboarding/requests/${requestId}/workspace/visit`,
+    { token, method: "POST", invalidateCache: false },
+  );
 }
 
 export async function getOnboardingOverview(token: string, after = 0) {
-  return adminRequest<{ data: OnboardingOverviewRow[]; next_cursor: number | null }>(
-    `/api/onboarding/requests/overview?after=${after}`,
-    { token },
-  )
+  return adminRequest<{
+    data: OnboardingOverviewRow[];
+    next_cursor: number | null;
+  }>(`/api/onboarding/requests/overview?after=${after}`, { token });
 }
 
 export async function getOnboardingProgress(
@@ -13054,11 +13338,7 @@ export async function listPendingEmployeeInvitations(token: string) {
 }
 
 export type EmployeeInvitationHistoryStatus =
-  | "all"
-  | "pending"
-  | "accepted"
-  | "expired"
-  | "cancelled";
+  "all" | "pending" | "accepted" | "expired" | "cancelled";
 
 export interface EmployeeInvitationHistoryQuery {
   status?: EmployeeInvitationHistoryStatus;
@@ -13151,20 +13431,33 @@ export async function getPublicRecruitmentOffer(token: string) {
 }
 
 export async function acceptPublicRecruitmentOffer(token: string) {
-  const payload = await adminRequest<unknown>(`/api/recruitment/offers/accept`, {
-    method: 'POST',
-    body: { token },
-    dedupe: false,
-  });
+  const payload = await adminRequest<unknown>(
+    `/api/recruitment/offers/accept`,
+    {
+      method: "POST",
+      body: { token },
+      dedupe: false,
+    },
+  );
   return normalizeSingle(payload) as { status: string; candidate_id: number };
 }
 
 export async function listRecruitmentRequests(token: string) {
-  return normalizeList(await adminRequest<unknown>('/api/recruitment/requests', { token }))
+  return normalizeList(
+    await adminRequest<unknown>("/api/recruitment/requests", { token }),
+  );
 }
 
-export async function listRecruitmentCandidates(token: string, requestId: number) {
-  return normalizeList(await adminRequest<unknown>(`/api/recruitment/requests/${requestId}/candidates`, { token }))
+export async function listRecruitmentCandidates(
+  token: string,
+  requestId: number,
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/recruitment/requests/${requestId}/candidates`,
+      { token },
+    ),
+  );
 }
 
 export async function recruitmentCommand(
@@ -13173,59 +13466,124 @@ export async function recruitmentCommand(
   body?: Record<string, unknown>,
 ) {
   const payload = await adminRequest<unknown>(`/api/recruitment/${path}`, {
-    method: 'POST', token, body: body ?? {}, dedupe: false,
-  })
-  return normalizeSingle(payload) as AdminRecord
+    method: "POST",
+    token,
+    body: body ?? {},
+    dedupe: false,
+  });
+  return normalizeSingle(payload) as AdminRecord;
 }
 
-export async function listEmploymentContracts(token: string, employeeId: number) {
-  return normalizeList(await adminRequest<unknown>(
-    `/api/employment-contracts/employees/${employeeId}`, { token },
-  ))
+export async function listEmploymentContracts(
+  token: string,
+  employeeId: number,
+) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/employment-contracts/employees/${employeeId}`,
+      { token },
+    ),
+  );
 }
 
 export async function listEmploymentLetterTemplates(token: string) {
-  return normalizeList(await adminRequest<unknown>("/api/employment-letters/templates", { token }))
+  return normalizeList(
+    await adminRequest<unknown>("/api/employment-letters/templates", { token }),
+  );
 }
 
-export async function saveEmploymentLetterTemplate(token: string, body: AdminRecord) {
-  return normalizeSingle(await adminRequest<unknown>("/api/employment-letters/templates", {
-    method: "PUT", token, body, dedupe: false,
-  }))
+export async function saveEmploymentLetterTemplate(
+  token: string,
+  body: AdminRecord,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>("/api/employment-letters/templates", {
+      method: "PUT",
+      token,
+      body,
+      dedupe: false,
+    }),
+  );
 }
 
-export async function generateEmploymentLetter(token: string, type: "offer" | "appointment", id: number) {
-  return normalizeSingle(await adminRequest<unknown>(`/api/employment-letters/${type === "offer" ? "candidates" : "employees"}/${id}/${type}`, {
-    method: "POST", token, body: {}, dedupe: false,
-  }))
+export async function generateEmploymentLetter(
+  token: string,
+  type: "offer" | "appointment",
+  id: number,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employment-letters/${type === "offer" ? "candidates" : "employees"}/${id}/${type}`,
+      {
+        method: "POST",
+        token,
+        body: {},
+        dedupe: false,
+      },
+    ),
+  );
 }
 
 export async function downloadEmploymentLetter(token: string, id: number) {
-  const response = await fetch(buildUrl(`/api/employment-letters/documents/${id}/download`), {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  })
-  if (!response.ok) throw new Error(`Could not download letter (${response.status})`)
-  return response.blob()
+  const response = await fetch(
+    buildUrl(`/api/employment-letters/documents/${id}/download`),
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok)
+    throw new Error(`Could not download letter (${response.status})`);
+  return response.blob();
 }
 
-export async function signEmploymentContract(token: string, contractId: number, signedName: string) {
-  const payload = await adminRequest<unknown>(`/api/employment-contracts/${contractId}/sign`, {
-    method: 'POST', token, body: { signed_name: signedName }, dedupe: false,
-  })
-  return normalizeSingle(payload)
+export async function signEmploymentContract(
+  token: string,
+  contractId: number,
+  signedName: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/employment-contracts/${contractId}/sign`,
+    {
+      method: "POST",
+      token,
+      body: { signed_name: signedName },
+      dedupe: false,
+    },
+  );
+  return normalizeSingle(payload);
 }
 
-export async function issueEmploymentContract(token: string, body: Record<string, unknown>) {
-  return normalizeSingle(await adminRequest<unknown>('/api/employment-contracts', {
-    method: 'POST', token, body, dedupe: false,
-  }))
+export async function issueEmploymentContract(
+  token: string,
+  body: Record<string, unknown>,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>("/api/employment-contracts", {
+      method: "POST",
+      token,
+      body,
+      dedupe: false,
+    }),
+  );
 }
 
-export async function attachEmploymentContract(token: string, contractId: number, file: Record<string, unknown>) {
-  return normalizeSingle(await adminRequest<unknown>(`/api/employment-contracts/${contractId}/document`, {
-    method: 'POST', token, body: file, dedupe: false,
-  }))
+export async function attachEmploymentContract(
+  token: string,
+  contractId: number,
+  file: Record<string, unknown>,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employment-contracts/${contractId}/document`,
+      {
+        method: "POST",
+        token,
+        body: file,
+        dedupe: false,
+      },
+    ),
+  );
 }
 
 export async function getEmployeeById(id: string | number, token: string) {
@@ -13373,16 +13731,27 @@ export async function getMyProfile(token: string) {
 }
 
 export type DashboardCardStyle = {
-  palette: "ocean" | "forest" | "plum" | "coral" | "midnight" | "berry" | "neutral" | "white"
-  artwork: "none" | "orbit" | "waves" | "confetti" | "arches" | "sprigs"
-}
+  palette:
+    | "ocean"
+    | "forest"
+    | "plum"
+    | "coral"
+    | "midnight"
+    | "berry"
+    | "neutral"
+    | "white";
+  artwork: "none" | "orbit" | "waves" | "confetti" | "arches" | "sprigs";
+};
 
 export async function getMyDashboardCardStyle(token: string) {
-  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
-    token,
-    cacheTtlMs: 0,
-    dedupe: false,
-  })
+  return adminRequest<DashboardCardStyle>(
+    "/api/users/me/dashboard-card-style",
+    {
+      token,
+      cacheTtlMs: 0,
+      dedupe: false,
+    },
+  );
 }
 
 export async function uploadMyLeaveRequestDocument(
@@ -13394,18 +13763,21 @@ export async function uploadMyLeaveRequestDocument(
     method: "POST",
     token,
     body: { file: await fileToBase64UploadDto(file) },
-  })
+  });
 }
 
 export async function updateMyDashboardCardStyle(
   token: string,
   style: DashboardCardStyle,
 ) {
-  return adminRequest<DashboardCardStyle>("/api/users/me/dashboard-card-style", {
-    method: "PATCH",
-    token,
-    body: style,
-  })
+  return adminRequest<DashboardCardStyle>(
+    "/api/users/me/dashboard-card-style",
+    {
+      method: "PATCH",
+      token,
+      body: style,
+    },
+  );
 }
 
 const PROFILE_PHOTO_URL_KEYS = [
@@ -13561,12 +13933,15 @@ export async function uploadMyProfilePhoto(
 
   if (!response.ok) {
     if (response.status === 404) {
-      const accountResponse = await fetch(buildUrl("/api/users/me/profile-photo"), {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        cache: "no-store",
-      });
+      const accountResponse = await fetch(
+        buildUrl("/api/users/me/profile-photo"),
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+          cache: "no-store",
+        },
+      );
       invalidateAdminGetCache();
       const accountText = await accountResponse.text();
       let accountPayload: unknown = null;
@@ -15542,7 +15917,10 @@ export async function createMyEmployeeSectionItem(
 }
 
 /** Self-onboarding: attaches a document to the caller's own employee profile. */
-export async function createMyEmployeeDocument(token: string, data: AdminRecord) {
+export async function createMyEmployeeDocument(
+  token: string,
+  data: AdminRecord,
+) {
   return adminRequest<unknown>(`/api/employees/me/documents`, {
     method: "POST",
     token,
@@ -16440,18 +16818,25 @@ export async function downloadPayrollFinalSettlementStatement(
   settlementId: string | number,
 ) {
   const response = await fetch(
-    buildUrl(`/api/payroll/reports/final-settlements/${settlementId}/statement`),
+    buildUrl(
+      `/api/payroll/reports/final-settlements/${settlementId}/statement`,
+    ),
     { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
   );
   if (!response.ok) {
     const text = await response.text();
     let payload: unknown = null;
-    try { payload = text ? JSON.parse(text) as unknown : null; } catch { payload = { message: text }; }
+    try {
+      payload = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      payload = { message: text };
+    }
     throw new Error(extractMessage(payload, response.status));
   }
   const disposition = response.headers.get("content-disposition") ?? "";
-  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
-    ?? `DEMO-SETTLEMENT-${settlementId}.pdf`;
+  const filename =
+    disposition.match(/filename="?([^";]+)"?/i)?.[1] ??
+    `DEMO-SETTLEMENT-${settlementId}.pdf`;
   return { blob: await response.blob(), filename };
 }
 
@@ -16672,9 +17057,7 @@ export async function postPayrollSource(token: string, id: string | number) {
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function listPayrollOvertimeApprovals(
-  token: string,
-) {
+export async function listPayrollOvertimeApprovals(token: string) {
   return listPayrollCollection(
     "/api/payroll/overtime-requests/payroll",
     token,
@@ -16683,7 +17066,10 @@ export async function listPayrollOvertimeApprovals(
 }
 
 export async function listMyOvertimeRequests(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/me", { token });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/overtime-requests/me",
+    { token },
+  );
   return normalizeList(payload);
 }
 
@@ -16703,12 +17089,18 @@ export async function createMyOvertimeRequest(
 }
 
 export async function listManagerOvertimeRequests(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/manager", { token });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/overtime-requests/manager",
+    { token },
+  );
   return normalizeList(payload);
 }
 
 export async function listHrOvertimeRequests(token: string) {
-  const payload = await adminRequest<unknown>("/api/payroll/overtime-requests/hr", { token });
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/overtime-requests/hr",
+    { token },
+  );
   return normalizeList(payload);
 }
 
@@ -16775,11 +17167,14 @@ export async function updatePayrollPeriodDates(
   id: string | number,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>(`/api/payroll/configuration/periods/${id}/dates`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    `/api/payroll/configuration/periods/${id}/dates`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function getPayrollSecurityPolicy(token: string) {
@@ -17672,8 +18067,23 @@ export async function createPerformanceKpiTemplate(
   });
 }
 
-export async function applyPerformanceKpiTemplate(token: string, periodId: string, templateId: string, conflictPolicy: 'MERGE' | 'SKIP' | 'REPLACE') {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}/apply-kpi-template`, { method: 'POST', token, body: { template_id: Number(templateId), conflict_policy: conflictPolicy } });
+export async function applyPerformanceKpiTemplate(
+  token: string,
+  periodId: string,
+  templateId: string,
+  conflictPolicy: "MERGE" | "SKIP" | "REPLACE",
+) {
+  return adminRequest<unknown>(
+    `/api/performance/periods/${periodId}/apply-kpi-template`,
+    {
+      method: "POST",
+      token,
+      body: {
+        template_id: Number(templateId),
+        conflict_policy: conflictPolicy,
+      },
+    },
+  );
 }
 
 export async function listPerformanceKpiRules(token: string) {
@@ -18134,26 +18544,61 @@ export async function listMyEmployeeKpis(
   return normalizeList(payload);
 }
 
-export async function listKpiCycleReviews(token: string, mode: 'self' | 'manager', periodId?: string) {
-  const payload = await adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpi-reviews${periodId ? `?period_id=${encodeURIComponent(periodId)}` : ''}`, { token });
+export async function listKpiCycleReviews(
+  token: string,
+  mode: "self" | "manager",
+  periodId?: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/performance/${mode === "self" ? "me" : "manager"}/kpi-reviews${periodId ? `?period_id=${encodeURIComponent(periodId)}` : ""}`,
+    { token },
+  );
   return normalizeList(payload);
 }
 
 export async function listMyKpiCycleScores(token: string) {
-  const payload = await adminRequest<unknown>('/api/performance/me/kpi-scores', { token });
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/kpi-scores",
+    { token },
+  );
   return normalizeList(payload);
 }
 
-export async function submitKpiCycleRating(token: string, mode: 'self' | 'manager', kpiId: string, kind: 'MID' | 'FINAL', rating: number, comment: string) {
-  return adminRequest<unknown>(`/api/performance/${mode === 'self' ? 'me' : 'manager'}/kpis/${kpiId}/reviews/${kind}/${mode === 'self' ? 'self' : 'manager'}`, { method: 'POST', token, body: { rating, comment } });
+export async function submitKpiCycleRating(
+  token: string,
+  mode: "self" | "manager",
+  kpiId: string,
+  kind: "MID" | "FINAL",
+  rating: number,
+  comment: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/${mode === "self" ? "me" : "manager"}/kpis/${kpiId}/reviews/${kind}/${mode === "self" ? "self" : "manager"}`,
+    { method: "POST", token, body: { rating, comment } },
+  );
 }
 
-export async function respondToKpiMidReview(token: string, kpiId: string, decision: 'ACKNOWLEDGE' | 'DISPUTE', comment: string) {
-  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}/reviews/mid/respond`, { method: 'POST', token, body: { decision, comment } });
+export async function respondToKpiMidReview(
+  token: string,
+  kpiId: string,
+  decision: "ACKNOWLEDGE" | "DISPUTE",
+  comment: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/me/kpis/${kpiId}/reviews/mid/respond`,
+    { method: "POST", token, body: { decision, comment } },
+  );
 }
 
-export async function finalizeKpiCycleReview(token: string, kpiId: string, comment: string) {
-  return adminRequest<unknown>(`/api/performance/manager/kpis/${kpiId}/reviews/final/finalize`, { method: 'POST', token, body: { comment } });
+export async function finalizeKpiCycleReview(
+  token: string,
+  kpiId: string,
+  comment: string,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/manager/kpis/${kpiId}/reviews/final/finalize`,
+    { method: "POST", token, body: { comment } },
+  );
 }
 
 export async function createMyEmployeeKpi(token: string, data: AdminRecord) {
@@ -18836,21 +19281,44 @@ export async function getManagerFieldVisitDashboard(token: string) {
 }
 
 export async function getManagerFieldVisitCommercialPolicy(token: string) {
-  const payload = await adminRequest<unknown>("/api/manager/field-visits/commercial-policy", { token })
-  return normalizeSingle(payload) ?? asRecord(payload)
+  const payload = await adminRequest<unknown>(
+    "/api/manager/field-visits/commercial-policy",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
-export async function saveManagerFieldVisitCommercialPolicy(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/manager/field-visits/commercial-policy", { method: "POST", token, body: data })
+export async function saveManagerFieldVisitCommercialPolicy(
+  token: string,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>("/api/manager/field-visits/commercial-policy", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
-export async function updateManagerFieldOpportunityCommercial(token: string, id: string | number, data: AdminRecord) {
-  return adminRequest<unknown>(`/api/manager/field-visits/opportunities/${id}/commercial`, { method: "POST", token, body: data })
+export async function updateManagerFieldOpportunityCommercial(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/manager/field-visits/opportunities/${id}/commercial`,
+    { method: "POST", token, body: data },
+  );
 }
 
-export async function getManagerFieldVisitCommercialSummary(token: string, params: Record<string, string | number | undefined> = {}) {
-  const payload = await adminRequest<unknown>(`/api/manager/field-visits/commercial-summary${buildRecordQuery(params)}`, { token })
-  return normalizeSingle(payload) ?? asRecord(payload)
+export async function getManagerFieldVisitCommercialSummary(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/manager/field-visits/commercial-summary${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listManagerFieldVisits(token: string) {
@@ -18945,8 +19413,11 @@ export async function listMyFieldVisits(
 }
 
 export async function getMyFieldVisitCommercialPolicy(token: string) {
-  const payload = await adminRequest<unknown>("/api/me/field-visits/commercial-policy", { token })
-  return normalizeSingle(payload) ?? asRecord(payload)
+  const payload = await adminRequest<unknown>(
+    "/api/me/field-visits/commercial-policy",
+    { token },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function getMyFieldVisit(token: string, id: string | number) {
@@ -19720,7 +20191,11 @@ export async function createEmployeeFinanceProductVersion(
   id: string | number,
   data: AdminRecord,
 ) {
-  return financePost(`/api/employee-finance/products/${id}/versions`, token, data);
+  return financePost(
+    `/api/employee-finance/products/${id}/versions`,
+    token,
+    data,
+  );
 }
 
 export async function retireEmployeeFinanceProduct(
@@ -19867,11 +20342,14 @@ export async function saveEmployeeFinanceSanctionTemplate(
   token: string,
   data: AdminRecord,
 ) {
-  return adminRequest<unknown>("/api/employee-finance/templates/sanction-letter", {
-    method: "PUT",
-    token,
-    body: data,
-  });
+  return adminRequest<unknown>(
+    "/api/employee-finance/templates/sanction-letter",
+    {
+      method: "PUT",
+      token,
+      body: data,
+    },
+  );
 }
 
 export async function previewEmployeeFinanceSanctionTemplate(
@@ -20104,7 +20582,9 @@ async function postAdminBlob(
 
 export async function listEmployeeFinanceLoanReportCatalog(token: string) {
   return normalizeList(
-    await adminRequest<unknown>("/api/employee-finance/loan-reports", { token }),
+    await adminRequest<unknown>("/api/employee-finance/loan-reports", {
+      token,
+    }),
   );
 }
 
@@ -20180,7 +20660,10 @@ export async function testEmployeeFinanceIntegration(
   token: string,
   channel: "erp" | "bank",
 ) {
-  return financePost(`/api/employee-finance/integrations/test/${channel}`, token);
+  return financePost(
+    `/api/employee-finance/integrations/test/${channel}`,
+    token,
+  );
 }
 
 export async function listEmployeeFinanceIntegrationLogs(
@@ -20199,7 +20682,10 @@ export async function retryEmployeeFinanceIntegration(
   token: string,
   logId: string | number,
 ) {
-  return financePost(`/api/employee-finance/integrations/logs/${logId}/retry`, token);
+  return financePost(
+    `/api/employee-finance/integrations/logs/${logId}/retry`,
+    token,
+  );
 }
 
 export async function previewEmployeeFinanceJournal(
@@ -20228,7 +20714,11 @@ export async function postEmployeeFinanceJournal(
   token: string,
   data: AdminRecord = {},
 ) {
-  return financePost("/api/employee-finance/integrations/journal/post", token, data);
+  return financePost(
+    "/api/employee-finance/integrations/journal/post",
+    token,
+    data,
+  );
 }
 
 export async function downloadEmployeeFinancePaymentFile(
@@ -20247,9 +20737,13 @@ export async function submitEmployeeFinancePayments(
   token: string,
   disbursementIds?: number[],
 ) {
-  return financePost("/api/employee-finance/integrations/bank/submit-payments", token, {
-    disbursement_ids: disbursementIds,
-  });
+  return financePost(
+    "/api/employee-finance/integrations/bank/submit-payments",
+    token,
+    {
+      disbursement_ids: disbursementIds,
+    },
+  );
 }
 
 export async function importEmployeeFinanceBankStatement(
@@ -20257,10 +20751,14 @@ export async function importEmployeeFinanceBankStatement(
   file: File,
   dryRun: boolean,
 ) {
-  return financePost("/api/employee-finance/integrations/bank/statement-import", token, {
-    file: await fileToBase64UploadDto(file),
-    dry_run: dryRun,
-  });
+  return financePost(
+    "/api/employee-finance/integrations/bank/statement-import",
+    token,
+    {
+      file: await fileToBase64UploadDto(file),
+      dry_run: dryRun,
+    },
+  );
 }
 
 export async function downloadEmployeeFinanceMigrationTemplate(token: string) {
@@ -20276,17 +20774,23 @@ export async function importEmployeeFinanceMigration(
   file: File,
   options: { dryRun: boolean; cutoverDate?: string },
 ) {
-  const payload = await financePost("/api/employee-finance/migration/import", token, {
-    file: await fileToBase64UploadDto(file),
-    dry_run: options.dryRun,
-    cutover_date: options.cutoverDate || undefined,
-  });
+  const payload = await financePost(
+    "/api/employee-finance/migration/import",
+    token,
+    {
+      file: await fileToBase64UploadDto(file),
+      dry_run: options.dryRun,
+      cutover_date: options.cutoverDate || undefined,
+    },
+  );
   return normalizeSingle(payload) ?? asRecord(payload);
 }
 
 export async function listEmployeeFinanceMigrationBatches(token: string) {
   return normalizeList(
-    await adminRequest<unknown>("/api/employee-finance/migration/batches", { token }),
+    await adminRequest<unknown>("/api/employee-finance/migration/batches", {
+      token,
+    }),
   );
 }
 
@@ -21937,7 +22441,8 @@ export function isSelectableDefaultAvatar(
 // ---------------------------------------------------------------------------
 
 export type IdentityAuditField = "first_name" | "last_name" | "email" | "phone";
-export type IdentityAuditSource = "user_update" | "employee_update" | "rollback";
+export type IdentityAuditSource =
+  "user_update" | "employee_update" | "rollback";
 
 export interface IdentityAuditEntry {
   id: number;
@@ -22038,11 +22543,22 @@ export async function rollbackIdentityChange(
   );
 }
 
-export async function extendLeaveEvidenceDeadline(token: string, id: number, evidence_due_at: string, reason: string) {
-  return adminRequest<AdminRecord>(`/api/leave/requests/${id}/evidence-deadline`, { token, method: "POST", body: { evidence_due_at, reason } })
+export async function extendLeaveEvidenceDeadline(
+  token: string,
+  id: number,
+  evidence_due_at: string,
+  reason: string,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/leave/requests/${id}/evidence-deadline`,
+    { token, method: "POST", body: { evidence_due_at, reason } },
+  );
 }
 export async function retryLeaveRouting(token: string, id: number) {
-  return adminRequest<AdminRecord>(`/api/leave/requests/${id}/retry-routing`, { token, method: "POST" })
+  return adminRequest<AdminRecord>(`/api/leave/requests/${id}/retry-routing`, {
+    token,
+    method: "POST",
+  });
 }
 
 export async function downloadMyLeaveRequestDocument(
@@ -22101,6 +22617,14 @@ export async function downloadMyLeaveRequestDocument(
   };
 }
 
-export async function patchMyLeaveRequestMedicalDetail(token: string, id: string | number, data: AdminRecord) {
-  return adminRequest<unknown>(`/api/me/leave/requests/${id}/medical-detail`, { method: "PATCH", token, body: data })
+export async function patchMyLeaveRequestMedicalDetail(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/medical-detail`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
 }
