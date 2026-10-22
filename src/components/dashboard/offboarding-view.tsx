@@ -1071,8 +1071,8 @@ export function OffboardingView() {
   async function submitRequestForm() {
     const token = readStoredToken()
     if (!token) return false
-    if (!requestForm.employee_id || !requestForm.title.trim() || !requestForm.reason.trim() || !requestForm.last_working_date) {
-      showErrorAlert("Employee, title, reason and last working date are required.")
+    if (!requestForm.employee_id || !requestForm.title.trim() || !requestForm.reason.trim()) {
+      showErrorAlert("Employee, title and reason are required.")
       return false
     }
     if (isEmployeeMode && selfEmployeeId != null && Number(requestForm.employee_id) !== selfEmployeeId) {
@@ -1095,7 +1095,7 @@ export function OffboardingView() {
         offboarding_type: requestForm.offboarding_type,
         reason: requestForm.reason.trim(),
         notice_date: requestForm.notice_date || undefined,
-        last_working_date: requestForm.last_working_date,
+        last_working_date: requestForm.last_working_date || undefined,
         notice_period_waived: canManage && requestForm.notice_period_waived === "true",
         notice_period_waiver_reason:
           canManage && requestForm.notice_period_waived === "true"
@@ -2245,17 +2245,18 @@ export function OffboardingView() {
                   />
                 </label>
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Last working date</span>
+                  <span className="font-medium text-muted-foreground">Last working date (optional)</span>
                   <DatePickerPresets
                     value={requestForm.last_working_date}
                     onChange={(value) =>
                       setRequestForm((prev) => ({ ...prev, last_working_date: value }))
                     }
-                    placeholder="Last working date"
+                    placeholder="Use notice policy"
                     className="h-8 text-xs"
                   />
                 </label>
               </div>
+              <p className="text-[11px] text-muted-foreground">Leave blank to calculate it from the effective notice policy.</p>
 
               {canManage ? (
                 <>
