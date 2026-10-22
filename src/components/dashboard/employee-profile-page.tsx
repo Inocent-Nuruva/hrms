@@ -57,6 +57,8 @@ import {
   deleteEmployeeDocument,
   deleteEmployeeSectionItem,
   downloadEmployeeDocument,
+  downloadEmploymentLetter,
+  downloadEmployeeLetterPreview,
   EMPLOYEE_STATUS_VALUES,
   fileToBase64UploadDto,
   getEmployeeById,
@@ -72,6 +74,8 @@ import {
   listEmployeePositions,
   listAllEmployees,
   listEmployees,
+  generateEmployeeTemplateLetter,
+  listEmployeeLetterHistory,
   listPositions,
   patchEmployeeById,
   patchEmployeeAssignment,
@@ -1696,6 +1700,7 @@ const PROFILE_SECTION_DEFS: Array<{
 }> = [
   { title: "Contacts", tabLabel: "Contacts", keys: ["contacts", "contact_details", "contactDetails"] },
   { title: "Documents", tabLabel: "Documents", keys: ["documents", "employee_documents", "employeeDocuments"] },
+  { title: "Letters", tabLabel: "Letters", keys: [] },
   { title: "Addresses", tabLabel: "Addresses", keys: ["addresses", "address_details", "addressDetails"] },
   { title: "Relatives", tabLabel: "Relatives", keys: ["relatives", "next_of_kin", "nextOfKin"] },
   { title: "Identifications", tabLabel: "IDs", keys: ["identifications", "identification_documents", "identificationDocuments"] },
@@ -1876,6 +1881,8 @@ function ProfileSectionsTabs({
                     onMutated={onMutated}
                     requestedRouteKey={requestedRouteKey}
                   />
+                ) : active.title === "Letters" ? (
+                  <EmployeeLettersSection employeeId={employeeId} />
                 ) : (
                   <Section
                     title={active.title}
@@ -1890,6 +1897,91 @@ function ProfileSectionsTabs({
           </AnimatePresence>
         </div>
     </div>
+  )
+}
+
+function EmployeeLettersSection({ employeeId }: { employeeId: number | null }) {
+  const [history, setHistory] = React.useState<AdminRecord[]>([])
+  const [letterType, setLetterType] = React.useState<"JOINING_FORM" | "OTHER">("JOINING_FORM")
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const refresh = React.useCallback(async () => {
+    const token = readStoredToken()
+    if (!token || employeeId === null) return
+    try {
+      setError(null)
+      setHistory(await listEmployeeLetterHistory(token, employeeId))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load generated letters.")
+    }
+  }, [employeeId])
+
+  React.useEffect(() => { void refresh() }, [refresh])
+
+  async function preview() {
+    const token = readStoredToken()
+    if (!token || employeeId === null) return
+    setBusy(true)
+    try {
+      const blob = await downloadEmployeeLetterPreview(token, employeeId, letterType)
+      const url = URL.createObjectURL(blob)
+      window.open(url, "_blank", "noopener,noreferrer")
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not preview the letter.")
+    } finally { setBusy(false) }
+  }
+
+  async function generate() {
+    const token = readStoredToken()
+    if (!token || employeeId === null) return
+    setBusy(true)
+    try {
+      await generateEmployeeTemplateLetter(token, employeeId, letterType)
+      await refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not generate the letter.")
+    } finally { setBusy(false) }
+  }
+
+  async function download(id: number) {
+    const token = readStoredToken()
+    if (!token) return
+    try {
+      const blob = await downloadEmploymentLetter(token, id)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = "employee-letter.pdf"
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not download the letter.")
+    }
+  }
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-sm">Template type
+          <select className="h-9 rounded-md border border-border bg-background px-2" value={letterType} onChange={(event) => setLetterType(event.target.value as typeof letterType)}>
+            <option value="JOINING_FORM">Joining form</option><option value="OTHER">Other letter</option>
+          </select>
+        </label>
+        <button type="button" disabled={busy || employeeId === null} onClick={() => void preview()} className="rounded-md border border-border px-3 py-2 text-sm">Preview</button>
+        <button type="button" disabled={busy || employeeId === null} onClick={() => void generate()} className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground">Generate and save</button>
+      </div>
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      <div className="divide-y divide-border rounded-md border border-border">
+        {history.length === 0 ? <p className="p-3 text-sm text-muted-foreground">No generated letters yet.</p> : history.map((row) => (
+          <div key={String(row.id)} className="flex flex-wrap items-center justify-between gap-2 p-3">
+            <div><p className="text-sm font-medium">{String(row.title ?? "Generated letter")}</p><p className="text-xs text-muted-foreground">{String(row.document_type ?? "")} · {String(row.created_at ?? "")}</p></div>
+            <button type="button" onClick={() => void download(Number(row.id))} className="rounded-md border border-border px-3 py-1.5 text-sm">Download PDF</button>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

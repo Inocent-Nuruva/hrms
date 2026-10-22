@@ -270,13 +270,14 @@ const EMPTY_FORM: RegisterFormState = {
 }
 
 const EMPLOYMENT_TYPE_OPTIONS = [
-  { value: "full_time", label: "Full Time" },
+  { value: "full_time", label: "Permanent" },
   { value: "part_time", label: "Part Time" },
   { value: "contract", label: "Contract" },
   { value: "probation", label: "Probation" },
   { value: "intern", label: "Intern" },
   { value: "consultant", label: "Consultant" },
   { value: "temporary", label: "Temporary" },
+  { value: "probation", label: "Probation" },
 ] as const
 
 const EMPTY_INITIALIZED_FIELDS: InitializedRegistrationFields = {
@@ -2887,7 +2888,7 @@ export function EmployeeRegisterForm() {
         position_id: selectedPositionId ?? undefined,
         employment_status: "onboarding",
         employment_type: (form.employmentType || "full_time") as
-          "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary",
+          "full_time" | "part_time" | "contract" | "intern" | "consultant" | "temporary" | "probation",
         reports_to: selectedReportsToId ?? undefined,
         first_name: form.firstName.trim(),
         middle_name: form.middleName.trim(),

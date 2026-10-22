@@ -72,12 +72,13 @@ const EMPLOYMENT_TYPES: ReadonlyArray<{
   value: CreateEmployeeInvitationPayload["employment_type"]
   label: string
 }> = [
-  { value: "full_time", label: "Full Time" },
+  { value: "full_time", label: "Permanent" },
   { value: "part_time", label: "Part Time" },
   { value: "contract", label: "Contract" },
   { value: "intern", label: "Intern" },
   { value: "consultant", label: "Consultant" },
   { value: "temporary", label: "Temporary" },
+  { value: "probation", label: "Probation" },
 ]
 
 type LookupOption = {
