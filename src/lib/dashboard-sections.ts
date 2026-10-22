@@ -1,17 +1,17 @@
 import {
   canAccessDashboardRoute,
   type DashboardAccessMode,
-} from "@/lib/dashboard-permissions"
+} from "@/lib/dashboard-permissions";
 
 export type DashboardSectionTab = {
-  title: string
-  url: string
-}
+  title: string;
+  url: string;
+};
 
 export type DashboardSectionTabGroup = {
-  title?: string
-  items: DashboardSectionTab[]
-}
+  title?: string;
+  items: DashboardSectionTab[];
+};
 
 const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -19,8 +19,14 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "All Employees", url: "/dashboard/employees/all" },
       { title: "Inactive Employees", url: "/dashboard/employees/inactive" },
-      { title: "Profile Updates", url: "/dashboard/employees/profile-update-approvals" },
-      { title: "Profile Changes", url: "/dashboard/employees/profile-change-requests" },
+      {
+        title: "Profile Updates",
+        url: "/dashboard/employees/profile-update-approvals",
+      },
+      {
+        title: "Profile Changes",
+        url: "/dashboard/employees/profile-change-requests",
+      },
       { title: "Offboarding", url: "/dashboard/employees/offboarding" },
     ],
   },
@@ -33,18 +39,24 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Contracts", url: "/dashboard/employees/contracts" },
     ],
   },
-]
+];
 
 export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My employee workspace",
     items: [
       { title: "Profile", url: "/dashboard/me/profile" },
-      { title: "Location privacy notice", url: "/dashboard/me/location-privacy" },
+      {
+        title: "Location privacy notice",
+        url: "/dashboard/me/location-privacy",
+      },
       { title: "Organization", url: "/dashboard/me/organization" },
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
-      { title: "Update details", url: "/dashboard/me/requests/profile-changes" },
+      {
+        title: "Update details",
+        url: "/dashboard/me/requests/profile-changes",
+      },
       { title: "Resignation", url: "/dashboard/me/requests/resignation" },
       { title: "Onboarding", url: "/dashboard/me/onboarding" },
       { title: "Offboarding", url: "/dashboard/me/offboarding" },
@@ -54,23 +66,38 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Team actions", url: "/dashboard/me/team/actions" },
     ],
   },
-]
+];
 
 export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
   ...employeeSelfSectionTabGroups,
   ...employeeOperationsSectionTabGroups,
-]
+];
 
 export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Attendance Operations",
     items: [
-      { title: "Daily Summaries", url: "/dashboard/attendance/daily-summaries" },
-      { title: "Mobile Punch Review", url: "/dashboard/attendance/mobile-punches" },
-      { title: "Processing Exceptions", url: "/dashboard/attendance/processing-exceptions" },
-      { title: "Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs" },
+      {
+        title: "Daily Summaries",
+        url: "/dashboard/attendance/daily-summaries",
+      },
+      {
+        title: "Mobile Punch Review",
+        url: "/dashboard/attendance/mobile-punches",
+      },
+      {
+        title: "Processing Exceptions",
+        url: "/dashboard/attendance/processing-exceptions",
+      },
+      {
+        title: "Recalculation Jobs",
+        url: "/dashboard/attendance/recalculation-jobs",
+      },
       { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
-      { title: "Device Sync Logs", url: "/dashboard/attendance/device-sync-logs" },
+      {
+        title: "Device Sync Logs",
+        url: "/dashboard/attendance/device-sync-logs",
+      },
     ],
   },
   {
@@ -87,13 +114,28 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Shift Management",
     items: [
-      { title: "Shift Schedules", url: "/dashboard/attendance/shift-schedules" },
-      { title: "Generated Schedules", url: "/dashboard/attendance/timetable-generated-schedules" },
+      {
+        title: "Shift Schedules",
+        url: "/dashboard/attendance/shift-schedules",
+      },
+      {
+        title: "Generated Schedules",
+        url: "/dashboard/attendance/timetable-generated-schedules",
+      },
       { title: "Shifts", url: "/dashboard/attendance/shifts" },
       { title: "Shift Breaks", url: "/dashboard/attendance/shift-breaks" },
-      { title: "Shift Assignments", url: "/dashboard/attendance/shift-assignments" },
-      { title: "Rotation Groups", url: "/dashboard/attendance/shift-rotation-groups" },
-      { title: "Rotation Rules", url: "/dashboard/attendance/shift-rotation-rules" },
+      {
+        title: "Shift Assignments",
+        url: "/dashboard/attendance/shift-assignments",
+      },
+      {
+        title: "Rotation Groups",
+        url: "/dashboard/attendance/shift-rotation-groups",
+      },
+      {
+        title: "Rotation Rules",
+        url: "/dashboard/attendance/shift-rotation-rules",
+      },
     ],
   },
   {
@@ -101,29 +143,47 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Timetables", url: "/dashboard/attendance/timetables" },
       { title: "Timetable Days", url: "/dashboard/attendance/timetable-days" },
-      { title: "Timetable Shift Options", url: "/dashboard/attendance/timetable-shift-rules" },
-      { title: "Timetable Holiday Rules", url: "/dashboard/attendance/timetable-holiday-rules" },
-      { title: "Timetable Rotations and Rules", url: "/dashboard/attendance/timetable-rotations" },
-      { title: "Employee Timetables", url: "/dashboard/attendance/employee-timetables" },
+      {
+        title: "Timetable Shift Options",
+        url: "/dashboard/attendance/timetable-shift-rules",
+      },
+      {
+        title: "Timetable Holiday Rules",
+        url: "/dashboard/attendance/timetable-holiday-rules",
+      },
+      {
+        title: "Timetable Rotations and Rules",
+        url: "/dashboard/attendance/timetable-rotations",
+      },
+      {
+        title: "Employee Timetables",
+        url: "/dashboard/attendance/employee-timetables",
+      },
     ],
   },
-]
+];
 
 export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My attendance",
     items: [
-      { title: "Attendance History", url: "/dashboard/attendance/attendance-history" },
+      {
+        title: "Attendance History",
+        url: "/dashboard/attendance/attendance-history",
+      },
       { title: "My Schedule", url: "/dashboard/attendance/schedule-preview" },
-      { title: "Work-from-home Requests", url: "/dashboard/attendance/work-from-home-requests" },
+      {
+        title: "Work-from-home Requests",
+        url: "/dashboard/attendance/work-from-home-requests",
+      },
     ],
   },
-]
+];
 
 export const attendanceWorkspaceSectionTabGroups: DashboardSectionTabGroup[] = [
   ...employeeAttendanceSectionTabGroups,
   ...attendanceSectionTabGroups,
-]
+];
 
 /**
  * HR staff can intentionally use the employee shell while retaining access to
@@ -141,11 +201,11 @@ export function resolveAttendanceSectionTabGroups(
       permissionLabels,
       accessMode,
     ),
-  )
+  );
 
   return isAdmin || canAccessAttendanceOperations
     ? attendanceWorkspaceSectionTabGroups
-    : employeeAttendanceSectionTabGroups
+    : employeeAttendanceSectionTabGroups;
 }
 
 export const selfRequestSectionTabGroups: DashboardSectionTabGroup[] = [
@@ -154,11 +214,14 @@ export const selfRequestSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "History", url: "/dashboard/me/requests/timeline" },
       { title: "Documents", url: "/dashboard/me/requests/documents" },
-      { title: "Update details", url: "/dashboard/me/requests/profile-changes" },
+      {
+        title: "Update details",
+        url: "/dashboard/me/requests/profile-changes",
+      },
       { title: "Resignation", url: "/dashboard/me/requests/resignation" },
     ],
   },
-]
+];
 
 export const selfLeaveSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -170,15 +233,13 @@ export const selfLeaveSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Policies", url: "/dashboard/me/leave/policies" },
     ],
   },
-]
+];
 
 export const positionsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    items: [
-      { title: "Positions", url: "/dashboard/positions" },
-    ],
+    items: [{ title: "Positions", url: "/dashboard/positions" }],
   },
-]
+];
 
 const performanceOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -191,7 +252,7 @@ const performanceOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Improvement", url: "/dashboard/performance/improvement" },
     ],
   },
-]
+];
 
 export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -204,17 +265,20 @@ export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Feedback", url: "/dashboard/me/performance/feedback" },
       { title: "Achievements", url: "/dashboard/me/performance/achievements" },
       { title: "Development", url: "/dashboard/me/performance/development" },
-      { title: "Improvement plans", url: "/dashboard/me/performance/improvement" },
+      {
+        title: "Improvement plans",
+        url: "/dashboard/me/performance/improvement",
+      },
       { title: "Team performance", url: "/dashboard/me/performance/team" },
       { title: "KPI approvals", url: "/dashboard/me/performance/manager-kpis" },
     ],
   },
-]
+];
 
 export const performanceSectionTabGroups: DashboardSectionTabGroup[] = [
   ...selfPerformanceSectionTabGroups,
   ...performanceOperationsSectionTabGroups,
-]
+];
 
 const probationOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -226,7 +290,7 @@ const probationOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "My team", url: "/dashboard/probation/team" },
     ],
   },
-]
+];
 
 export const probationSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -234,7 +298,7 @@ export const probationSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [{ title: "Overview", url: "/dashboard/me/probation" }],
   },
   ...probationOperationsSectionTabGroups,
-]
+];
 
 const fieldOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -247,7 +311,7 @@ const fieldOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Setup", url: "/dashboard/field/setup" },
     ],
   },
-]
+];
 
 export const selfFieldSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -258,12 +322,12 @@ export const selfFieldSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Follow-ups", url: "/dashboard/me/field/follow-ups" },
     ],
   },
-]
+];
 
 export const fieldSectionTabGroups: DashboardSectionTabGroup[] = [
   ...selfFieldSectionTabGroups,
   ...fieldOperationsSectionTabGroups,
-]
+];
 
 const financeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -277,33 +341,37 @@ const financeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Payroll deductions", url: "/dashboard/finance/payroll" },
       { title: "Reports", url: "/dashboard/finance/reports" },
       { title: "Settings", url: "/dashboard/finance/settings" },
-      { title: "Bank, ERP & migration", url: "/dashboard/finance/integrations" },
+      {
+        title: "Bank, ERP & migration",
+        url: "/dashboard/finance/integrations",
+      },
     ],
   },
-]
+];
 
 export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "My finance",
     items: [
       { title: "Payroll", url: "/dashboard/me/finance/payroll" },
-      { title: "Loans and advances", url: "/dashboard/me/finance/applications" },
+      {
+        title: "Loans and advances",
+        url: "/dashboard/me/finance/applications",
+      },
     ],
   },
-]
+];
 
 export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
   ...selfFinanceSectionTabGroups,
   ...financeOperationsSectionTabGroups,
-]
+];
 
 export const selfActivitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    items: [
-      { title: "My activities", url: "/dashboard/me/activities/today" },
-    ],
+    items: [{ title: "My activities", url: "/dashboard/me/activities/today" }],
   },
-]
+];
 
 export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -317,7 +385,7 @@ export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Setup", url: "/dashboard/activities/setup" },
     ],
   },
-]
+];
 
 export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -331,7 +399,10 @@ export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Feedback", url: "/dashboard/me/performance/feedback" },
       { title: "Achievements", url: "/dashboard/me/performance/achievements" },
       { title: "Development", url: "/dashboard/me/performance/development" },
-      { title: "Improvement plans", url: "/dashboard/me/performance/improvement" },
+      {
+        title: "Improvement plans",
+        url: "/dashboard/me/performance/improvement",
+      },
     ],
   },
   {
@@ -363,12 +434,18 @@ export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Setup", url: "/dashboard/activities/setup" },
     ],
   },
-]
+];
 
-export const myGoalsAndWorkTabGroups = [performanceActivitySectionTabGroups[0]]
-export const teamGoalsAndWorkTabGroups = [performanceActivitySectionTabGroups[1]]
-export const performanceManagementTabGroups = [performanceActivitySectionTabGroups[2]]
-export const activityManagementTabGroups = [performanceActivitySectionTabGroups[3]]
+export const myGoalsAndWorkTabGroups = [performanceActivitySectionTabGroups[0]];
+export const teamGoalsAndWorkTabGroups = [
+  performanceActivitySectionTabGroups[1],
+];
+export const performanceManagementTabGroups = [
+  performanceActivitySectionTabGroups[2],
+];
+export const activityManagementTabGroups = [
+  performanceActivitySectionTabGroups[3],
+];
 
 const movementOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -379,7 +456,7 @@ const movementOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Operations", url: "/dashboard/movements/operations" },
     ],
   },
-]
+];
 
 export const movementSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -387,7 +464,7 @@ export const movementSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [{ title: "Overview", url: "/dashboard/me/movements" }],
   },
   ...movementOperationsSectionTabGroups,
-]
+];
 
 export const smsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -398,27 +475,33 @@ export const smsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Platform", url: "/dashboard/sms/platform" },
     ],
   },
-]
+];
 
 export const notificationSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [
-      { title: "Current notifications", url: "/dashboard/operations/notifications" },
+      {
+        title: "Current notifications",
+        url: "/dashboard/operations/notifications",
+      },
       { title: "Mail / SMTP configuration", url: "/dashboard/smtp" },
       { title: "SMS configuration", url: "/dashboard/sms" },
     ],
   },
-]
+];
 
 export const operationsReportSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     title: "Reports",
     items: [
       { title: "Reports & Analytics", url: "/dashboard/operations/reports" },
-      { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting" },
+      {
+        title: "Scheduled Reporting",
+        url: "/dashboard/operations/scheduled-reporting",
+      },
     ],
   },
-]
+];
 
 export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -430,7 +513,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Actions", url: "/dashboard/me/team/actions" },
     ],
   },
-]
+];
 
 export const structureSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -440,7 +523,7 @@ export const structureSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Numbering", url: "/dashboard/structure/numbering" },
     ],
   },
-]
+];
 
 export const insightsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -453,7 +536,7 @@ export const insightsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Identity audit", url: "/dashboard/insights/identity-audit" },
     ],
   },
-]
+];
 
 const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -461,22 +544,35 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Leave Types", url: "/dashboard/leave-management/types" },
       { title: "Leave Requests", url: "/dashboard/leave-management/requests" },
-      { title: "Team Calendar", url: "/dashboard/leave-management/team-calendar" },
+      {
+        title: "Team Calendar",
+        url: "/dashboard/leave-management/team-calendar",
+      },
       { title: "Leave Balances", url: "/dashboard/leave-management/balances" },
-      { title: "Balance Import", url: "/dashboard/leave-management/balance-import" },
-      { title: "Balance Transactions", url: "/dashboard/leave-management/transactions" },
-      { title: "Business Trips", url: "/dashboard/leave-management/business-trips" },
+      {
+        title: "Balance Import",
+        url: "/dashboard/leave-management/balance-import",
+      },
+      {
+        title: "Balance Transactions",
+        url: "/dashboard/leave-management/transactions",
+      },
+      { title: "Leave Reports", url: "/dashboard/leave-management/reports" },
+      {
+        title: "Business Trips",
+        url: "/dashboard/leave-management/business-trips",
+      },
       { title: "Holidays", url: "/dashboard/leave-management/holidays" },
       { title: "Policies", url: "/dashboard/leave-management/policies" },
       { title: "Workflows", url: "/dashboard/leave-management/workflows" },
     ],
   },
-]
+];
 
 export const leaveManagementSectionTabGroups: DashboardSectionTabGroup[] = [
   ...selfLeaveSectionTabGroups,
   ...leaveOperationsSectionTabGroups,
-]
+];
 
 const ACCESS_CONTROL_DEVICE_TABS: DashboardSectionTab[] = [
   { title: "Devices", url: "/dashboard/access-control/devices" },
@@ -487,26 +583,29 @@ const ACCESS_CONTROL_DEVICE_TABS: DashboardSectionTab[] = [
   { title: "Groups", url: "/dashboard/access-control/groups" },
   { title: "Credentials", url: "/dashboard/access-control/access-credentials" },
   { title: "Audit Logs", url: "/dashboard/access-control/audit-logs" },
-  { title: "Command Logs", url: "/dashboard/access-control/device-command-logs" },
+  {
+    title: "Command Logs",
+    url: "/dashboard/access-control/device-command-logs",
+  },
   { title: "Sync Logs", url: "/dashboard/access-control/hikvision-sync-logs" },
-]
+];
 
 const ACCESS_GOVERNANCE_TABS: DashboardSectionTab[] = [
   { title: "Roles", url: "/dashboard/roles" },
   { title: "Permissions", url: "/dashboard/permissions" },
-]
+];
 
 export const accessControlDeviceSectionTabGroups: DashboardSectionTabGroup[] = [
   { items: ACCESS_CONTROL_DEVICE_TABS },
-]
+];
 
 export const accessGovernanceSectionTabGroups: DashboardSectionTabGroup[] = [
   { items: ACCESS_GOVERNANCE_TABS },
-]
+];
 
 export const accessControlSectionTabGroups: DashboardSectionTabGroup[] = [
   { items: [...ACCESS_CONTROL_DEVICE_TABS, ...ACCESS_GOVERNANCE_TABS] },
-]
+];
 
 export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
   return [
@@ -534,22 +633,22 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     leaveManagementSectionTabGroups,
     accessControlSectionTabGroups,
     insightsSectionTabGroups,
-  ].flat()
+  ].flat();
 }
 
 export function findFirstAccessibleSectionUrl(
   groups: DashboardSectionTabGroup[],
   permissionLabels: string[],
-  accessMode?: "admin" | "employee"
+  accessMode?: "admin" | "employee",
 ) {
   for (const group of groups) {
     const item = group.items.find((entry) =>
-      canAccessDashboardRoute(entry.url, permissionLabels, accessMode)
-    )
+      canAccessDashboardRoute(entry.url, permissionLabels, accessMode),
+    );
     if (item) {
-      return item.url
+      return item.url;
     }
   }
 
-  return null
+  return null;
 }

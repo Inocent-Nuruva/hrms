@@ -486,6 +486,7 @@ export function LeaveTypesCatalog({
                         "—",
                     },
                     { label: "Updated", value: formatDateTime(readText(selected, ["updated_at", "updatedAt"])) },
+                    { label: "Created", value: formatDateTime(readText(selected, ["created_at", "createdAt"])) },
                   ].map((fact) => (
                     <div key={fact.label} className="min-w-0">
                       <dt className="text-[11px] text-slate-500">{fact.label}</dt>

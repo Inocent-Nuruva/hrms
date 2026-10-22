@@ -1392,7 +1392,7 @@ export default function AdminDashboardView({
                 />
               ) : null}
               <div
-                className={`flex min-w-0 max-w-full flex-col px-3 pt-0 pb-3 sm:px-4 md:px-4 md:pb-4 ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
+                className={`flex min-w-0 max-w-full flex-col pt-0 pb-3 md:pb-4 ${currentPath === "/dashboard/employees/onboarding" ? "px-1 sm:px-2" : "px-3 sm:px-4 md:px-4"} ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
               >
                 {navigationReady && showAccessControlTabs ? (
                   <DashboardSectionTabs groups={accessControlTabGroups} />

@@ -5,6 +5,7 @@ import {
   invalidateAdminGetCache,
   getAttendancePolicy,
   listDepartments,
+  visitOnboardingWorkspace,
 } from "./admin-api";
 import { ApiResponseSchema, ContractError } from "./request-json";
 const Entity = z.object({ id: z.number(), name: z.string() });
@@ -21,6 +22,14 @@ function deferred<T>() {
 }
 
 describe("strict resource contracts and cache generations", () => {
+  it("records workspace visits without aborting concurrent employee reads", async () => {
+    const pending = deferred<Response>();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValueOnce(Response.json({ previous_viewed_at: null, viewed_at: "2026-10-21T08:00:00Z" })));
+    const detail = adminRequest("/api/onboarding/requests/55", Entity);
+    await visitOnboardingWorkspace("test-token", 55);
+    pending.resolve(Response.json({ id: 55, name: "Employee" }));
+    await expect(detail).resolves.toEqual({ id: 55, name: "Employee" });
+  });
   it("rejects successful invalid JSON and mismatched typed records", async () => {
     vi.stubGlobal(
       "fetch",

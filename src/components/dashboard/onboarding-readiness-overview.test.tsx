@@ -24,6 +24,8 @@ const data = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
+  vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })))
   getReadiness.mockResolvedValue(data)
   container = document.createElement("div")
   document.body.appendChild(container)
@@ -38,7 +40,7 @@ async function render(canActivate = true) {
   await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} saving={false} onActivate={activate} onNavigate={navigate} />))
 }
 function button(label: string) {
-  return [...container.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
+  return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
 }
 describe("onboarding activation overview", () => {
   it("shows blockers and prevents activation until ready", async () => {
@@ -48,13 +50,16 @@ describe("onboarding activation overview", () => {
     expect(button("Activate employee").disabled).toBe(true)
     await act(async () => button("Review Signed contract").click())
     expect(navigate).toHaveBeenCalledWith("contracts", "contract")
-    await act(async () => button("Show outstanding only").click())
     expect(container.textContent).not.toContain("Provide laptop")
+    await act(async () => button("Show completed requirements (1)").click())
+    expect(container.textContent).toContain("Provide laptop")
   })
   it("enables activation only after a successful readiness response", async () => {
     getReadiness.mockResolvedValue({ ...data, ready_to_activate: true, blocker_count: 0, next_action: null })
     await render()
     await act(async () => button("Activate employee").click())
+    expect(activate).not.toHaveBeenCalled()
+    await act(async () => button("Confirm activation").click())
     expect(activate).toHaveBeenCalledOnce()
   })
   it("does not offer activation without permission", async () => {

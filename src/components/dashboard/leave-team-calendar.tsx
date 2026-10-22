@@ -41,6 +41,7 @@ export function LeaveTeamCalendar() {
   })
   const [selectedDate, setSelectedDate] = React.useState(() => dateKey(new Date()))
   const [entries, setEntries] = React.useState<LeaveTeamCalendarEntry[]>([])
+  const [teamMemberCount, setTeamMemberCount] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -52,6 +53,7 @@ export function LeaveTeamCalendar() {
     if (!token) {
       setError("Sign in again to view your team calendar.")
       setEntries([])
+      setTeamMemberCount(null)
       setLoading(false)
       return
     }
@@ -59,9 +61,11 @@ export function LeaveTeamCalendar() {
     setError(null)
     try {
       const result = await listLeaveTeamCalendar(token, fromDate, toDate)
-      setEntries(result)
+      setEntries(result.entries)
+      setTeamMemberCount(result.teamMemberCount)
     } catch (reason) {
       setEntries([])
+      setTeamMemberCount(null)
       setError(reason instanceof Error ? reason.message : "Could not load the team leave calendar.")
     } finally {
       setLoading(false)
@@ -86,6 +90,7 @@ export function LeaveTeamCalendar() {
   const selectedEntries = entries.filter(
     (entry) => entry.start_date <= selectedDate && entry.end_date >= selectedDate,
   )
+  const inDisplayedMonth = selectedDate >= fromDate && selectedDate <= toDate
   const today = dateKey(new Date())
 
   function moveMonth(offset: number) {
@@ -99,8 +104,9 @@ export function LeaveTeamCalendar() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Team leave calendar</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            View approved leave and requests awaiting review for your direct reports and managed departments.
+            <p className="mt-1 text-sm text-muted-foreground">
+              View approved leave and requests awaiting review for your direct reports and managed departments.
+              {teamMemberCount !== null ? ` ${teamMemberCount} team ${teamMemberCount === 1 ? "member" : "members"}.` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -201,7 +207,9 @@ export function LeaveTeamCalendar() {
           {loading ? <p className="mt-5 text-sm text-muted-foreground">Loading team leave…</p> : null}
           {error ? <p role="alert" className="mt-5 text-sm text-rose-600">{error}</p> : null}
           {!loading && !error && selectedEntries.length === 0 ? (
-            <p className="mt-5 text-sm text-muted-foreground">No team leave on this date.</p>
+            <p className="mt-5 text-sm text-muted-foreground">
+              {inDisplayedMonth ? "No team leave on this date." : "Select a date in this month to view leave."}
+            </p>
           ) : null}
           <ul className="mt-3 space-y-2">
             {!loading && !error ? selectedEntries.map((entry) => (

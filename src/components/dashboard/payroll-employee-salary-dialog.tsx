@@ -3,13 +3,13 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import * as React from "react";
+import { OverlayDrawer, DrawerHeader, DrawerHeaderTitle, DrawerBody, Button as FluentButton } from "@fluentui/react-components";
 
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import {
   Dialog,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
@@ -113,6 +113,7 @@ export function PayrollEmployeeSalaryDialog({
   structures,
   canEdit,
   onChanged,
+  drawer = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -121,7 +122,9 @@ export function PayrollEmployeeSalaryDialog({
   structures: AdminRecord[];
   canEdit: boolean;
   onChanged?: () => void;
+  drawer?: boolean;
 }) {
+  const [dirty, setDirty] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [salary, setSalary] = React.useState<AdminRecord | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -134,6 +137,17 @@ export function PayrollEmployeeSalaryDialog({
   const [overrides, setOverrides] = React.useState<
     Record<string, OverrideDraft>
   >({});
+
+  const closeSalary = (nextOpen: boolean) => {
+    if (!nextOpen && (saving || (dirty && !window.confirm("Discard unsaved salary changes?")))) return;
+    onOpenChange(nextOpen);
+  };
+  React.useEffect(() => {
+    if (!open || !dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [open, dirty]);
 
   // One entry per code: the newest active version.
   const activeStructures = React.useMemo(() => {
@@ -173,6 +187,7 @@ export function PayrollEmployeeSalaryDialog({
 
   React.useEffect(() => {
     if (!open) return;
+    setDirty(false);
     setStructureCode("");
     setStructureLines([]);
     setBaseSalary("");
@@ -183,6 +198,7 @@ export function PayrollEmployeeSalaryDialog({
   }, [open, load]);
 
   async function onSelectStructure(code: string) {
+    setDirty(true);
     setStructureCode(code);
     setOverrides({});
     setStructureLines([]);
@@ -254,6 +270,7 @@ export function PayrollEmployeeSalaryDialog({
         }),
       );
       toast.success("Salary structure assigned.");
+      setDirty(false);
       onChanged?.();
     } catch (errorObject) {
       setError(
@@ -275,6 +292,7 @@ export function PayrollEmployeeSalaryDialog({
       await approveEmployeePayrollSalary(token, employeeId);
       await load();
       toast.success("Starting salary approved and available to payroll.");
+      setDirty(false);
       onChanged?.();
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Failed to approve salary.");
@@ -295,14 +313,9 @@ export function PayrollEmployeeSalaryDialog({
   const overrideMap = rec(compensation?.componentOverrides) ?? {};
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="flex max-h-[90vh] w-[min(980px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Salary &amp; structure</DialogTitle>
-          <DialogDescription>{employeeLabel}</DialogDescription>
-        </DialogHeader>
+    <SalarySurface open={open} onOpenChange={closeSalary} drawer={drawer} employeeLabel={employeeLabel}>
         {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        <div onChangeCapture={() => setDirty(true)} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {loading && !salary ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <FluentLoadingIndicator className="size-4 animate-spin" />
@@ -608,11 +621,11 @@ export function PayrollEmployeeSalaryDialog({
             </div>
           ) : null}
         </div>
-        <DialogFooter>
+        <div className="flex justify-end gap-3 border-t border-border pt-3">
           <button
             type="button"
             className={secondaryButtonClass}
-            onClick={() => onOpenChange(false)}
+            onClick={() => closeSalary(false)}
           >
             Close
           </button>
@@ -627,10 +640,14 @@ export function PayrollEmployeeSalaryDialog({
               Assign salary
             </button>
           ) : null}
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
+        </div>
+    </SalarySurface>
   );
+}
+
+function SalarySurface({ open, onOpenChange, drawer, employeeLabel, children }: { open: boolean; onOpenChange: (open: boolean) => void; drawer: boolean; employeeLabel: string; children: React.ReactNode }) {
+  if (drawer) return <OverlayDrawer open={open} onOpenChange={(_, data) => onOpenChange(data.open)} position="end" size="large"><DrawerHeader><DrawerHeaderTitle action={<FluentButton onClick={() => onOpenChange(false)}>Close</FluentButton>}>Joining salary & payroll</DrawerHeaderTitle><p>{employeeLabel}</p></DrawerHeader><DrawerBody className="flex flex-col gap-4">{children}</DrawerBody></OverlayDrawer>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogPopup className="flex max-h-[90vh] w-[min(980px,96vw)] flex-col overflow-hidden sm:max-w-4xl"><DialogHeader><DialogTitle>Salary &amp; structure</DialogTitle><DialogDescription>{employeeLabel}</DialogDescription></DialogHeader>{children}</DialogPopup></Dialog>;
 }
 
 function SummaryField({ label, value }: { label: string; value: string }) {

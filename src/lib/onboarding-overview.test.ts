@@ -8,6 +8,12 @@ const rows = [
 ] as OnboardingOverviewRow[]
 
 describe("onboarding overview filters", () => {
+  it("filters attention flags without hiding older responses that omit the field", () => {
+    const flagged = { ...rows[0], attention_reasons: ["Start date passed with blockers"] }
+    expect(filterOnboardingOverview([flagged, rows[1]], { ...emptyOnboardingOverviewFilters, attention: "any" })).toEqual([flagged])
+    expect(filterOnboardingOverview([flagged, rows[1]], { ...emptyOnboardingOverviewFilters, attention: "Start date passed with blockers" })).toEqual([flagged])
+    expect(filterOnboardingOverview(rows, emptyOnboardingOverviewFilters)).toEqual(rows)
+  })
   it("combines search, department, owner, stage, blocker and overdue filters", () => {
     expect(filterOnboardingOverview(rows, { search: "amina", stage: "Checklist & documents", department: "Finance", owner: "Payroll", blocker: "Employment & payroll", overdue: "overdue" }).map((row) => row.id)).toEqual([1])
   })

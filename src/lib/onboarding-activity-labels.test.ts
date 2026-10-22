@@ -67,7 +67,7 @@ describe("onboarding activity labels", () => {
   })
 
   it("does not render Role: #19 or User: #146 when names cannot be resolved", () => {
-    expect(resolveResponsiblePartyLabel({ assigned_role_id: 19, assigned_user_id: 146 }, [], [])).toBe("")
+    expect(resolveResponsiblePartyLabel({ assigned_role_id: 19, assigned_user_id: 146 }, [], [])).toBe("Assigned team member")
   })
 
   it("resolves audit actors from nested objects or numeric created_by", () => {

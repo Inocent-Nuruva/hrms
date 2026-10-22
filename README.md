@@ -14,7 +14,8 @@ Run `npx playwright install chromium` once, then
 `npx playwright test e2e/onboarding-workspace.spec.ts`. The suite uses isolated
 API fixtures, not real employee records or credentials. It verifies joining-tab
 navigation, desktop/mobile readiness, search and ownership filters, recovery from
-API errors, activation permissions, and activation rejection/retry. It does not
+API errors, activation permissions, activation rejection/retry, retained list
+filters, focused tabs, and handoff-note retry without losing drafts. It does not
 replace authenticated UAT acceptance testing against the deployed backend.
 
 `PLAYWRIGHT_BASE_URL` selects the frontend under test. When using an installed
@@ -27,6 +28,30 @@ run `npm run build`, copy `public` and `.next/static` into `.next/standalone/` a
 `.next/standalone/.next/` respectively, then set `PLAYWRIGHT_SERVER_MODE=production`
 when running Playwright. CI requires this suite to pass before deployment; failures
 retain browser traces and screenshots for seven days.
+
+## Employee onboarding workspace
+
+Requests open in a full-screen Fluent UI sheet with Overview, Employee details, Payroll &
+contract, Tasks & documents, and Activity tabs. Mandatory blockers are grouped by
+responsible team, with completed work collapsed and optional work separate. The
+readiness panel refreshes on focus and every 30 seconds; activation requires a
+confirmation and the existing server-side checks. Returning to the overview keeps
+its mounted search and filters. Request and tab context are reflected in the URL.
+The overview uses compact employee rows with progress and the next responsible
+action. Filters search all loaded requests; grouped results render 25 employees
+per page, and changing filters returns to the first page.
+
+Focused payroll, salary and handoff drawers retain failed-save drafts while open
+and warn before discarding. Drafts are not persisted in browser storage. Review
+decisions and payroll edits use version checks; reload and review the latest
+record after a conflict. Blank private payroll identifiers preserve stored values,
+never the masked values returned by the API.
+
+Handoff notes default to internal. Employee-visible messages are an explicit
+choice, and the employee endpoint never returns internal notes. Backend migration
+`1795100000000-AddOnboardingWorkspaceCollaboration` must run before deploying the
+workspace collaboration endpoints. See the backend onboarding contract document
+for access rules and notification behavior.
 
 ## Project structure
 
