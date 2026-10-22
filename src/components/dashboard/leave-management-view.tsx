@@ -3679,6 +3679,7 @@ export function LeaveManagementView({
           requires_approval: row.requires_approval === "true",
           encashment_enabled: row.encashment_enabled === "true",
           maximum_encashment_days: optionalNumber(row.maximum_encashment_days),
+          encashment_rate_divisor: optionalNumber(row.encashment_rate_divisor),
           minimum_balance_after_encashment: optionalNumber(
             row.minimum_balance_after_encashment,
           ),

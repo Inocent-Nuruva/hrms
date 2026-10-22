@@ -87,6 +87,8 @@ import {
   listAccessControlResources,
   listAllCurrentCompanyUsers,
   listAttendanceDevices,
+  listAttendancePolicies,
+  listLeavePolicies,
   listAllEmployees,
   listBranches,
   listDepartments,
@@ -210,6 +212,8 @@ type OnboardingLookupKey =
   | "accessGroups"
   | "accessOrganizations"
   | "attendanceDevices"
+  | "attendancePolicies"
+  | "leavePolicies"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 function readStoredToken() {
@@ -1000,6 +1004,8 @@ const EMPTY_REQUEST_PROVISIONING: OnboardingProvisioningDraft = {
   roleIds: [],
   branchAccessIds: [],
   attendanceMode: "",
+  attendancePolicyId: "",
+  leavePolicyId: "",
   shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
   timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
   deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
@@ -1373,6 +1379,8 @@ export function OnboardingView() {
   const [accessGroups, setAccessGroups] = React.useState<AdminRecord[]>([])
   const [accessOrganizations, setAccessOrganizations] = React.useState<AdminRecord[]>([])
   const [attendanceDevices, setAttendanceDevices] = React.useState<AdminRecord[]>([])
+  const [attendancePolicies, setAttendancePolicies] = React.useState<AdminRecord[]>([])
+  const [leavePolicies, setLeavePolicies] = React.useState<AdminRecord[]>([])
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
   const [invitationSearch, setInvitationSearch] = React.useState("")
@@ -1409,6 +1417,8 @@ export function OnboardingView() {
     accessGroups: false,
     accessOrganizations: false,
     attendanceDevices: false,
+    attendancePolicies: false,
+    leavePolicies: false,
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
   const [workspaceTab, setWorkspaceTab] = React.useState("overview")
@@ -1842,6 +1852,10 @@ export function OnboardingView() {
                   sortOrder: "DESC",
                 }),
               }
+            case "attendancePolicies":
+              return { key, result: await listAttendancePolicies(token, { page: 1, limit: 100, is_active: true }) }
+            case "leavePolicies":
+              return { key, result: await listLeavePolicies(token, { page: 1, limit: 100, status: "active" } as never) }
           }
         })
       )
@@ -1887,6 +1901,12 @@ export function OnboardingView() {
             break
           case "attendanceDevices":
             setAttendanceDevices(entry.result.rows)
+            break
+          case "attendancePolicies":
+            setAttendancePolicies(entry.result.rows)
+            break
+          case "leavePolicies":
+            setLeavePolicies(entry.result.rows)
             break
         }
       })
@@ -2702,6 +2722,8 @@ export function OnboardingView() {
       "accessGroups",
       "accessOrganizations",
       "attendanceDevices",
+      "attendancePolicies",
+      "leavePolicies",
     ])
     if (!loaded) {
       return
@@ -5490,6 +5512,16 @@ export function OnboardingView() {
 
                       {requestProvisioningEnabled ? (
                         <div className="mt-4 space-y-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="grid gap-1 text-xs font-medium">
+                              Attendance policy
+                              <FluentSelect ariaLabel="Attendance policy" value={requestProvisioning.attendancePolicyId} onChange={(value) => updateRequestProvisioningField("attendancePolicyId", value)} options={[{ value: "", label: "Use company default" }, ...attendancePolicies.map((row) => ({ value: String(readRecordId(row, ["id"]) ?? ""), label: readString(row, ["name", "policy_name"], "Attendance policy") }))]} />
+                            </label>
+                            <label className="grid gap-1 text-xs font-medium">
+                              Leave policy
+                              <FluentSelect ariaLabel="Leave policy" value={requestProvisioning.leavePolicyId} onChange={(value) => updateRequestProvisioningField("leavePolicyId", value)} options={[{ value: "", label: "Use employee eligibility rules" }, ...leavePolicies.map((row) => ({ value: String(readRecordId(row, ["id"]) ?? ""), label: readString(row, ["name", "policy_name"], "Leave policy") }))]} />
+                            </label>
+                          </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <MultiSelectChecklist
                               compact

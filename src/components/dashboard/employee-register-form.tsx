@@ -246,6 +246,8 @@ type OnboardingFormState = {
   roleIds: number[]
   branchAccessIds: number[]
   attendanceMode: "" | OnboardingAttendanceMode
+  attendancePolicyId: string
+  leavePolicyId: string
   shiftAssignment: OnboardingShiftAssignmentFormState
   timetableAssignment: OnboardingTimetableAssignmentFormState
   deviceAssignment: OnboardingDeviceAssignmentFormState
@@ -438,6 +440,8 @@ const EMPTY_ONBOARDING_FORM: OnboardingFormState = {
   roleIds: [],
   branchAccessIds: [],
   attendanceMode: "",
+  attendancePolicyId: "",
+  leavePolicyId: "",
   shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
   timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
   deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },

@@ -7,6 +7,7 @@ const HISTORICAL_EMPLOYEE_STATUSES = new Set([
   "resigned",
   "terminated",
   "retired",
+  "deceased",
   "exited",
 ])
 

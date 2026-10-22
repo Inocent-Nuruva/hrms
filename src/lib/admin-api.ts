@@ -117,6 +117,7 @@ export interface EmployeesQueryParams extends UsersQueryParams {
     | "resigned"
     | "terminated"
     | "retired"
+    | "deceased"
     | "exited";
   branch_id?: number;
   department_id?: number;
@@ -607,6 +608,7 @@ export interface EmployeeStatusPayload {
     | "resigned"
     | "terminated"
     | "retired"
+    | "deceased"
     | "exited";
   effective_date: string;
   exit_date?: string;
@@ -633,6 +635,7 @@ export const EMPLOYEE_STATUS_VALUES = [
   "resigned",
   "terminated",
   "retired",
+  "deceased",
   "exited",
 ] as const;
 
@@ -676,6 +679,8 @@ export interface OnboardingProvisioning {
   role_ids?: number[];
   branch_access_ids?: number[];
   attendance_mode?: OnboardingAttendanceMode;
+  attendance_policy_id?: number;
+  leave_policy_id?: number;
   shift_assignment?: OnboardingShiftProvisioning;
   timetable_assignment?: OnboardingTimetableProvisioning;
   device_assignment?: OnboardingDeviceProvisioning;
@@ -11269,7 +11274,7 @@ export async function listMyOnboardingRequests(
 export async function acknowledgeOnboardingRequest(
   token: string,
   id: string | number,
-  data: { accepted: boolean; acknowledgement_version: string },
+  data: { accepted: boolean; acknowledgement_version: string; acknowledgement_document_id?: number },
 ) {
   const version = data.acknowledgement_version.trim();
   if (!version) {
@@ -11281,6 +11286,7 @@ export async function acknowledgeOnboardingRequest(
     body: {
       accepted: data.accepted === true,
       acknowledgement_version: version.slice(0, 50),
+      acknowledgement_document_id: data.acknowledgement_document_id,
     },
   });
 }
@@ -16025,7 +16031,7 @@ export async function patchEmployeeStatus(
   };
 
   if (
-    ["resigned", "terminated", "retired", "exited"].includes(normalizedStatus)
+    ["resigned", "terminated", "retired", "deceased", "exited"].includes(normalizedStatus)
   ) {
     const trimmedExitDate =
       typeof data.exit_date === "string" ? data.exit_date.trim() : "";

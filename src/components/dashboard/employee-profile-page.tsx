@@ -4762,7 +4762,7 @@ export function EmployeeProfilePage({
   const currentEmployeeStatus = employee
     ? normalizeEmployeeStatus(employee.employment_status ?? employee.status)
     : "active"
-  const supportsExitDetails = ["resigned", "terminated", "retired", "exited"].includes(
+  const supportsExitDetails = ["resigned", "terminated", "retired", "deceased", "exited"].includes(
     statusForm.employment_status,
   )
   const blocksDirectOnboardingExit =
@@ -5429,7 +5429,7 @@ export function EmployeeProfilePage({
                 onChange={(value) =>
                   setStatusForm((prev) => {
                     const nextStatus = normalizeEmployeeStatus(value)
-                    if (["resigned", "terminated", "retired", "exited"].includes(nextStatus)) {
+                    if (["resigned", "terminated", "retired", "deceased", "exited"].includes(nextStatus)) {
                       return { ...prev, employment_status: nextStatus }
                     }
                     return {

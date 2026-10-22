@@ -624,6 +624,20 @@ export function LeavePolicyEditorSheet({
                                       {assignment.encashment_enabled === "true" ? (
                                         <>
                                           <Field
+                                            label="Salary divisor for encashment"
+                                            hint="Monthly base salary is divided by this value to calculate pay per unused leave day. Set this from your approved HR/Finance rule."
+                                          >
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              step="0.01"
+                                              required
+                                              className={inputClass}
+                                              value={assignment.encashment_rate_divisor}
+                                              onChange={(event) => updateAssignment(index, { encashment_rate_divisor: event.target.value })}
+                                            />
+                                          </Field>
+                                          <Field
                                             label="Max encashment days"
                                             hint="The most unused days an employee can exchange for money at one time."
                                           >

@@ -39,7 +39,7 @@ const john = {
 
 describe("employee directory search", () => {
   it("routes historical statuses to the inactive directory", () => {
-    for (const status of ["inactive", "resigned", "terminated", "retired", "exited"]) {
+    for (const status of ["inactive", "resigned", "terminated", "retired", "deceased", "exited"]) {
       expect(employeeBelongsToDirectory(status, "inactive")).toBe(true)
       expect(employeeBelongsToDirectory(status, "current")).toBe(false)
     }

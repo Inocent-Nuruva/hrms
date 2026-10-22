@@ -6,6 +6,7 @@ export type LeavePolicyTypeAssignment = {
   requires_approval: string
   encashment_enabled: string
   maximum_encashment_days: string
+  encashment_rate_divisor: string
   minimum_balance_after_encashment: string
   encashment_requires_approval: string
   maximum_accumulation_days: string
@@ -189,6 +190,7 @@ export function emptyLeavePolicyTypeAssignment(): LeavePolicyTypeAssignment {
     requires_approval: "true",
     encashment_enabled: "false",
     maximum_encashment_days: "0",
+    encashment_rate_divisor: "",
     minimum_balance_after_encashment: "0",
     encashment_requires_approval: "true",
     maximum_accumulation_days: "0",
@@ -321,6 +323,7 @@ function mapLeaveTypeAssignment(entry: unknown): LeavePolicyTypeAssignment {
       ["maximum_encashment_days", "maximumEncashmentDays", "max_encashment_days"],
       "0",
     ),
+    encashment_rate_divisor: readNumberString(row, ["encashment_rate_divisor", "encashmentRateDivisor"], ""),
     minimum_balance_after_encashment: readNumberString(
       record,
       ["minimum_balance_after_encashment", "minimumBalanceAfterEncashment"],
