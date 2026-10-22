@@ -323,7 +323,7 @@ function mapLeaveTypeAssignment(entry: unknown): LeavePolicyTypeAssignment {
       ["maximum_encashment_days", "maximumEncashmentDays", "max_encashment_days"],
       "0",
     ),
-    encashment_rate_divisor: readNumberString(row, ["encashment_rate_divisor", "encashmentRateDivisor"], ""),
+    encashment_rate_divisor: readNumberString(record, ["encashment_rate_divisor", "encashmentRateDivisor"], ""),
     minimum_balance_after_encashment: readNumberString(
       record,
       ["minimum_balance_after_encashment", "minimumBalanceAfterEncashment"],
