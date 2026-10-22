@@ -1138,6 +1138,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     ],
     mode: "any",
   },
+  "/dashboard/leave-management/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
   "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/leave-management/holidays": {
     permissions: ["holidays:read", "attendance_holidays:read"],
