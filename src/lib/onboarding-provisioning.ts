@@ -40,6 +40,8 @@ export type OnboardingProvisioningDraft = {
   roleIds: number[]
   branchAccessIds: number[]
   attendanceMode: "" | OnboardingAttendanceMode
+  attendancePolicyId: string
+  leavePolicyId: string
   shiftAssignment: OnboardingShiftAssignmentDraft
   timetableAssignment: OnboardingTimetableAssignmentDraft
   deviceAssignment: OnboardingDeviceAssignmentDraft
@@ -107,6 +109,19 @@ export function buildOnboardingProvisioningPayload(
 
   if (draft.attendanceMode) {
     provisioning.attendance_mode = draft.attendanceMode
+  }
+
+  const attendancePolicyId = draft.attendancePolicyId?.trim()
+  if (attendancePolicyId) {
+    const parsed = toOptionalNumber(attendancePolicyId)
+    if (parsed === null) return { error: "Select a valid attendance policy." }
+    provisioning.attendance_policy_id = parsed!
+  }
+  const leavePolicyId = draft.leavePolicyId?.trim()
+  if (leavePolicyId) {
+    const parsed = toOptionalNumber(leavePolicyId)
+    if (parsed === null) return { error: "Select a valid leave policy." }
+    provisioning.leave_policy_id = parsed!
   }
 
   if (draft.attendanceMode === "shift") {

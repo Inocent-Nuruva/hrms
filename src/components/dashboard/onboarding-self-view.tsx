@@ -87,6 +87,7 @@ export function OnboardingSelfView() {
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState("")
   const [ackNote, setAckNote] = React.useState("I have read and accept the onboarding terms.")
+  const [ackDocumentId, setAckDocumentId] = React.useState("")
   const [documentType, setDocumentType] = React.useState("other")
   const fileRef = React.useRef<HTMLInputElement>(null)
 
@@ -126,6 +127,8 @@ export function OnboardingSelfView() {
       )
       setTasks(taskResult.status === "fulfilled" ? taskResult.value : asRecordArray(request?.tasks ?? request?.items))
       setDocuments(documentResult.status === "fulfilled" ? documentResult.value : asRecordArray(request?.documents))
+      const availableAckDocs = (documentResult.status === "fulfilled" ? documentResult.value : asRecordArray(request?.documents)).filter((doc) => doc.is_verified === true && readString(doc, ["review_status"]).toLowerCase() === "approved")
+      setAckDocumentId((current) => availableAckDocs.some((doc) => String(readNumber(doc, ["id"])) === current) ? current : String(readNumber(availableAckDocs[0] ?? {}, ["id"]) ?? ""))
       setContracts(contractResult.status === "fulfilled" ? contractResult.value : [])
     } catch (errorObject) {
       if (leaveIfForbidden(errorObject)) return
@@ -198,9 +201,15 @@ export function OnboardingSelfView() {
     if (!access || !id) return
     setBusy("ack")
     try {
+      const requiredVersion = readString(selected, ["acknowledgement_required_version"], "").trim()
+      const pickedDocument = documents.find((doc) => String(readNumber(doc, ["id"])) === ackDocumentId)
+      const version = requiredVersion || readString(pickedDocument ?? {}, ["version", "updated_at"], "").slice(0, 50)
+      if (!version) throw new Error("The acknowledgement version is not configured. Contact HR.")
+      if (!requiredVersion && !pickedDocument) throw new Error("Select an approved acknowledgement document first.")
       const result = await acknowledgeOnboardingRequest(access, id, {
         accepted: true,
-        acknowledgement_version: "1.0",
+        acknowledgement_version: version,
+        acknowledgement_document_id: requiredVersion ? undefined : Number(ackDocumentId),
       })
       toast.success(onboardingActionMessage(result, "Onboarding acknowledged."))
       await load()
@@ -623,6 +632,18 @@ export function OnboardingSelfView() {
               {needsAck(selected) ? (
                 <div className="w-full space-y-3 overflow-hidden rounded-xl border border-border bg-card px-4 py-4">
                   <h2 className="text-sm font-semibold">Acknowledge</h2>
+                  {readString(selected, ["acknowledgement_required_version"]).trim() ? (
+                    <p className="text-xs text-muted-foreground">You are acknowledging version {readString(selected, ["acknowledgement_required_version"])}</p>
+                  ) : (
+                    <label className="grid gap-1 text-xs font-medium">
+                      Acknowledgement document version
+                      <select className="h-9 rounded border border-border bg-background px-2 text-sm" value={ackDocumentId} onChange={(event) => setAckDocumentId(event.target.value)}>
+                        <option value="">Select an approved document</option>
+                        {documents.filter((doc) => doc.is_verified === true && readString(doc, ["review_status"]).toLowerCase() === "approved").map((doc) => <option key={String(readNumber(doc, ["id"]))} value={String(readNumber(doc, ["id"]))}>{readString(doc, ["title"], "Acknowledgement document")} · {readString(doc, ["version", "updated_at"], "version unavailable")}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  {ackDocumentId ? <p className="text-xs text-muted-foreground">Selected document ID {ackDocumentId}; its exact stored version and hash will be recorded with your acknowledgement.</p> : null}
                   <Textarea
                     className={textareaClass}
                     value={ackNote}
@@ -632,7 +653,7 @@ export function OnboardingSelfView() {
                   <button
                     type="button"
                     className={primaryButtonClass}
-                    disabled={busy === "ack" || !ackNote.trim()}
+                    disabled={busy === "ack" || !ackNote.trim() || (!readString(selected, ["acknowledgement_required_version"]).trim() && !ackDocumentId)}
                     onClick={() => void acknowledge()}
                   >
                     {busy === "ack" ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}I accept
