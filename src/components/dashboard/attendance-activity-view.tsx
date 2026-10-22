@@ -48,6 +48,7 @@ import {
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
 import {
   cancelMyAttendanceCorrectionRequest,
+  addMyAttendanceCorrectionDocument,
   clearAttendanceDailySummaryAdjustment,
   createMyAttendanceCorrectionRequest,
   downloadAttendanceReport,
@@ -66,6 +67,7 @@ import {
   listMyAttendanceHistory,
   runPendingAttendanceProcessingJobs,
   submitMyAttendanceCorrectionRequest,
+  fileToBase64UploadDto,
   updateAttendanceProcessingException,
   upsertAttendanceDailySummaryAdjustment,
   type AdminRecord,
@@ -2861,6 +2863,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
   const [correctionRequests, setCorrectionRequests] = React.useState<AdminRecord[]>([])
   const [correctionDialogOpen, setCorrectionDialogOpen] = React.useState(false)
   const [correctionBusy, setCorrectionBusy] = React.useState(false)
+  const [correctionEvidenceFile, setCorrectionEvidenceFile] = React.useState<File | null>(null)
   const [correctionSaveMode, setCorrectionSaveMode] = React.useState<"draft" | "submit" | null>(null)
   const [pendingCorrectionAction, setPendingCorrectionAction] = React.useState<{
     id: string | number
@@ -3681,8 +3684,8 @@ export function AttendanceActivityView({ section }: { section: string }) {
       return
     }
 
-    if (!correctionForm.attendance_date.trim() || !correctionForm.reason.trim()) {
-      setError("Attendance date and reason are required.")
+    if (!correctionForm.attendance_date.trim()) {
+      setError("Attendance date is required.")
       return
     }
 
@@ -3704,7 +3707,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
           correctionForm.requested_check_out_at
         ),
         requested_status: correctionForm.requested_status,
-        reason: correctionForm.reason.trim(),
+        reason: correctionForm.reason.trim() || undefined,
       })
       const createdRecord = asRecordValue(createdRequest)
       const createdRequestId = readNumberFromRow(createdRecord ?? {}, ["id", "request_id"])
@@ -3714,6 +3717,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       let submittedRequest = createdRequest
       let wasSubmitted = !["", "-", "draft"].includes(createdStatus)
+      if (correctionEvidenceFile && createdRequestId !== null) {
+        const file = await fileToBase64UploadDto(correctionEvidenceFile)
+        await addMyAttendanceCorrectionDocument(token, createdRequestId, file)
+      }
       if (mode === "submit" && !wasSubmitted) {
         if (createdRequestId === null) {
           throw new Error("The request was saved as a draft, but its id was not returned so it could not be submitted.")
@@ -3747,6 +3754,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
         requested_status: "PRESENT",
         reason: "",
       })
+      setCorrectionEvidenceFile(null)
       await fetchSectionData(true)
     } catch (errorObject) {
       setError(
@@ -5577,8 +5585,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 className="min-h-28 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 value={correctionForm.reason}
                 onChange={(event) => setCorrectionForm((current) => ({ ...current, reason: event.target.value }))}
-                placeholder="Explain what should be corrected."
+                placeholder="Explain what should be corrected if a reason is required by your attendance policy."
               />
+            </label>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Supporting evidence</span>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
+                disabled={correctionBusy}
+                onChange={(event) => setCorrectionEvidenceFile(event.target.files?.[0] ?? null)}
+                className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5"
+              />
+              <span className="text-xs text-muted-foreground">
+                {correctionEvidenceFile
+                  ? `${correctionEvidenceFile.name} selected`
+                  : "Attach a document if your attendance policy requires supporting evidence. Maximum 10 MB."}
+              </span>
             </label>
           </div>
           <DialogFooter className="sticky bottom-0 z-10 mt-auto border-t border-border bg-background py-3">

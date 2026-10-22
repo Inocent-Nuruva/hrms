@@ -141,6 +141,8 @@ type FieldConfig = {
   readOnlyOnEdit?: boolean
   /** Pre-filled create value (string form state). */
   defaultValue?: string
+  /** Send null when the input is blank, clearing an optional policy limit. */
+  nullable?: boolean
 }
 
 /** Full attendance policy schema → POST/PATCH /api/attendance/config/policies */
@@ -227,6 +229,44 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
+  },
+  {
+    key: "regularization_backdate_days",
+    label: "Regularization Backdate Limit (Days)",
+    description: "Maximum age of an attendance date employees may regularize. Leave blank for no configured limit.",
+    type: "number",
+    nullable: true,
+    placeholder: "No limit",
+  },
+  {
+    key: "regularization_monthly_request_limit",
+    label: "Monthly Regularization Request Limit",
+    description: "Maximum submitted requests for attendance dates in the same calendar month. Cancelled submissions still count. Leave blank for no configured limit.",
+    type: "number",
+    nullable: true,
+    placeholder: "No limit",
+  },
+  {
+    key: "regularization_reason_required",
+    label: "Require a Reason for Regularization",
+    description: "Require a non-empty reason before an attendance correction can be submitted.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "regularization_evidence_required",
+    label: "Require Supporting Evidence for Regularization",
+    description: "Require at least one private supporting document before an attendance correction can be submitted.",
+    type: "boolean",
+    defaultValue: "false",
+  },
+  {
+    key: "regularization_eligible_statuses",
+    label: "Eligible Attendance Statuses (JSON)",
+    description: "Optional JSON array of current attendance statuses allowed for correction. Use null to leave eligibility unrestricted; include NO_SUMMARY to allow dates without a daily summary.",
+    type: "json",
+    nullable: true,
+    placeholder: '["ABSENT", "MISSING_CHECK_IN", "NO_SUMMARY"]',
   },
   {
     key: "rounding_mode",
@@ -1261,6 +1301,11 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
   for (const field of fields) {
     const raw = values[field.key]
     const trimmed = raw.trim()
+
+    if (!trimmed && field.nullable) {
+      payload[field.key] = null
+      continue
+    }
 
     if (field.required && !trimmed) {
       throw new Error(`${field.label} is required.`)

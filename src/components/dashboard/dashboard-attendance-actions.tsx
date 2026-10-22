@@ -20,8 +20,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 import {
-  createAttendanceMobilePunchCheckIn,
-  createAttendanceMobilePunchCheckOut,
+  createMyAttendanceCheckIn,
+  createMyAttendanceCheckOut,
   getCurrentEmployee,
   getMyAttendanceMobilePunchPolicy,
   getEmployeeDashboard,
@@ -458,14 +458,12 @@ export function NetworkCheckButton({
 }
 
 export function AttendancePunchActions({
-  employeeId,
   canCheckIn,
   canCheckOut,
   onAttendanceChanged,
   className,
   compact = false,
 }: {
-  employeeId: number
   canCheckIn: boolean
   canCheckOut: boolean
   onAttendanceChanged?: () => Promise<void>
@@ -524,7 +522,6 @@ export function AttendancePunchActions({
         const connection = getBrowserConnection()
         const payload: AdminRecord = {
           clientRequestId: crypto.randomUUID(),
-          employeeId,
           latitude: locationResult.location.latitude,
           longitude: locationResult.location.longitude,
           accuracyMeters: locationResult.location.accuracy,
@@ -540,9 +537,9 @@ export function AttendancePunchActions({
         }
 
         if (action === "in") {
-          await createAttendanceMobilePunchCheckIn(token, payload)
+          await createMyAttendanceCheckIn(token, payload)
         } else {
-          await createAttendanceMobilePunchCheckOut(token, payload)
+          await createMyAttendanceCheckOut(token, payload)
         }
 
         setMessage({
@@ -565,7 +562,7 @@ export function AttendancePunchActions({
         setBusyAction(null)
       }
     },
-    [employeeId, exceptionReason, onAttendanceChanged, punchPolicy, selfieFile],
+    [exceptionReason, onAttendanceChanged, punchPolicy, selfieFile],
   )
 
   return (
@@ -742,7 +739,6 @@ export function DashboardAttendanceQuickActions() {
         <span className="mt-0.5 text-[9px] tabular-nums text-muted-foreground">{statusDetail}</span>
       </div>
       <AttendancePunchActions
-        employeeId={state.employeeId}
         canCheckIn={state.canCheckIn}
         canCheckOut={state.canCheckOut}
         onAttendanceChanged={loadAttendance}

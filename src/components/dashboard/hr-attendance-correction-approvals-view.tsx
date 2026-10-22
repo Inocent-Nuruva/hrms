@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select"
 import {
   approveHrAttendanceCorrectionRequest,
+  downloadHrAttendanceCorrectionEvidence,
   getEmployeeById,
   getHrAttendanceCorrectionApprovalRequest,
   listHrAttendanceCorrectionApprovalRequests,
@@ -872,6 +873,29 @@ export function HrAttendanceCorrectionApprovalsView() {
     highlightedRequestIdRef.current = highlightedRequestId
   }, [highlightedRequestId])
 
+  const downloadCorrectionEvidence = React.useCallback(async (
+    requestId: string,
+    evidence: AdminRecord,
+  ) => {
+    const token = readStoredToken()
+    const documentId = evidence.id
+    if (!token || (typeof documentId !== "number" && typeof documentId !== "string")) {
+      showErrorAlert("Evidence download is unavailable for this request.")
+      return
+    }
+    try {
+      const downloaded = await downloadHrAttendanceCorrectionEvidence(token, requestId, documentId)
+      const url = URL.createObjectURL(downloaded.blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = downloaded.filename
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (errorObject) {
+      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Could not download evidence.")
+    }
+  }, [])
+
   const loadRequests = React.useCallback(async () => {
     const token = readStoredToken()
     if (!token) {
@@ -1290,6 +1314,30 @@ export function HrAttendanceCorrectionApprovalsView() {
                   <p className="mt-0.5 line-clamp-3 text-xs leading-snug text-muted-foreground">
                     {readString(activeRequest, ["reason"], "No reason supplied")}
                   </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-foreground">Supporting evidence</p>
+                  {Array.isArray(activeRequest.evidence) && activeRequest.evidence.length > 0 ? (
+                    <div className="space-y-1">
+                      {activeRequest.evidence.map((item, index) => {
+                        const evidence = asRecord(item)
+                        if (!evidence) return null
+                        return (
+                          <button
+                            key={String(evidence.id ?? index)}
+                            type="button"
+                            className="block w-full truncate rounded-md border border-border px-2.5 py-2 text-left text-xs text-primary hover:bg-muted"
+                            onClick={() => void downloadCorrectionEvidence(getRequestId(activeRequest), evidence)}
+                          >
+                            {readString(evidence, ["file_name"], "Download evidence")}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-dashed border-border px-2.5 py-2 text-xs text-muted-foreground">No evidence attached.</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5">
