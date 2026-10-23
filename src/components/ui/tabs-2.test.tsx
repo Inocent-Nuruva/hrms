@@ -30,9 +30,11 @@ describe("employee workspace navigation", () => {
     await act(async () => root.render(<Tabs2 groups={employeeSectionTabGroups} currentPath="/dashboard/employees/all" showGroupNavigation />))
     const joining = [...container.querySelectorAll("nav button")].find((button) => button.textContent === "Joining & onboarding") as HTMLButtonElement
     expect(joining).toBeDefined()
+    expect(joining.hasAttribute("data-hrms-button-tone")).toBe(false)
     await act(async () => joining.click())
     expect(push).toHaveBeenCalledWith("/dashboard/employees/invite")
     await act(async () => root.render(<Tabs2 groups={employeeSectionTabGroups} currentPath="/dashboard/employees/invite" showGroupNavigation />))
+    expect(joining.getAttribute("data-hrms-button-tone")).toBe("brand")
     const tabs = [...container.querySelectorAll('[role="tab"]')]
     expect(tabs).toHaveLength(4)
     for (const [index, label] of ["Invite", "Registration", "Onboarding", "Contracts"].entries()) {

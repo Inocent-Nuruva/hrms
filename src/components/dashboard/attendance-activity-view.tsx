@@ -14,24 +14,29 @@ import {
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
+  Add20Regular,
   ArrowReset20Regular,
   ArrowSync20Regular,
+  Building20Regular,
+  Calendar20Regular,
+  CheckmarkCircle16Regular,
+  ChevronDown20Regular,
+  ClockAlarm20Regular,
+  Code20Regular,
+  Desktop20Regular,
+  DismissCircle16Regular,
+  Edit20Regular,
   Filter20Regular,
+  PersonQuestionMark20Regular,
+  Warning20Regular,
 } from "@fluentui/react-icons"
 import {
   AnimatePresence,
   motion,
   useReducedMotion,
 } from "framer-motion"
-import {
-  AlarmClockCheckIcon,
-  AlertTriangle,
-  CalendarDays,
-  PlusIcon,
-  TimerResetIcon,
-} from "lucide-react"
-
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { useAuth } from "@/hooks/useAuth"
 import { ResizableTable } from "@/components/ui/resizable-table"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { TimeClockPicker } from "@/components/ui/time-clock-picker"
@@ -60,6 +65,7 @@ import {
   listMyAttendanceCorrectionRequests,
   refreshAttendanceDailySummaries,
   listAttendanceDailySummariesPage,
+  listAttendanceDevices,
   listAttendanceProcessingJobs,
   listAttendanceUnmatchedLogs,
   listBranches,
@@ -823,7 +829,7 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
   return (
     <div className="space-y-3">
       <motion.div
-        className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto"
+        className="grid w-full grid-cols-2 items-stretch sm:grid-cols-4"
         initial={animate ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
@@ -836,9 +842,10 @@ function TodayOverview({ record }: { record: AdminRecord | null }) {
             <div
               key={chip.key}
               className={cn(
-                "flex min-w-[5.25rem] shrink-0 flex-col justify-center px-3 py-2",
+                "flex min-w-0 flex-col justify-center px-3 py-2",
                 chipTone.chip,
-                index < arr.length - 1 ? "border-r border-border/60" : null
+                index < arr.length - 1 ? "border-r border-border/60" : null,
+                index < 2 ? "border-b border-border/60 sm:border-b-0" : null
               )}
             >
               <span className="truncate text-[10px] font-semibold uppercase tracking-wide opacity-80">
@@ -1400,9 +1407,14 @@ function filterDailySummaryDisplayRows(
   )
 }
 
-function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[], employees: AdminRecord[]) {
+function enrichRowsWithReadableNames(
+  rows: AdminRecord[],
+  branches: AdminRecord[],
+  employees: AdminRecord[]
+) {
   const branchNameById = new Map<number, string>()
   const employeeNameById = new Map<number, string>()
+  const employeeNameByNumber = new Map<string, string>()
 
   branches.forEach((branch) => {
     const id = readNumberFromRow(branch, ["id", "branch_id"])
@@ -1430,6 +1442,9 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
     if (displayName && employeeId !== null) {
       employeeNameById.set(employeeId, displayName)
     }
+    if (displayName && employeeNo) {
+      employeeNameByNumber.set(employeeNo.trim().toLowerCase(), displayName)
+    }
   })
 
   return rows.map((row) => {
@@ -1446,6 +1461,16 @@ function enrichRowsWithReadableNames(rows: AdminRecord[], branches: AdminRecord[
 
     if (!readStringFromRow(next, ["employee_name", "employeeName"]) && employeeId !== null) {
       const employeeName = employeeNameById.get(employeeId)
+      if (employeeName) {
+        next.employee_name = employeeName
+      }
+    }
+
+    if (!readStringFromRow(next, ["employee_name", "employeeName"])) {
+      const employeeNo = readStringFromRow(row, ATTENDANCE_EMPLOYEE_NO_KEYS)
+      const employeeName = employeeNo
+        ? employeeNameByNumber.get(employeeNo.trim().toLowerCase())
+        : undefined
       if (employeeName) {
         next.employee_name = employeeName
       }
@@ -1587,6 +1612,28 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
           "expected_work",
           "is_off_day",
         ]
+      : section === "recalculation-jobs"
+      ? [
+          "id",
+          "status",
+          "attempts",
+          "companyName",
+          "createdAt",
+          "dateFrom",
+          "dateTo",
+          "employee_name",
+        ]
+      : section === "unmatched-logs"
+      ? [
+          "id",
+          "attendanceDate",
+          "branch_name",
+          "companyName",
+          "createdAt",
+          "device_name",
+          "direction",
+          "employee_name",
+        ]
       : [
           "id",
           "employee_name",
@@ -1629,6 +1676,9 @@ function resolveVisibleColumns(rows: AdminRecord[], section: AttendanceActivityS
       return false
     }
     if (key === "employee_id" && keySet.has("employee_name")) {
+      return false
+    }
+    if ((key === "company_id" || key === "companyId") && keySet.has("companyName")) {
       return false
     }
     return true
@@ -2075,7 +2125,7 @@ function DailySummaryDetailsContent({
 
   return (
     <motion.div
-      className="max-h-[68vh] space-y-5 overflow-auto pr-1"
+      className="space-y-4 pr-1"
       variants={motionPreset.container}
       initial="hidden"
       animate="show"
@@ -2101,7 +2151,7 @@ function DailySummaryDetailsContent({
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <CalendarDays className="size-3.5" />
+              <Calendar20Regular className="size-4" />
               {formatPrettyDate(readFirstValue(details, ["attendance_date"]))}
             </span>
             {contextItems.map((item) => (
@@ -2113,19 +2163,19 @@ function DailySummaryDetailsContent({
           </div>
         </div>
         <motion.div
-          className="inline-flex items-center gap-2 text-sm font-semibold"
+          className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold", statusUi.badge)}
           initial={motionPreset.reduce ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 420, damping: 22 }}
         >
           <span className={cn("size-1.5 rounded-full", statusUi.accent)} />
-          <span className={statusUi.accent.replace("bg-", "text-")}>{statusValue}</span>
+          <span>{statusValue}</span>
         </motion.div>
       </motion.div>
 
       <motion.div
         variants={motionPreset.item}
-        className="overflow-hidden rounded-2xl border border-border/80 bg-muted/20"
+        className="overflow-hidden rounded-xl border border-border/80 bg-muted/20"
       >
         <div className="flex flex-wrap items-end justify-between gap-3 px-4 pt-4">
           <div>
@@ -2139,7 +2189,7 @@ function DailySummaryDetailsContent({
           </div>
           {needsReview ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="size-3.5" />
+              <Warning20Regular className="size-4" />
               Manual review
             </span>
           ) : null}
@@ -2291,12 +2341,14 @@ function DailySummaryDetailsContent({
               <span
                 key={flag.label}
                 className={cn(
-                  "text-xs font-medium",
-                  flag.on ? "text-foreground" : "text-muted-foreground",
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium",
+                  flag.on
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "bg-muted text-muted-foreground",
                 )}
               >
-                {flag.label}
-                <span className="ml-1 text-muted-foreground">{flag.on ? "yes" : "no"}</span>
+                {flag.on ? <CheckmarkCircle16Regular /> : <DismissCircle16Regular />}
+                <span>{flag.label}: {flag.on ? "Yes" : "No"}</span>
               </span>
             ))}
           </div>
@@ -2334,9 +2386,225 @@ function DailySummaryDetailsContent({
   )
 }
 
+function UnmatchedLogDetailsContent({
+  row,
+  detailsError,
+}: {
+  row: AdminRecord | null
+  detailsError: string | null
+}) {
+  const [technicalOpen, setTechnicalOpen] = React.useState(false)
+
+  if (!row) {
+    return <p className="text-sm text-muted-foreground">No unmatched log details are available.</p>
+  }
+
+  const humanizeCode = (value: string) => value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+  const employeeName = readFirstValue(row, ["employee_name", "employeeName"]) ?? "Unmatched employee"
+  const employeeNo = readFirstValue(row, ATTENDANCE_EMPLOYEE_NO_KEYS) ?? "Not provided"
+  const companyName = readFirstValue(row, ["companyName", "company_name"]) ?? "Company unavailable"
+  const branchName = readFirstValue(row, ["branch_name", "branchName"]) ?? "Branch unavailable"
+  const deviceName = readFirstValue(row, ["device_name", "deviceName"]) ?? "Device unavailable"
+  const attendanceDate = readFirstValue(row, ["attendance_date", "attendanceDate"])
+  const receivedAt = readFirstValue(row, ["received_at", "receivedAt", "created_at", "createdAt"])
+  const status = humanizeCode(readFirstValue(row, ["processing_status", "processingStatus", "status"]) ?? "Unmatched")
+  const reason = humanizeCode(readFirstValue(row, ["processing_reason", "processingReason", "reason"]) ?? "Identity not found")
+  const direction = humanizeCode(readFirstValue(row, ["direction"]) ?? "Not determined")
+  const processingVersion = readFirstValue(row, ["processing_version", "processingVersion"])
+  const payloadHash = readFirstValue(row, ["payload_hash", "payloadHash"])
+  const payloadValue = ["raw_payload_snapshot", "rawPayloadSnapshot", "raw_payload", "rawPayload", "payload"]
+    .map((key) => row[key])
+    .find((value) => value !== null && value !== undefined)
+  let payloadRecord: AdminRecord | null = null
+  let payloadFallback = "Payload not available."
+  if (typeof payloadValue === "string" && payloadValue.trim()) {
+    try {
+      const parsedPayload = JSON.parse(payloadValue)
+      if (parsedPayload && typeof parsedPayload === "object" && !Array.isArray(parsedPayload)) {
+        payloadRecord = parsedPayload as AdminRecord
+      } else {
+        payloadFallback = String(parsedPayload)
+      }
+    } catch {
+      payloadFallback = payloadValue
+    }
+  } else if (payloadValue && typeof payloadValue === "object") {
+    payloadRecord = payloadValue as AdminRecord
+  }
+
+  const payloadLabelOverrides: Record<string, string> = {
+    time: "Event time",
+    employeeNoString: "Employee number",
+    serialNo: "Device serial number",
+    userType: "User type",
+    doorNo: "Door number",
+    cardReaderNo: "Card reader number",
+    cardNo: "Card number",
+    MACAddr: "MAC address",
+    RS485No: "RS-485 number",
+    remoteHostAddr: "Remote host",
+    attendanceStatus: "Attendance status",
+    verifyNo: "Verification number",
+    deviceNo: "Device number",
+    major: "Major event code",
+    minor: "Minor event code",
+    type: "Event type",
+  }
+  const payloadPriority = [
+    "time",
+    "employeeNoString",
+    "serialNo",
+    "userType",
+    "attendanceStatus",
+    "doorNo",
+    "cardReaderNo",
+    "remoteHostAddr",
+    "type",
+    "major",
+    "minor",
+  ]
+  const formatPayloadLabel = (key: string) => payloadLabelOverrides[key] ?? key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  const formatPayloadValue = (key: string, value: unknown) => {
+    if (key === "time" && typeof value === "string") {
+      return formatPrettyDateTime(value)
+    }
+    if (typeof value === "boolean") return value ? "Yes" : "No"
+    if (value && typeof value === "object") return JSON.stringify(value)
+    if (value === "") return "Not provided"
+    return String(value)
+  }
+  const payloadEntries = payloadRecord
+    ? Object.entries(payloadRecord)
+        .sort(([firstKey], [secondKey]) => {
+          const firstPriority = payloadPriority.indexOf(firstKey)
+          const secondPriority = payloadPriority.indexOf(secondKey)
+          if (firstPriority === -1 && secondPriority === -1) return firstKey.localeCompare(secondKey)
+          if (firstPriority === -1) return 1
+          if (secondPriority === -1) return -1
+          return firstPriority - secondPriority
+        })
+        .map(([key, value]) => ({
+          key,
+          label: formatPayloadLabel(key),
+          value: formatPayloadValue(key, value),
+        }))
+    : []
+
+  const overviewItems = [
+    { label: "Company", value: companyName, icon: <Building20Regular /> },
+    { label: "Branch", value: branchName, icon: <Building20Regular /> },
+    { label: "Device", value: deviceName, icon: <Desktop20Regular /> },
+    { label: "Attendance date", value: formatPrettyDate(attendanceDate), icon: <Calendar20Regular /> },
+    { label: "Received", value: formatPrettyDateTime(receivedAt), icon: <ClockAlarm20Regular /> },
+    { label: "Direction", value: direction, icon: <ArrowSync20Regular /> },
+  ]
+
+  return (
+    <div className="space-y-5 pr-1">
+      {detailsError ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Showing the latest available details. {detailsError}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300">
+            <PersonQuestionMark20Regular />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-foreground">{employeeName}</h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">Employee number {employeeNo}</p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <Warning20Regular />
+          {status}
+        </span>
+      </div>
+
+      <section>
+        <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Log context</h4>
+        <div className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          {overviewItems.map((item) => (
+            <div key={item.label} className="flex min-w-0 items-start gap-2.5">
+              <span className="mt-0.5 text-primary">{item.icon}</span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+                <p className="mt-0.5 break-words text-sm font-medium text-foreground">{item.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-y border-border/70 py-4">
+        <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Processing result</h4>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Status</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{status}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Reason</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{reason}</p>
+          </div>
+        </div>
+      </section>
+
+      <div className="rounded-lg border border-border/70 bg-muted/20">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-foreground"
+          aria-expanded={technicalOpen}
+          onClick={() => setTechnicalOpen((current) => !current)}
+        >
+          <Code20Regular />
+          Technical payload
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {technicalOpen ? "Hide event details" : "Show event details"}
+          </span>
+          <ChevronDown20Regular className={cn("transition-transform", technicalOpen && "rotate-180")} />
+        </button>
+        {technicalOpen ? <div className="border-t border-border/70 p-4">
+          {payloadEntries.length > 0 ? (
+            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              {payloadEntries.map((item) => (
+                <div key={item.key} className="min-w-0">
+                  <dt className="text-xs font-medium text-muted-foreground">{item.label}</dt>
+                  <dd className="mt-1 break-words text-sm font-medium text-foreground">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-sm text-muted-foreground">{payloadFallback}</p>
+          )}
+          {payloadHash || processingVersion ? (
+            <dl className="mt-5 grid gap-4 border-t border-border/70 pt-4 text-xs sm:grid-cols-2">
+              {processingVersion ? <div><dt className="font-medium text-muted-foreground">Processing version</dt><dd className="mt-1 text-sm font-medium text-foreground">{processingVersion}</dd></div> : null}
+              {payloadHash ? <div><dt className="font-medium text-muted-foreground">Payload reference</dt><dd className="mt-1 break-all font-mono text-[11px] text-foreground">{payloadHash}</dd></div> : null}
+            </dl>
+          ) : null}
+        </div> : null}
+      </div>
+    </div>
+  )
+}
+
 function resolveTableCellValue(section: AttendanceActivitySectionKey, column: string, row: AdminRecord): React.ReactNode {
   if (section === "daily-summaries") {
     return resolveDailySummaryCellValue(column, row)
+  }
+  if (section === "recalculation-jobs" && column === "employee_name") {
+    const employeeName = readStringFromRow(row, ["employee_name", "employeeName"])
+    return employeeName && employeeName !== "—" ? employeeName : "All employees"
   }
   if (section === "processing-exceptions") {
     if (column === "exception_type") {
@@ -2351,13 +2619,27 @@ function resolveTableCellValue(section: AttendanceActivitySectionKey, column: st
       return <span className={`text-xs font-medium ${textClass}`}>{String(status)}</span>
     }
     if (column === "employee_name") {
-      return readEmployeeIdentityLabel(row)
+      const employeeName = String(
+        readFirstValue(row, ["employee_name", "employeeName", "full_name", "fullName"]) ?? ""
+      ).trim()
+      const employeeNo = String(readFirstValue(row, ATTENDANCE_EMPLOYEE_NO_KEYS) ?? "").trim()
+      if (!employeeName || employeeName === employeeNo) {
+        return <span className="text-muted-foreground">Unmatched employee</span>
+      }
+      return employeeNo && employeeName.endsWith(` (${employeeNo})`)
+        ? employeeName.slice(0, -employeeNo.length - 3)
+        : employeeName
     }
     if (column === "attendance_date") {
       return readFirstValue(row, ["attendance_date", "attendanceDate", "date"]) ?? "—"
     }
     if (column === "device_name" || column === "device_id") {
-      return readDeviceIdentityLabel(row)
+      const deviceName = readFirstValue(row, ["device_name", "deviceName", "terminal_name", "terminalName"])
+      return deviceName ? String(deviceName) : <span className="text-muted-foreground">Unknown device</span>
+    }
+    if (column === "created_at") {
+      const createdAt = readFirstValue(row, ["created_at", "createdAt"])
+      return createdAt ? formatPrettyDateTime(createdAt) : "—"
     }
     return stringifyValue(row[column]) || "—"
   }
@@ -2591,6 +2873,7 @@ function TableBlock({
         showExport={false}
         toolbarStart={toolbarStart}
         toolbarActions={toolbarActions}
+        sortIconOnly={section === "unmatched-logs"}
         storageKey="attendance-activity"
         page={page}
         totalPages={totalPages}
@@ -2759,6 +3042,7 @@ function buildDailySummaryAdjustmentPayload(form: DailySummaryAdjustmentFormStat
 }
 
 export function AttendanceActivityView({ section }: { section: string }) {
+  const { user } = useAuth()
   const activeSection = React.useMemo(() => resolveSection(section), [section])
   const config = React.useMemo(() => SECTION_CONFIG[activeSection], [activeSection])
   const lastFetchKeyRef = React.useRef<string | null>(null)
@@ -3031,7 +3315,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
     const loadDailySummarySupportData = async () => {
       try {
-        const [branchesResult, employeesResult] = await Promise.all([
+        const [branchesResult, employeesResult] = await Promise.allSettled([
           listBranches(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
           listEmployees(token, { page: 1, limit: 200, sortBy: "created_at", sortOrder: "DESC" }),
         ])
@@ -3040,8 +3324,12 @@ export function AttendanceActivityView({ section }: { section: string }) {
           return
         }
 
-        setBranches(branchesResult.rows)
-        setEmployees(employeesResult.rows)
+        if (branchesResult.status === "fulfilled") {
+          setBranches(branchesResult.value.rows)
+        }
+        if (employeesResult.status === "fulfilled") {
+          setEmployees(employeesResult.value.rows)
+        }
       } catch {
         if (!isActive) {
           return
@@ -3289,10 +3577,39 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       if (activeSection === "recalculation-jobs") {
         const result = await listAttendanceProcessingJobs(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        let employeeDirectory = employeesRef.current
+        if (!employeeDirectory.length) {
+          try {
+            const employeeResult = await listEmployees(token, {
+              page: 1,
+              limit: 200,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+            employeeDirectory = employeeResult.rows
+            setEmployees(employeeDirectory)
+          } catch {
+            employeeDirectory = []
+          }
+        }
+        const companyRows = enrichRowsWithReadableNames(result.rows, [], employeeDirectory).map((row) => {
+          const employeeId = readNumberFromRow(row, ["employee_id", "employeeId"])
+          const employeeName = readStringFromRow(row, ["employee_name", "employeeName"])
+          return {
+            ...row,
+            companyName:
+              readStringFromRow(row, ["companyName", "company_name"]) ||
+              user?.companyName ||
+              "Company",
+            employee_name:
+              (employeeName && employeeName !== "—" ? employeeName : null) ||
+              (employeeId === null ? "All employees" : "Employee unavailable"),
+          }
+        })
         setDailySummaryRows([])
         setDailySummaryTotal(null)
         setDailySummaryTotalPages(null)
-        setRows(result.rows)
+        setRows(companyRows)
         setSingleRecord(null)
         setCorrectionRequests([])
         return
@@ -3354,11 +3671,123 @@ export function AttendanceActivityView({ section }: { section: string }) {
       }
 
       if (activeSection === "unmatched-logs") {
-        const result = await listAttendanceUnmatchedLogs(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" })
+        const result = await listAttendanceUnmatchedLogs(token, {
+          page: 1,
+          limit: 100,
+          sortBy: "created_at",
+          sortOrder: "DESC",
+        })
+        let deviceDirectory: AdminRecord[] = []
+        try {
+          const devicesResult = await listAttendanceDevices(token, {
+            page: 1,
+            limit: 200,
+            sortBy: "created_at",
+            sortOrder: "DESC",
+          })
+          deviceDirectory = devicesResult.rows
+        } catch {
+          deviceDirectory = []
+        }
+        let branchDirectory = branchesRef.current
+        if (!branchDirectory.length) {
+          try {
+            const branchesResult = await listBranches(token, {
+              page: 1,
+              limit: 200,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+            branchDirectory = branchesResult.rows
+            setBranches(branchDirectory)
+          } catch {
+            branchDirectory = []
+          }
+        }
+        let employeeDirectory = employeesRef.current
+        if (!employeeDirectory.length) {
+          try {
+            const employeesResult = await listEmployees(token, {
+              page: 1,
+              limit: 200,
+              sortBy: "created_at",
+              sortOrder: "DESC",
+            })
+            employeeDirectory = employeesResult.rows
+            setEmployees(employeeDirectory)
+          } catch {
+            employeeDirectory = []
+          }
+        }
+        const branchNameById = new Map(
+          branchDirectory.flatMap((branch) => {
+            const id = readNumberFromRow(branch, ["id", "branch_id", "branchId"])
+            const name = readStringFromRow(branch, ["name", "branch_name", "branchName"])
+            return id !== null && name ? [[id, name] as const] : []
+          })
+        )
+        const deviceNameById = new Map(
+          deviceDirectory.flatMap((device) => {
+            const id = readNumberFromRow(device, ["id", "device_id", "deviceId", "attendance_device_id"])
+            const name = readStringFromRow(device, ["device_name", "deviceName", "name", "device_code"])
+            return id !== null && name ? [[id, name] as const] : []
+          })
+        )
+        const employeeNameByNumber = new Map(
+          employeeDirectory.flatMap((employee) => {
+            const employeeNo = readStringFromRow(employee, ATTENDANCE_EMPLOYEE_NO_KEYS)
+            const employeeName =
+              readStringFromRow(employee, ATTENDANCE_EMPLOYEE_NAME_KEYS) ||
+              [
+                readStringFromRow(employee, ["preferred_name", "preferredName", "first_name", "firstName"]),
+                readStringFromRow(employee, ["middle_name", "middleName"]),
+                readStringFromRow(employee, ["last_name", "lastName"]),
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .trim()
+            return employeeNo && employeeName
+              ? [[employeeNo.trim().toLowerCase(), employeeName] as const]
+              : []
+          })
+        )
+        const readableRows = result.rows.map((row) => {
+          const branchId = readNumberFromRow(row, ["branch_id", "branchId"])
+          const deviceId = readNumberFromRow(row, ["device_id", "deviceId"])
+          const employeeNo = readStringFromRow(row, ATTENDANCE_EMPLOYEE_NO_KEYS)
+          const source = readStringFromRow(row, ["source"])
+          const sourceLabel = source
+            ? `${source.charAt(0).toUpperCase()}${source.slice(1).toLowerCase()}`
+            : null
+          const direction = readStringFromRow(row, ["direction"])
+          return {
+            ...row,
+            branch_name:
+              readStringFromRow(row, ["branch_name", "branchName"]) ||
+              (branchId !== null ? branchNameById.get(branchId) : null) ||
+              "Unknown branch",
+            companyName:
+              readStringFromRow(row, ["companyName", "company_name"]) ||
+              user?.companyName ||
+              "Company",
+            device_name:
+              readStringFromRow(row, ["device_name", "deviceName"]) ||
+              (deviceId !== null ? deviceNameById.get(deviceId) : null) ||
+              (sourceLabel ? `${sourceLabel} attendance device` : "Attendance device"),
+            direction:
+              !direction || direction.toUpperCase() === "UNKNOWN"
+                ? "Not determined"
+                : prettifyLabel(direction),
+            employee_name:
+              readStringFromRow(row, ["employee_name", "employeeName"]) ||
+              (employeeNo ? employeeNameByNumber.get(employeeNo.trim().toLowerCase()) : null) ||
+              "Unmatched employee",
+          }
+        })
         setDailySummaryRows([])
         setDailySummaryTotal(null)
         setDailySummaryTotalPages(null)
-        setRows(result.rows)
+        setRows(readableRows)
         setSingleRecord(null)
         setCorrectionRequests([])
         return
@@ -3391,6 +3820,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
     debouncedRecordSearch,
     hasAppliedDailySummaryFilters,
     historyFilters,
+    user?.companyName,
   ])
 
   const openRecordDetails = React.useCallback(
@@ -4298,19 +4728,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
   ) : null
 
   const refreshButton = (
-    <button
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+    <Button
+      appearance="subtle"
+      className="!h-8 !min-h-8 !min-w-8"
       type="button"
       disabled={loading}
       aria-label="Refresh"
       title="Refresh"
+      icon={
+        <ArrowSync20Regular
+          className={cn("text-primary", loading && "animate-spin")}
+        />
+      }
       onClick={() => {
         setMessage(null)
         void fetchSectionData(true)
       }}
-    >
-      <ArrowSync20Regular className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
-    </button>
+    />
   )
 
   const sectionTitleBlock = (
@@ -4343,7 +4777,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                 type="button"
                 onClick={() => setCorrectionDialogOpen(true)}
               >
-                <PlusIcon className="size-3.5 text-primary" />
+                <Add20Regular className="size-4 text-primary" />
                 Request correction
               </button>
             )}
@@ -4440,10 +4874,10 @@ export function AttendanceActivityView({ section }: { section: string }) {
               initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.28, ease: "easeOut" }}
-              className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+              className="border-y border-border"
               aria-label="Today at a glance"
             >
-              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between gap-3 border-b border-border px-1 py-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                     Today at a glance
@@ -4460,7 +4894,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   }).format(new Date())}
                 </span>
               </div>
-              <div className="p-3 sm:p-4">
+              <div className="py-3">
                 <TodayOverview record={singleRecord} />
               </div>
             </motion.section>
@@ -5366,7 +5800,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                     onClick={() => void runPendingJobs()}
                     title="Run pending jobs"
                   >
-                    <AlarmClockCheckIcon className="size-3.5" />
+                    <ClockAlarm20Regular className="size-4" />
                     <span className="hidden sm:inline">Run pending</span>
                   </button>
 
@@ -5376,7 +5810,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
                       aria-label="Refresh daily summaries"
                       title="Refresh daily summaries"
                     >
-                      <TimerResetIcon className="size-3.5 text-primary" />
+                      <ArrowReset20Regular className="size-4 text-primary" />
                       <span className="hidden sm:inline">Rebuild</span>
                     </PopoverTrigger>
                     <PopoverContent className="w-[min(100vw-1.5rem,21rem)] p-3" align="end">
@@ -5663,11 +6097,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
         }}
         title={detailsTitle}
         description={detailsDescription}
-        popupClassName={activeSection === "daily-summaries" ? "sm:max-w-3xl" : undefined}
+        popupClassName={activeSection === "daily-summaries" || activeSection === "unmatched-logs" ? "sm:max-w-3xl" : undefined}
         row={detailsDisplayRow}
         content={
           activeSection === "daily-summaries" ? (
             <DailySummaryDetailsContent row={detailsRow} detailsError={detailsError} />
+          ) : activeSection === "unmatched-logs" ? (
+            <UnmatchedLogDetailsContent row={detailsRow} detailsError={detailsError} />
           ) : undefined
         }
         resolveLabel={(key) => prettifyLabel(key)}
@@ -5675,21 +6111,23 @@ export function AttendanceActivityView({ section }: { section: string }) {
         footer={
           activeSection === "daily-summaries" && detailsRow ? (
             <div className="flex w-full flex-wrap justify-end gap-2">
-              <button
+              <Button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                appearance="subtle"
+                icon={<ArrowReset20Regular />}
                 onClick={() => void clearDailySummaryAdjustment()}
                 disabled={detailsActionBusy === "clear-adjustment"}
               >
                 {detailsActionBusy === "clear-adjustment" ? "Clearing..." : "Clear adjustment"}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium !text-white transition hover:brightness-95"
+                appearance="primary"
+                icon={<Edit20Regular />}
                 onClick={() => setAdjustmentDialogOpen(true)}
               >
                 Adjust summary
-              </button>
+              </Button>
             </div>
           ) : activeSection === "processing-exceptions" && detailsRow ? (
             <div className="flex w-full flex-col gap-3">

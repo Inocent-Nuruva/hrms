@@ -12,7 +12,30 @@ import {
   InfoIcon,
   QrCodeIcon,
 } from "lucide-react"
-import { Add16Regular, ArrowSync16Regular, Delete16Regular, Edit16Regular, Filter16Regular } from "@fluentui/react-icons"
+import {
+  Add16Regular,
+  ArrowSync20Regular,
+  Building20Regular,
+  Building24Color,
+  Calendar20Regular,
+  Calendar24Color,
+  CalendarPeopleColor,
+  CheckmarkCircle16Regular,
+  ClockAlarm20Regular,
+  Delete16Regular,
+  Delete20Regular,
+  Desktop20Regular,
+  DismissCircle16Regular,
+  Edit16Regular,
+  Edit20Color,
+  Filter16Regular,
+  Info20Regular,
+  LocationRipple24Color,
+  ScanType24Color,
+  Settings20Regular,
+  Settings24Color,
+  Wifi24Color,
+} from "@fluentui/react-icons"
 import {
   Button,
   Field,
@@ -53,7 +76,6 @@ import {
   persistFormState,
   readPersistedFormState,
   readStoredCompanyName,
-  RecordDetailList,
   RecordDetailsDialog,
 } from "@/components/dashboard/admin-view-shared"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -1562,6 +1584,24 @@ function buildAttendanceDetailEntries(
   return entries
 }
 
+const ATTENDANCE_DETAIL_LABELS: Partial<Record<AttendanceSectionKey, string>> = {
+  policies: "Policy",
+  "holiday-groups": "Holiday group",
+  holidays: "Holiday",
+  geofences: "Geofence",
+  "wifi-networks": "Wi-Fi network",
+  checkpoints: "Checkpoint",
+}
+
+function formatAttendanceDetailValue(value: string) {
+  if (!/^[A-Z][A-Z_\s-]*$/.test(value) || value.length < 3) return value
+  if (value === "QR" || value === "GPS" || value === "WI-FI") return value
+  return value
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
 function AttendanceDetailsContent({
   section,
   row,
@@ -1636,28 +1676,98 @@ function AttendanceDetailsContent({
   const detailEntries = entries.filter((entry) => !summaryLabels.has(entry.label))
   const punchLatitude = section === "mobile-punches" ? readNumberFromRecord(row, ["latitude"]) : null
   const punchLongitude = section === "mobile-punches" ? readNumberFromRecord(row, ["longitude"]) : null
+  const sectionLabel = ATTENDANCE_DETAIL_LABELS[section] ?? section.replaceAll("-", " ")
+  const isSetupRecord = Boolean(ATTENDANCE_DETAIL_LABELS[section])
+  const badgeEntry = summaryCandidates.find((entry) => entry.label === "Status") ??
+    summaryCandidates.find((entry) => entry.label === "Type")
+  const timestampLabels = new Set(["Created At", "Updated At"])
+  const hiddenLabels = new Set(["Name", "Status", "Type"])
+  const seenLabels = new Set<string>()
+  const readableEntries = [...summaryCandidates, ...detailEntries]
+    .filter((entry) => {
+      if (hiddenLabels.has(entry.label) || timestampLabels.has(entry.label) || seenLabels.has(entry.label)) return false
+      seenLabels.add(entry.label)
+      return true
+    })
+    .map((entry) => ({ ...entry, value: formatAttendanceDetailValue(entry.value) }))
+  const activityEntries = detailEntries
+    .filter((entry) => timestampLabels.has(entry.label))
+    .map((entry) => ({ ...entry, value: formatAttendanceDetailValue(entry.value) }))
+  const detailIcon = (label: string) => {
+    const normalized = label.toLowerCase()
+    if (normalized.includes("date") || normalized.includes("created") || normalized.includes("updated")) {
+      return <Calendar20Regular />
+    }
+    if (normalized.includes("company") || normalized.includes("branch") || normalized.includes("group")) {
+      return <Building20Regular />
+    }
+    if (normalized.includes("device") || normalized.includes("network") || normalized.includes("ssid")) {
+      return <Desktop20Regular />
+    }
+    return <Settings20Regular />
+  }
+  const heroIcon = section === "holidays"
+    ? <Calendar24Color className="size-6" />
+    : section === "holiday-groups"
+      ? <CalendarPeopleColor className="size-6" />
+      : section === "wifi-networks"
+        ? <Wifi24Color className="size-6" />
+        : section === "geofences"
+          ? <LocationRipple24Color className="size-6" />
+          : section === "checkpoints"
+            ? <ScanType24Color className="size-6" />
+            : section === "policies"
+              ? <Settings24Color className="size-6" />
+              : <Building24Color className="size-6" />
 
   return (
-    <div className="max-h-[65vh] space-y-7 overflow-auto pr-1">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Attendance details
-          </p>
-          <p className="mt-1 text-xl font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Review the selected {section.replaceAll("-", " ")} record in a readable summary.
-          </p>
+    <div className="space-y-5 pr-1">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/50 ring-1 ring-border/60">
+            {heroIcon}
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {isSetupRecord ? `${sectionLabel} configuration` : `Attendance ${sectionLabel} record`}
+            </p>
+          </div>
         </div>
-          {summaryCandidates.find((entry) => entry.label === "Status") ? (
-            <div className="rounded-full border border-border bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
-              {summaryCandidates.find((entry) => entry.label === "Status")?.value}
-            </div>
-          ) : null}
+        {badgeEntry ? (
+          <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-xs font-semibold text-primary">
+            {formatAttendanceDetailValue(badgeEntry.value)}
+          </span>
+        ) : null}
       </div>
 
-      {summaryCandidates.length > 0 ? (
-        <RecordDetailList items={summaryCandidates.map((entry) => ({ ...entry, key: entry.label }))} />
+      {readableEntries.length > 0 ? (
+        <section>
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {sectionLabel} details
+          </h4>
+          <div className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {readableEntries.map((entry) => {
+              const isBoolean = entry.value === "Yes" || entry.value === "No"
+              return (
+                <div key={`${entry.label}-${entry.value}`} className="flex min-w-0 items-start gap-2.5">
+                  <span className="mt-0.5 text-primary">{detailIcon(entry.label)}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground">{entry.label}</p>
+                    {isBoolean ? (
+                      <span className={`mt-1 inline-flex items-center gap-1.5 text-sm font-semibold ${entry.value === "Yes" ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}>
+                        {entry.value === "Yes" ? <CheckmarkCircle16Regular /> : <DismissCircle16Regular />}
+                        {entry.value}
+                      </span>
+                    ) : (
+                      <p className="mt-0.5 break-words text-sm font-medium text-foreground">{entry.value}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
       ) : null}
 
       {punchLatitude !== null && punchLongitude !== null ? (
@@ -1684,13 +1794,24 @@ function AttendanceDetailsContent({
         </section>
       ) : null}
 
-      {detailEntries.length > 0 ? (
-        <RecordDetailList
-          items={detailEntries.map((entry) => ({ ...entry, key: `${entry.label}-${entry.value}` }))}
-        />
-      ) : (
+      {activityEntries.length > 0 ? (
+        <section className="border-t border-border/70 pt-4">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Record activity</h4>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            {activityEntries.map((entry) => (
+              <div key={`${entry.label}-${entry.value}`} className="flex min-w-0 items-start gap-2.5">
+                <span className="mt-0.5 text-primary"><ClockAlarm20Regular /></span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">{entry.label}</p>
+                  <p className="mt-0.5 break-words text-sm font-medium text-foreground">{entry.value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : readableEntries.length === 0 ? (
         <p className="text-sm text-muted-foreground">No readable details are available for this record.</p>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -3169,8 +3290,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
     <TeachingPopover positioning="below-start">
       <TeachingPopoverTrigger>
         <Button
-          appearance="outline"
-          icon={<InfoIcon className="h-4 w-4" />}
+          appearance="subtle"
+          icon={<Info20Regular />}
           className="w-full self-start justify-start sm:w-auto sm:justify-center"
         >
           Setup guidance
@@ -3187,6 +3308,40 @@ export function AttendanceManagementView({ section }: { section: string }) {
           </div>
         </TeachingPopoverBody>
         <TeachingPopoverFooter primary="Got it" />
+      </TeachingPopoverSurface>
+    </TeachingPopover>
+  ) : null
+
+  const wifiDetailsHelperControl = activeSection === "wifi-networks" ? (
+    <TeachingPopover appearance="brand" positioning="below-start">
+      <TeachingPopoverTrigger>
+        <Button
+          appearance="subtle"
+          icon={<Wifi24Color className="size-5" />}
+          className="w-fit [grid-column:1/-1]"
+        >
+          Wi-Fi details helper
+        </Button>
+      </TeachingPopoverTrigger>
+      <TeachingPopoverSurface
+        className="!w-[min(28rem,calc(100vw-1.5rem))] !max-w-[28rem]"
+        style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+      >
+        <TeachingPopoverHeader>Wi-Fi setup guidance</TeachingPopoverHeader>
+        <TeachingPopoverBody>
+          <TeachingPopoverTitle>Find the approved network details</TeachingPopoverTitle>
+          <div className="grid gap-3 text-sm leading-relaxed">
+            <p>
+              Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
+            </p>
+            <ol className="grid list-decimal gap-1.5 pl-4">
+              <li>Connect a phone or laptop to the target Wi-Fi.</li>
+              <li>Copy the SSID and BSSID from the device network settings.</li>
+              <li>Confirm the security type and allowed CIDRs in the router or LAN configuration.</li>
+            </ol>
+          </div>
+        </TeachingPopoverBody>
+        <TeachingPopoverFooter primary="Got it" className="[&_.fui-Button]:!text-[var(--primary)]" />
       </TeachingPopoverSurface>
     </TeachingPopover>
   ) : null
@@ -3401,16 +3556,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                       : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
                   >
                     {renderMissingPrerequisites(createValues, () => setCreateOpen(false))}
-                    {activeSection === "wifi-networks" ? (
-                      <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 [grid-column:1/-1] dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
-                        <p className="font-medium">Wi-Fi details helper</p>
-                        <p className="mt-1 text-sky-900 dark:text-sky-200">
-                          Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
-                          The best workflow is to connect a phone or laptop to the target Wi-Fi, then copy those values from device
-                          settings and router or LAN configuration.
-                        </p>
-                      </div>
-                    ) : null}
+                    {wifiDetailsHelperControl}
                     {activeSection === "geofences" ? (
                       <AttendanceGeofenceMapEditor
                         type={createValues.type ?? "CIRCLE"}
@@ -3485,16 +3631,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
               >
                 {renderMissingPrerequisites(editValues, () => setEditOpen(false))}
-                {activeSection === "wifi-networks" ? (
-                  <div className="rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-3 text-sm text-sky-950 [grid-column:1/-1] dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
-                    <p className="font-medium">Wi-Fi details helper</p>
-                    <p className="mt-1 text-sky-900 dark:text-sky-200">
-                      Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
-                      The best workflow is to connect a phone or laptop to the target Wi-Fi, then copy those values from device
-                      settings and router or LAN configuration.
-                    </p>
-                  </div>
-                ) : null}
+                {wifiDetailsHelperControl}
                 {activeSection === "geofences" ? (
                   <AttendanceGeofenceMapEditor
                     type={editValues.type ?? "CIRCLE"}
@@ -3744,10 +3881,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 setCheckpointQr(null)
               }
             }}
-            title={`${activeSection.replaceAll("-", " ")} details`}
+            title={`${ATTENDANCE_DETAIL_LABELS[activeSection] ?? activeSection.replaceAll("-", " ")} details`}
+            popupClassName={ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? "sm:max-w-3xl" : undefined}
             description={
               canReviewMobilePunchOverride
                 ? "Review the selected mobile punch override request and approve or reject it."
+                : ATTENDANCE_SETUP_SECTIONS.has(activeSection)
+                  ? `Review the selected ${(ATTENDANCE_DETAIL_LABELS[activeSection] ?? activeSection.replaceAll("-", " ")).toLowerCase()} configuration and record activity.`
                 : "Review the selected attendance record in a readable operational summary."
             }
             row={selectedRow}
@@ -3807,7 +3947,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   </div>
                 </div>
               ) : supportsEditDelete && selectedRow ? (
-                <div className="flex w-full flex-wrap justify-end gap-2">
+                <div className="flex w-full flex-wrap items-center justify-end gap-2">
                   {(activeSection === "policies" || activeSection === "settings") &&
                   !(selectedRow.is_active === true || selectedRow.isActive === true) ? (
                     <Button
@@ -3877,7 +4017,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   ) : null}
                   <Button
                     appearance="secondary"
-                    icon={<Edit16Regular className="size-4 text-blue-600 dark:text-blue-400" />}
+                    className="!min-w-28"
+                    icon={<Edit20Color className="size-5" />}
                     onClick={() => {
                       setDetailsOpen(false)
                       openEditDialog(selectedRow)
@@ -3886,9 +4027,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     Edit
                   </Button>
                   <Button
-                    appearance="primary"
-                    className="!bg-red-600 !text-white hover:!bg-red-700"
-                    icon={<Delete16Regular className="size-4 text-red-600 dark:text-red-400" />}
+                    appearance="secondary"
+                    className="!min-w-28 !border-red-200 !text-red-700 hover:!bg-red-50 dark:!border-red-900 dark:!text-red-300 dark:hover:!bg-red-950/40"
+                    icon={<Delete20Regular className="size-5 text-red-600 dark:text-red-400" />}
                     onClick={() => {
                       setDetailsOpen(false)
                       openDeleteDialog(selectedRow)
@@ -3908,7 +4049,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
         <div className="mb-4">
           <TeachingPopover appearance="brand" positioning="below-start">
             <TeachingPopoverTrigger>
-              <Button appearance="outline" icon={<InfoIcon className="h-4 w-4" />}>
+              <Button appearance="subtle" icon={<Info20Regular />}>
                 About sync logs
               </Button>
             </TeachingPopoverTrigger>
@@ -3997,6 +4138,8 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 ? "branch"
                 : column === "company_id" || column === "companyId"
                   ? "company"
+                : ATTENDANCE_SETUP_SECTIONS.has(activeSection)
+                  ? column.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
                   : column.replaceAll("_", " "),
             defaultWidth: 75,
             sortable: true,
@@ -4073,6 +4216,28 @@ export function AttendanceManagementView({ section }: { section: string }) {
         loading={loading}
         compact
         showExport={false}
+        sortIconOnly={isDeviceSyncLogsSection || ATTENDANCE_SETUP_SECTIONS.has(activeSection)}
+        emptyContent={isDeviceSyncLogsSection ? (
+          <div className="flex min-h-32 flex-col items-center justify-center gap-2 whitespace-normal px-6 py-8 text-center">
+            <span className="inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ArrowSync20Regular />
+            </span>
+            <p className="text-sm font-semibold text-foreground">No sync activity yet</p>
+            <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+              Sync attempts will appear here after a terminal exchanges workforce data.
+            </p>
+          </div>
+        ) : ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? (
+          <div className="flex min-h-32 flex-col items-center justify-center gap-2 whitespace-normal px-6 py-8 text-center">
+            <span className="inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Settings20Regular />
+            </span>
+            <p className="text-sm font-semibold text-foreground">No {sectionDisplayTitle.toLowerCase()} configured</p>
+            <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+              Create the first record to start configuring this part of attendance setup.
+            </p>
+          </div>
+        ) : undefined}
         toolbarStart={sectionTitleBlock}
         toolbarActions={
           <>
@@ -4093,14 +4258,14 @@ export function AttendanceManagementView({ section }: { section: string }) {
             {deviceFiltersControl}
             <Button
               type="button"
-              appearance="outline"
+              appearance={isDeviceSyncLogsSection || ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? "subtle" : "outline"}
               size="small"
-              className="!h-8 !min-h-8 !px-[14px]"
+              className={isDeviceSyncLogsSection || ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? "!h-8 !min-h-8 !min-w-8" : "!h-8 !min-h-8 !px-[14px]"}
               onClick={() => void fetchRows()}
               disabled={loading}
               aria-label="Refresh"
               title="Refresh"
-              icon={<ArrowSync16Regular className={`size-4 text-blue-600 ${loading ? "animate-spin" : ""}`} />}
+              icon={<ArrowSync20Regular className={loading ? "animate-spin" : undefined} />}
             >
             </Button>
           </>

@@ -97,6 +97,7 @@ import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
+import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -1938,7 +1939,12 @@ export function OffboardingView() {
             selfEmployeeId)))
 
   return (
-    <section className="flex w-full min-w-0 flex-col overflow-hidden border border-border bg-background shadow-sm">
+    <section
+      className={cn(
+        pageBleedClass,
+        "flex min-w-0 flex-col overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+      )}
+    >
       <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">

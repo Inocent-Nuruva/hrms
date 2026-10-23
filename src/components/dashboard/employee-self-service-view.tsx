@@ -48,7 +48,10 @@ import {
   WalletRegular as PayrollWalletIcon,
   Camera20Color,
   ContactCard20Color,
+  ContactCard20Regular,
   Edit16Regular,
+  LocationAdd20Regular,
+  PeopleAdd20Regular,
   PeopleTeam20Color,
   Person20Color,
   PersonKey20Color,
@@ -2014,8 +2017,32 @@ function ProfileDataItem({
   )
 }
 
-function ProfileEmptyRow({ message }: { message: string }) {
-  return <div className="px-3 py-4 text-sm text-muted-foreground">{message}</div>
+function ProfileEmptyRow({
+  message,
+  actionLabel,
+  icon,
+  onAction,
+}: {
+  message: string
+  actionLabel?: string
+  icon?: React.ReactElement
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex min-h-32 flex-col items-center justify-center gap-3 px-3 py-6 text-center">
+      {icon ? (
+        <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary" aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
+      <p className="text-sm text-muted-foreground">{message}</p>
+      {actionLabel && onAction ? (
+        <FluentButton appearance="primary" size="small" icon={icon} onClick={onAction}>
+          {actionLabel}
+        </FluentButton>
+      ) : null}
+    </div>
+  )
 }
 
 function requestStatusTone(status: string) {
@@ -2281,7 +2308,7 @@ function ProfileAssignmentsTab({ employee, assignmentSummaryRows, scheduleDays }
   ]
 
   return (
-    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
+    <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
     <motion.div
       className="space-y-4"
       variants={assignmentsStagger}
@@ -2576,13 +2603,19 @@ function asRecordList(value: unknown): AdminRecord[] {
   return value.map((entry) => asRecord(entry)).filter((entry): entry is AdminRecord => entry !== null)
 }
 
-function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
+function ProfilePersonalTab({
+  employee,
+  onRequestAdd,
+}: {
+  employee: AdminRecord
+  onRequestAdd: () => void
+}) {
   const contacts = asRecordList(employee.contacts)
   const addresses = asRecordList(employee.addresses)
   const relatives = asRecordList(employee.relatives)
 
   return (
-    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
+    <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
@@ -2649,7 +2682,12 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
                       )
                     })
                   ) : (
-                    <ProfileEmptyRow message="No contacts available." />
+                    <ProfileEmptyRow
+                      message="No contacts available yet. Send the details to HR for approval."
+                      actionLabel="Add contact"
+                      icon={<ContactCard20Regular />}
+                      onAction={onRequestAdd}
+                    />
                   )}
                 </SelfServiceSectionCard>
               ),
@@ -2680,7 +2718,12 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
                       />
                     ))
                   ) : (
-                    <ProfileEmptyRow message="No addresses available." />
+                    <ProfileEmptyRow
+                      message="No addresses available yet. Send an address to HR for approval."
+                      actionLabel="Add address"
+                      icon={<LocationAdd20Regular />}
+                      onAction={onRequestAdd}
+                    />
                   )}
                 </SelfServiceSectionCard>
               ),
@@ -2714,7 +2757,12 @@ function ProfilePersonalTab({ employee }: { employee: AdminRecord }) {
                       />
                     ))
                   ) : (
-                    <ProfileEmptyRow message="No relatives available." />
+                    <ProfileEmptyRow
+                      message="No relatives available yet. Send an emergency contact to HR for approval."
+                      actionLabel="Add relative"
+                      icon={<PeopleAdd20Regular />}
+                      onAction={onRequestAdd}
+                    />
                   )}
                 </SelfServiceSectionCard>
               ),
@@ -2749,7 +2797,7 @@ function ProfileRecordsTab({
   }).length
 
   return (
-    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
+    <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
     <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
@@ -3171,7 +3219,7 @@ function ProfileUpdatesTab({
   ]
 
   return (
-    <FluentCard appearance="outline" size="small" className="!flex-col !items-stretch !gap-5 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5">
+    <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
     <motion.div
       className="w-full min-w-0 max-w-full space-y-4"
       variants={profileTabStagger}
@@ -3630,7 +3678,10 @@ function ProfileSummaryTab({
       </div>
 
       {/* Today's attendance detail row */}
-      <div className="divide-y divide-border overflow-hidden border border-border">
+      <div className={cn(
+        pageBleedClass,
+        "divide-y divide-border overflow-hidden border-y border-border sm:border-x"
+      )}>
         <div className="flex bg-background">
           <div className={cn("w-1 shrink-0", punchTone.bar)} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-3 py-2.5 sm:flex-nowrap">
@@ -3744,7 +3795,10 @@ function ProfileSummaryTab({
       <FluentCard
         appearance="outline"
         size="small"
-        className="w-full min-w-0 !gap-0 !rounded-none !border-border/70 !bg-card !p-4 shadow-sm sm:!p-5"
+        className={cn(
+          pageBleedClass,
+          "min-w-0 !gap-0 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5"
+        )}
       >
       <div className="grid min-w-0 grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
         <ProfileSummarySection
@@ -4528,7 +4582,10 @@ export function EmployeeSelfServiceProfileView() {
           ) : null}
 
           {activeTab === "personal" && employee ? (
-            <ProfilePersonalTab employee={employee} />
+            <ProfilePersonalTab
+              employee={employee}
+              onRequestAdd={() => router.push("/dashboard/me/requests/profile-changes")}
+            />
           ) : null}
 
           {activeTab === "records" ? (
@@ -4712,8 +4769,8 @@ export function EmployeeOrganizationView() {
   const { loading, error, employee } = useSelfEmployeeData()
 
   return (
-    <div className="grid gap-4 px-4 lg:px-6">
-      <Card>
+    <div className={cn(pageBleedClass, "grid gap-4")}>
+      <Card className="rounded-none border-x-0 sm:border-x">
         <CardHeader>
           <CardTitle>My Organization Details</CardTitle>
           <CardDescription>Read-only information about your branch, department, and role context.</CardDescription>

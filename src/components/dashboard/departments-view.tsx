@@ -793,7 +793,7 @@ export function DepartmentsView() {
             <FluentSelect
               ariaLabel="Filter department status"
               size="small"
-              className="w-[8.5rem]"
+              className="!w-[8.5rem] !max-w-[8.5rem] !flex-none"
               value={query.status}
               placeholder="All statuses"
               onChange={(value) => {

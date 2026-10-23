@@ -81,6 +81,8 @@ import {
   permanentDeleteSummary,
 } from "@/lib/employee-permanent-delete";
 import { toast } from "@/components/ui/fluent-toast-store";
+import { pageBleedClass } from "@/components/dashboard/talent-visuals";
+import { cn } from "@/lib/utils";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt";
@@ -1205,7 +1207,12 @@ export function EmployeesListView({
   );
 
   return (
-    <section className="mt-2 overflow-hidden border border-border bg-background shadow-sm">
+    <section
+      className={cn(
+        pageBleedClass,
+        "mt-2 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+      )}
+    >
       <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">

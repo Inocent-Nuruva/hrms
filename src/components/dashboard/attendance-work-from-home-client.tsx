@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { Badge as FluentBadge } from "@fluentui/react-components"
+import { CalendarDays, CheckCircle2, Clock3, Home, Inbox, RefreshCw, Send, XCircle } from "lucide-react"
 import {
   cancelAttendanceWorkFromHomeRequest,
   createAttendanceWorkFromHomeRequest,
@@ -9,6 +11,9 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
 type WorkFromHomeRequest = {
   id: number
@@ -44,8 +49,18 @@ function readRequests(value: unknown): WorkFromHomeRequest[] {
 }
 
 function errorMessage(error: unknown) {
+  if (error instanceof Error && /databaseName|Cannot read properties of undefined/i.test(error.message)) {
+    return "Work-from-home requests are temporarily unavailable. Refresh in a moment."
+  }
   if (error instanceof Error && error.message) return error.message
   return "The work-from-home request could not be completed."
+}
+
+function requestStatusColor(status: WorkFromHomeRequest["status"]) {
+  if (status === "APPROVED") return "success" as const
+  if (status === "PENDING") return "warning" as const
+  if (status === "REJECTED") return "danger" as const
+  return "informative" as const
 }
 
 export function AttendanceWorkFromHomeClient() {
@@ -62,6 +77,9 @@ export function AttendanceWorkFromHomeClient() {
   const [saving, setSaving] = React.useState(false)
   const [message, setMessage] = React.useState("")
   const [error, setError] = React.useState("")
+  const pendingCount = requests.filter((request) => request.status === "PENDING").length
+  const approvedCount = requests.filter((request) => request.status === "APPROVED").length
+  const closedCount = requests.filter((request) => ["REJECTED", "CANCELLED"].includes(request.status)).length
 
   React.useEffect(() => {
     setToken(readToken())
@@ -157,63 +175,99 @@ export function AttendanceWorkFromHomeClient() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-foreground">Work from home</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Remote attendance is available only for a remote-enabled shift and an approved request covering that date.
-        </p>
+    <main className="flex w-full flex-col gap-5 px-4 py-5 sm:px-5">
+      <header className="flex items-start gap-3 border-b border-border pb-4">
+        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Home className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Work from home</h1>
+          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
+            Request remote-work dates and track approval before recording attendance away from the office.
+          </p>
+        </div>
       </header>
 
-      {message ? <p role="status" className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p> : null}
-      {error ? <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
+      {message ? <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
+      {error ? <p role="alert" className="border-l-4 border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
 
       {canRequest ? (
-        <form onSubmit={submitRequest} className="grid gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
-          <h2 className="text-lg font-medium sm:col-span-2">Request remote work dates</h2>
-          <label className="grid gap-1 text-sm">
+        <form onSubmit={submitRequest} className="grid gap-3 border-y border-border py-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_1fr_auto] sm:items-end">
+          <div className="sm:col-span-4">
+            <h2 className="font-semibold text-foreground">New remote-work request</h2>
+            <p className="text-xs text-muted-foreground">Approval must cover every requested date.</p>
+          </div>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Start date
-            <input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="rounded-md border border-input bg-background px-3 py-2" />
+            <Input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             End date
-            <input required type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} className="rounded-md border border-input bg-background px-3 py-2" />
+            <Input required type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </label>
-          <label className="grid gap-1 text-sm sm:col-span-2">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Reason
-            <textarea required maxLength={2000} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} className="rounded-md border border-input bg-background px-3 py-2" />
+            <Textarea required maxLength={2000} rows={1} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why do you need to work remotely?" className="min-h-8 resize-none" />
           </label>
-          <button disabled={saving} type="submit" className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 sm:col-span-2">
+          <Button disabled={saving} type="submit" size="sm" className="gap-2">
+            <Send aria-hidden />
             {saving ? "Submitting…" : "Submit request"}
-          </button>
+          </Button>
         </form>
       ) : null}
 
-      <section className="rounded-xl border border-border bg-card p-4">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">{canReview ? "Company requests" : "My requests"}</h2>
-          <button type="button" onClick={() => void refresh()} disabled={loading || saving} className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">Refresh</button>
+      <section className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+          <div className="mr-auto">
+            <h2 className="font-semibold text-foreground">{canReview ? "Company requests" : "My requests"}</h2>
+            <p className="text-xs text-muted-foreground">{canReview ? "Review remote-work requests across the company." : "Track your submitted requests and decisions."}</p>
+          </div>
+          <FluentBadge appearance="tint" color="warning" shape="rounded">{pendingCount} pending</FluentBadge>
+          <FluentBadge appearance="tint" color="success" shape="rounded">{approvedCount} approved</FluentBadge>
+          <FluentBadge appearance="tint" color="informative" shape="rounded">{closedCount} closed</FluentBadge>
+          <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading || saving} className="gap-2">
+            <RefreshCw className={loading ? "animate-spin" : undefined} aria-hidden />
+            Refresh
+          </Button>
         </div>
-        {loading ? <p className="text-sm text-muted-foreground">Loading requests…</p> : null}
-        {!loading && requests.length === 0 ? <p className="text-sm text-muted-foreground">No work-from-home requests found.</p> : null}
+        {loading ? <p role="status" className="py-8 text-center text-sm text-muted-foreground">Loading requests…</p> : null}
+        {!loading && requests.length === 0 ? (
+          <div className="flex items-center gap-3 py-8">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Inbox className="size-5" aria-hidden />
+            </span>
+            <div>
+              <p className="font-medium text-foreground">{canReview ? "No requests need review" : "No remote-work requests yet"}</p>
+              <p className="text-sm text-muted-foreground">{canReview ? "New employee requests will appear here." : "Submit a request to begin the approval process."}</p>
+            </div>
+          </div>
+        ) : null}
         <div className="divide-y divide-border">
           {requests.map((request) => (
-            <article key={request.id} className="grid gap-3 py-4 md:grid-cols-[1fr_auto]">
-              <div className="space-y-1">
-                <p className="font-medium">{request.employee_name || `Employee #${request.employee_id}`} · {request.start_date}{request.end_date !== request.start_date ? ` – ${request.end_date}` : ""}</p>
-                <p className="text-sm text-muted-foreground">{request.reason}</p>
-                {request.review_comment ? <p className="text-sm">Review note: {request.review_comment}</p> : null}
+            <article key={request.id} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CalendarDays className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">{request.employee_name || `Employee #${request.employee_id}`}</p>
+                    <FluentBadge appearance="tint" color={requestStatusColor(request.status)} shape="rounded">{request.status.toLowerCase()}</FluentBadge>
+                  </div>
+                  <p className="mt-0.5 text-sm tabular-nums text-muted-foreground">{request.start_date}{request.end_date !== request.start_date ? ` – ${request.end_date}` : ""}</p>
+                  <p className="mt-1 text-sm text-foreground/80">{request.reason}</p>
+                  {request.review_comment ? <p className="mt-1 text-xs text-muted-foreground">Review note: {request.review_comment}</p> : null}
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">{request.status}</span>
                 {canReview && request.status === "PENDING" ? (
                   <>
-                    <input aria-label={`Review note for request ${request.id}`} value={comments[request.id] ?? ""} onChange={(event) => setComments((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Rejection reason" className="min-w-36 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
-                    <button type="button" disabled={saving} onClick={() => void review(request, "APPROVE")} className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50">Approve</button>
-                    <button type="button" disabled={saving} onClick={() => void review(request, "REJECT")} className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">Reject</button>
+                    <Input aria-label={`Review note for request ${request.id}`} value={comments[request.id] ?? ""} onChange={(event) => setComments((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Comment or rejection reason" className="min-w-48" />
+                    <Button type="button" size="sm" disabled={saving} onClick={() => void review(request, "APPROVE")} className="gap-1.5"><CheckCircle2 aria-hidden />Approve</Button>
+                    <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void review(request, "REJECT")} className="gap-1.5"><XCircle aria-hidden />Reject</Button>
                   </>
                 ) : null}
-                {canRequest && request.status === "PENDING" ? <button type="button" disabled={saving} onClick={() => void cancel(request)} className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50">Cancel</button> : null}
+                {canRequest && request.status === "PENDING" ? <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void cancel(request)} className="gap-1.5"><Clock3 aria-hidden />Cancel request</Button> : null}
               </div>
             </article>
           ))}

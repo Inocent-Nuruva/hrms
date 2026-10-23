@@ -1,6 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { Button } from "@fluentui/react-components"
+import {
+  Alert20Regular,
+  ArrowSync20Regular,
+  CheckmarkCircle20Regular,
+  Send20Regular,
+} from "@fluentui/react-icons"
 import { getAttendanceSyncAlertReadiness, sendAttendanceSyncAlertTest, type AdminRecord } from "@/lib/admin-api"
 
 export function AttendanceSyncAlertReadiness({
@@ -39,7 +46,7 @@ export function AttendanceSyncAlertReadiness({
       const data = typeof result === "object" && result !== null ? result as AdminRecord : {}
       setMessage(Number(data.queued_count ?? 0) > 0
         ? `Test alert queued for ${String(data.queued_count)} operator(s). Confirm it appears in the recipients’ notifications.`
-        : "No eligible recipients were found. Grant access_control_sync:execute to an active company operator, then retry.")
+        : "No eligible recipients were found. Assign device sync access to an active company operator, then retry.")
       await refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not send the attendance sync alert test.")
@@ -48,23 +55,48 @@ export function AttendanceSyncAlertReadiness({
     }
   }
 
+  const isReady = readiness?.ready === true
+
   return (
-    <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold">Sync failure alert recipients</h3>
-        {busy && readiness === null ? <p className="text-xs text-muted-foreground">Checking readiness…</p> : (
-          <p className="text-xs text-muted-foreground">
-            {readiness?.ready === true
-              ? `${String(readiness.recipient_count)} active operator(s) have ${String(readiness.required_permission)}.`
-              : "No active company operator currently has access_control_sync:execute."}
-          </p>
-        )}
-        {message ? <p role="status" className="text-xs text-emerald-700 dark:text-emerald-300">{message}</p> : null}
-        {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : null}
+    <section className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 py-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-lg ${isReady ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"}`}>
+          {isReady ? <CheckmarkCircle20Regular /> : <Alert20Regular />}
+        </span>
+        <div className="grid min-w-0 gap-0.5">
+          <h3 className="text-sm font-semibold">Sync alerts</h3>
+          {busy && readiness === null ? <p className="text-xs text-muted-foreground">Checking alert readiness…</p> : (
+            <p className="text-xs text-muted-foreground">
+              {isReady
+                ? `${String(readiness?.recipient_count)} active operator(s) can receive sync failure alerts.`
+                : "No eligible alert recipient is configured."}
+            </p>
+          )}
+          {message ? <p role="status" className="text-xs text-emerald-700 dark:text-emerald-300">{message}</p> : null}
+          {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : null}
+        </div>
       </div>
-      <div className="flex gap-2">
-        <button type="button" onClick={() => void refresh()} disabled={busy} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50">Refresh</button>
-        {canTest ? <button type="button" onClick={() => void sendTest()} disabled={busy || readiness?.ready !== true} className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">{busy ? "Sending…" : "Send test alert"}</button> : null}
+      <div className="flex items-center gap-2">
+        <Button
+          appearance="subtle"
+          size="small"
+          icon={<ArrowSync20Regular className={busy ? "animate-spin" : undefined} />}
+          aria-label="Refresh sync alert readiness"
+          title="Refresh"
+          onClick={() => void refresh()}
+          disabled={busy}
+        />
+        {canTest ? (
+          <Button
+            appearance="outline"
+            size="small"
+            icon={<Send20Regular />}
+            onClick={() => void sendTest()}
+            disabled={busy || !isReady}
+          >
+            {busy ? "Sending…" : "Send test"}
+          </Button>
+        ) : null}
       </div>
     </section>
   )

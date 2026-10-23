@@ -42,6 +42,7 @@ import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
+import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -1006,7 +1007,12 @@ export function HrProfileUpdateApprovalsView() {
     : ""
 
   return (
-    <section className="w-full min-w-0 max-w-full overflow-hidden border border-border bg-background shadow-sm">
+    <section
+      className={cn(
+        pageBleedClass,
+        "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+      )}
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
@@ -1036,8 +1042,8 @@ export function HrProfileUpdateApprovalsView() {
         </div>
       ) : null}
 
-      <div className="min-w-0 max-w-full space-y-2 p-3">
-        <div className="flex min-w-0 max-w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+      <div className="min-w-0 max-w-full space-y-2 py-3">
+        <div className="flex min-w-0 max-w-full flex-col gap-2 px-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0 max-w-full">
             <h3 className="text-sm font-semibold tracking-tight text-foreground">Requests</h3>
             <p className="text-xs text-muted-foreground">

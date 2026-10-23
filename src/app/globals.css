@@ -179,8 +179,9 @@ input:focus {
 /* Shared primary controls must always retain an on-brand foreground. Some
  * route-level Tailwind utility classes previously overrode Fluent's white
  * primary text with the neutral foreground, producing black text on indigo. */
-.fui-Button[data-hrms-button-tone="brand"],
-.fui-Button[data-hrms-button-tone="brand"] .fui-Button__icon {
+[data-hrms-button-tone="brand"],
+[data-hrms-button-tone="brand"] .fui-Button__icon,
+[data-hrms-button-tone="brand"] svg {
   color: var(--colorNeutralForegroundOnBrand, #ffffff) !important;
 }
 

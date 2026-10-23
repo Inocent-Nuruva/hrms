@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ArrowClockwise20Regular, Database20Regular } from "@fluentui/react-icons"
 import {
   createAttendanceRetentionHold,
   getAttendanceRetentionGovernanceReadiness,
@@ -12,6 +13,7 @@ import {
   reviewAttendanceRetentionPurgeApproval,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { Button } from "@/components/ui/button"
 
 type Category = "RAW_HIKVISION_LOG" | "MOBILE_SELFIE" | "ATTENDANCE_LOCATION" | "FIELD_VISIT_LOCATION"
 
@@ -97,20 +99,25 @@ export function AttendanceRetentionGovernance({
   }
 
   return (
-    <section className="mb-4 grid gap-4 rounded-xl border border-border bg-card p-4">
+    <section className="mb-4 grid gap-4 border-b border-border pb-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">Attendance retention safeguards</h3>
-          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Active legal holds exclude their source record from automated purge. Purge requests require a different authorized reviewer and are consumed after one approved purge run. Deployment purge flags must also be enabled.</p>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Database20Regular className="size-4" aria-hidden />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold">Attendance retention safeguards</h3>
+            <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground">Legal holds protect source records from automated purge. Purge runs require independent approval and enabled deployment flags.</p>
+          </div>
         </div>
-        <button type="button" onClick={() => void refresh()} disabled={busy} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50">Refresh</button>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={() => void refresh()} disabled={busy} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Refresh retention safeguards" title="Refresh retention safeguards"><ArrowClockwise20Regular className={busy ? "animate-spin" : undefined} aria-hidden /></Button>
       </div>
 
-      {canReadGovernance ? <div className="grid gap-2 rounded-lg bg-muted/40 p-3 text-xs sm:grid-cols-2">
-        <p>Raw Hikvision period: <strong>{display(readiness, "raw_log_retention_days")} days</strong>; purge flag: <strong>{String(readiness.raw_log_purge_enabled ?? false)}</strong></p>
-        <p>Mobile selfie period: <strong>{display(readiness, "selfie_retention_days")} days</strong>; purge flag: <strong>{String(readiness.selfie_purge_enabled ?? false)}</strong></p>
-        <p>Attendance location period: <strong>{display(readiness, "location_retention_days")} days</strong>; purge flag: <strong>{String(readiness.location_purge_enabled ?? false)}</strong></p>
-        <p>Field visit location period: <strong>{display(readiness, "field_location_retention_days")} days</strong>; purge flag: <strong>{String(readiness.field_location_purge_enabled ?? false)}</strong></p>
+      {canReadGovernance ? <div className="grid divide-y divide-border border-y border-border text-xs sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+        <p className="px-3 py-2">Raw Hikvision<br /><strong>{display(readiness, "raw_log_retention_days")} days</strong> · purge {String(readiness.raw_log_purge_enabled ?? false)}</p>
+        <p className="px-3 py-2">Mobile selfies<br /><strong>{display(readiness, "selfie_retention_days")} days</strong> · purge {String(readiness.selfie_purge_enabled ?? false)}</p>
+        <p className="px-3 py-2">Attendance locations<br /><strong>{display(readiness, "location_retention_days")} days</strong> · purge {String(readiness.location_purge_enabled ?? false)}</p>
+        <p className="px-3 py-2">Field visit locations<br /><strong>{display(readiness, "field_location_retention_days")} days</strong> · purge {String(readiness.field_location_purge_enabled ?? false)}</p>
       </div> : null}
 
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
@@ -163,13 +170,14 @@ export function AttendanceRetentionGovernance({
         </div>
       ) : null}
 
-      {canReadGovernance ? <div className="grid gap-2">
+      <div className="grid gap-4 border-t border-border pt-4 lg:grid-cols-3">
+      {canReadGovernance ? <div className="grid content-start gap-2">
         <h4 className="text-xs font-semibold">Legal holds ({holds.length})</h4>
         {holds.length === 0 ? <p className="text-xs text-muted-foreground">No retention holds recorded.</p> : holds.map((hold) => {
           const id = String(hold.id ?? "")
           const active = hold.active === true
           return (
-            <article key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/70 p-2 text-xs">
+            <article key={id} className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-2 text-xs">
               <p><strong>{display(hold, "category")} #{display(hold, "recordId")}</strong> · {active ? "ACTIVE" : "RELEASED"} · {display(hold, "reason")}</p>
               {active && canManage ? <div className="flex flex-wrap gap-2"><input value={reasonById[id] ?? ""} onChange={(event) => setReasonById((previous) => ({ ...previous, [id]: event.target.value }))} placeholder="Release reason" className="h-8 rounded-md border border-input bg-background px-2" /><button type="button" disabled={busy} onClick={() => void runAction(() => releaseAttendanceRetentionHold(token, id, reasonById[id] ?? ""), "Legal hold released.")} className="rounded-md border border-border px-2 py-1 font-semibold disabled:opacity-50">Release hold</button></div> : null}
             </article>
@@ -177,28 +185,29 @@ export function AttendanceRetentionGovernance({
         })}
       </div> : null}
 
-      {canViewLocation ? <div className="grid gap-2">
+      {canViewLocation ? <div className="grid content-start gap-2">
         <h4 className="text-xs font-semibold">Attendance location access history ({locationAccessLogs.length})</h4>
         {locationAccessLogs.length === 0 ? <p className="text-xs text-muted-foreground">No attendance location reads recorded.</p> : locationAccessLogs.map((row) => (
-          <article key={String(row.id)} className="rounded-md border border-border/70 p-2 text-xs">
+          <article key={String(row.id)} className="border-t border-border py-2 text-xs">
             <strong>{display(row, "accessType")}</strong> · actor {display(row, "actorCompanyUserId")} · employee {display(row, "employeeId")} · {display(row, "recordCount")} record(s) · {display(row, "purpose")} · {display(row, "accessedAt")}
           </article>
         ))}
       </div> : null}
 
-      {canReadGovernance ? <div className="grid gap-2">
+      {canReadGovernance ? <div className="grid content-start gap-2">
         <h4 className="text-xs font-semibold">Purge approval history ({approvals.length})</h4>
         {approvals.length === 0 ? <p className="text-xs text-muted-foreground">No purge requests recorded.</p> : approvals.map((approval) => {
           const id = String(approval.id ?? "")
           const pending = String(approval.status ?? "").toUpperCase() === "PENDING"
           return (
-            <article key={id} className="grid gap-2 rounded-md border border-border/70 p-2 text-xs">
+            <article key={id} className="grid gap-2 border-t border-border py-2 text-xs">
               <p><strong>{display(approval, "category")} · {display(approval, "retentionDays")} days · {display(approval, "status")}</strong> · requested by {display(approval, "requestedByCompanyUserId")} · {display(approval, "reason")}</p>
               {pending && canReview ? <div className="flex flex-wrap gap-2"><input value={reasonById[`approval-${id}`] ?? ""} onChange={(event) => setReasonById((previous) => ({ ...previous, [`approval-${id}`]: event.target.value }))} placeholder="Review note (required)" className="h-8 min-w-56 flex-1 rounded-md border border-input bg-background px-2" /><button type="button" disabled={busy} onClick={() => void runAction(() => reviewAttendanceRetentionPurgeApproval(token, id, { decision: "APPROVE", note: reasonById[`approval-${id}`] ?? "" }), "Purge request approved for a single run.")} className="rounded-md border border-border px-2 py-1 font-semibold disabled:opacity-50">Approve</button><button type="button" disabled={busy} onClick={() => void runAction(() => reviewAttendanceRetentionPurgeApproval(token, id, { decision: "REJECT", note: reasonById[`approval-${id}`] ?? "" }), "Purge request rejected.")} className="rounded-md border border-border px-2 py-1 font-semibold disabled:opacity-50">Reject</button></div> : null}
             </article>
           )
         })}
       </div> : null}
+      </div>
     </section>
   )
 }

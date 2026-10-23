@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { ArrowClockwise20Regular, DeviceEq20Regular, TrayItemAdd20Regular } from "@fluentui/react-icons"
 import {
   listAttendanceMobileDeviceRegistrationAudit,
   listAttendanceMobileDeviceRegistrations,
   releaseAttendanceMobileDeviceRegistration,
   type AdminRecord,
 } from "@/lib/admin-api"
+import { Button } from "@/components/ui/button"
 
 function value(record: AdminRecord, key: string) {
   const item = record[key]
@@ -85,19 +87,24 @@ export function AttendanceMobileDeviceRegistrations({
   }
 
   return (
-    <section className="mb-4 grid gap-3 rounded-xl border border-border bg-card p-4">
+    <section className="mb-4 grid gap-3 border-y border-border py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">Mobile app device registrations</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Installations are enrolled when an employee punches under a policy that blocks device sharing.</p>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <DeviceEq20Regular className="size-4" aria-hidden />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold">Mobile app device registrations</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Installations enroll when an employee punches under a policy that blocks device sharing.</p>
+          </div>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-50">
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+        <Button type="button" variant="ghost" size="icon-sm" onClick={() => void load()} disabled={loading} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Refresh device registrations" title="Refresh device registrations">
+          <ArrowClockwise20Regular className={loading ? "animate-spin" : undefined} aria-hidden />
+        </Button>
       </div>
       {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
       {loading && rows.length === 0 ? <p className="text-sm text-muted-foreground">Loading registrations…</p> : null}
-      {!loading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No app installations have enrolled yet.</p> : null}
+      {!loading && rows.length === 0 ? <div className="flex items-center gap-3 py-3"><TrayItemAdd20Regular className="size-5 text-muted-foreground" aria-hidden /><div><p className="text-sm font-medium text-foreground">No enrolled devices</p><p className="text-xs text-muted-foreground">New mobile installations will appear here after the first protected punch.</p></div></div> : null}
       {rows.map((row) => {
         const id = String(row.id ?? "")
         const isActive = String(row.status ?? "").toUpperCase() === "ACTIVE"
@@ -106,7 +113,7 @@ export function AttendanceMobileDeviceRegistrations({
         const platform = value(deviceInfo, "platform")
         const appVersion = value(deviceInfo, "appVersion")
         return (
-          <article key={id} className="grid gap-2 rounded-lg border border-border/70 p-3">
+          <article key={id} className="grid gap-2 border-t border-border py-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="grid gap-1 text-xs">
                 <p className="font-semibold">{platform} · {model} <span className="ml-1 rounded bg-muted px-1.5 py-0.5 font-normal">{String(row.status ?? "unknown")}</span></p>

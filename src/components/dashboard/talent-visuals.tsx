@@ -592,7 +592,7 @@ export function CompactFactGrid({
             <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
               {field.label}
             </p>
-            <p className="truncate text-xs font-semibold text-foreground">{field.value}</p>
+            <div className="truncate text-xs font-semibold text-foreground">{field.value}</div>
           </div>
         ))}
       </div>

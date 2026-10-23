@@ -3,13 +3,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   ArrowDownload16Regular,
-  ArrowSort16Filled,
+  ArrowSortDownLines20Regular,
+  ArrowSort20Regular,
+  ArrowSortUpLines20Regular,
   ChevronDown16Regular,
   ColumnTriple20Regular,
   Filter16Regular,
 } from "@fluentui/react-icons";
 import {
   Checkbox as FluentCheckbox,
+  Dropdown,
+  Option,
   Table,
   TableBody,
   TableCell,
@@ -1332,77 +1336,106 @@ export function ResizableTable<T = Record<string, unknown>>({
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
-                  className="grid w-[min(36rem,calc(100vw-1.5rem))] grid-cols-1 gap-0 overflow-hidden p-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.82fr)]"
+                  className="max-h-[min(34rem,calc(100vh-8rem))] w-[min(27rem,calc(100vw-1.5rem))] overflow-y-auto p-0"
                 >
-                  <div className="flex min-w-0 flex-col gap-3 p-3">
-                    <div className="text-sm font-semibold text-foreground">
-                      Filters
-                    </div>
-                    {filterContent}
+                  <div className="border-b border-border bg-muted/25 px-4 py-3">
+                    <div className="text-sm font-semibold text-foreground">Refine results</div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Filter the table, change its order, or choose visible columns.
+                    </p>
                   </div>
-                  {showSort ? (
-                    <div className="flex min-w-0 flex-col items-center justify-center gap-x-px gap-y-[3px] border-t border-border p-3 text-[10px] sm:border-l sm:border-t-0">
-                      <div className="text-[10px] font-semibold text-foreground">
-                        Sort by
+                  <div className="flex min-w-0 flex-col gap-4 p-4">
+                    <section className="space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Filter16Regular />
+                        Filters
                       </div>
-                      <Button
-                        type="button"
-                        onClick={clearSort}
-                        appearance={sortField === null ? "secondary" : "subtle"}
-                        size="small"
-                        className="w-full justify-center !text-[10px]"
-                        aria-pressed={sortField === null}
-                      >
-                        Default view
-                      </Button>
-                      {sortableColumns.map((col) => (
-                        <Button
-                          key={col.key}
-                          type="button"
-                          onClick={() => handleSort(col.key)}
-                          appearance={
-                            sortField === col.key ? "secondary" : "subtle"
-                          }
-                          size="small"
-                          className="w-full justify-center !text-[10px]"
-                          aria-pressed={sortField === col.key}
-                        >
-                          {col.label}
-                          {sortField === col.key
-                            ? ` (${sortOrder === "asc" ? "↑" : "↓"})`
-                            : ""}
-                        </Button>
-                      ))}
-                      {enableColumnVisibility ? (
-                        <>
-                          <div className="my-1 h-px w-full bg-border" />
-                          <div className="flex items-center justify-center gap-1 text-[10px] font-semibold text-foreground">
-                            <ColumnTriple20Regular />
-                            Columns
-                          </div>
-                          <div className="grid w-full grid-cols-1 gap-x-px gap-y-[3px]">
-                            {candidateTableColumns.map((col) => {
-                              const checked = !hiddenColumns.includes(col.key);
-                              return (
-                                <label
-                                  key={col.key}
-                                  className="flex cursor-pointer items-center justify-center gap-1 rounded px-1 py-0.5 text-[10px] transition-colors hover:bg-muted/50"
-                                >
-                                  <Checkbox
-                                    checked={checked}
-                                    onCheckedChange={() =>
-                                      toggleColumnVisibility(col.key)
-                                    }
-                                  />
-                                  <span className="truncate">{col.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
+                      {filterContent}
+                    </section>
+                    {showSort ? (
+                      <section className="space-y-2.5 border-t border-border pt-4">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <ArrowSort20Regular />
+                          Sort by
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Dropdown
+                            aria-label="Sort table by"
+                            className="min-w-0 flex-1"
+                            value={
+                              sortField
+                                ? sortableColumns.find((column) => column.key === sortField)?.label ?? "Default view"
+                                : "Default view"
+                            }
+                            selectedOptions={[sortField ?? "default"]}
+                            onOptionSelect={(_event, data) => {
+                              const value = data.optionValue;
+                              if (!value || value === "default") {
+                                setSortField(null);
+                                setSortOrder("asc");
+                              } else {
+                                setSortField(value);
+                              }
+                              setCurrentPage(1);
+                            }}
+                          >
+                            <Option value="default">Default view</Option>
+                            {sortableColumns.map((column) => (
+                              <Option key={column.key} value={column.key}>
+                                {column.label}
+                              </Option>
+                            ))}
+                          </Dropdown>
+                          <Button
+                            type="button"
+                            appearance="outline"
+                            size="small"
+                            className="size-8 shrink-0 !min-w-8 !p-0"
+                            aria-label={sortOrder === "asc" ? "Sort ascending" : "Sort descending"}
+                            title={sortOrder === "asc" ? "Ascending" : "Descending"}
+                            disabled={!sortField}
+                            onClick={() => setSortOrder((order) => (order === "asc" ? "desc" : "asc"))}
+                          >
+                            {sortOrder === "asc" ? (
+                              <ArrowSortUpLines20Regular />
+                            ) : (
+                              <ArrowSortDownLines20Regular />
+                            )}
+                          </Button>
+                        </div>
+                      </section>
+                    ) : null}
+                    {showSort && enableColumnVisibility ? (
+                      <section className="space-y-2.5 border-t border-border pt-4">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <ColumnTriple20Regular />
+                          Visible columns
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {candidateTableColumns.map((col) => {
+                            const checked = !hiddenColumns.includes(col.key);
+                            return (
+                              <label
+                                key={col.key}
+                                className={cn(
+                                  "flex min-w-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors",
+                                  checked
+                                    ? "border-primary/25 bg-primary/5 text-foreground"
+                                    : "border-border bg-background text-muted-foreground hover:bg-muted/50",
+                                )}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={() => toggleColumnVisibility(col.key)}
+                                />
+                                <span className="truncate">{col.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ) : null}
+                  </div>
                 </PopoverContent>
               </Popover>
             ) : null}
@@ -1418,7 +1451,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                   type="button"
                   onClick={() => setShowSortMenu(!showSortMenu)}
                   appearance={sortIconOnly ? "subtle" : "outline"}
-                  icon={sortIconOnly ? <ArrowSort16Filled /> : undefined}
+                  icon={sortIconOnly ? <ArrowSort20Regular /> : undefined}
                   size="small"
                   className="!h-8 !min-h-8"
                   aria-label="Sort"
@@ -1426,7 +1459,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                 >
                   {!sortIconOnly ? (
                     <>
-                      <ArrowSort16Filled className="size-3.5 text-primary" />
+                      <ArrowSort20Regular className="size-3.5 text-primary" />
                       <span className="hidden sm:inline">Sort</span>
                     </>
                   ) : null}

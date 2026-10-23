@@ -4,8 +4,13 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  ArrowRightIcon, CircleAlertIcon, CircleCheckIcon, RefreshCwIcon, WandSparklesIcon } from "lucide-react";
-import { Field } from "@fluentui/react-components"
+  ArrowRight20Regular,
+  ArrowSync20Regular,
+  CheckmarkCircle20Regular,
+  Sparkle20Regular,
+  Warning20Regular,
+} from "@fluentui/react-icons"
+import { Button as FluentButton, Field } from "@fluentui/react-components"
 
 import {
   Dialog,
@@ -150,15 +155,15 @@ export function AttendanceSetupWizard() {
       <div className="flex sm:justify-end">
         <DialogTrigger
           render={
-            <Button
+            <FluentButton
               type="button"
-              variant="outline"
-              size="sm"
+              appearance="subtle"
+              size="small"
+              icon={<Sparkle20Regular />}
               className="w-full sm:w-auto"
             />
           }
         >
-          <WandSparklesIcon data-icon="inline-start" />
           Policy creation quickstart
         </DialogTrigger>
       </div>
@@ -173,7 +178,7 @@ export function AttendanceSetupWizard() {
         </DialogHeader>
 
         <Alert>
-          {isComplete ? <CircleCheckIcon /> : <CircleAlertIcon />}
+          {isComplete ? <CheckmarkCircle20Regular /> : <Warning20Regular />}
           <AlertTitle className="flex flex-wrap items-center gap-2">
             <span>{statusTitle}</span>
             <Badge variant={isComplete ? "secondary" : "outline"}>
@@ -207,7 +212,7 @@ export function AttendanceSetupWizard() {
                       {canManageCheckpoints
                         ? "Create or activate checkpoint"
                         : "View checkpoints"}
-                      <ArrowRightIcon data-icon="inline-end" />
+                      <ArrowRight20Regular data-icon="inline-end" />
                     </Button>
                     <p className="text-xs">
                       Create a checkpoint if none exists, or activate an
@@ -246,7 +251,7 @@ export function AttendanceSetupWizard() {
                       className="animate-spin"
                     />
                   ) : (
-                    <WandSparklesIcon data-icon="inline-start" />
+                    <Sparkle20Regular data-icon="inline-start" />
                   )}
                   {busy ? "Creating policy…" : "Create starter policy"}
                 </Button>
@@ -261,7 +266,7 @@ export function AttendanceSetupWizard() {
                   size="sm"
                   onClick={() => void load()}
                 >
-                  <RefreshCwIcon data-icon="inline-start" />
+                  <ArrowSync20Regular data-icon="inline-start" />
                   Refresh setup status
                 </Button>
               </div>
