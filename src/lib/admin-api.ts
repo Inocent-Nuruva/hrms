@@ -17993,7 +17993,7 @@ export async function generatePerformancePeriods(
 export async function calculatePerformanceAggregates(
   token: string,
   yearId: string | number,
-  periodType: string,
+  periodType: "QUARTERLY" | "ANNUAL",
 ) {
   return adminRequest<unknown>(
     `/api/performance/financial-years/${yearId}/aggregates`,
