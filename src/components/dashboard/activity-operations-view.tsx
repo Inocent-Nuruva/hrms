@@ -54,8 +54,17 @@ import {
   getManagerActivityReport,
   listActivityCategories,
   listActivityPolicies,
+  listDepartments,
+  listPositions,
+  listEmployeeGrades,
   listHrActivities,
+  listHrActivityDepartmentSummary,
+  listHrActivityCategories,
   listHrActivityExceptions,
+  listHrPendingActivityReports,
+  downloadHrActivityReportExport,
+  getHrPlannedCompletedActivities,
+  downloadHrPlannedCompletedActivities,
   listManagerPendingActivityReviews,
   listManagerTeamActivities,
   reviewManagerActivityReport,
@@ -73,6 +82,26 @@ export type ActivityOpsTab =
   | "reviews"
   | "exceptions"
   | "setup";
+
+const standardActivityCategoryCodes = new Set([
+  "SALES_VISIT",
+  "CLIENT_MEETING",
+  "RENEWAL_FOLLOW_UP",
+  "NEW_BUSINESS_LEAD",
+  "BROKER_INTERMEDIARY_VISIT",
+  "CLAIM_FOLLOW_UP",
+  "UNDERWRITING_REVIEW",
+  "POLICY_ISSUANCE",
+  "CUSTOMER_SERVICE",
+  "COLLECTION_FOLLOW_UP",
+  "TRAINING",
+  "INTERNAL_MEETING",
+  "BRANCH_OPERATIONS",
+  "REPORT_PREPARATION",
+  "COMPLIANCE_ACTIVITY",
+  "ADMINISTRATIVE_TASK",
+  "SPECIAL_ASSIGNMENT",
+]);
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim();
@@ -99,10 +128,14 @@ export function ActivityOperationsView({
   const [pending, setPending] = React.useState<AdminRecord[]>([]);
   const [exceptions, setExceptions] = React.useState<AdminRecord[]>([]);
   const [categories, setCategories] = React.useState<AdminRecord[]>([]);
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([]);
+  const [positions, setPositions] = React.useState<AdminRecord[]>([]);
+  const [grades, setGrades] = React.useState<AdminRecord[]>([]);
   const [policies, setPolicies] = React.useState<AdminRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
+  const [categoryFilterId, setCategoryFilterId] = React.useState("");
   const [detail, setDetail] = React.useState<AdminRecord | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createMode, setCreateMode] = React.useState<
@@ -114,6 +147,16 @@ export function ActivityOperationsView({
   const [setupKind, setSetupKind] = React.useState<"categories" | "policies">(
     "categories",
   );
+  const [reportDateFrom, setReportDateFrom] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [reportDateTo, setReportDateTo] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [reportDepartmentId, setReportDepartmentId] = React.useState("");
+  const [plannedStatusFilter, setPlannedStatusFilter] = React.useState("");
+  const [reportMode, setReportMode] = React.useState<"summary" | "pending" | "planned-completed">("summary");
+  const [departmentSummary, setDepartmentSummary] = React.useState<AdminRecord[]>([]);
+  const [pendingReportRows, setPendingReportRows] = React.useState<AdminRecord[]>([]);
+  const [reportTotals, setReportTotals] = React.useState<AdminRecord>({});
+  const [plannedCompletedRows, setPlannedCompletedRows] = React.useState<AdminRecord[]>([]);
+  const [exporting, setExporting] = React.useState(false);
 
   const { begin, invalidate, credential } = useWorkflowRequest(activeTab);
 
@@ -134,7 +177,7 @@ export function ActivityOperationsView({
         getManagerActivitiesDashboard(token).then((value) =>
           commit(() => setDashboard(value)),
         ),
-        listHrActivities(token, { limit: 50 }).then((value) =>
+        listHrActivities(token, { limit: 50, activity_category_id: categoryFilterId || undefined }).then((value) =>
           commit(() => setReports(value)),
         ),
         listManagerPendingActivityReviews(token, { limit: 20 }).then((value) =>
@@ -144,11 +187,60 @@ export function ActivityOperationsView({
     }
     if (activeTab === "reports") {
       tasks.push(
-        listHrActivities(token, { limit: 50 }).then((value) =>
+        listHrActivities(token, { limit: 50, activity_category_id: categoryFilterId || undefined }).then((value) =>
           commit(() => setReports(value)),
         ),
-        listManagerTeamActivities(token, { limit: 50 }).then((value) =>
+        listManagerTeamActivities(token, { limit: 50, activity_category_id: categoryFilterId || undefined }).then((value) =>
           commit(() => setTeamReports(value)),
+        ),
+        listDepartments(token, { page: 1, limit: 100 }).then((value) =>
+          commit(() => setDepartments(value.rows)),
+        ),
+      );
+      const reportParams = {
+        date_from: reportDateFrom || undefined,
+        date_to: reportDateTo || undefined,
+        department_id: reportDepartmentId || undefined,
+        work_status:
+          reportMode === "planned-completed"
+            ? plannedStatusFilter || undefined
+            : undefined,
+        activity_category_id:
+          reportMode === "planned-completed"
+            ? categoryFilterId || undefined
+            : undefined,
+        limit: 100,
+      };
+      if (reportMode === "summary") {
+        tasks.push(
+          listHrActivityDepartmentSummary(token, reportParams).then((value) => {
+            const result = value as AdminRecord;
+            commit(() => setDepartmentSummary(Array.isArray(result.data) ? result.data as AdminRecord[] : []));
+            commit(() => setReportTotals((result.totals as AdminRecord) ?? {}));
+          }),
+        );
+      } else if (reportMode === "pending") {
+        tasks.push(
+          listHrPendingActivityReports(token, reportParams).then((value) => {
+            const result = value as AdminRecord;
+            commit(() => setPendingReportRows(Array.isArray(result.data) ? result.data as AdminRecord[] : []));
+            commit(() => setReportTotals((result.totals as AdminRecord) ?? {}));
+          }),
+        );
+      } else {
+        tasks.push(
+          getHrPlannedCompletedActivities(token, reportParams).then((value) => {
+            const result = value as AdminRecord;
+            commit(() => setPlannedCompletedRows(Array.isArray(result.data) ? result.data as AdminRecord[] : []));
+            commit(() => setReportTotals((result.totals as AdminRecord) ?? {}));
+          }),
+        );
+      }
+    }
+    if (activeTab === "reports") {
+      tasks.push(
+        listHrActivityCategories(token).then((value) =>
+          commit(() => setCategories(value)),
         ),
       );
     }
@@ -180,6 +272,15 @@ export function ActivityOperationsView({
         listActivityPolicies(token).then((value) =>
           commit(() => setPolicies(value)),
         ),
+        listDepartments(token, { page: 1, limit: 100 }).then((value) =>
+          commit(() => setDepartments(value.rows)),
+        ),
+        listPositions(token, { page: 1, limit: 100 }).then((value) =>
+          commit(() => setPositions(value.rows)),
+        ),
+        listEmployeeGrades(token).then((value) =>
+          commit(() => setGrades(value)),
+        ),
       );
     }
     const results = await Promise.allSettled(tasks);
@@ -192,7 +293,7 @@ export function ActivityOperationsView({
       );
     }
     commit(() => setLoading(false));
-  }, [begin, credential, activeTab]);
+  }, [begin, credential, activeTab, categoryFilterId, reportDateFrom, reportDateTo, reportDepartmentId, reportMode, plannedStatusFilter]);
 
   React.useEffect(() => {
     if (!canAccess) return;
@@ -215,7 +316,10 @@ export function ActivityOperationsView({
             ? policies
             : categories
           : reportRows;
-  const visible = rows.filter(
+  const activityReportData = activeTab === "reports"
+    ? reportMode === "summary" ? departmentSummary : reportMode === "pending" ? pendingReportRows : plannedCompletedRows
+    : rows;
+  const visible = activityReportData.filter(
     (row) =>
       !search ||
       JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
@@ -266,6 +370,24 @@ export function ActivityOperationsView({
           requires_time: form.requires_time === "true",
           requires_outcome: form.requires_outcome === "true",
           is_field_activity: form.is_field_activity === "true",
+          department_id:
+            form.department_id === undefined
+              ? undefined
+              : form.department_id === ""
+                ? null
+                : Number(form.department_id),
+          position_id:
+            form.position_id === undefined
+              ? undefined
+              : form.position_id === ""
+                ? null
+                : Number(form.position_id),
+          grade_id:
+            form.grade_id === undefined
+              ? undefined
+              : form.grade_id === ""
+                ? null
+                : Number(form.grade_id),
         };
         if (form.id) await updateActivityCategory(token, form.id, payload);
         if (!isMutationCurrent()) return;
@@ -306,6 +428,28 @@ export function ActivityOperationsView({
     }
   }
 
+  async function exportActivityReport() {
+    const token = credential?.trim() || readStoredToken();
+    if (!token || exporting) return;
+    setExporting(true);
+    try {
+      const exportParams = { date_from: reportDateFrom, date_to: reportDateTo, department_id: reportDepartmentId || undefined, work_status: reportMode === "planned-completed" ? plannedStatusFilter || undefined : undefined, activity_category_id: reportMode === "planned-completed" ? categoryFilterId || undefined : undefined };
+      const blob = reportMode === "planned-completed"
+        ? await downloadHrPlannedCompletedActivities(token, exportParams)
+        : await downloadHrActivityReportExport(token, reportMode === "summary" ? "department-summary" : "pending-reports", exportParams);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = reportMode === "summary" ? "activity-department-summary.csv" : reportMode === "pending" ? "pending-activity-reports.csv" : "planned-completed-activities.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (errorObject) {
+      toast.error(workflowFailure(errorObject, "Could not export activity report."));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "setup") {
       return [
@@ -340,6 +484,9 @@ export function ActivityOperationsView({
                     code: readString(row, ["code"]),
                     name: readString(row, ["name"]),
                     description: readString(row, ["description"]),
+                    department_id: readString(row, ["departmentId", "department_id"]),
+                    position_id: readString(row, ["positionId", "position_id"]),
+                    grade_id: readString(row, ["gradeId", "grade_id"]),
                     effective_from: readString(row, [
                       "effectiveFrom",
                       "effective_from",
@@ -384,6 +531,25 @@ export function ActivityOperationsView({
             </div>
           ),
         },
+      ];
+    }
+    if (activeTab === "reports" && reportMode === "planned-completed") {
+      return [
+        {
+          key: "activity",
+          label: "Activity",
+          render: (row) => (
+            <div className="space-y-0.5">
+              <p className="font-medium">{readString(row, ["title"], "Untitled activity")}</p>
+              <p className="text-xs text-muted-foreground">{employeeLabel(row)}</p>
+            </div>
+          ),
+        },
+        { key: "activity_date", label: "Reporting date", render: (row) => formatDate(row.activity_date) },
+        { key: "status", label: "Status", render: (row) => <StatusChip value={readString(row, ["status"], "PLANNED")} /> },
+        { key: "deadline", label: "Scheduled end", render: (row) => formatDate(row.planned_end_time ?? row.due_date) },
+        { key: "completion", label: "Completion", render: (row) => row.completed ? `Completed${row.completed_late ? " late" : ""}` : row.overdue ? "Overdue" : "Open" },
+        { key: "follow_up_date", label: "Carry-forward date", render: (row) => formatDate(row.follow_up_date) },
       ];
     }
     if (activeTab === "exceptions") {
@@ -466,7 +632,7 @@ export function ActivityOperationsView({
         ),
       },
     ];
-  }, [activeTab, load, setupKind]);
+  }, [activeTab, load, setupKind, reportMode]);
 
   if (!canAccess)
     return (
@@ -666,6 +832,70 @@ export function ActivityOperationsView({
             onChange={setSearch}
             placeholder="Search"
           />
+            {activeTab === "reports" ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">From</span>
+                  <input className={inputClass} type="date" value={reportDateFrom} max={reportDateTo} onChange={(event) => setReportDateFrom(event.target.value)} />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">To</span>
+                  <input className={inputClass} type="date" value={reportDateTo} min={reportDateFrom} onChange={(event) => setReportDateTo(event.target.value)} />
+                </label>
+                <label className="grid min-w-48 gap-1.5 text-sm">
+                  <span className="font-medium">Department</span>
+                  <FluentSelect ariaLabel="Filter by department" value={reportDepartmentId} onChange={setReportDepartmentId} options={[{ value: "", label: "All departments" }, ...departments.map((department) => ({ value: rowId(department), label: optionLabel(department) }))]} />
+                </label>
+                <label className="grid min-w-48 gap-1.5 text-sm">
+                  <span className="font-medium">View</span>
+                  <FluentSelect ariaLabel="Activity report view" value={reportMode} onChange={(value) => setReportMode(value as "summary" | "pending" | "planned-completed")} options={[{ value: "summary", label: "Department summary" }, { value: "pending", label: "Pending reports" }, { value: "planned-completed", label: "Planned vs completed" }]} />
+                </label>
+                <button type="button" className={secondaryButtonClass} onClick={() => void exportActivityReport()} disabled={exporting}>
+                  {exporting ? "Exporting…" : "Export CSV"}
+                </button>
+              </div>
+            ) : null}
+            {activeTab === "reports" ? (
+              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-8">
+                {reportMode === "planned-completed" ? <>
+                  <MetricTile label="Planned" value={readNumber(reportTotals, ["planned_count"]) ?? 0} />
+                  <MetricTile label="Completed" value={readNumber(reportTotals, ["completed_count"]) ?? 0} />
+                  <MetricTile label="Incomplete" value={readNumber(reportTotals, ["incomplete_count"]) ?? 0} />
+                  <MetricTile label="Deferred" value={readNumber(reportTotals, ["deferred_count"]) ?? 0} />
+                  <MetricTile label="Cancelled" value={readNumber(reportTotals, ["cancelled_count"]) ?? 0} />
+                  <MetricTile label="Overdue" value={readNumber(reportTotals, ["overdue_count"]) ?? 0} />
+                  <MetricTile label="Completed late" value={readNumber(reportTotals, ["completed_late_count"]) ?? 0} />
+                  <MetricTile label="Completion %" value={readNumber(reportTotals, ["completion_percent"]) ?? 0} />
+                </> : <>
+                  <MetricTile label="Eligible employee days" value={readNumber(reportTotals, ["eligible_employee_days"]) ?? 0} />
+                  <MetricTile label="Submitted reports" value={readNumber(reportTotals, ["submitted_reports"]) ?? 0} />
+                  <MetricTile label="Pending reports" value={readNumber(reportTotals, ["pending_reports"]) ?? 0} />
+                </>}
+              </div>
+            ) : null}
+            {activeTab === "reports" ? (
+            <label className="grid max-w-sm gap-1.5 text-sm">
+              <span className="font-medium">Filter by activity category</span>
+              <FluentSelect
+                ariaLabel="Filter by activity category"
+                value={categoryFilterId}
+                onChange={setCategoryFilterId}
+                options={[
+                  { value: "", label: "All categories" },
+                  ...categories.map((category) => ({
+                    value: rowId(category),
+                    label: optionLabel(category),
+                  })),
+                ]}
+              />
+            </label>
+          ) : null}
+            {activeTab === "reports" && reportMode === "planned-completed" ? (
+              <label className="grid max-w-sm gap-1.5 text-sm">
+                <span className="font-medium">Filter by activity status</span>
+                <FluentSelect ariaLabel="Filter by activity status" value={plannedStatusFilter} onChange={setPlannedStatusFilter} options={[{ value: "", label: "All statuses" }, { value: "PLANNED", label: "Planned" }, { value: "IN_PROGRESS", label: "In progress" }, { value: "COMPLETED", label: "Completed" }, { value: "DEFERRED", label: "Deferred" }, { value: "CANCELLED", label: "Cancelled" }]} />
+              </label>
+            ) : null}
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
@@ -673,7 +903,7 @@ export function ActivityOperationsView({
           ) : null}
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
-              title="Activity records"
+              title={activeTab === "reports" ? reportMode === "summary" ? "Department activity summary" : reportMode === "pending" ? "Pending activity reports" : "Planned versus completed activities" : "Activity records"}
               data={visible}
               columns={columns}
               loading={loading}
@@ -688,7 +918,7 @@ export function ActivityOperationsView({
                 if (
                   token &&
                   id &&
-                  (activeTab === "reports" || activeTab === "reviews")
+                  ((activeTab === "reports" && reportMode !== "planned-completed") || activeTab === "reviews")
                 ) {
                   void getManagerActivityReport(token, id)
                     .then((record) => record && setDetail(record))
@@ -794,6 +1024,9 @@ export function ActivityOperationsView({
                       <input
                         className={inputClass}
                         value={form.code ?? ""}
+                        disabled={standardActivityCategoryCodes.has(
+                          (form.code ?? "").toUpperCase(),
+                        )}
                         onChange={(event) =>
                           setForm((current) => ({
                             ...current,
@@ -826,6 +1059,42 @@ export function ActivityOperationsView({
                             description: event.target.value,
                           }))
                         }
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Department applicability</span>
+                      <FluentSelect
+                        ariaLabel="Department applicability"
+                        value={form.department_id ?? ""}
+                        onChange={(value) => setForm((current) => ({ ...current, department_id: value }))}
+                        options={[
+                          { value: "", label: "All departments" },
+                          ...departments.map((item) => ({ value: rowId(item), label: optionLabel(item) })),
+                        ]}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Position applicability</span>
+                      <FluentSelect
+                        ariaLabel="Position applicability"
+                        value={form.position_id ?? ""}
+                        onChange={(value) => setForm((current) => ({ ...current, position_id: value }))}
+                        options={[
+                          { value: "", label: "All positions" },
+                          ...positions.map((item) => ({ value: rowId(item), label: optionLabel(item) })),
+                        ]}
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Grade applicability</span>
+                      <FluentSelect
+                        ariaLabel="Grade applicability"
+                        value={form.grade_id ?? ""}
+                        onChange={(value) => setForm((current) => ({ ...current, grade_id: value }))}
+                        options={[
+                          { value: "", label: "All grades" },
+                          ...grades.map((item) => ({ value: rowId(item), label: optionLabel(item) })),
+                        ]}
                       />
                     </label>
                   </>

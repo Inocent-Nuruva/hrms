@@ -29,6 +29,8 @@ export default function ActivitiesScreen() {
   const [edit, setEdit] = React.useState<Row | null>(null);
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
+  const [categories, setCategories] = React.useState<Row[]>([]);
+  const [activityCategoryId, setActivityCategoryId] = React.useState('');
   const [dueDate, setDueDate] = React.useState(new Date().toISOString().slice(0, 10));
   const [summary, setSummary] = React.useState('');
   const [report, setReport] = React.useState<Row | null>(null);
@@ -54,10 +56,21 @@ export default function ActivitiesScreen() {
     setLoading(true);
     try {
       if (view === 'tasks') {
-        setRows(await api.listMyActivityTasks());
+        const [taskRows, categoryRows] = await Promise.all([
+          api.listMyActivityTasks(),
+          api.listMyActivityCategories(),
+        ]);
+        setRows(taskRows);
+        setCategories(categoryRows);
       } else {
-        setRows(await api.listMyActivities());
-        setReport(await api.getMyActivityToday());
+        const [activityRows, todayReport, categoryRows] = await Promise.all([
+          api.listMyActivities(),
+          api.getMyActivityToday(),
+          api.listMyActivityCategories(),
+        ]);
+        setRows(activityRows);
+        setReport(todayReport);
+        setCategories(categoryRows);
       }
     } catch (error) {
       Alert.alert('Could not load activities', error instanceof Error ? error.message : 'Try again.');
@@ -74,17 +87,17 @@ export default function ActivitiesScreen() {
     if (params.view === 'reports' || params.view === 'tasks') setView(params.view);
   }, [params.view]);
 
-  const startCreate = () => { setEdit(null); setTitle(''); setDescription(''); setDueDate(new Date().toISOString().slice(0, 10)); setForm(true); };
-  const startEdit = (row: Row) => { setEdit(row); setTitle(str(row.title)); setDescription(str(row.description)); setDueDate(str(row.dueDate ?? row.due_date, new Date().toISOString().slice(0, 10)).slice(0, 10)); setForm(true); };
+  const startCreate = () => { setEdit(null); setTitle(''); setDescription(''); setActivityCategoryId(''); setDueDate(new Date().toISOString().slice(0, 10)); setForm(true); };
+  const startEdit = (row: Row) => { setEdit(row); setTitle(str(row.title)); setDescription(str(row.description)); setActivityCategoryId(str(row.activityCategoryId ?? row.activity_category_id)); setDueDate(str(row.dueDate ?? row.due_date, new Date().toISOString().slice(0, 10)).slice(0, 10)); setForm(true); };
   const save = async () => {
     if (!title.trim() || !description.trim()) { Alert.alert('Required fields', 'Enter a title and description.'); return; }
     setBusy(true);
     try {
-      const payload = { activity_date: new Date().toISOString().slice(0, 10), title: title.trim(), description: description.trim(), due_date: dueDate };
+      const payload = { activity_date: new Date().toISOString().slice(0, 10), title: title.trim(), description: description.trim(), due_date: dueDate, activity_category_id: activityCategoryId ? Number(activityCategoryId) : undefined };
       if (view === 'tasks' && edit) {
         const reportId = str(edit.report_id ?? edit.reportId);
         const entryId = str(edit.id);
-        await api.updateMyActivityEntry(reportId, entryId, { title: title.trim(), description: description.trim(), due_date: dueDate, status: 'PLANNED' });
+        await api.updateMyActivityEntry(reportId, entryId, { title: title.trim(), description: description.trim(), due_date: dueDate, activity_category_id: activityCategoryId ? Number(activityCategoryId) : undefined, status: 'PLANNED' });
       } else if (view === 'tasks') {
         const requestId = globalThis.crypto?.randomUUID?.();
         if (!requestId) throw new Error('Secure request identifiers are unavailable.');
@@ -160,11 +173,20 @@ export default function ActivitiesScreen() {
         {rows.map((row, i) => <View key={str(row.id, String(i))} style={[styles.card, { borderColor: isDark ? '#3F4852' : '#E2E8F0' }]}>
           <Text style={[styles.cardTitle, { color: fg }]}>{view === 'reports' ? str(row.activityDate ?? row.activity_date, 'Daily report') : str(row.title, 'Activity')}</Text>
           <Text style={[styles.copy, { color: muted }]}>{view === 'reports' ? str(row.status) : `${str(row.status)}${str(row.dueDate ?? row.due_date) ? ` · due ${str(row.dueDate ?? row.due_date).slice(0, 10)}` : ''}`}</Text>
+          {view === 'tasks' && str(row.activity_category_name ?? row.activityCategoryName) ? <Text style={[styles.copy, { color: muted }]}>{str(row.activity_category_name ?? row.activityCategoryName)}</Text> : null}
           {view === 'tasks' ? <View style={styles.rowActions}><Pressable onPress={() => startEdit(row)}><Text style={[styles.actionText, { color: accent }]}>Edit</Text></Pressable><Pressable onPress={() => remove(row)}><Text style={[styles.actionText, { color: COLORS.error }]}>Delete</Text></Pressable></View> : null}
         </View>)}
         {form ? <View style={[styles.form, { borderColor: isDark ? '#3F4852' : '#E2E8F0' }]}>
           <Text style={[styles.heading, { color: fg }]}>{edit ? 'Edit activity' : view === 'reports' ? 'Add report entry' : 'Create task'}</Text>
           <TextInput value={title} onChangeText={setTitle} placeholder="Title" placeholderTextColor={muted} style={inputStyle} />
+          <Text style={[styles.label, { color: fg }]}>Activity category (optional)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryOptions}>
+            {[{ id: '', name: 'Uncategorized' }, ...categories].map((category, index) => {
+              const id = str(category.id);
+              const selected = activityCategoryId === id;
+              return <Pressable key={id || `uncategorized-${index}`} onPress={() => setActivityCategoryId(id)} style={[styles.categoryOption, { borderColor: selected ? accent : (isDark ? '#475361' : '#CBD5E1'), backgroundColor: selected ? `${accent}20` : 'transparent' }]}><Text style={[styles.categoryOptionText, { color: fg }]}>{str(category.name, id ? `Category ${id}` : 'Uncategorized')}</Text></Pressable>;
+            })}
+          </ScrollView>
           <TextInput value={description} onChangeText={setDescription} placeholder="Description" placeholderTextColor={muted} multiline style={[...inputStyle, styles.multiline]} />
           {view === 'tasks' ? <TextInput value={dueDate} onChangeText={setDueDate} placeholder="Due date (YYYY-MM-DD)" placeholderTextColor={muted} style={inputStyle} /> : null}
           <View style={styles.rowActions}><Pressable onPress={() => setForm(false)}><Text style={[styles.actionText, { color: muted }]}>Cancel</Text></Pressable><Pressable disabled={busy} onPress={() => void save()}><Text style={[styles.actionText, { color: accent }]}>{busy ? 'Saving…' : 'Save'}</Text></Pressable></View>
@@ -175,5 +197,29 @@ export default function ActivitiesScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 }, content: { padding: 16, paddingBottom: 40 }, tabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 }, tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#E9EFF5' }, tabText: { color: '#334155', fontSize: 13, fontWeight: '600' }, selectedText: { color: '#FFFFFF' }, actions: { alignItems: 'flex-end', marginBottom: 10 }, button: { alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 9 }, buttonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' }, card: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 }, cardTitle: { fontSize: 15, fontWeight: '700' }, copy: { marginTop: 5, fontSize: 12 }, rowActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 14 }, actionText: { fontSize: 13, fontWeight: '700' }, form: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 14, gap: 10 }, heading: { fontSize: 16, fontWeight: '700' }, label: { fontSize: 13, fontWeight: '700', marginBottom: 6 }, input: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 }, multiline: { minHeight: 86, textAlignVertical: 'top' }, submitBox: { marginBottom: 16, padding: 14, borderRadius: 12, backgroundColor: '#0877B914', gap: 8 }, empty: { paddingVertical: 20, fontSize: 14, textAlign: 'center' }, queueBox: { marginBottom: 14, padding: 12, borderRadius: 10, backgroundColor: '#0877B914', gap: 8 },
+  safe: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
+  tabs: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: '#E9EFF5' },
+  tabText: { color: '#334155', fontSize: 13, fontWeight: '600' },
+  selectedText: { color: '#FFFFFF' },
+  actions: { alignItems: 'flex-end', marginBottom: 10 },
+  button: { alignSelf: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, borderRadius: 9 },
+  buttonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  card: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '700' },
+  copy: { marginTop: 5, fontSize: 12 },
+  rowActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 20, marginTop: 14 },
+  actionText: { fontSize: 13, fontWeight: '700' },
+  form: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 14, gap: 10 },
+  heading: { fontSize: 16, fontWeight: '700' },
+  label: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
+  categoryOptions: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  categoryOption: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  categoryOptionText: { fontSize: 12, fontWeight: '600' },
+  input: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 },
+  multiline: { minHeight: 86, textAlignVertical: 'top' },
+  submitBox: { marginBottom: 16, padding: 14, borderRadius: 12, backgroundColor: '#0877B914', gap: 8 },
+  empty: { paddingVertical: 20, fontSize: 14, textAlign: 'center' },
+  queueBox: { marginBottom: 14, padding: 12, borderRadius: 10, backgroundColor: '#0877B914', gap: 8 },
 });

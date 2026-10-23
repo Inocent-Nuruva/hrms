@@ -18998,6 +18998,13 @@ export async function listManagerActivityCategories(token: string) {
   return normalizeList(payload);
 }
 
+export async function listMyActivityCategories(token: string) {
+  const payload = await adminRequest<unknown>("/api/me/activities/categories", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
 export async function validateManagerAchievement(
   token: string,
   achievementId: string | number,
@@ -19296,6 +19303,75 @@ export async function listHrActivities(
 ) {
   const payload = await adminRequest<unknown>(
     `/api/hr/activities${buildRecordQuery(params)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listHrActivityDepartmentSummary(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/activities/department-summary${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function listHrPendingActivityReports(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/activities/pending-reports${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function getHrPlannedCompletedActivities(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/activities/planned-completed${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function downloadHrPlannedCompletedActivities(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  const response = await fetch(
+    buildUrl(`/api/hr/activities/planned-completed/export.csv${buildRecordQuery(params)}`),
+    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Export failed with status ${response.status}`);
+  }
+  return response.blob();
+}
+
+export async function downloadHrActivityReportExport(
+  token: string,
+  kind: "department-summary" | "pending-reports",
+  params: Record<string, string | number | undefined> = {},
+) {
+  const response = await fetch(
+    buildUrl(`/api/hr/activities/${kind}/export.csv${buildRecordQuery(params)}`),
+    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Export failed with status ${response.status}`);
+  }
+  return response.blob();
+}
+
+export async function listHrActivityCategories(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/hr/activity-categories",
     { token },
   );
   return normalizeList(payload);

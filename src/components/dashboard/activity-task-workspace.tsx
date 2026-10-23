@@ -80,9 +80,11 @@ import {
   getMyActivityReport,
   getMyAttendanceSchedule,
   listManagerActivityAssignees,
+  listManagerActivityCategories,
   listManagerActivityTasks,
   listManagerEmployeeKpis,
   listMyActivities,
+  listMyActivityCategories,
   listMyActivityTasks,
   listMyEmployeeKpis,
   submitMyActivityReport,
@@ -421,6 +423,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   );
   const [team, setTeam] = React.useState<AdminRecord[]>([]);
   const [employeeKpis, setEmployeeKpis] = React.useState<AdminRecord[]>([]);
+  const [activityCategories, setActivityCategories] = React.useState<AdminRecord[]>([]);
   const [selected, setSelected] = React.useState<AdminRecord | null>(null);
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
@@ -499,7 +502,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     try {
       if (mode === "self") {
         const scheduleDate = today();
-        const [taskRows, reportRows, kpiRows, scheduleRows] = await Promise.all(
+        const [taskRows, reportRows, kpiRows, scheduleRows, categoryRows] = await Promise.all(
           [
             listMyActivityTasks(accessToken, { limit: 100 }),
             listMyActivities(accessToken, { limit: 100 }),
@@ -508,6 +511,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               from_date: scheduleDate,
               to_date: scheduleDate,
             }),
+            listMyActivityCategories(accessToken),
           ],
         );
         const fromReports = entriesFromReports(reportRows);
@@ -559,14 +563,16 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         );
         commit(() => setTeam([]));
         commit(() => setEmployeeKpis(kpiRows));
+        commit(() => setActivityCategories(categoryRows));
       } else {
-        const [taskRows, teamRows, kpiRows] = await Promise.all([
+        const [taskRows, teamRows, kpiRows, categoryRows] = await Promise.all([
           listManagerActivityTasks(accessToken, { limit: 100 }),
           listManagerActivityAssignees(accessToken),
           listManagerEmployeeKpis(accessToken, {
             status: "APPROVED",
             limit: 100,
           }),
+          listManagerActivityCategories(accessToken),
         ]);
         commit(() =>
           setTasks(
@@ -577,6 +583,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         );
         commit(() => setTeam(teamRows));
         commit(() => setEmployeeKpis(kpiRows));
+        commit(() => setActivityCategories(categoryRows));
         commit(() => setDailySchedule(null));
       }
     } catch (errorObject) {
@@ -790,6 +797,28 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   }, [dailySchedule, visibleRows]);
 
   const canAssign = team.length > 0;
+  const selectedTeamMembers = employeeIds
+    .map((id) => team.find((member) => rowId(member) === id))
+    .filter((member): member is AdminRecord => Boolean(member));
+  const managerSelectableCategories = activityCategories.filter((category) =>
+    selectedTeamMembers.every((member) => {
+      const departmentId = readString(category, ["departmentId", "department_id"]);
+      const positionId = readString(category, ["positionId", "position_id"]);
+      const gradeId = readString(category, ["gradeId", "grade_id"]);
+      const memberDepartmentId =
+        rowId(asRecord(member.department)) ||
+        readString(member, ["primary_department_id", "department_id"]);
+      const memberPositionId =
+        rowId(asRecord(member.position)) ||
+        readString(member, ["primary_position_id", "position_id"]);
+      const memberGradeId = readString(member, ["grade_id", "gradeId"]);
+      return (
+        (!departmentId || departmentId === memberDepartmentId) &&
+        (!positionId || positionId === memberPositionId) &&
+        (!gradeId || gradeId === memberGradeId)
+      );
+    }),
+  );
   const filteredTeam = React.useMemo(() => {
     const needle = teamQuery.trim().toLowerCase();
     if (!needle) return team;
@@ -944,6 +973,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       start_time: "09:00",
       end_time: "10:00",
       priority: "MEDIUM",
+      activity_category_id: "",
     });
     setChecklistDraft("");
     setChecklistItems([]);
@@ -964,6 +994,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       start_time: "09:00",
       end_time: "10:00",
       priority: "MEDIUM",
+      activity_category_id: "",
     });
     setChecklistDraft("");
     setChecklistItems([]);
@@ -1031,6 +1062,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               employeeIds[0]));
       const taskPayload = {
         activity_date: targetDate,
+        activity_category_id: form.activity_category_id
+          ? Number(form.activity_category_id)
+          : undefined,
         title: form.title.trim(),
         description: form.description.trim(),
         planned_start_time: plannedStart,
@@ -1941,6 +1975,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   start_time: "09:00",
                   end_time: "10:00",
                   priority: "MEDIUM",
+                  activity_category_id: "",
                 });
                 setChecklistDraft("");
                 setChecklistItems([]);
@@ -3110,6 +3145,38 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">
+                      Activity category <span className="font-normal text-slate-500">(optional)</span>
+                    </span>
+                    <FluentSelect
+                      ariaLabel="Activity category"
+                      className="w-full"
+                      value={form.activity_category_id ?? ""}
+                      placeholder="Select an activity category"
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          activity_category_id: value,
+                        }))
+                      }
+                      options={[
+                        { value: "", label: "Uncategorized task" },
+                        ...(audience === "employee"
+                          ? managerSelectableCategories
+                          : activityCategories
+                        ).map((category) => ({
+                          value: rowId(category),
+                          label: optionLabel(category),
+                        })),
+                      ]}
+                    />
+                    {audience === "employee" && employeeIds.length > 1 ? (
+                      <span className="text-xs text-slate-500">
+                        A scoped category must apply to every selected employee.
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">
                       {mode === "self"
                         ? "Which day is this for?"
                         : "Start date"}
@@ -3562,6 +3629,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 {readString(selected, ["title"], "Untitled task")}
               </DialogTitle>
               <DialogDescription>
+                {readString(selected, ["activity_category_name", "activityCategoryName"])
+                  ? `Category: ${readString(selected, ["activity_category_name", "activityCategoryName"])}. `
+                  : ""}
                 Review the assignment, update its progress, and keep the
                 activity trail together.
               </DialogDescription>
