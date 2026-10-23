@@ -3209,6 +3209,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
           sortBy: "created_at" as const,
           sortOrder: "DESC" as const,
           employee_no: searchTerm.includes("/") ? searchTerm : undefined,
+          search: searchTerm || undefined,
+          check_in_after: appliedDailySummaryFilters.check_in_after || undefined,
+          check_in_before: appliedDailySummaryFilters.check_in_before || undefined,
           from_date: appliedDailySummaryFilters.from_date || undefined,
           to_date: appliedDailySummaryFilters.to_date || undefined,
           employee_id: resolvedEmployeeId,
@@ -3222,20 +3225,32 @@ export function AttendanceActivityView({ section }: { section: string }) {
         let resultTotalPages: number | null = null
 
         if (!resolvedEmployeeId && matchedEmployeeIds.length > 1) {
-          // Search can match more than twenty employees; fetch all matched IDs
-          // in small batches so valid matches are not silently omitted.
+          // Search can match several employees and a long date range can give
+          // each employee multiple pages. Load every page so totals and the
+          // visible result set represent the complete filtered search.
           for (let index = 0; index < matchedEmployeeIds.length; index += 10) {
             const batch = matchedEmployeeIds.slice(index, index + 10)
-            const pages = await Promise.all(
-              batch.map((employeeId) =>
-                listAttendanceDailySummariesPage(token, {
+            const employeeResults = await Promise.all(
+              batch.map(async (employeeId) => {
+                const firstPage = await listAttendanceDailySummariesPage(token, {
                   ...listParams,
                   page: 1,
                   employee_id: employeeId,
-                }),
-              ),
+                })
+                const pageCount = Math.max(1, firstPage.totalPages ?? 1)
+                const remainingPages = await Promise.all(
+                  Array.from({ length: pageCount - 1 }, (_, pageIndex) =>
+                    listAttendanceDailySummariesPage(token, {
+                      ...listParams,
+                      page: pageIndex + 2,
+                      employee_id: employeeId,
+                    }),
+                  ),
+                )
+                return [firstPage, ...remainingPages].flatMap((page) => page.rows)
+              }),
             )
-            resultRows.push(...pages.flatMap((page) => page.rows))
+            resultRows.push(...employeeResults.flat())
           }
           resultTotal = resultRows.length
           resultTotalPages = 1
@@ -3847,19 +3862,21 @@ export function AttendanceActivityView({ section }: { section: string }) {
         limit: 100,
         sortBy: "created_at",
         sortOrder: "DESC",
-        search: recordSearch.trim() || undefined,
-        from_date: dailySummaryFilters.from_date || undefined,
-        to_date: dailySummaryFilters.to_date || undefined,
-        employee_id: dailySummaryFilters.employee_id
-          ? Number(dailySummaryFilters.employee_id)
+        search: debouncedRecordSearch.trim() || undefined,
+        check_in_after: appliedDailySummaryFilters.check_in_after || undefined,
+        check_in_before: appliedDailySummaryFilters.check_in_before || undefined,
+        from_date: appliedDailySummaryFilters.from_date || undefined,
+        to_date: appliedDailySummaryFilters.to_date || undefined,
+        employee_id: appliedDailySummaryFilters.employee_id
+          ? Number(appliedDailySummaryFilters.employee_id)
           : undefined,
-        branch_id: dailySummaryFilters.branch_id
-          ? Number(dailySummaryFilters.branch_id)
+        branch_id: appliedDailySummaryFilters.branch_id
+          ? Number(appliedDailySummaryFilters.branch_id)
           : undefined,
-        organization_id: dailySummaryFilters.branch_id
-          ? Number(dailySummaryFilters.branch_id)
+        organization_id: appliedDailySummaryFilters.branch_id
+          ? Number(appliedDailySummaryFilters.branch_id)
           : undefined,
-        status: dailySummaryFilters.status || undefined,
+        status: appliedDailySummaryFilters.status || undefined,
         format,
       })
 
