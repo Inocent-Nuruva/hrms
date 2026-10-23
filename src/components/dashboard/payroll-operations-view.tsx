@@ -3168,12 +3168,35 @@ export function PayrollOperationsView() {
             formatAdminValue(row.work_date ?? row.workDate),
         },
         {
-          key: "minutes",
-          label: "Requested / recorded / payable",
+          key: "calculated_minutes",
+          label: "Calculated",
+          render: (row) => `${readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0} min`,
+        },
+        {
+          key: "requested_minutes",
+          label: "Requested",
+          render: (row) => `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
+        },
+        {
+          key: "approved_minutes",
+          label: "Approved",
+          render: (row) => `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
+        },
+        {
+          key: "payable_minutes",
+          label: "Payable",
+          render: (row) => `${Math.min(
+            readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0,
+            readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0,
+          )} min`,
+        },
+        {
+          key: "pending_minutes",
+          label: "Unapproved calculated",
           render: (row) => {
             const requested = readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0;
-            const recorded = readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
-            return `${requested} / ${recorded} / ${Math.min(requested, recorded)} min`;
+            const calculated = readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
+            return `${Math.max(0, calculated - requested)} min`;
           },
         },
         {

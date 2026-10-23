@@ -235,6 +235,9 @@ export interface OffboardingWorkflowsQueryParams extends UsersQueryParams {
 }
 
 export interface AttendanceQueryParams extends UsersQueryParams {
+  search?: string;
+  check_in_after?: string;
+  check_in_before?: string;
   employee_id?: number;
   employee_no?: string;
   device_id?: number;
@@ -1796,6 +1799,8 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim());
   }
+  if (params.check_in_after) searchParams.set("check_in_after", params.check_in_after);
+  if (params.check_in_before) searchParams.set("check_in_before", params.check_in_before);
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id));
   }

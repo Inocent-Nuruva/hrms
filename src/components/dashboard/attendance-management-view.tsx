@@ -3041,12 +3041,16 @@ export function AttendanceManagementView({ section }: { section: string }) {
       return
     }
 
+    const reviewNote = mobilePunchReviewNote.trim()
+    if (!reviewNote) {
+      setFormError("Enter a review reason before approving or rejecting this override.")
+      return
+    }
+
     setMobilePunchActionBusy(action)
     setFormError(null)
     try {
-      const payload = mobilePunchReviewNote.trim()
-        ? { reviewNote: mobilePunchReviewNote.trim() }
-        : {}
+      const payload = { reviewNote }
       if (action === "approve") {
         await approveAttendanceMobilePunchOverride(token, rowId, payload)
         setMessage("Mobile punch override approved.")
@@ -3774,11 +3778,11 @@ export function AttendanceManagementView({ section }: { section: string }) {
                 <div className="flex w-full flex-col gap-3">
                   <label className="grid gap-1">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Review note
+                      Review reason (required)
                     </span>
                     <Textarea
                       className="min-h-24"
-                      placeholder="Optional note for the override review"
+                      placeholder="Explain why this override is approved or rejected"
                       value={mobilePunchReviewNote}
                       onChange={(event) => setMobilePunchReviewNote(event.target.value)}
                     />
@@ -3787,7 +3791,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     <button
                       type="button"
                       className="rounded-md border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:opacity-50"
-                      disabled={Boolean(mobilePunchActionBusy)}
+                      disabled={Boolean(mobilePunchActionBusy) || !mobilePunchReviewNote.trim()}
                       onClick={() => void handleMobilePunchOverrideAction("reject")}
                     >
                       {mobilePunchActionBusy === "reject" ? "Rejecting..." : "Reject override"}
@@ -3795,7 +3799,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                     <button
                       type="button"
                       className="rounded-md bg-[var(--primary)] px-3 py-1.5 text-sm font-medium !text-white transition hover:brightness-95 disabled:opacity-50"
-                      disabled={Boolean(mobilePunchActionBusy)}
+                      disabled={Boolean(mobilePunchActionBusy) || !mobilePunchReviewNote.trim()}
                       onClick={() => void handleMobilePunchOverrideAction("approve")}
                     >
                       {mobilePunchActionBusy === "approve" ? "Approving..." : "Approve override"}
