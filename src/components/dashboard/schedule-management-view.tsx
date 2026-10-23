@@ -2585,7 +2585,21 @@ export function ScheduleManagementView({ section }: { section: string }) {
           label: fields.find((field) => field.key === column)?.label ?? prettifyLabel(column),
           defaultWidth: column === "name" ? 180 : column === "status" ? 90 : 150,
           sortable: true,
-          render: (row: AdminRecord) => resolveScheduleCellValue(column, row, lookupMaps),
+          render: (row: AdminRecord) => {
+            const value = resolveScheduleCellValue(column, row, lookupMaps)
+            if (column !== "status") return value
+
+            const status = String(value || "ACTIVE").toUpperCase()
+            return (
+              <span className={cn(
+                "inline-flex items-center gap-1.5 text-[10px] font-semibold",
+                scheduleStatusTextClass(status)
+              )}>
+                <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+                {prettifyLabel(status.toLowerCase())}
+              </span>
+            )
+          },
         })),
         actionColumn,
       ]

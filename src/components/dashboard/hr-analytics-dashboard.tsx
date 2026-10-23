@@ -16,6 +16,14 @@ import {
   FilterIcon,
   MoreHorizontalIcon,
   FileTextIcon,
+  BellRingIcon,
+  BriefcaseBusinessIcon,
+  ChevronRightIcon,
+  CircleCheckBigIcon,
+  Clock3Icon,
+  ListChecksIcon,
+  SparklesIcon,
+  UserRoundPlusIcon,
 } from "lucide-react"
 import {
   getAnalyticsDashboard,
@@ -40,7 +48,25 @@ import {
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { Card as UiCard, CardContent as UiCardContent } from "@/components/ui/card"
+import {
+  Card as UiCard,
+  CardAction as UiCardAction,
+  CardContent as UiCardContent,
+  CardDescription as UiCardDescription,
+  CardFooter as UiCardFooter,
+  CardHeader as UiCardHeader,
+  CardTitle as UiCardTitle,
+} from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   Badge as FluentBadge,
   Caption1,
@@ -52,7 +78,14 @@ import {
   Text as FluentText,
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
-import { MoreHorizontal20Regular } from "@fluentui/react-icons"
+import {
+  CheckmarkCircleColor,
+  ClipboardTaskColor,
+  MoreHorizontal20Regular,
+  PersonAddColor,
+  PersonAvailableColor,
+  PersonWarningColor,
+} from "@fluentui/react-icons"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
@@ -565,6 +598,160 @@ interface HrAnalyticsDashboardProps {
   showHrAnalytics?: boolean
 }
 
+type DashboardPriorityTone = "urgent" | "warning" | "info"
+
+interface DashboardPriority {
+  id: string
+  title: string
+  description: string
+  owner: string
+  count: number
+  href?: string
+  tone: DashboardPriorityTone
+  icon: React.ReactNode
+}
+
+interface LifecycleStage {
+  label: string
+  count: number
+  description: string
+  icon: React.ReactNode
+  countColor: "brand" | "success" | "warning" | "subtle"
+  href?: string
+}
+
+interface DashboardInsight {
+  title: string
+  href?: string
+}
+
+const priorityToneClasses = {
+  urgent: "before:bg-destructive text-destructive",
+  warning: "before:bg-primary text-primary",
+  info: "before:bg-muted-foreground text-foreground",
+} satisfies Record<DashboardPriorityTone, string>
+
+function DashboardPriorityCard({ priority }: { priority: DashboardPriority }) {
+  return (
+    <UiCard
+      size="sm"
+      className={cn(
+        "relative h-full gap-0 rounded-lg border-border/70 bg-card py-0 shadow-sm transition before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-r-full hover:-translate-y-px hover:border-primary/25 hover:shadow-md",
+        priorityToneClasses[priority.tone],
+      )}
+    >
+      <UiCardHeader className="border-b border-border/60 py-3">
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50 [&_svg]:size-4">
+            {priority.icon}
+          </span>
+          <div className="min-w-0">
+            <UiCardTitle className="text-foreground">{priority.title}</UiCardTitle>
+            <UiCardDescription className="mt-0.5 text-xs">
+              Responsible: {priority.owner}
+            </UiCardDescription>
+          </div>
+        </div>
+        <UiCardAction>
+          <Badge variant="secondary" className="tabular-nums">
+            {priority.count}
+          </Badge>
+        </UiCardAction>
+      </UiCardHeader>
+      <UiCardContent className="py-3">
+        <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+          {priority.description}
+        </p>
+      </UiCardContent>
+      {priority.href ? (
+        <UiCardFooter className="justify-end border-border/60 bg-muted/20 py-2.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<Link href={priority.href} />}
+            className="gap-1.5"
+          >
+            Review
+            <ChevronRightIcon data-icon="inline-end" aria-hidden="true" />
+          </Button>
+        </UiCardFooter>
+      ) : null}
+    </UiCard>
+  )
+}
+
+function DashboardLifecycle({ stages }: { stages: LifecycleStage[] }) {
+  return (
+    <section className="border-y border-border/70 py-4">
+      <h2 className="px-1 text-base font-semibold text-foreground">Workforce lifecycle</h2>
+      <ol className="mt-3 grid sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-border/70">
+          {stages.map((stage) => {
+            const content = (
+              <div className="flex min-h-16 items-center gap-3 px-3 py-2 transition hover:bg-muted/25">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-muted/30 [&_svg]:size-5">
+                  {stage.icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">{stage.label}</p>
+                    <FluentBadge
+                      appearance="tint"
+                      color={stage.countColor}
+                      shape="rounded"
+                      size="medium"
+                      className="min-w-8 justify-center tabular-nums"
+                    >
+                      {stage.count}
+                    </FluentBadge>
+                  </div>
+                  <p className="mt-1 text-xs leading-4 text-muted-foreground">{stage.description}</p>
+                </div>
+              </div>
+            )
+
+            return (
+              <li key={stage.label}>
+                {stage.href ? (
+                  <Link href={stage.href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                    {content}
+                  </Link>
+                ) : content}
+              </li>
+            )
+          })}
+      </ol>
+    </section>
+  )
+}
+
+function DashboardIntelligence({ insights }: { insights: DashboardInsight[] }) {
+  return (
+    <section className="border-b border-border/70 pb-4">
+      <div className="flex items-center gap-2 px-1">
+        <span className="inline-flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <SparklesIcon className="size-4" aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="text-base font-semibold text-foreground">HR briefing</h2>
+          <p className="text-xs text-muted-foreground">Today’s workforce signals.</p>
+        </div>
+      </div>
+      <div className="mt-3 grid sm:grid-cols-3 sm:divide-x sm:divide-border/70">
+        {insights.map((insight) => (
+          <div key={insight.title} className="flex min-h-16 flex-col px-3 py-2">
+            <p className="text-sm font-medium text-foreground">{insight.title}</p>
+            {insight.href ? (
+              <Link href={insight.href} className="mt-auto inline-flex items-center gap-1 pt-2 text-xs font-medium text-primary">
+                Open workspace <ChevronRightIcon className="size-3" aria-hidden="true" />
+              </Link>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function AnimatedMetricValue({ value }: { value: string | number }) {
   const [displayValue, setDisplayValue] = React.useState(() =>
     typeof value === "number" ? "0" : typeof value === "string" && value.endsWith("%") ? "0%" : String(value)
@@ -852,16 +1039,16 @@ function WorkforceMetricCard({
         }
       />
 
-      <div className="mt-4 flex items-center gap-2.5">
-        <span className={cn("inline-flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone.icon)}>
+      <div className="mt-3 flex items-center gap-2.5">
+        <span className={cn("inline-flex size-8 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone.icon)}>
           {metric.icon}
         </span>
-        <div className="text-3xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
+        <div className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
           <AnimatedMetricValue value={metric.value} />
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-[minmax(58px,0.7fr)_minmax(0,1.3fr)] items-end gap-2.5">
+      <div className="mt-2.5 grid grid-cols-[minmax(52px,0.65fr)_minmax(0,1.35fr)] items-end gap-2">
         <WorkforceMetricVisual metric={metric} />
         <Caption1
           block
@@ -884,7 +1071,7 @@ function WorkforceMetricCard({
           <FluentCard
             appearance="outline"
             className={cn(
-              "relative h-full min-h-40 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-4 shadow-sm transition duration-200 after:!border-border/70 before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:rounded-r-full hover:-translate-y-px hover:shadow-md dark:!border-border/80 dark:after:!border-border/80",
+              "relative h-full min-h-32 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-3 shadow-sm transition duration-200 after:!border-border/70 before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-r-full hover:-translate-y-px hover:shadow-md dark:!border-border/80 dark:after:!border-border/80",
               tone.accent,
             )}
           >
@@ -895,7 +1082,7 @@ function WorkforceMetricCard({
         <FluentCard
           appearance="outline"
           className={cn(
-            "relative h-full min-h-40 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-4 shadow-sm after:!border-border/70 before:absolute before:inset-y-4 before:left-0 before:w-0.5 before:rounded-r-full dark:!border-border/80 dark:after:!border-border/80",
+            "relative h-full min-h-32 overflow-hidden !gap-0 !rounded-lg !border-border/70 !bg-card !p-3 shadow-sm after:!border-border/70 before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-r-full dark:!border-border/80 dark:after:!border-border/80",
             tone.accent,
           )}
         >
@@ -1254,6 +1441,8 @@ export default function HrAnalyticsDashboard({
   )
   const [toDate, setToDate] = React.useState(warm?.toDate ?? formatInputDate(new Date()))
   const [dateFilterOpen, setDateFilterOpen] = React.useState(false)
+  const [reviewOpen, setReviewOpen] = React.useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = React.useState<Date | null>(null)
 
   const [employees, setEmployees] = React.useState<AdminRecord[]>(warm?.employees ?? [])
   const [departments, setDepartments] = React.useState<AdminRecord[]>(warm?.departments ?? [])
@@ -1336,6 +1525,15 @@ export default function HrAnalyticsDashboard({
       actor.permissionLabels,
       actor.accessMode
     )
+  const attendanceHref = canOpenAttendance
+    ? canAccessDashboardRoute(
+        "/dashboard/attendance/daily-summaries",
+        actor.permissionLabels,
+        actor.accessMode,
+      )
+      ? "/dashboard/attendance/daily-summaries"
+      : "/dashboard/attendance"
+    : undefined
 
   React.useEffect(() => {
     employeesRef.current = employees
@@ -1501,6 +1699,7 @@ export default function HrAnalyticsDashboard({
     ]
 
     await Promise.allSettled(tasks)
+    setLastUpdatedAt(new Date())
     setLoading(false)
   }, [canOpenPayroll, fromDate, toDate, markReady, showLeaveRequests])
 
@@ -1856,15 +2055,7 @@ export default function HrAnalyticsDashboard({
       icon: <UserCheckIcon className="size-5" aria-hidden="true" />,
       tone: toneForPercentage(percentageOfHeadcount(todayPresent)),
       visualization: "bars",
-      href: canOpenAttendance
-        ? canAccessDashboardRoute(
-            "/dashboard/attendance/daily-summaries",
-            actor.permissionLabels,
-            actor.accessMode
-          )
-          ? "/dashboard/attendance/daily-summaries"
-          : "/dashboard/attendance"
-        : undefined,
+      href: attendanceHref,
     },
     {
       label: "Today absent",
@@ -1874,15 +2065,7 @@ export default function HrAnalyticsDashboard({
       icon: <UserXIcon className="size-5" aria-hidden="true" />,
       tone: toneForPercentage(percentageOfHeadcount(todayAbsent)),
       visualization: "ticks",
-      href: canOpenAttendance
-        ? canAccessDashboardRoute(
-            "/dashboard/attendance/daily-summaries",
-            actor.permissionLabels,
-            actor.accessMode
-          )
-          ? "/dashboard/attendance/daily-summaries"
-          : "/dashboard/attendance"
-        : undefined,
+      href: attendanceHref,
     },
     {
       label: "Today on leave",
@@ -1929,6 +2112,159 @@ export default function HrAnalyticsDashboard({
       ready: sliceReady.offboarding,
       compact: true,
       href: canOpenOffboarding ? "/dashboard/employees/offboarding" : undefined,
+    },
+  ]
+
+  const pendingLeaveRequests = leaveRequests.filter((request) => {
+    const status = getLeaveStatus(request)
+    return !status || status.includes("pending") || status.includes("submitted") || status.includes("review")
+  }).length
+  const pendingActions = readNumberDeep(analyticsSummary, [
+    "pending_actions",
+    "pending_approvals",
+    "actions_pending",
+  ]) ?? 0
+  const riskIndicatorCount = Array.isArray(analyticsSummary?.risk_indicators)
+    ? analyticsSummary.risk_indicators.length
+    : 0
+  const invitedCount = readNumberDeep(analyticsSummary, [
+    "pending_invitations",
+    "invited_employees",
+    "invitations",
+  ]) ?? 0
+  const registeredCount = readNumberDeep(analyticsSummary, [
+    "registered_employees",
+    "registrations",
+    "registration_completed",
+  ]) ?? 0
+
+  const priorities: DashboardPriority[] = [
+    ...(pendingActions > 0
+      ? [{
+          id: "approvals",
+          title: "Approvals waiting",
+          description: "Requests are waiting for an assigned approver to make a decision.",
+          owner: "Assigned approvers",
+          count: pendingActions,
+          tone: "urgent" as const,
+          icon: <ListChecksIcon aria-hidden="true" />,
+        }]
+      : []),
+    ...(pendingOnboarding > 0
+      ? [{
+          id: "onboarding",
+          title: "Onboarding needs progress",
+          description: "Open employee journeys still have readiness steps or responsible teams to follow up.",
+          owner: "HR and responsible teams",
+          count: pendingOnboarding,
+          href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
+          tone: "warning" as const,
+          icon: <UserRoundPlusIcon aria-hidden="true" />,
+        }]
+      : []),
+    ...(todayAbsent > 0
+      ? [{
+          id: "attendance",
+          title: "Attendance exceptions",
+          description: "Employees are recorded absent today and may need verification or manager follow-up.",
+          owner: "HR and line managers",
+          count: todayAbsent,
+          href: attendanceHref,
+          tone: "urgent" as const,
+          icon: <Clock3Icon aria-hidden="true" />,
+        }]
+      : []),
+    ...(pendingLeaveRequests > 0
+      ? [{
+          id: "leave",
+          title: "Leave requests waiting",
+          description: "Submitted leave requests are awaiting review or a final decision.",
+          owner: "Leave approvers",
+          count: pendingLeaveRequests,
+          href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
+          tone: "info" as const,
+          icon: <CalendarIcon aria-hidden="true" />,
+        }]
+      : []),
+    ...(pendingOffboarding > 0
+      ? [{
+          id: "offboarding",
+          title: "Offboarding in progress",
+          description: "Exit journeys still require completion, clearance, or ownership follow-up.",
+          owner: "HR and line managers",
+          count: pendingOffboarding,
+          href: canOpenOffboarding ? "/dashboard/employees/offboarding" : undefined,
+          tone: "warning" as const,
+          icon: <BriefcaseBusinessIcon aria-hidden="true" />,
+        }]
+      : []),
+    ...(riskIndicatorCount > 0
+      ? [{
+          id: "risks",
+          title: "Workforce risk signals",
+          description: "Analytics detected workforce conditions that deserve a closer HR review.",
+          owner: "HR leadership",
+          count: riskIndicatorCount,
+          tone: "urgent" as const,
+          icon: <BellRingIcon aria-hidden="true" />,
+        }]
+      : []),
+  ]
+
+  const lifecycleStages: LifecycleStage[] = [
+    {
+      label: "Invited",
+      count: invitedCount,
+      description: "Waiting to accept",
+      icon: <PersonAddColor aria-hidden="true" />,
+      countColor: invitedCount > 0 ? "brand" : "subtle",
+      href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
+    },
+    {
+      label: "Registered",
+      count: registeredCount,
+      description: "Profile created",
+      icon: <PersonAvailableColor aria-hidden="true" />,
+      countColor: registeredCount > 0 ? "brand" : "subtle",
+      href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
+    },
+    {
+      label: "Onboarding",
+      count: pendingOnboarding,
+      description: "Readiness in progress",
+      icon: <ClipboardTaskColor aria-hidden="true" />,
+      countColor: pendingOnboarding > 0 ? "warning" : "subtle",
+      href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
+    },
+    {
+      label: "Active",
+      count: activeCount,
+      description: "Currently employed",
+      icon: <CheckmarkCircleColor aria-hidden="true" />,
+      countColor: activeCount > 0 ? "success" : "subtle",
+      href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
+    },
+    {
+      label: "Exiting",
+      count: pendingOffboarding,
+      description: "Clearance in progress",
+      icon: <PersonWarningColor aria-hidden="true" />,
+      countColor: pendingOffboarding > 0 ? "warning" : "subtle",
+      href: canOpenOffboarding ? "/dashboard/employees/offboarding" : undefined,
+    },
+  ]
+
+  const insights: DashboardInsight[] = [
+    {
+      title: priorities.length > 0 ? `${priorities.length} areas need attention` : "Your queue is clear",
+    },
+    {
+      title: `${attendanceReport.rate}% attendance rate`,
+      href: attendanceHref,
+    },
+    {
+      title: pendingOnboarding > 0 ? `${pendingOnboarding} onboarding journeys open` : "Onboarding is under control",
+      href: canOpenOnboarding ? "/dashboard/employees/onboarding" : undefined,
     },
   ]
 
@@ -2026,6 +2362,15 @@ export default function HrAnalyticsDashboard({
     ? readString(upcomingHoliday, ["name", "holiday_name", "holidayName", "title"])
     : ""
   const upcomingHolidayDate = upcomingHoliday ? holidayDateKey(upcomingHoliday) : ""
+  const firstName = (userName || "Company user").trim().split(/\s+/)[0]
+  const primaryRole = visibleRoleNames.find(
+    (roleName) => !/^(company user|user|employee)$/i.test(roleName),
+  ) ?? visibleRoleNames[0]
+  const secondaryRoleNames = visibleRoleNames.filter((roleName) => roleName !== primaryRole)
+  const secondaryRoleCount = secondaryRoleNames.length
+  const lastUpdatedLabel = lastUpdatedAt
+    ? lastUpdatedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    : "Waiting for data"
 
   return (
     <motion.div
@@ -2035,30 +2380,15 @@ export default function HrAnalyticsDashboard({
       animate="show"
     >
       <motion.header
-        className="relative mx-1 mt-2 overflow-hidden border-x-0 border-b border-t-0 border-slate-200 bg-white px-3 py-4 text-slate-900 shadow-none sm:mx-2 sm:px-4 md:py-5 lg:mx-3 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        className="relative mx-1 mt-2 border-b border-border/70 px-2 py-3 sm:mx-2 sm:px-3 lg:mx-3 lg:px-2"
         variants={motionPreset.rise}
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden text-sky-500/70 dark:text-sky-300/60">
-          <span className="absolute left-[29%] top-5 text-xs text-blue-400/60 dark:text-blue-200/45">✧</span>
-          <span className="absolute left-[43%] bottom-4 text-sm">✦</span>
-          <span className="absolute right-[42%] top-3 text-[10px] text-blue-400/60 dark:text-blue-200/45">✧</span>
-          <span className="absolute right-[34%] top-10 text-xs text-blue-400/70 dark:text-blue-200/50">✧</span>
-          <span className="absolute right-[26%] bottom-4 text-[10px] text-sky-400/60 dark:text-sky-200/45">✧</span>
-          <span className="absolute right-[18%] top-4 text-lg">✦</span>
-          <span className="absolute right-[8%] bottom-3 text-sm">✦</span>
-        </div>
-        <div className="relative z-10 flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
+        <div className="grid gap-4 md:grid-cols-[minmax(18rem,1fr)_auto] md:items-center">
+          <div className="flex min-w-0 items-center gap-3">
             <Persona
               name={userName || "Company user"}
-              primaryText={{
-                children: userName || "Company user",
-                style: { color: "var(--foreground)", fontWeight: 600 },
-              }}
-              secondaryText={{
-                children: "Available",
-                style: { color: "var(--muted-foreground)" },
-              }}
+              primaryText=""
+              secondaryText=""
               presence={{ status: "available" }}
               avatar={{
                 color: "brand",
@@ -2066,50 +2396,79 @@ export default function HrAnalyticsDashboard({
                   ? { src: profilePhotoUrl, alt: userName || "HR profile" }
                   : undefined,
               }}
-              size="extra-large"
-              textAlignment="center"
-              className="min-h-14 min-w-[11.375rem] [&_.fui-Persona__primaryText]:font-semibold [&_.fui-Persona__primaryText]:!text-foreground [&_.fui-Persona__secondaryText]:!text-muted-foreground"
+              size="huge"
+              className="shrink-0"
             />
-          </div>
-          <div
-            className="mt-2 flex flex-wrap items-center gap-1.5 pl-[68px] sm:absolute sm:right-2 sm:top-1 sm:mt-0 sm:pl-0 xl:static xl:ml-auto"
-            aria-label="Assigned roles"
-          >
-            {visibleRoleNames.length > 0 ? (
-              visibleRoleNames.map((roleName) => (
-                <span
-                  key={roleName}
-                  className="inline-flex h-5 items-center rounded-full border border-white/70 bg-white/60 px-2 text-[9px] font-semibold text-slate-700 shadow-sm backdrop-blur-md dark:border-white/20 dark:bg-white/10 dark:text-white"
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Welcome back
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2.5">
+                <h1
+                  className="relative truncate pb-1 text-2xl font-semibold tracking-tight text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary/45 sm:text-3xl"
+                  aria-label={`Welcome back, ${firstName}`}
                 >
-                  {roleName}
-                </span>
-              ))
-            ) : (
-              <span className="text-[10px] text-muted-foreground">No roles assigned</span>
-            )}
+                  {firstName}
+                </h1>
+                <Badge variant="secondary" className="gap-1.5">
+                  <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                  Available
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {priorities.length > 0
+                  ? `${priorities.length} areas need attention.`
+                  : "No urgent items."}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Assigned roles">
+                {primaryRole ? <Badge variant="outline">{primaryRole}</Badge> : null}
+                {secondaryRoleCount > 0 ? (
+                  <Popover>
+                    <PopoverTrigger
+                      type="button"
+                      className="rounded-md px-1.5 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      aria-label={`View ${secondaryRoleCount} additional role${secondaryRoleCount === 1 ? "" : "s"}`}
+                    >
+                      +{secondaryRoleCount} additional role{secondaryRoleCount === 1 ? "" : "s"}
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-56 p-3">
+                      <p className="text-xs font-semibold text-foreground">Additional roles</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {secondaryRoleNames.map((roleName) => (
+                          <Badge key={roleName} variant="secondary">
+                            {roleName}
+                          </Badge>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : null}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex flex-col items-start gap-2 md:items-end">
             {upcomingHoliday && upcomingHolidayDate ? (
               <Link
                 href="/dashboard/attendance/holidays"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/70 bg-white/60 px-2.5 text-[10px] text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border/70 bg-muted/25 px-3 text-xs text-foreground transition hover:bg-muted/45"
                 aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
               >
-                <CalendarIcon className="size-3.5 text-sky-300" aria-hidden="true" />
-                <span className="text-slate-500 dark:text-white/70">Upcoming</span>
-                <span className="max-w-40 truncate font-semibold">
+                <CalendarIcon className="size-4 text-primary" aria-hidden="true" />
+                <span className="text-muted-foreground">Upcoming</span>
+                <span className="max-w-36 truncate font-medium">
                   {upcomingHolidayName || "Holiday"}
                 </span>
-                <span className="text-slate-500 dark:text-white/70">{formatDateShort(upcomingHolidayDate)}</span>
+                <span className="text-muted-foreground">{formatDateShort(upcomingHolidayDate)}</span>
               </Link>
             ) : null}
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
               <PopoverTrigger
                 type="button"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/70 bg-white/60 px-2.5 text-[10px] font-semibold text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-3 text-xs font-medium text-foreground transition hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 aria-label="Filter dashboard date range"
               >
-                <FilterIcon className="size-3" aria-hidden="true" />
+                <FilterIcon className="size-3.5" aria-hidden="true" />
                 <span>{activeDateRangeLabel}</span>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-[min(19rem,calc(100vw-1.5rem))] p-2.5">
@@ -2160,26 +2519,147 @@ export default function HrAnalyticsDashboard({
                 </div>
               </PopoverContent>
             </Popover>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => void fetchAll()}
               disabled={loading}
-              className="inline-flex size-8 items-center justify-center rounded-lg border border-white/70 bg-white/60 text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/80 disabled:opacity-60 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
-              title="Refresh"
+              aria-label="Refresh dashboard"
+              title={`Last updated ${lastUpdatedLabel}`}
             >
               <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
-            </button>
+            </Button>
+            </div>
+            <span className="text-[10px] tabular-nums text-muted-foreground">
+              Updated {lastUpdatedLabel}
+            </span>
           </div>
         </div>
       </motion.header>
+
+      <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
+        <SheetContent side="right" className="w-full gap-0 sm:max-w-lg">
+          <SheetHeader className="gap-0.5 p-3 pr-12">
+            <SheetTitle>Guided HR review</SheetTitle>
+            <SheetDescription>Today’s priority items.</SheetDescription>
+          </SheetHeader>
+          <div className="flex flex-1 flex-col overflow-y-auto px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-border/70 px-1 py-2 text-xs">
+              <SparklesIcon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+              <span className="font-medium text-foreground">Daily briefing</span>
+              <span className="truncate text-muted-foreground">
+                {priorities.length > 0
+                  ? `${priorities.length} areas · urgent first`
+                  : "No urgent items."}
+              </span>
+            </div>
+            {priorities.length > 0 ? (
+              <div className="divide-y divide-border/70">
+                {priorities.map((priority) => {
+                  const row = (
+                    <div className="flex min-h-16 items-center gap-2.5 px-1 py-2 transition hover:bg-muted/25">
+                      <span className={cn(
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/60 [&_svg]:size-4",
+                        priority.tone === "urgent" ? "text-destructive" : "text-primary",
+                      )}>
+                        {priority.icon}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium text-foreground">{priority.title}</p>
+                          <Badge variant="secondary" className="shrink-0 tabular-nums">{priority.count}</Badge>
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {priority.owner} · {priority.description}
+                        </p>
+                      </div>
+                      {priority.href ? <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+                    </div>
+                  )
+                  return priority.href ? (
+                    <Link key={priority.id} href={priority.href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                      {row}
+                    </Link>
+                  ) : (
+                    <div key={priority.id}>{row}</div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 px-1 py-4">
+                <CircleCheckBigIcon className="size-6 shrink-0 text-emerald-500" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Review complete</p>
+                  <p className="text-xs text-muted-foreground">No action required.</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <SheetFooter className="p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">Updated {lastUpdatedLabel}</span>
+              <Button size="sm" variant="outline" onClick={() => setReviewOpen(false)}>Close</Button>
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <div className="w-full px-1 sm:px-2 lg:px-3">
       <motion.section
         className="relative pb-1 pt-3 md:pt-4"
         variants={motionPreset.item}
       >
+        <div className="flex flex-col gap-3">
+          <section className="border-b border-border/70 pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 px-1">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold text-foreground">Needs your attention</h2>
+                  <Badge variant={priorities.length > 0 ? "default" : "secondary"}>
+                    {priorities.length > 0 ? `${priorities.length} areas` : "All clear"}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Approvals and workforce exceptions.
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setReviewOpen(true)} className="gap-1.5">
+                <ListChecksIcon data-icon="inline-start" aria-hidden="true" />
+                Review all
+              </Button>
+            </div>
+            <div className="mt-3">
+              {priorities.length > 0 ? (
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {priorities.slice(0, 3).map((priority) => (
+                    <DashboardPriorityCard key={priority.id} priority={priority} />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-1 py-2">
+                  <span className="inline-flex size-8 shrink-0 items-center justify-center text-emerald-600 dark:text-emerald-400">
+                    <CircleCheckBigIcon className="size-4" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="font-medium text-foreground">Nothing urgent is waiting</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      No urgent items right now.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <DashboardLifecycle stages={lifecycleStages} />
+          <DashboardIntelligence insights={insights} />
+        </div>
+
+        <div className="mb-3 mt-5">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Today at a glance</h2>
+        </div>
         <motion.div
-          className="grid w-full grid-cols-1 items-stretch gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid w-full grid-cols-1 items-stretch gap-2.5 min-[520px]:grid-cols-2 lg:grid-cols-4"
           aria-busy={loading}
           aria-live="polite"
           variants={motionPreset.metrics}
@@ -2193,8 +2673,11 @@ export default function HrAnalyticsDashboard({
             />
           ))}
         </motion.div>
+        <div className="mb-3 mt-5">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Workforce movement</h2>
+        </div>
         <motion.div
-          className="mt-2.5 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] items-stretch gap-2.5"
+          className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] items-stretch gap-2.5"
           variants={motionPreset.metrics}
         >
           {metrics.map((metric) => (

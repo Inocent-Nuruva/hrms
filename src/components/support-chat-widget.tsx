@@ -363,7 +363,8 @@ export function SupportChatWidget() {
       ) : null}
       <button
         type="button"
-        className="pointer-events-auto inline-flex size-12 touch-none items-center justify-center rounded-full bg-primary text-white shadow-lg transition hover:brightness-95 active:cursor-grabbing"
+        data-hrms-button-tone="brand"
+        className="pointer-events-auto inline-flex size-12 touch-none items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition hover:brightness-95 active:cursor-grabbing"
         onPointerDown={beginDrag}
         onPointerMove={continueDrag}
         onPointerUp={endDrag}

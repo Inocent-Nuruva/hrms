@@ -89,6 +89,7 @@ export const activityTaskSchema = formObject({
     .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Choose a valid end time."),
   due_date: optionalDate,
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]),
+  activity_category_id: optionalId,
   expected_result: z.string().max(4000).optional(),
   employee_kpi_id: optionalId,
   audience: z.enum(["employee", "self"]),

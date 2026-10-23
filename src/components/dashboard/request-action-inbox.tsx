@@ -2,8 +2,9 @@
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import * as React from "react"
-import { Field } from "@fluentui/react-components"
-import { Search, Users, ArrowRight, ClipboardCheck } from "lucide-react"
+import { Avatar, Badge as FluentBadge, Field } from "@fluentui/react-components"
+import { Search, ArrowRight, SlidersHorizontal, ChevronDown, X } from "lucide-react"
+import { CheckmarkCircleColor, ClipboardTaskColor, PeopleColor } from "@fluentui/react-icons"
 import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/animate-ui/components/base/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,6 +39,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [documentsLoading, setDocumentsLoading] = React.useState(false)
   const [documentsError, setDocumentsError] = React.useState("")
   const [groupPage, setGroupPage] = React.useState(1)
+  const [filtersOpen, setFiltersOpen] = React.useState(false)
   const groups = React.useMemo(() => filterAndGroupActions(actions, filters), [actions, filters])
   const selected = actions.find((row) => rowId(row) === selectedId)
   const subject = selected ? actionSubject(selected) : null
@@ -57,6 +59,10 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const evidenceRequired = context.completion_evidence_required === true
   const requestId = reference?.requestId
   const sourceType = reference?.type
+  const advancedFilterCount = [filters.module, filters.kind, filters.priority, filters.due]
+    .filter((value) => value !== "all").length
+  const resultItemCount = groups.reduce((total, group) => total + group.items.length, 0)
+  const hasSearchOrAdvancedFilters = Boolean(filters.search.trim()) || advancedFilterCount > 0
 
   React.useEffect(() => {
     if (!evidenceRequired || !requestId || !sourceType) return
@@ -129,33 +135,82 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid overflow-hidden rounded-xl border bg-card sm:grid-cols-3 sm:divide-x sm:divide-border">
         {[
-          { label: "People", value: groupCount, icon: Users },
-          { label: "Awaiting action", value: actions.filter(isOpenAction).length, icon: ClipboardCheck },
-          { label: "Completed", value: actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length, icon: ClipboardCheck },
-        ].map(({ label, value, icon: Icon }) => (
-          <div key={label} className="flex items-center gap-3 rounded-xl border bg-card p-4">
-            <Icon className="size-5 text-muted-foreground" aria-hidden />
-            <div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-semibold tabular-nums">{loading ? "…" : value}</p></div>
+          { label: "People", hint: "Request owners", value: groupCount, icon: PeopleColor, color: "brand" as const },
+          { label: "Awaiting action", hint: "Needs your response", value: actions.filter(isOpenAction).length, icon: ClipboardTaskColor, color: "warning" as const },
+          { label: "Completed", hint: "Finished items", value: actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length, icon: CheckmarkCircleColor, color: "success" as const },
+        ].map(({ label, hint, value, icon: Icon, color }) => (
+          <div key={label} className="flex min-h-24 items-center gap-3 border-b border-border p-4 last:border-b-0 sm:border-b-0">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/35 [&_svg]:size-6">
+              <Icon aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-medium text-foreground">{label}</p>
+                <FluentBadge appearance="tint" color={color} shape="rounded" size="medium" className="min-w-8 justify-center tabular-nums">
+                  {loading ? "…" : value}
+                </FluentBadge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+            </div>
           </div>
         ))}
       </div>
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
-        <Field label="Search requests">
-          <Input type="search" aria-label="Search requests" placeholder="Search employee, staff number, department or checklist item…" value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} contentBefore={<Search aria-hidden />} />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <FluentSelect label="Status" value={filters.status} onChange={(value) => updateFilter("status", value)} options={[{ value: "open", label: "Awaiting action" }, { value: "all", label: "All statuses" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }]} />
-          <FluentSelect label="Request type" value={filters.module} onChange={(value) => updateFilter("module", value)} options={[{ value: "all", label: "All request types" }, ...modules.map((value) => ({ value, label: prettify(value) }))]} />
-          <FluentSelect label="Action" value={filters.kind} onChange={(value) => updateFilter("kind", value)} options={[{ value: "all", label: "All actions" }, { value: "APPROVAL", label: "Approvals" }, { value: "TASK", label: "Checklist tasks" }]} />
-          <FluentSelect label="Priority" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={[{ value: "all", label: "All priorities" }, ...["URGENT", "HIGH", "MEDIUM", "LOW"].map((value) => ({ value, label: prettify(value) }))]} />
-          <FluentSelect label="Due date" value={filters.due} onChange={(value) => updateFilter("due", value)} options={[{ value: "all", label: "Any due date" }, { value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "none", label: "No due date" }]} />
+      <div className="flex flex-col gap-2 border-y bg-card py-2">
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <div className="min-w-56 flex-1 sm:w-64 sm:flex-none">
+            <Input
+              type="search"
+              size="medium"
+              aria-label="Search requests"
+              placeholder="Search requests"
+              value={filters.search}
+              onChange={(event) => updateFilter("search", event.target.value)}
+              contentBefore={<Search aria-hidden />}
+            />
+          </div>
+          <div className="w-40 shrink-0">
+            <FluentSelect
+              ariaLabel="Filter by status"
+              size="small"
+              value={filters.status}
+              onChange={(value) => updateFilter("status", value)}
+              options={[{ value: "open", label: "Awaiting action" }, { value: "all", label: "All statuses" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }]}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn("h-8 shrink-0 gap-1.5", (filtersOpen || advancedFilterCount > 0) && "border-primary/40 bg-primary/5 text-primary")}
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            <SlidersHorizontal data-icon="inline-start" aria-hidden />
+            Filters{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
+            <ChevronDown data-icon="inline-end" className={cn("transition-transform", filtersOpen && "rotate-180")} aria-hidden />
+          </Button>
+          <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground" aria-live="polite">
+            {groups.length} {groups.length === 1 ? "person" : "people"} · {resultItemCount} {resultItemCount === 1 ? "item" : "items"}
+          </span>
+          {hasSearchOrAdvancedFilters ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Clear search and filters"
+              title="Clear search and filters"
+              onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}
+            >
+              <X aria-hidden />
+            </Button>
+          ) : null}
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground" aria-live="polite">{groups.length} {groups.length === 1 ? "person" : "people"} · {groups.reduce((total, group) => total + group.items.length, 0)} items found</p>
-          <Button variant="ghost" size="sm" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1) }}>Reset filters</Button>
-        </div>
+        {filtersOpen ? <div className="grid gap-2 border-t px-1 pt-2 sm:grid-cols-2 lg:grid-cols-4">
+          <FluentSelect ariaLabel="Filter by request type" size="small" value={filters.module} onChange={(value) => updateFilter("module", value)} options={[{ value: "all", label: "All request types" }, ...modules.map((value) => ({ value, label: prettify(value) }))]} />
+          <FluentSelect ariaLabel="Filter by action" size="small" value={filters.kind} onChange={(value) => updateFilter("kind", value)} options={[{ value: "all", label: "All actions" }, { value: "APPROVAL", label: "Approvals" }, { value: "TASK", label: "Checklist tasks" }]} />
+          <FluentSelect ariaLabel="Filter by priority" size="small" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={[{ value: "all", label: "All priorities" }, ...["URGENT", "HIGH", "MEDIUM", "LOW"].map((value) => ({ value, label: prettify(value) }))]} />
+          <FluentSelect ariaLabel="Filter by due date" size="small" value={filters.due} onChange={(value) => updateFilter("due", value)} options={[{ value: "all", label: "Any due date" }, { value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "none", label: "No due date" }]} />
+        </div> : null}
       </div>
       {loading ? <p role="status" className="py-10 text-center text-muted-foreground">Loading assigned requests…</p> : groups.length === 0 ? (
         <div className="rounded-xl border border-dashed p-10 text-center">
@@ -165,22 +220,38 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {groups.slice((currentPage - 1) * 12, currentPage * 12).map((group) => (
-            <article key={group.subject.key} className="flex flex-col gap-4 rounded-xl border bg-card p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">Requested for</p>
-                  <h2 className="mt-1 text-base font-semibold">{group.subject.name}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Open the request to confirm the employee details."}</p>
+            <article key={group.subject.key} className="relative flex flex-col overflow-hidden rounded-xl border border-primary/20 bg-card shadow-sm transition before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary hover:-translate-y-px hover:shadow-md">
+              <div className="flex items-start gap-3 border-b border-border/70 bg-primary/5 px-5 py-4">
+                <Avatar name={group.subject.name} color="brand" size={48} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Requested for</p>
+                  <h2 className="mt-0.5 truncate text-lg font-semibold text-foreground">{group.subject.name}</h2>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee details not provided"}</p>
                 </div>
-                <Badge variant="secondary">{group.items.length} {group.items.length === 1 ? "item" : "items"}</Badge>
+                <FluentBadge appearance="tint" color="brand" shape="rounded" size="medium">
+                  {group.items.length} {group.items.length === 1 ? "item" : "items"}
+                </FluentBadge>
               </div>
-              <ul className="flex flex-col gap-2 text-sm">
-                {group.items.slice(0, 3).map((row) => <li key={rowId(row)} className="flex items-start justify-between gap-3"><span className="min-w-0 truncate">{readString(row, ["title"], "Assigned request")}</span><span className="shrink-0 text-xs text-muted-foreground">{prettify(readString(row, ["sourceModule", "source_module"]))}</span></li>)}
-                {group.items.length > 3 ? <li className="text-xs text-muted-foreground">+{group.items.length - 3} more items</li> : null}
+              <ul className="flex flex-col gap-2 px-5 py-4 text-sm">
+                {group.items.slice(0, 3).map((row) => (
+                  <li key={rowId(row)} className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
+                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-background [&_svg]:size-5">
+                      <ClipboardTaskColor aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{readString(row, ["title"], "Assigned request")}</span>
+                    <Badge variant="secondary" className="shrink-0">{prettify(readString(row, ["sourceModule", "source_module"]))}</Badge>
+                  </li>
+                ))}
+                {group.items.length > 3 ? <li className="px-3 text-xs text-muted-foreground">+{group.items.length - 3} more items</li> : null}
               </ul>
-              <div className="mt-auto flex items-center justify-between border-t pt-3">
-                <span className="text-xs text-muted-foreground">{group.items.filter(isOpenAction).length} awaiting action</span>
-                <Button variant="outline" size="sm" onClick={() => select(group.items[0])}>Review requests <ArrowRight data-icon="inline-end" /></Button>
+              <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-muted/15 px-5 py-3">
+                <FluentBadge appearance="tint" color="warning" shape="rounded" size="medium">
+                  {group.items.filter(isOpenAction).length} awaiting action
+                </FluentBadge>
+                <Button size="sm" className="gap-2" onClick={() => select(group.items[0])}>
+                  Review requests
+                  <ArrowRight data-icon="inline-end" aria-hidden />
+                </Button>
               </div>
             </article>
           ))}

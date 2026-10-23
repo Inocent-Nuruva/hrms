@@ -4,8 +4,18 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
-import { CheckmarkCircle20Filled } from "@fluentui/react-icons"
+import {
+  Add20Regular,
+  ArrowClockwise20Regular,
+  CheckmarkCircle20Filled,
+} from "@fluentui/react-icons"
+import {
+  Badge as FluentBadge,
+  Button as FluentButton,
+  Field as FluentField,
+  Input as FluentInput,
+  Textarea as FluentTextarea,
+} from "@fluentui/react-components"
 import { toast } from "@/components/ui/fluent-toast-store"
 
 import {
@@ -107,7 +117,14 @@ const DOCUMENT_TYPES = [
   { value: "OTHER", label: "Other" },
 ] as const
 
-const PROFILE_CHANGE_FIELDS: Record<string, Array<{ key: string; label: string; type?: string }>> = {
+const PROFILE_CHANGE_FIELDS: Record<
+  string,
+  Array<{
+    key: string
+    label: string
+    type?: React.ComponentProps<typeof FluentInput>["type"]
+  }>
+> = {
   PERSONAL_INFORMATION: [
     { key: "first_name", label: "First name" },
     { key: "middle_name", label: "Middle name" },
@@ -188,6 +205,87 @@ function collectChangePayload(requestType: string, form: Record<string, string>)
   return payload
 }
 
+const TANZANIA_PHONE_DIGITS = 9
+
+function TanzaniaPhoneInput({
+  ariaLabel,
+  value,
+  onChange,
+}: {
+  ariaLabel: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const inputRefs = React.useRef<Array<HTMLInputElement | null>>([])
+  const nationalNumber = value
+    .replace(/\D/g, "")
+    .replace(/^255/, "")
+    .replace(/^0/, "")
+    .slice(0, TANZANIA_PHONE_DIGITS)
+  const digits = Array.from(
+    { length: TANZANIA_PHONE_DIGITS },
+    (_item, index) => nationalNumber[index] ?? "",
+  )
+
+  function updateDigits(nextDigits: string[]) {
+    const number = nextDigits.join("").slice(0, TANZANIA_PHONE_DIGITS)
+    onChange(number ? `+255${number}` : "")
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <FluentSelect
+        ariaLabel={`${ariaLabel} country code`}
+        className="!w-28 !shrink-0"
+        value="TZ"
+        onChange={() => undefined}
+        options={[{ value: "TZ", label: "TZ +255" }]}
+      />
+      <div className="flex min-w-0 flex-wrap gap-1.5" role="group" aria-label={`${ariaLabel} number`}>
+        {digits.map((digit, index) => (
+          <FluentInput
+            key={`${ariaLabel}-${index}`}
+            ref={(element) => {
+              inputRefs.current[index] = element
+            }}
+            aria-label={`${ariaLabel} digit ${index + 1}`}
+            className="!w-10 !min-w-10 [&_input]:!px-0 [&_input]:text-center [&_input]:tabular-nums"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            onChange={(_event, data) => {
+              const nextDigit = data.value.replace(/\D/g, "").slice(-1)
+              const nextDigits = [...digits]
+              nextDigits[index] = nextDigit
+              updateDigits(nextDigits)
+              if (nextDigit && index < TANZANIA_PHONE_DIGITS - 1) {
+                inputRefs.current[index + 1]?.focus()
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Backspace" && !digit && index > 0) {
+                inputRefs.current[index - 1]?.focus()
+              }
+            }}
+            onPaste={(event) => {
+              const pastedDigits = event.clipboardData
+                .getData("text")
+                .replace(/\D/g, "")
+                .replace(/^255/, "")
+                .replace(/^0/, "")
+                .slice(0, TANZANIA_PHONE_DIGITS)
+              if (!pastedDigits) return
+              event.preventDefault()
+              updateDigits(Array.from({ length: TANZANIA_PHONE_DIGITS }, (_item, digitIndex) => pastedDigits[digitIndex] ?? ""))
+              inputRefs.current[Math.min(pastedDigits.length, TANZANIA_PHONE_DIGITS) - 1]?.focus()
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab }) {
   const leaveIfForbidden = useLeaveIfForbidden()
   const copy = TAB_COPY[activeTab]
@@ -209,6 +307,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [historyRows, setHistoryRows] = React.useState<AdminRecord[]>([])
   const [historyLoading, setHistoryLoading] = React.useState(false)
+  const profilePhotoInputRef = React.useRef<HTMLInputElement>(null)
 
   const load = React.useCallback(async () => {
     const token = readStoredToken()
@@ -599,6 +698,14 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   }, [activeTab, busyId, load])
 
   const changeFields = PROFILE_CHANGE_FIELDS[form.request_type || "CONTACT_INFORMATION"] ?? []
+  const waitingProfileChanges = changes.filter((row) => {
+    const status = readString(row, ["status"], "").toUpperCase()
+    return ["DRAFT", "OPEN", "PENDING", "SUBMITTED", "IN_REVIEW"].includes(status)
+  }).length
+  const reviewedProfileChanges = changes.filter((row) => {
+    const status = readString(row, ["status"], "").toUpperCase()
+    return ["APPROVED", "REJECTED", "CANCELLED", "COMPLETED"].includes(status)
+  }).length
   const summaryItems =
     activeTab === "timeline"
         ? [
@@ -614,9 +721,30 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             ]
           : activeTab === "profile-changes"
             ? [
-                { label: "Change requests", value: loading ? "…" : String(changes.length) },
-                { label: "Waiting", value: loading ? "…" : "—" },
-                { label: "Reviewed", value: "—" },
+                {
+                  label: "Total requests",
+                  value: loading ? "…" : (
+                    <FluentBadge appearance="tint" color="brand" size="small">
+                      {changes.length}
+                    </FluentBadge>
+                  ),
+                },
+                {
+                  label: "Awaiting review",
+                  value: loading ? "…" : (
+                    <FluentBadge appearance="tint" color="warning" size="small">
+                      {waitingProfileChanges}
+                    </FluentBadge>
+                  ),
+                },
+                {
+                  label: "Reviewed",
+                  value: loading ? "…" : (
+                    <FluentBadge appearance="tint" color="success" size="small">
+                      {reviewedProfileChanges}
+                    </FluentBadge>
+                  ),
+                },
               ]
             : [
                 { label: "Notice", value: "HR review" },
@@ -661,24 +789,47 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+          <FluentButton
+            appearance="secondary"
+            size="medium"
+            icon={
+              mounted && loading ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : (
+                <ArrowClockwise20Regular />
+              )
+            }
+            aria-label="Refresh"
+            title="Refresh"
             onClick={() => void load()}
             disabled={mounted ? loading : undefined}
-          >
-            {mounted && loading ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <RefreshCwIcon className="size-3.5" />}
-            Refresh
-          </button>
+          />
+          {activeTab === "timeline" ? (
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => openCreate("change")}
+            >
+              New request
+            </FluentButton>
+          ) : null}
           {activeTab === "documents" ? (
-            <button type="button" className={primaryButtonClass} onClick={() => openCreate("document")}>
-              <PlusIcon className="size-4" /> Upload a file
-            </button>
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => openCreate("document")}
+            >
+              Upload a file
+            </FluentButton>
           ) : null}
           {activeTab === "profile-changes" ? (
-            <button type="button" className={primaryButtonClass} onClick={() => openCreate("change")}>
-              <PlusIcon className="size-4" /> Ask HR to update
-            </button>
+            <FluentButton
+              appearance="primary"
+              icon={<Add20Regular />}
+              onClick={() => openCreate("change")}
+            >
+              Ask HR to update
+            </FluentButton>
           ) : null}
         </div>
       </header>
@@ -688,7 +839,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         </div>
       ) : null}
 
-      {activeTab !== "actions" ? (
+      {activeTab !== "actions" && activeTab !== "timeline" ? (
         <CompactStatStrip items={summaryItems} />
       ) : null}
 
@@ -854,8 +1005,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             ) : null}
             {createMode === "change" ? (
               <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">What should change</span>
+                <FluentField label="What should change">
                   <FluentSelect
                     ariaLabel="What should change"
                     className="w-full"
@@ -872,49 +1022,80 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
                       { value: "OTHER_PROFILE_INFORMATION", label: "Something else" },
                     ]}
                   />
-                </label>
+                </FluentField>
                 {form.request_type === "PROFILE_PHOTO" ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Photo</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                    />
-                  </label>
+                  <FluentField label="Photo">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        ref={profilePhotoInputRef}
+                        className="sr-only"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                      />
+                      <FluentButton appearance="secondary" onClick={() => profilePhotoInputRef.current?.click()}>
+                        Choose photo
+                      </FluentButton>
+                      <span className="text-sm text-muted-foreground">
+                        {file?.name ?? "No photo selected"}
+                      </span>
+                    </div>
+                  </FluentField>
                 ) : (
                   changeFields.map((field) => (
-                    <label key={field.key} className="grid gap-1.5 text-sm">
-                      <span className="font-medium">{field.label}</span>
-                      <input
-                        type={field.type ?? "text"}
-                        className={inputClass}
-                        value={form[field.key] ?? ""}
-                        onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                      />
-                    </label>
+                    <FluentField key={field.key} label={field.label}>
+                      {field.key === "phone" || field.key === "alternative_phone" ? (
+                        <TanzaniaPhoneInput
+                          ariaLabel={field.label}
+                          value={form[field.key] ?? ""}
+                          onChange={(value) =>
+                            setForm((current) => ({ ...current, [field.key]: value }))
+                          }
+                        />
+                      ) : field.type === "date" ? (
+                        <DateInput
+                          className="max-w-none"
+                          value={form[field.key] ?? ""}
+                          onValueChange={(value) =>
+                            setForm((current) => ({ ...current, [field.key]: value }))
+                          }
+                          placeholder={`Select ${field.label.toLowerCase()}`}
+                        />
+                      ) : (
+                        <FluentInput
+                          type={field.type ?? "text"}
+                          value={form[field.key] ?? ""}
+                          onChange={(_event, data) =>
+                            setForm((current) => ({ ...current, [field.key]: data.value }))
+                          }
+                        />
+                      )}
+                    </FluentField>
                   ))
                 )}
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Why (optional)</span>
-                  <Textarea
-                    className={textareaClass}
+                <FluentField label="Why (optional)">
+                  <FluentTextarea
+                    resize="vertical"
                     value={form.reason ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
+                    onChange={(_event, data) =>
+                      setForm((current) => ({ ...current, reason: data.value }))
+                    }
                     placeholder="A short note for HR"
                   />
-                </label>
+                </FluentField>
               </>
             ) : null}
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
           </div>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setCreateOpen(false)}>
+            <FluentButton appearance="secondary" onClick={() => setCreateOpen(false)}>
               Cancel
-            </button>
-            <button type="button" className={primaryButtonClass} onClick={() => void onSave()} disabled={saving}>
+            </FluentButton>
+            <FluentButton appearance="primary" onClick={() => void onSave()} disabled={saving}>
               {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : createMode === "change" ? "Send to HR" : "Upload"}
-            </button>
+            </FluentButton>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

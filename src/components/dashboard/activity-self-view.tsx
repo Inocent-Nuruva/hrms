@@ -46,7 +46,7 @@ import {
   deleteMyActivityEntry,
   getMyActivitiesToday,
   getMyActivityReport,
-  listActivityCategories,
+  listMyActivityCategories,
   listMyActivities,
   submitMyActivityReport,
   type AdminRecord,
@@ -137,7 +137,7 @@ export function ActivitySelfView({
       listMyActivities(token, { limit: 50 }).then((value) =>
         commit(() => setReports(value)),
       ),
-      listActivityCategories(token).then((value) =>
+      listMyActivityCategories(token).then((value) =>
         commit(() => setCategories(value)),
       ),
     ]);

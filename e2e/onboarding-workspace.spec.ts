@@ -54,6 +54,26 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     page.setDefaultNavigationTimeout(120_000)
   })
 
+  for (const [theme, accent] of [["light", "#303194"], ["dark", "#303194"], ["light", "#0078D4"], ["dark", "#0078D4"]]) {
+    test(`keeps onboarding navigation and support readable in ${theme} mode with ${accent}`, async ({ page }) => {
+      await prepareWorkspace(page)
+      await page.addInitScript(({ mode, color }) => {
+        localStorage.setItem("hrms.theme", mode)
+        localStorage.setItem("hrms.accent.color", color)
+      }, { mode: theme, color: accent })
+      await page.goto("/dashboard/employees/onboarding")
+      await page.addStyleTag({ content: 'button:not(.fui-Button) { color: var(--foreground); }' })
+      await expect(page.getByRole("navigation", { name: "Workspace areas" })).toHaveCount(0)
+      await expect(page.getByRole("tab", { name: "Onboarding", exact: true })).toHaveAttribute("aria-selected", "true")
+      const support = page.getByRole("button", { name: "Open help chat", exact: true })
+      await expect(support).toHaveCSS("color", "rgb(255, 255, 255)")
+      await expect(support.locator("svg")).toHaveCSS("color", "rgb(255, 255, 255)")
+      await support.press("Enter")
+      await expect(page.getByText("Help and IT support", { exact: true })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Close help chat", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)")
+    })
+  }
+
   test("keeps invite, registration, onboarding and contracts in the employee workspace", async ({ page }) => {
     await prepareWorkspace(page, true, ["employees:create", "employees:update"])
     await page.goto("/dashboard/employees/onboarding")

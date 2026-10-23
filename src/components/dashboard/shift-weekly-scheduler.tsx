@@ -777,6 +777,9 @@ export function ShiftWeeklyScheduler({
   const selectedVisibleEmployeeIds = filteredEmployeeViews
     .filter((employee) => selectedEmployeeIds.has(employee.id))
     .map((employee) => employee.id)
+  const hasActiveFilters = employeeSearch.trim().length > 0
+    || departmentFilter !== ALL_DEPARTMENTS_VALUE
+    || designationFilter !== ALL_DESIGNATIONS_VALUE
 
   const toggleAll = (checked: boolean) => {
     setSelectedEmployeeIds((current) => {
@@ -846,14 +849,16 @@ export function ShiftWeeklyScheduler({
 
   return (
     <section className="min-w-0 bg-background">
-      <div className="border-b border-border bg-muted/20 px-3 py-2 sm:px-4 sm:py-2.5">
+      <div className="border-b border-border bg-gradient-to-r from-primary/[0.06] via-background to-background px-3 py-2 sm:px-4 sm:py-2.5">
         <div className="flex flex-col gap-2 sm:gap-2.5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-center gap-2.5">
-            <CalendarClock24Color aria-hidden="true" className="hidden size-8 shrink-0 sm:block" />
+            <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-background shadow-sm ring-1 ring-border/70 sm:grid">
+              <CalendarClock24Color aria-hidden="true" className="size-7" />
+            </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h1 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Shift rostering</h1>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary">
                   <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
                   Weekly planner
                 </span>
@@ -897,43 +902,60 @@ export function ShiftWeeklyScheduler({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-b border-border bg-background px-3 py-2.5 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            <Filter20Regular className="size-3.5" /> Filters
-          </span>
-          <Input
-            type="search"
-            value={employeeSearch}
-            onChange={(event) => setEmployeeSearch(event.target.value)}
-            placeholder="Search employees"
-            className="w-full bg-background sm:w-44"
-            aria-label="Search employees by name, employee number, department, designation, or team"
-          />
-          <Select value={designationFilter} onValueChange={(value) => setDesignationFilter(value || ALL_DESIGNATIONS_VALUE)}>
-            <SelectTrigger size="sm" className="w-full bg-background sm:w-44" aria-label="Filter by designation">
-              <SelectValue placeholder={ALL_DESIGNATIONS_VALUE} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value={ALL_DESIGNATIONS_VALUE}>{ALL_DESIGNATIONS_VALUE}</SelectItem>
-                {designationOptions.map((designation) => <SelectItem key={designation} value={designation}>{designation}</SelectItem>)}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Select value={departmentFilter} onValueChange={(value) => setDepartmentFilter(value || ALL_DEPARTMENTS_VALUE)}>
-            <SelectTrigger size="sm" className="w-full bg-background sm:w-44" aria-label="Filter by department">
-              <SelectValue placeholder={ALL_DEPARTMENTS_VALUE} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value={ALL_DEPARTMENTS_VALUE}>{ALL_DEPARTMENTS_VALUE}</SelectItem>
-                {departmentOptions.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col gap-2.5 border-b border-border bg-muted/[0.12] px-3 py-2.5 sm:px-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <Filter20Regular className="size-3.5" /> Filters
+            </span>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                className="text-[10px] font-semibold text-primary hover:underline"
+                onClick={() => {
+                  setEmployeeSearch("")
+                  setDesignationFilter(ALL_DESIGNATIONS_VALUE)
+                  setDepartmentFilter(ALL_DEPARTMENTS_VALUE)
+                }}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-1.5 grid min-w-0 gap-2 sm:grid-cols-3">
+            <Input
+              type="search"
+              value={employeeSearch}
+              onChange={(event) => setEmployeeSearch(event.target.value)}
+              placeholder="Search employees"
+              className="w-full bg-background"
+              aria-label="Search employees by name, employee number, department, designation, or team"
+            />
+            <Select value={designationFilter} onValueChange={(value) => setDesignationFilter(value || ALL_DESIGNATIONS_VALUE)}>
+              <SelectTrigger size="sm" className="w-full bg-background" aria-label="Filter by designation">
+                <SelectValue placeholder={ALL_DESIGNATIONS_VALUE} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={ALL_DESIGNATIONS_VALUE}>{ALL_DESIGNATIONS_VALUE}</SelectItem>
+                  {designationOptions.map((designation) => <SelectItem key={designation} value={designation}>{designation}</SelectItem>)}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select value={departmentFilter} onValueChange={(value) => setDepartmentFilter(value || ALL_DEPARTMENTS_VALUE)}>
+              <SelectTrigger size="sm" className="w-full bg-background" aria-label="Filter by department">
+                <SelectValue placeholder={ALL_DEPARTMENTS_VALUE} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={ALL_DEPARTMENTS_VALUE}>{ALL_DEPARTMENTS_VALUE}</SelectItem>
+                  {departmentOptions.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
           {selectedVisibleEmployeeIds.length > 0 ? (
-            <div className="flex h-8 items-center gap-2 rounded-lg bg-primary/8 px-2.5 text-[11px] font-medium text-primary">
+            <div className="mt-2 flex min-h-8 items-center gap-2 rounded-lg bg-primary/8 px-2.5 text-[11px] font-medium text-primary">
               {selectedVisibleEmployeeIds.length} selected · choose a shift to assign
               <button type="button" className="font-semibold hover:underline" onClick={() => setSelectedEmployeeIds(new Set())}>Clear</button>
             </div>
@@ -958,17 +980,22 @@ export function ShiftWeeklyScheduler({
         </div>
       </div>
 
-      <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 bg-background px-3 py-1.5 text-[10px] text-muted-foreground sm:px-4">
-        <span><span className="font-semibold text-foreground">{filteredEmployeeViews.length}</span> {filteredEmployeeViews.length === 1 ? "employee" : "employees"}</span>
-        <span aria-hidden="true" className="text-border">·</span>
-        <span><span className="font-semibold text-foreground">{weeklyScheduleCount}</span> {weeklyScheduleCount === 1 ? "assignment" : "assignments"} this week</span>
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/60 bg-background px-3 py-1.5 text-[10px] text-muted-foreground sm:px-4">
+        <div className="flex items-center gap-x-3">
+          <span><span className="font-semibold text-foreground">{filteredEmployeeViews.length}</span> {filteredEmployeeViews.length === 1 ? "employee" : "employees"}</span>
+          <span aria-hidden="true" className="text-border">·</span>
+          <span><span className="font-semibold text-foreground">{weeklyScheduleCount}</span> {weeklyScheduleCount === 1 ? "assignment" : "assignments"} this week</span>
+        </div>
+        <span className="hidden font-medium text-muted-foreground lg:inline">
+          Select employees for bulk scheduling, or choose any day to assign one shift.
+        </span>
       </div>
 
       <div className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_205px]">
         <div className="min-w-0 overflow-x-auto">
           <div className="min-w-[1035px]">
             <div className="grid grid-cols-[200px_repeat(7,minmax(119px,1fr))] border-b border-border">
-              <div className="flex min-h-13 items-center gap-2.5 border-r border-border px-3">
+              <div className="sticky left-0 z-20 flex min-h-13 items-center gap-2.5 border-r border-border bg-background px-3 shadow-[8px_0_14px_-14px_rgba(15,23,42,0.75)]">
                 <Checkbox checked={allSelected} onCheckedChange={(value) => toggleAll(Boolean(value))} aria-label="Select all employees" />
                 <div>
                   <p className="text-xs font-semibold text-foreground">Employee details</p>
@@ -992,7 +1019,7 @@ export function ShiftWeeklyScheduler({
             </div>
 
             <div className="grid grid-cols-[200px_repeat(7,minmax(119px,1fr))] border-b border-border bg-muted/20">
-              <div className="flex min-h-8 items-center border-r border-border px-3 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="sticky left-0 z-20 flex min-h-8 items-center border-r border-border bg-muted/90 px-3 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground shadow-[8px_0_14px_-14px_rgba(15,23,42,0.75)] backdrop-blur-sm">
                 Weekly allocation
               </div>
               {schedulesPerDay.map((count, index) => (
@@ -1027,7 +1054,7 @@ export function ShiftWeeklyScheduler({
                   </div>
                   {people.map((employee) => (
                     <div key={employee.id} className="grid grid-cols-[200px_repeat(7,minmax(119px,1fr))] border-b border-border last:border-b-0">
-                      <div className="flex min-h-16 items-center gap-2.5 border-r border-border px-3">
+                      <div className="sticky left-0 z-10 flex min-h-16 items-center gap-2.5 border-r border-border bg-background px-3 shadow-[8px_0_14px_-14px_rgba(15,23,42,0.75)]">
                         <Checkbox
                           checked={selectedEmployeeIds.has(employee.id)}
                           onCheckedChange={(value) => toggleEmployee(employee.id, Boolean(value))}

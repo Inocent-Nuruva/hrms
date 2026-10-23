@@ -406,6 +406,8 @@ const ACTIVITY_MODULE_WIDE = [
   "manage_daily_activities",
   "work_activities:manager:read",
   "work_activities:manager:review",
+  "work_activities:hr:read",
+  "work_activities:config",
 ]
 
 export const ACTIVITY_ROUTE_PERMISSION: PermissionRequirement = {
@@ -430,6 +432,7 @@ export const ACTIVITY_REVIEWS_PERMISSION: PermissionRequirement = {
 
 export const ACTIVITY_SETUP_PERMISSION: PermissionRequirement = {
   permissions: [
+    "work_activities:config",
     "activity_categories:read",
     "activity_categories:create",
     "activity_policies:read",

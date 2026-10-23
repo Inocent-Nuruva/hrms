@@ -54,6 +54,7 @@ import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 import { OnboardingHandoffDrawer, OnboardingWorkspaceUpdates, onboardingActivityLabel } from "./onboarding-workspace-collaboration"
 import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer"
+import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 import { cn } from "@/lib/utils"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -4855,7 +4856,12 @@ export function OnboardingView() {
   ]
 
   return (
-    <section className="min-w-0 overflow-hidden border border-border bg-background shadow-sm">
+    <section
+      className={cn(
+        pageBleedClass,
+        "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+      )}
+    >
       <div hidden={requestDetailsOpen} className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
@@ -6087,6 +6093,7 @@ export function OnboardingView() {
                                   <button
                                     type="button"
                                     onClick={() => setEmployeeReviewStep(index)}
+                                    data-hrms-button-tone={active ? "brand" : undefined}
                                     className={cn(
                                       "flex min-h-11 w-full items-center gap-2 border border-transparent px-2 py-1.5 text-left text-[11px] transition",
                                       active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"

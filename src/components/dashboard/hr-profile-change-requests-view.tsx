@@ -14,6 +14,7 @@ import {
   actionButtonClass,
   asRecord,
   formatDate,
+  pageBleedClass,
   prettify,
   readString,
   rowId,
@@ -372,6 +373,8 @@ export function HrProfileChangeRequestsView() {
   const previewFile = profileChangeFiles(detail).find(
     (file) => file.mimeType.startsWith("image/") || readString(detail, ["request_type", "requestType"]).toUpperCase() === "PROFILE_PHOTO",
   )
+  const previewFileId = previewFile?.id
+  const previewFileName = previewFile?.name
 
   const detailItems = Array.isArray(detail?.items)
     ? detail.items.filter((item): item is AdminRecord => Boolean(asRecord(item))).map((item) => asRecord(item) as AdminRecord)
@@ -450,7 +453,7 @@ export function HrProfileChangeRequestsView() {
   React.useEffect(() => {
     setPhotoPreview(null)
     setPhotoPreviewError(null)
-    if (!detailId || !previewFile) {
+    if (!detailId || !previewFileId) {
       setPhotoPreviewLoading(false)
       return
     }
@@ -464,14 +467,14 @@ export function HrProfileChangeRequestsView() {
     let active = true
     let objectUrl = ""
     setPhotoPreviewLoading(true)
-    void previewHrProfileChangeRequestFile(token, detailId, previewFile.id)
+    void previewHrProfileChangeRequestFile(token, detailId, previewFileId)
       .then((result) => {
         objectUrl = URL.createObjectURL(result.blob)
         if (!active) {
           URL.revokeObjectURL(objectUrl)
           return
         }
-        setPhotoPreview({ url: objectUrl, name: result.filename || previewFile.name })
+        setPhotoPreview({ url: objectUrl, name: result.filename || previewFileName || "Requested photo" })
       })
       .catch((errorObject) => {
         if (active) {
@@ -486,7 +489,7 @@ export function HrProfileChangeRequestsView() {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [detailId, previewFile])
+  }, [detailId, previewFileId, previewFileName])
 
   const counts = React.useMemo(() => ({
     all: rows.length,
@@ -630,7 +633,12 @@ export function HrProfileChangeRequestsView() {
   if (!canAccess) return null
 
   return (
-    <section className="overflow-hidden border border-border bg-background shadow-sm">
+    <section
+      className={cn(
+        pageBleedClass,
+        "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
+      )}
+    >
       <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">

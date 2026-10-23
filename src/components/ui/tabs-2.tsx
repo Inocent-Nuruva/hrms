@@ -166,7 +166,7 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
             const first = group.items[0]
             if (!first) return null
             const active = group === activeGroup
-            return <button key={group.title ?? first.url} type="button" aria-current={active ? "page" : undefined} onClick={() => router.push(first.url)} className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{group.title ?? first.title}</button>
+            return <button key={group.title ?? first.url} type="button" aria-current={active ? "page" : undefined} data-hrms-button-tone={active ? "brand" : undefined} onClick={() => router.push(first.url)} className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>{group.title ?? first.title}</button>
           })}
         </nav> : null}
         <TabList

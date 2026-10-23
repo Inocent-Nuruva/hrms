@@ -922,6 +922,10 @@ export const api = {
     return normalizeList(await request<unknown>('/api/me/activities/tasks?page=1&limit=100'));
   },
 
+  async listMyActivityCategories() {
+    return normalizeList(await request<unknown>('/api/me/activities/categories'));
+  },
+
   async getMyActivityToday() {
     return request<Record<string, unknown>>('/api/me/activities/today');
   },
