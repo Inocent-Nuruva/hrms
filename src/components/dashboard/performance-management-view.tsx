@@ -1434,6 +1434,42 @@ export function PerformanceManagementView({
     return rows.slice(0, 3).map((row) => optionLabel(row));
   }
 
+  const calculateAggregatesForYear = React.useCallback(
+    async (yearId: string, periodType: "QUARTERLY" | "ANNUAL") => {
+      const token = readStoredToken();
+      if (!token) return;
+      const actionId = `agg-${periodType}-${yearId}`;
+      setBusyId(actionId);
+      try {
+        const result = asRecord(
+          await calculatePerformanceAggregates(token, yearId, periodType),
+        );
+        const count = readNumber(result, ["aggregate_count"]) ?? 0;
+        const skippedPeriods =
+          readNumber(result, ["skipped_period_count"]) ?? 0;
+        const skippedReviews =
+          readNumber(result, ["skipped_review_count"]) ?? 0;
+        const summary =
+          periodType === "QUARTERLY"
+            ? `${count} aggregate(s), ${skippedPeriods} quarter(s) without published source scores, ${skippedReviews} unpublished or unscored review(s) omitted.`
+            : `${count} annual aggregate(s) updated.`;
+        toast[count > 0 ? "success" : "info"](
+          `${prettify(periodType)} calculation finished: ${summary}`,
+        );
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not calculate performance aggregates.",
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
+
   const runAction = React.useCallback(
     async (
       id: string,
@@ -2885,28 +2921,29 @@ export function PerformanceManagementView({
                     "Generate periods"
                   )}
                 </FluentButton>
-                <FluentButton
-                  type="button"
-                  appearance="secondary"
-                  size="small"
-                  icon={<ScoreIcon />}
-                  disabled={busyId === `agg-${id}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void runAction(
-                      `agg-${id}`,
-                      (token) =>
-                        calculatePerformanceAggregates(token, id, "MONTHLY"),
-                      "Aggregates calculated.",
-                    );
-                  }}
-                >
-                  {busyId === `agg-${id}` ? (
-                    <FluentLoadingIndicator className="size-3.5 animate-spin" />
-                  ) : (
-                    "Aggregates"
-                  )}
-                </FluentButton>
+                {(["QUARTERLY", "ANNUAL"] as const).map((periodType) => {
+                  const actionId = `agg-${periodType}-${id}`;
+                  return (
+                    <FluentButton
+                      key={periodType}
+                      type="button"
+                      appearance="secondary"
+                      size="small"
+                      icon={<ScoreIcon />}
+                      disabled={busyId === actionId}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void calculateAggregatesForYear(id, periodType);
+                      }}
+                    >
+                      {busyId === actionId ? (
+                        <FluentLoadingIndicator className="size-3.5 animate-spin" />
+                      ) : (
+                        `${prettify(periodType)} aggregates`
+                      )}
+                    </FluentButton>
+                  );
+                })}
               </div>
             );
           },
@@ -3262,6 +3299,7 @@ export function PerformanceManagementView({
       },
     ];
   }, [
+    calculateAggregatesForYear,
     runAction,
     canReopenPeriod,
     periodActionResults,
