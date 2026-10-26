@@ -1338,11 +1338,16 @@ export function OnboardingView() {
     () => canPerformPermission(actorPermissions, "onboarding_requests:complete"),
     [actorPermissions]
   )
-  const canReadJoiningSalary = React.useMemo(
+  const canReadPayrollProfile = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:profiles:read"),
     [actorPermissions]
   )
+  const canReadJoiningSalary = canReadPayrollProfile || canUpdateOnboardingRequests
   const canManageJoiningSalary = React.useMemo(
+    () => canPerformPermission(actorPermissions, "payroll:profiles") || canUpdateOnboardingRequests,
+    [actorPermissions, canUpdateOnboardingRequests]
+  )
+  const canApproveJoiningSalary = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:profiles"),
     [actorPermissions]
   )
@@ -6320,9 +6325,9 @@ export function OnboardingView() {
                         <p className="mt-1 text-xs text-muted-foreground">Payroll owns the enabled profile, TIN, pension and health enrollment, and verified bank account. These are separate from salary approval; use the activation overview to see exactly which are missing.</p>
                       </div>
                       {canReadJoiningSalary ? (
-                      <div className="flex flex-wrap gap-2"><FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton>
+                      <div className="flex flex-wrap gap-2">{canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
                       <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
-                        Review salary setup
+                        Implement salary
                       </Button>
                       </div>
                       ) : <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p>}
@@ -7462,6 +7467,7 @@ export function OnboardingView() {
             employeeLabel={selectedRequestSummary.employee}
             structures={salaryStructures}
             canEdit={canManageJoiningSalary}
+            canApprove={canApproveJoiningSalary}
             onChanged={() => {
               const row = selectedRequestRow
               if (row) void openRequestDetails(row)
