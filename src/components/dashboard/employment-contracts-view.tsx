@@ -233,7 +233,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
             ]}
           />
         </Field>
-        {contractedEmployeeIds ? <div className="flex flex-wrap gap-2 pb-0.5" role="group" aria-label="Contract status filter">
+        {contractedEmployeeIds ? <div className="flex flex-wrap gap-2" role="group" aria-label="Contract status filter">
           {([
             ["all", "All", employees.length],
             ["contracted", "Contracted", contractedEmployeeIds.size],
@@ -243,7 +243,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
             type="button"
             size="sm"
             variant={contractFilter === value ? "default" : "outline"}
-            className="rounded-full"
+            className="rounded-full px-2.5"
             aria-pressed={contractFilter === value}
             onClick={() => setContractFilter(value)}
           >{label} <span className="text-xs opacity-75">{count}</span></Button>)}
