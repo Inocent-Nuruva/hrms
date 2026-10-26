@@ -209,16 +209,31 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
     </div>
 
     {!scopedEmployeeId ? <section className="space-y-3 border-y py-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="max-w-sm">
         <Field title="Search employees">
           <FluentSearchBox
-            className="min-w-64"
+            className="w-full"
             placeholder="Name or employee number"
             value={employeeSearch}
             onChange={(_, data) => setEmployeeSearch(data.value)}
           />
         </Field>
-        {contractedEmployeeIds ? <div className="flex flex-wrap gap-2" role="group" aria-label="Contract status filter">
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field title={`${filteredEmployees.length} employee${filteredEmployees.length === 1 ? "" : "s"}`}>
+          <FluentSelect
+            ariaLabel="Employee"
+            className="w-full sm:w-[32rem]"
+            value={employeeId && filteredEmployees.some((item) => Number(item.id) === employeeId) ? String(employeeId) : ""}
+            onChange={(value) => selectEmployee(Number(value))}
+            placeholder={filteredEmployees.length ? "Select employee" : "No employees match these filters"}
+            options={[
+              { value: "", label: filteredEmployees.length ? "Select employee" : "No employees match these filters" },
+              ...filteredEmployees.map((item) => ({ value: String(Number(item.id)), label: employeeOptionLabel(item) })),
+            ]}
+          />
+        </Field>
+        {contractedEmployeeIds ? <div className="flex flex-wrap gap-2 pb-0.5" role="group" aria-label="Contract status filter">
           {([
             ["all", "All", employees.length],
             ["contracted", "Contracted", contractedEmployeeIds.size],
@@ -234,19 +249,6 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
           >{label} <span className="text-xs opacity-75">{count}</span></Button>)}
         </div> : null}
       </div>
-      <Field title={`${filteredEmployees.length} employee${filteredEmployees.length === 1 ? "" : "s"}`}>
-        <FluentSelect
-          ariaLabel="Employee"
-          className="w-full sm:max-w-xl"
-          value={employeeId && filteredEmployees.some((item) => Number(item.id) === employeeId) ? String(employeeId) : ""}
-          onChange={(value) => selectEmployee(Number(value))}
-          placeholder={filteredEmployees.length ? "Select employee" : "No employees match these filters"}
-          options={[
-            { value: "", label: filteredEmployees.length ? "Select employee" : "No employees match these filters" },
-            ...filteredEmployees.map((item) => ({ value: String(Number(item.id)), label: employeeOptionLabel(item) })),
-          ]}
-        />
-      </Field>
     </section> : null}
 
     {employeeId ? <section className="border-t">
