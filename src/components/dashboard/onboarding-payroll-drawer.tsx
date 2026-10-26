@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Button, Field, Input, MessageBar, MessageBarBody, OverlayDrawer, DrawerHeader, DrawerHeaderTitle, DrawerBody, Spinner, Switch } from "@fluentui/react-components"
+import { DateInput } from "@/components/ui/date-input"
 import { listEmployeePayrollProfiles, upsertEmployeePayrollProfile, type AdminRecord } from "@/lib/admin-api"
 
 const fields = [
@@ -70,16 +71,22 @@ export function OnboardingPayrollDrawer({ token, employeeId, employeeName, emplo
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save payroll profile. Your draft is retained.") }
     finally { setSaving(false) }
   }
-  return <OverlayDrawer open position="end" size="medium" onOpenChange={(_, data) => { if (!data.open) close() }}><DrawerHeader><DrawerHeaderTitle action={<Button onClick={close}>Close</Button>}>Payroll setup</DrawerHeaderTitle><p>{employeeName}</p></DrawerHeader><DrawerBody className="flex flex-col gap-4">
+  return <OverlayDrawer open position="end" size="medium" onOpenChange={(_, data) => { if (!data.open) close() }}><DrawerHeader><DrawerHeaderTitle action={<Button onClick={close}>Close</Button>}>Payroll setup</DrawerHeaderTitle><p>{employeeName}</p></DrawerHeader><DrawerBody className="flex flex-col gap-4 !pb-6">
     {error ? <MessageBar intent="error"><MessageBarBody>{error}<Button disabled={saving} onClick={() => { if (!dirty || window.confirm("Discard the draft and load the latest profile?")) setRevision((current) => current + 1) }}>Reload profile</Button></MessageBarBody></MessageBar> : null}
     {loading ? <Spinner label="Loading payroll profile" /> : <>
       <p className="text-sm">Payroll owns these activation requirements. Salary approval and bank verification remain separate checks. Existing private identifiers are not displayed; leave their fields blank to keep them, or enter the full new value to replace them.</p>
-      {fields.map(([key, , label]) => <Field key={key} label={label} required={key === "payroll_number" || key === "effective_from"}><Input value={form[key] ?? ""} type={key === "effective_from" ? "date" : "text"} disabled={!canEdit || saving} onChange={(_, data) => { setDirty(true); setForm((current) => ({ ...current, [key]: data.value })) }} /></Field>)}
-      <Switch label="Payroll enabled" checked={enabled} disabled={!canEdit || saving} onChange={(_, data) => { setEnabled(data.checked); setDirty(true) }} />
-      <Switch label="Payroll on hold" checked={hold} disabled={!canEdit || saving} onChange={(_, data) => { setHold(data.checked); setDirty(true) }} />
+      {fields.map(([key, , label]) => <Field key={key} label={label} required={key === "payroll_number" || key === "effective_from"}>{key === "effective_from" ? <DateInput className="max-w-none" value={form[key] ?? ""} disabled={!canEdit || saving} onValueChange={(nextValue) => { setDirty(true); setForm((current) => ({ ...current, [key]: nextValue })) }} /> : <Input value={form[key] ?? ""} disabled={!canEdit || saving} onChange={(_, data) => { setDirty(true); setForm((current) => ({ ...current, [key]: data.value })) }} />}</Field>)}
+      <div className="grid gap-1">
+        <Switch label="Payroll enabled" checked={enabled} disabled={!canEdit || saving} onChange={(_, data) => { setEnabled(data.checked); setDirty(true) }} />
+        <p className="pl-10 text-xs text-muted-foreground">Includes this employee in payroll processing when the other payroll requirements are complete.</p>
+      </div>
+      <div className="grid gap-1">
+        <Switch label="Payroll on hold" checked={hold} disabled={!canEdit || saving} onChange={(_, data) => { setHold(data.checked); setDirty(true) }} />
+        <p className="pl-10 text-xs text-muted-foreground">Temporarily blocks payroll processing even when payroll is enabled. A hold reason is required.</p>
+      </div>
       {hold ? <Field label="Hold reason" required><Input value={reason} disabled={!canEdit || saving} onChange={(_, data) => { setReason(data.value); setDirty(true) }} /></Field> : null}
       {employeeNo ? <a className="text-sm text-primary underline" href={`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`} target="_blank" rel="noopener noreferrer">Review bank details in employee profile (new tab)</a> : null}
-      {canEdit ? <Button appearance="primary" disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save payroll setup"}</Button> : <p>Payroll management permission is required to edit.</p>}
+      {canEdit ? <Button appearance="primary" size="large" className="min-h-10 w-full shrink-0" disabled={saving || !dirty} onClick={() => void save()}>{saving ? "Saving…" : "Save payroll setup"}</Button> : <p>Payroll management permission is required to edit.</p>}
     </>}
   </DrawerBody></OverlayDrawer>
 }

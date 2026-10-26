@@ -2568,7 +2568,7 @@ export function DataTable({
         >
           <DialogPopup
             from="right"
-            className="flex max-h-[min(92dvh,42rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+            className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
           >
             <DialogHeader className="shrink-0 space-y-1 border-b border-slate-200 px-4 py-3 pr-10 text-left dark:border-border">
               <DialogTitle className="text-base">

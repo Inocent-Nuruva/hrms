@@ -79,6 +79,10 @@ const REPORT_UI: Record<string, ReportUiConfig> = {
     columns: ["visit_no", "visit_date", "employee_name", "event_type", "captured_at", "latitude", "longitude", "location_validation_status"],
     cards: [{ label: "Points", count: true }],
   },
+  PENDING_ACTIVITY: {
+    columns: ["activity_date", "employee_no", "employee_name", "department_name", "report_status", "is_workday", "is_holiday", "has_approved_leave", "assigned_task_count", "completed_task_count", "open_task_count"],
+    cards: [{ label: "Pending employee-days", count: true }, { label: "Assigned tasks", field: "assigned_task_count" }, { label: "Open tasks", field: "open_task_count" }],
+  },
   KPI_ASSIGNMENTS: {
     columns: ["employee_number", "employee_name", "kpi_code", "kpi_name", "target_value", "weight", "assignment_status", "effective_from"],
     cards: [{ label: "Assignments", count: true }, { label: "Total weight", field: "weight" }],
@@ -88,8 +92,8 @@ const REPORT_UI: Record<string, ReportUiConfig> = {
     cards: [{ label: "Rows", count: true }, { label: "Achievement", field: "achievement_value" }, { label: "Weighted score", field: "weighted_score" }],
   },
   MONTHLY_KPI_SCORE: {
-    columns: ["employee_number", "employee_name", "period_name", "kpi_code", "raw_score", "capped_score", "weighted_score", "status"],
-    cards: [{ label: "Rows", count: true }, { label: "Weighted score", field: "weighted_score" }],
+    columns: ["employee_number", "employee_name", "period_name", "final_score", "rating_code", "status", "published_at", "locked_at"],
+    cards: [{ label: "Rows", count: true }, { label: "Published final score", field: "final_score" }],
   },
   QUARTERLY_KPI_AVERAGE: {
     columns: ["employee_number", "employee_name", "period_name", "score", "rating_code", "published_at", "locked_at"],

@@ -112,6 +112,7 @@ export function PayrollEmployeeSalaryDialog({
   employeeLabel,
   structures,
   canEdit,
+  canApprove = canEdit,
   onChanged,
   drawer = false,
 }: {
@@ -121,6 +122,7 @@ export function PayrollEmployeeSalaryDialog({
   employeeLabel: string;
   structures: AdminRecord[];
   canEdit: boolean;
+  canApprove?: boolean;
   onChanged?: () => void;
   drawer?: boolean;
 }) {
@@ -583,7 +585,7 @@ export function PayrollEmployeeSalaryDialog({
               ) : null}
             </div>
           ) : null}
-          {str(compensation, "status").toUpperCase() === "PENDING_APPROVAL" && canEdit ? (
+          {str(compensation, "status").toUpperCase() === "PENDING_APPROVAL" && canApprove ? (
             <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onApprove()}>
               {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
               Approve starting salary
