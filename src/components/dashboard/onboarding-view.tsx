@@ -8,7 +8,6 @@ import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import {
   Button as FluentButton,
   Avatar as FluentAvatar,
@@ -18,18 +17,10 @@ import {
   OverlayDrawer,
   DrawerHeaderTitle,
   Field,
-  Table as FluentTable,
-  TableBody as FluentTableBody,
-  TableCell as FluentTableCell,
-  TableCellLayout,
-  TableHeader as FluentTableHeader,
-  TableHeaderCell,
-  TableRow as FluentTableRow,
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
   Add16Regular,
-  ClipboardTaskListLtr20Regular,
   Delete16Regular,
   Edit16Regular,
 } from "@fluentui/react-icons"
@@ -7689,7 +7680,7 @@ export function OnboardingView() {
           </Dialog>
         </div>
       ) : activeTab === "workflows" && canViewOnboardingWorkflows ? (
-        <div className="space-y-2">
+        <div className="space-y-2 px-4 pb-4">
           <ResizableTable
             title="Onboarding Workflows"
             data={filteredWorkflows}
@@ -7772,7 +7763,7 @@ export function OnboardingView() {
           >
             <SheetContent
               side="right"
-              className="w-full overflow-hidden data-[side=right]:overflow-hidden data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none"
+              className="flex h-full w-full flex-col overflow-hidden data-[side=right]:w-full data-[side=right]:overflow-hidden sm:data-[side=right]:w-[72vw] sm:data-[side=right]:max-w-[1120px]"
             >
               <SheetHeader className="shrink-0">
                 <SheetTitle>
@@ -7902,109 +7893,57 @@ export function OnboardingView() {
                           : "This workflow has no steps yet. Click Add Step to add one."}
                     </p>
                   ) : (
-                    <HorizontalScrollContainer className="rounded-lg border border-border">
-                      <FluentTable
-                        aria-label="Workflow steps"
-                        size="small"
-                        style={{ tableLayout: "fixed", width: "100%" }}
-                      >
-                        <FluentTableHeader>
-                          <FluentTableRow>
-                            <TableHeaderCell style={{ width: "31%" }}>Step name</TableHeaderCell>
-                            <TableHeaderCell style={{ width: "26%" }}>Checklist</TableHeaderCell>
-                            <TableHeaderCell style={{ width: "28%" }}>Assignment</TableHeaderCell>
-                            <TableHeaderCell className="text-right" style={{ width: "15%" }}>
-                              Actions
-                            </TableHeaderCell>
-                          </FluentTableRow>
-                        </FluentTableHeader>
-                        <FluentTableBody>
-                          {workflowSteps.map((step, index) => (
-                            <FluentTableRow key={`step-${index}`}>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  media={<ClipboardTaskListLtr20Regular />}
-                                  description={`${toTitleCaseWords(step.step_type || "task")} · ${resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · ${step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}`}
-                                >
-                                  {step.name || `Step ${index + 1}`}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  description={step.description || undefined}
-                                  truncate
-                                >
-                                  {step.checklist_items.length > 0
-                                    ? step.checklist_items.map((item) => item.name).join(", ")
-                                    : "No checklist"}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  description={
-                                    step.assigned_user_id
-                                      ? resolveOptionLabel(
-                                          users,
-                                          step.assigned_user_id,
-                                          ["id", "user_id", "company_user_id"],
-                                          ["full_name", "name", "email"]
-                                        )
-                                      : step.assigned_department_id
-                                        ? "Whole department"
-                                        : step.assigned_role_id
-                                          ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
-                                          : step.metadata?.assigned_position_id
-                                            ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
-                                          : "Unassigned"
-                                  }
-                                >
-                                  {resolveOptionLabel(
-                                    departments,
-                                    step.assigned_department_id ?? null,
-                                    ["id", "department_id"],
-                                    ["name", "title", "code"]
-                                  )}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="size-7 p-0"
-                                    onClick={() => editWorkflowStep(step, index)}
-                                    aria-label={`Edit step ${index + 1}`}
-                                    title="Edit step"
-                                  >
-                                    <Edit16Regular data-icon="icon-only" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="size-7 p-0 text-rose-600"
-                                    onClick={() => removeWorkflowStep(index)}
-                                    aria-label={`Remove step ${index + 1}`}
-                                    title="Remove step"
-                                  >
-                                    <Delete16Regular data-icon="icon-only" />
-                                  </Button>
-                                </div>
-                              </FluentTableCell>
-                            </FluentTableRow>
-                          ))}
-                        </FluentTableBody>
-                      </FluentTable>
-                    </HorizontalScrollContainer>
+                    <div className="overflow-hidden rounded-lg border border-border bg-background" role="table" aria-label="Workflow steps">
+                      <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid" role="row">
+                        <span>Step</span><span>Checklist</span><span>Assignment</span><span>Actions</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {workflowSteps.map((step, index) => {
+                          const checklist = step.checklist_items.length > 0
+                            ? step.checklist_items.map((item) => item.name).join(", ")
+                            : "No checklist items"
+                          const assignment = step.assigned_user_id
+                            ? resolveOptionLabel(users, step.assigned_user_id, ["id", "user_id", "company_user_id"], ["full_name", "name", "email"])
+                            : step.assigned_department_id
+                              ? "Whole department"
+                              : step.assigned_role_id
+                                ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
+                                : step.metadata?.assigned_position_id
+                                  ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
+                                  : "Unassigned"
+                          const assignmentGroup = resolveOptionLabel(
+                            departments,
+                            step.assigned_department_id ?? null,
+                            ["id", "department_id"],
+                            ["name", "title", "code"],
+                          )
+                          return <div key={`step-${index}`} className="grid gap-4 px-4 py-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center" role="row">
+                            <div className="flex min-w-0 gap-3">
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-foreground">{step.name || `Step ${index + 1}`}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">{toTitleCaseWords(step.step_type || "task")} · {resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · {step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}</p>
+                              </div>
+                            </div>
+                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Checklist</p><p className="truncate text-sm" title={checklist}>{checklist}</p>{step.description ? <p className="truncate text-xs text-muted-foreground" title={step.description}>{step.description}</p> : null}</div>
+                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignment</p><p className="truncate text-sm font-medium">{assignmentGroup || assignment}</p><p className="truncate text-xs text-muted-foreground">{assignmentGroup ? assignment : ""}</p></div>
+                            <div className="flex items-center gap-1 md:justify-end">
+                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0" onClick={() => editWorkflowStep(step, index)} aria-label={`Edit step ${index + 1}`} title="Edit step"><Edit16Regular data-icon="icon-only" /></Button>
+                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0 text-rose-600" onClick={() => removeWorkflowStep(index)} aria-label={`Remove step ${index + 1}`} title="Remove step"><Delete16Regular data-icon="icon-only" /></Button>
+                            </div>
+                          </div>
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <SheetFooter className="shrink-0 sm:flex-row sm:justify-end">
+              <SheetFooter className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
+                  className="border-border bg-background text-foreground"
                   onClick={() => {
                     setWorkflowSheetOpen(false)
                     setEditingWorkflowId(null)
