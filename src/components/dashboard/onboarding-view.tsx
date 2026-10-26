@@ -4787,21 +4787,25 @@ export function OnboardingView() {
     {
       key: "id",
       label: "ID",
-      defaultWidth: 80,
+      defaultWidth: 56,
       render: (row) => readNumber(row, ["id", "workflow_id"]) ?? "-",
     },
     {
       key: "name",
       label: "Name",
-      defaultWidth: 160,
-      render: (row) => readString(row, ["name", "title"]),
+      defaultWidth: 220,
+      render: (row) => (
+        <span className="block max-w-[260px] truncate" title={readString(row, ["name", "title"])}>
+          {readString(row, ["name", "title"])}
+        </span>
+      ),
     },
     {
       key: "description",
       label: "Description",
-      defaultWidth: 220,
+      defaultWidth: 300,
       render: (row) => (
-        <span className="block max-w-full truncate text-xs text-slate-600" title={readString(row, ["description"])}>
+        <span className="block max-w-[360px] truncate text-xs text-slate-600" title={readString(row, ["description"])}>
           {readString(row, ["description"])}
         </span>
       ),
@@ -7691,7 +7695,7 @@ export function OnboardingView() {
             data={filteredWorkflows}
             columns={onboardingWorkflowColumns}
             loading={loading}
-            storageKey="onboarding-workflows"
+            storageKey="onboarding-workflows-v2"
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
