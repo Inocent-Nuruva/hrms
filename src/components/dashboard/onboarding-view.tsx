@@ -81,6 +81,7 @@ import {
   fileToBase64UploadDto,
   getOnboardingAuditLogs,
   getOnboardingProgress,
+  getEmployeePayrollSalary,
   getCurrentCompanyUser,
   getOnboardingRequest,
   getOnboardingWorkflow,
@@ -1348,7 +1349,7 @@ export function OnboardingView() {
     [actorPermissions, canUpdateOnboardingRequests]
   )
   const canApproveJoiningSalary = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:profiles"),
+    () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
     [actorPermissions]
   )
   const canCreateOnboardingWorkflows = React.useMemo(
@@ -1437,6 +1438,7 @@ export function OnboardingView() {
   const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false)
   const [payrollDrawerOpen, setPayrollDrawerOpen] = React.useState(false)
   const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>([])
+  const [joiningSalary, setJoiningSalary] = React.useState<AdminRecord | null>(null)
   const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
   const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
@@ -3803,6 +3805,28 @@ export function OnboardingView() {
     }
   }
 
+  const loadJoiningSalary = React.useCallback(async () => {
+    const token = readStoredToken()
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    )
+    if (!token || !employeeId || !canReadJoiningSalary) {
+      setJoiningSalary(null)
+      return
+    }
+    try {
+      setJoiningSalary(await getEmployeePayrollSalary(token, employeeId))
+    } catch {
+      setJoiningSalary(null)
+    }
+  }, [canReadJoiningSalary, selectedRequestDetails, selectedRequestRow])
+
+  React.useEffect(() => {
+    if (!requestDetailsOpen) return
+    void loadJoiningSalary()
+  }, [loadJoiningSalary, requestDetailsOpen])
+
   async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
     if (!canUpdateOnboardingRequests) {
       showErrorAlert("You do not have permission to review employee details.")
@@ -4763,21 +4787,25 @@ export function OnboardingView() {
     {
       key: "id",
       label: "ID",
-      defaultWidth: 80,
+      defaultWidth: 56,
       render: (row) => readNumber(row, ["id", "workflow_id"]) ?? "-",
     },
     {
       key: "name",
       label: "Name",
-      defaultWidth: 160,
-      render: (row) => readString(row, ["name", "title"]),
+      defaultWidth: 220,
+      render: (row) => (
+        <span className="block max-w-[260px] truncate" title={readString(row, ["name", "title"])}>
+          {readString(row, ["name", "title"])}
+        </span>
+      ),
     },
     {
       key: "description",
       label: "Description",
-      defaultWidth: 220,
+      defaultWidth: 300,
       render: (row) => (
-        <span className="block max-w-full truncate text-xs text-slate-600" title={readString(row, ["description"])}>
+        <span className="block max-w-[360px] truncate text-xs text-slate-600" title={readString(row, ["description"])}>
           {readString(row, ["description"])}
         </span>
       ),
@@ -6318,19 +6346,56 @@ export function OnboardingView() {
                     ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
                   </section>
 
-                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Assign the effective salary structure and route it for independent approval. Activation remains blocked until payroll prerequisites are ready.</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Payroll owns the enabled profile, TIN, pension and health enrollment, and verified bank account. These are separate from salary approval; use the activation overview to see exactly which are missing.</p>
-                      </div>
-                      {canReadJoiningSalary ? (
-                      <div className="flex flex-wrap gap-2">{canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
-                      <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
-                        Implement salary
-                      </Button>
-                      </div>
-                      ) : <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p>}
+                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="border-b border-border bg-background px-3 py-4">
+                      {(() => {
+                        const compensation = toRecord(joiningSalary?.compensation)
+                        const approval = toRecord(compensation?.approval)
+                        const approvedBy = toRecord(approval?.approved_by)
+                        const assignedTo = toRecord(approval?.assigned_to)
+                        const status = readString(compensation ?? {}, ["status"], "")
+                        const approved = status === "ACTIVE" || status === "SCHEDULED"
+                        const pending = status === "PENDING_APPROVAL"
+                        const baseSalary = Number(compensation?.baseSalary)
+                        const currency = readString(compensation ?? {}, ["currency"], "TZS")
+                        const amount = Number.isFinite(baseSalary)
+                          ? `${currency} ${baseSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "—"
+
+                        return <div className="space-y-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
+                                {approved ? <FluentBadge appearance="tint" color="success">Salary approved</FluentBadge> : null}
+                                {pending ? <FluentBadge appearance="tint" color="warning">Awaiting approval</FluentBadge> : null}
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {approved
+                                  ? "The starting salary is approved and available to payroll. Future changes must use the salary revision workflow."
+                                  : pending
+                                    ? `The starting salary is waiting for ${readString(assignedTo ?? {}, ["name"], "an eligible salary approver")}.`
+                                    : "Assign the effective salary structure and route it for independent approval."}
+                              </p>
+                            </div>
+                            {canReadJoiningSalary ? <div className="flex flex-wrap gap-2">
+                              {canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
+                              <Button type="button" size="sm" variant={approved || pending ? "outline" : "default"} onClick={() => void openJoiningSalary()}>
+                                {approved || pending ? "View salary details" : "Implement salary"}
+                              </Button>
+                            </div> : null}
+                          </div>
+
+                          {compensation ? <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Base salary</p><p className="mt-1 text-sm font-semibold">{amount}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Structure</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["salaryStructureCode"], "—")}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Effective from</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["effectiveFrom"], "—")}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{approved ? "Approved by" : "Assigned approver"}</p><p className="mt-1 text-sm font-semibold">{readString((approved ? approvedBy : assignedTo) ?? {}, ["name"], "Not recorded")}</p></div>
+                          </div> : null}
+
+                          {!canReadJoiningSalary ? <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p> : null}
+                          <p className="text-xs text-muted-foreground">Payroll setup, TIN, pension, health enrollment, and verified bank account remain separate activation checks.</p>
+                        </div>
+                      })()}
                     </section>
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
@@ -7469,6 +7534,7 @@ export function OnboardingView() {
             canEdit={canManageJoiningSalary}
             canApprove={canApproveJoiningSalary}
             onChanged={() => {
+              void loadJoiningSalary()
               const row = selectedRequestRow
               if (row) void openRequestDetails(row)
             }}
@@ -7629,7 +7695,7 @@ export function OnboardingView() {
             data={filteredWorkflows}
             columns={onboardingWorkflowColumns}
             loading={loading}
-            storageKey="onboarding-workflows"
+            storageKey="onboarding-workflows-v2"
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"

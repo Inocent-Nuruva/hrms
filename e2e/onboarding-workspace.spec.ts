@@ -219,7 +219,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     expect(submitted).not.toHaveProperty("taxpayer_identification_number")
     expect(submitted).not.toHaveProperty("social_security_number")
     expect(submitted).not.toHaveProperty("health_insurance_number")
-    await page.getByRole("button", { name: "Review salary setup", exact: true }).click()
+    await page.getByRole("button", { name: "Implement salary", exact: true }).click()
     await expect(page.getByRole("dialog", { name: "Joining salary & payroll", exact: true })).toBeVisible()
   })
 

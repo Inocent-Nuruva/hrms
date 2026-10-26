@@ -22,6 +22,7 @@ import {
   approveEmployeePayrollSalary,
   getEmployeePayrollSalary,
   getPayrollSalaryStructure,
+  listEligibleSalaryApprovers,
   type AdminRecord,
 } from "@/lib/admin-api";
 import { readStoredSessionTokens } from "@/lib/session-client";
@@ -139,6 +140,8 @@ export function PayrollEmployeeSalaryDialog({
   const [overrides, setOverrides] = React.useState<
     Record<string, OverrideDraft>
   >({});
+  const [approvers, setApprovers] = React.useState<AdminRecord[]>([]);
+  const [assignedApproverId, setAssignedApproverId] = React.useState("");
 
   const closeSalary = (nextOpen: boolean) => {
     if (!nextOpen && (saving || (dirty && !window.confirm("Discard unsaved salary changes?")))) return;
@@ -175,7 +178,12 @@ export function PayrollEmployeeSalaryDialog({
     setLoading(true);
     setError(null);
     try {
-      setSalary(await getEmployeePayrollSalary(token, employeeId));
+      const [salaryResult, approverRows] = await Promise.all([
+        getEmployeePayrollSalary(token, employeeId),
+        canEdit ? listEligibleSalaryApprovers(token) : Promise.resolve([]),
+      ]);
+      setSalary(salaryResult);
+      setApprovers(approverRows);
     } catch (errorObject) {
       setError(
         errorObject instanceof Error
@@ -185,7 +193,7 @@ export function PayrollEmployeeSalaryDialog({
     } finally {
       setLoading(false);
     }
-  }, [employeeId]);
+  }, [canEdit, employeeId]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -196,6 +204,7 @@ export function PayrollEmployeeSalaryDialog({
     setEffectiveFrom(today());
     setJustification("");
     setOverrides({});
+    setAssignedApproverId("");
     void load();
   }, [open, load]);
 
@@ -229,8 +238,8 @@ export function PayrollEmployeeSalaryDialog({
   async function onAssign() {
     const token = readStoredSessionTokens().accessToken.trim();
     if (!token) return;
-    if (!structureCode || !baseSalary.trim() || !effectiveFrom) {
-      setError("Structure, base salary and effective date are required.");
+    if (!structureCode || !baseSalary.trim() || !effectiveFrom || !assignedApproverId) {
+      setError("Structure, base salary, effective date and salary approver are required.");
       return;
     }
     const componentOverrides = Object.entries(overrides)
@@ -265,6 +274,7 @@ export function PayrollEmployeeSalaryDialog({
           salary_structure_code: structureCode,
           base_salary: baseSalary.trim(),
           effective_from: effectiveFrom,
+          assigned_approver_company_user_id: Number(assignedApproverId),
           justification: justification.trim() || undefined,
           component_overrides: componentOverrides.length
             ? componentOverrides
@@ -313,6 +323,10 @@ export function PayrollEmployeeSalaryDialog({
   const history = recs(salary?.history);
   const currency = str(compensation, "currency") || "TZS";
   const overrideMap = rec(compensation?.componentOverrides) ?? {};
+  const approval = rec(compensation?.approval);
+  const submittedBy = rec(approval?.submitted_by);
+  const assignedTo = rec(approval?.assigned_to);
+  const approvedBy = rec(approval?.approved_by);
 
   return (
     <SalarySurface open={open} onOpenChange={closeSalary} drawer={drawer} employeeLabel={employeeLabel}>
@@ -355,6 +369,17 @@ export function PayrollEmployeeSalaryDialog({
                 label="Status"
                 value={prettify(str(compensation, "status"))}
               />
+            </div>
+          ) : null}
+
+          {compensation ? (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Approval trail</h3>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <SummaryField label="Submitted by" value={str(submittedBy, "name") || "Not recorded"} />
+                <SummaryField label="Assigned approver" value={str(assignedTo, "name") || "Any eligible salary approver"} />
+                <SummaryField label="Approved by" value={str(approvedBy, "name") || "Awaiting approval"} />
+              </div>
             </div>
           ) : null}
 
@@ -490,6 +515,28 @@ export function PayrollEmployeeSalaryDialog({
                   />
                 </label>
               </div>
+              <label className="grid gap-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Salary approver
+                </span>
+                <FluentSelect
+                  ariaLabel="Salary approver"
+                  className="w-full"
+                  value={assignedApproverId}
+                  onChange={setAssignedApproverId}
+                  placeholder="Select the independent approver"
+                  options={[
+                    { value: "", label: "Select the independent approver" },
+                    ...approvers.map((row) => ({
+                      value: str(row, "company_user_id"),
+                      label: str(row, "name") || str(row, "email"),
+                    })),
+                  ]}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Only users granted “Approve starting salaries” can be selected. They are notified immediately.
+                </span>
+              </label>
               <label className="grid gap-1">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Justification
