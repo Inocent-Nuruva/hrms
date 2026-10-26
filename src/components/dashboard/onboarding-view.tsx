@@ -8,7 +8,6 @@ import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { HorizontalScrollContainer } from "@/components/common/horizontal-scroll-container"
 import {
   Button as FluentButton,
   Avatar as FluentAvatar,
@@ -18,18 +17,10 @@ import {
   OverlayDrawer,
   DrawerHeaderTitle,
   Field,
-  Table as FluentTable,
-  TableBody as FluentTableBody,
-  TableCell as FluentTableCell,
-  TableCellLayout,
-  TableHeader as FluentTableHeader,
-  TableHeaderCell,
-  TableRow as FluentTableRow,
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
   Add16Regular,
-  ClipboardTaskListLtr20Regular,
   Delete16Regular,
   Edit16Regular,
 } from "@fluentui/react-icons"
@@ -81,6 +72,9 @@ import {
   fileToBase64UploadDto,
   getOnboardingAuditLogs,
   getOnboardingProgress,
+  getEmployeePayrollSalary,
+  getEmployeeById,
+  extractProfilePhotoUrl,
   getCurrentCompanyUser,
   getOnboardingRequest,
   getOnboardingWorkflow,
@@ -115,6 +109,7 @@ import {
   submitOnboardingRequest,
   uploadOnboardingDocument,
   verifyOnboardingDocument,
+  verifyEmployeeBankAccount,
   type AdminRecord,
   type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
@@ -1348,7 +1343,7 @@ export function OnboardingView() {
     [actorPermissions, canUpdateOnboardingRequests]
   )
   const canApproveJoiningSalary = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:profiles"),
+    () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
     [actorPermissions]
   )
   const canCreateOnboardingWorkflows = React.useMemo(
@@ -1436,7 +1431,12 @@ export function OnboardingView() {
   const dirtyReviewKeys = React.useRef(new Set<string>())
   const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false)
   const [payrollDrawerOpen, setPayrollDrawerOpen] = React.useState(false)
+  const [bankVerificationOpen, setBankVerificationOpen] = React.useState(false)
+  const [bankVerificationLoading, setBankVerificationLoading] = React.useState(false)
+  const [bankAccounts, setBankAccounts] = React.useState<AdminRecord[]>([])
+  const [workspaceEmployeePhoto, setWorkspaceEmployeePhoto] = React.useState("")
   const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>([])
+  const [joiningSalary, setJoiningSalary] = React.useState<AdminRecord | null>(null)
   const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
   const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
   const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
@@ -3803,6 +3803,78 @@ export function OnboardingView() {
     }
   }
 
+  async function openBankVerification() {
+    const token = readStoredToken()
+    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
+    if (!token || !employeeId) return
+    setWorkspaceTab("payroll")
+    setBankVerificationOpen(true)
+    setBankVerificationLoading(true)
+    try {
+      const employee = await getEmployeeById(employeeId, token)
+      setBankAccounts(toRecordList(employee?.bank_accounts))
+      window.setTimeout(() => document.getElementById("onboarding-bank-verification")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
+    } catch (cause) {
+      showErrorAlert(cause instanceof Error ? cause.message : "Bank details could not be loaded.")
+    } finally {
+      setBankVerificationLoading(false)
+    }
+  }
+
+  async function verifyBankAccount(account: AdminRecord) {
+    const token = readStoredToken()
+    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
+    const accountId = readNumber(account, ["id"])
+    if (!token || !employeeId || !accountId) return
+    setBankVerificationLoading(true)
+    try {
+      await verifyEmployeeBankAccount(token, employeeId, accountId)
+      showSuccessAlert("Bank account verified successfully.")
+      await openBankVerification()
+      if (selectedRequestRow) await openRequestDetails(selectedRequestRow)
+    } catch (cause) {
+      showErrorAlert(cause instanceof Error ? cause.message : "Bank account could not be verified.")
+    } finally {
+      setBankVerificationLoading(false)
+    }
+  }
+
+  const loadJoiningSalary = React.useCallback(async () => {
+    const token = readStoredToken()
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    )
+    if (!token || !employeeId || !canReadJoiningSalary) {
+      setJoiningSalary(null)
+      return
+    }
+    try {
+      setJoiningSalary(await getEmployeePayrollSalary(token, employeeId))
+    } catch {
+      setJoiningSalary(null)
+    }
+  }, [canReadJoiningSalary, selectedRequestDetails, selectedRequestRow])
+
+  React.useEffect(() => {
+    if (!requestDetailsOpen) return
+    void loadJoiningSalary()
+  }, [loadJoiningSalary, requestDetailsOpen])
+
+  React.useEffect(() => {
+    const token = readStoredToken()
+    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
+    if (!requestDetailsOpen || !token || !employeeId) {
+      setWorkspaceEmployeePhoto("")
+      return
+    }
+    let cancelled = false
+    void getEmployeeById(employeeId, token).then((employee) => {
+      if (!cancelled) setWorkspaceEmployeePhoto(extractProfilePhotoUrl(employee ?? {}) ?? "")
+    }).catch(() => { if (!cancelled) setWorkspaceEmployeePhoto("") })
+    return () => { cancelled = true }
+  }, [requestDetailsOpen, selectedRequestDetails, selectedRequestRow])
+
   async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
     if (!canUpdateOnboardingRequests) {
       showErrorAlert("You do not have permission to review employee details.")
@@ -4763,21 +4835,25 @@ export function OnboardingView() {
     {
       key: "id",
       label: "ID",
-      defaultWidth: 80,
+      defaultWidth: 56,
       render: (row) => readNumber(row, ["id", "workflow_id"]) ?? "-",
     },
     {
       key: "name",
       label: "Name",
-      defaultWidth: 160,
-      render: (row) => readString(row, ["name", "title"]),
+      defaultWidth: 220,
+      render: (row) => (
+        <span className="block max-w-[260px] truncate" title={readString(row, ["name", "title"])}>
+          {readString(row, ["name", "title"])}
+        </span>
+      ),
     },
     {
       key: "description",
       label: "Description",
-      defaultWidth: 220,
+      defaultWidth: 300,
       render: (row) => (
-        <span className="block max-w-full truncate text-xs text-slate-600" title={readString(row, ["description"])}>
+        <span className="block max-w-[360px] truncate text-xs text-slate-600" title={readString(row, ["description"])}>
           {readString(row, ["description"])}
         </span>
       ),
@@ -5977,11 +6053,12 @@ export function OnboardingView() {
             <DrawerHeaderTitle className="sr-only">Employee onboarding workspace</DrawerHeaderTitle>
             <section aria-label="Employee onboarding workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-4">
               <FluentButton appearance="subtle" className="self-start" onClick={closeWorkspace}>← Back to onboarding</FluentButton>
-              <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+              <header className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
+                  <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} image={workspaceEmployeePhoto ? { src: workspaceEmployeePhoto } : undefined} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
                 </div>
                 <div className="flex flex-col items-start gap-2"><FluentBadge appearance="tint" color={selectedRequestSummary.status === "completed" ? "success" : "informative"}>{toTitleCaseWords(readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employment_status"], "onboarding"))}</FluentBadge><p className="text-xs text-muted-foreground">Request {toTitleCaseWords(selectedRequestSummary.status)} · Updated {selectedRequestSummary.updated}</p></div>
+                <div id="onboarding-activation-summary" className="absolute right-0 top-0" />
               </header>
               <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
                 <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">Payroll & contract</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
@@ -6005,6 +6082,7 @@ export function OnboardingView() {
                         canActivate={canCompleteOnboardingRequests}
                         saving={saving}
                         refreshKey={String(selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? "")}
+                        summaryTargetId="onboarding-activation-summary"
                         onDiscuss={(id, label) => setHandoffRequirement({ id, label })}
                         onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
                         onNavigate={(action, requirementId) => {
@@ -6016,8 +6094,12 @@ export function OnboardingView() {
                           }
                           setWorkspaceTab(action === "contracts" || action === "payroll" ? "payroll" : action === "approvals" ? "tasks" : action)
                           if (requirementId === "independently approved starting salary") {
-                            if (canReadJoiningSalary) void openJoiningSalary()
-                            else showErrorAlert("Payroll access is required. Ask the payroll team to complete this requirement.")
+                            if (canApproveJoiningSalary) window.location.assign("/dashboard/employees/salary-approvals")
+                            else showErrorAlert("Salary approval access is required. Ask the assigned payroll approver to complete this requirement.")
+                            return
+                          }
+                          if (requirementId === "bank account") {
+                            void openBankVerification()
                             return
                           }
                           if (action === "payroll" && canReadJoiningSalary) {
@@ -6305,6 +6387,25 @@ export function OnboardingView() {
                   </section>
 
                   <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-contracts" tabIndex={-1} className="border-b p-3">
+                    {bankVerificationOpen ? <div id="onboarding-bank-verification" className="mb-5 rounded-lg border border-border bg-muted/20 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div><h2 className="text-base font-semibold">Verify bank account</h2><p className="mt-1 text-sm text-muted-foreground">This is the exact payroll requirement blocking activation. Review the account below and verify it independently.</p></div>
+                        <FluentButton appearance="subtle" onClick={() => setBankVerificationOpen(false)}>Close</FluentButton>
+                      </div>
+                      {bankVerificationLoading ? <p className="mt-4 text-sm text-muted-foreground">Loading bank details…</p> : bankAccounts.length ? <div className="mt-4 space-y-3">{bankAccounts.map((account) => {
+                        const accountNumber = readString(account, ["account_number"], "")
+                        const maskedAccount = accountNumber ? `${"•".repeat(Math.max(0, accountNumber.length - 4))}${accountNumber.slice(-4)}` : "Not provided"
+                        const status = readString(account, ["verification_status"], "PENDING").toUpperCase()
+                        return <div key={readString(account, ["id"])} className="grid gap-3 rounded-md border bg-background p-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+                          <div><p className="text-xs font-medium text-muted-foreground">Bank</p><p className="text-sm font-semibold">{readString(account, ["bank_name"], "Not provided")}</p></div>
+                          <div><p className="text-xs font-medium text-muted-foreground">Account holder</p><p className="text-sm font-semibold">{readString(account, ["account_name"], "Not provided")}</p></div>
+                          <div><p className="text-xs font-medium text-muted-foreground">Account number</p><p className="text-sm font-semibold">{maskedAccount}</p></div>
+                          <div><p className="text-xs font-medium text-muted-foreground">Status</p><FluentBadge appearance="tint" color={status === "VERIFIED" ? "success" : "warning"}>{toTitleCaseWords(status)}</FluentBadge></div>
+                          <FluentButton appearance={status === "PENDING" ? "primary" : "secondary"} disabled={bankVerificationLoading || status !== "PENDING"} onClick={() => void verifyBankAccount(account)}>{status === "VERIFIED" ? "Verified" : "Verify account"}</FluentButton>
+                        </div>
+                      })}</div> : <Alert className="mt-4"><AlertTitle>No bank account found</AlertTitle><AlertDescription>Add the employee bank account in Employee details, then return here to verify it.</AlertDescription></Alert>}
+                      <p className="mt-3 text-xs text-muted-foreground">For separation of duties, the user who created the bank account cannot verify it. Another authorized user must complete verification.</p>
+                    </div> : null}
                     {readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? (
                       <EmploymentContractsView
                         key={readNumber(selectedRequestDetails ?? {}, ["employee_id"])}
@@ -6318,19 +6419,56 @@ export function OnboardingView() {
                     ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
                   </section>
 
-                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-3 py-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Assign the effective salary structure and route it for independent approval. Activation remains blocked until payroll prerequisites are ready.</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Payroll owns the enabled profile, TIN, pension and health enrollment, and verified bank account. These are separate from salary approval; use the activation overview to see exactly which are missing.</p>
-                      </div>
-                      {canReadJoiningSalary ? (
-                      <div className="flex flex-wrap gap-2">{canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
-                      <Button type="button" size="sm" onClick={() => void openJoiningSalary()}>
-                        Implement salary
-                      </Button>
-                      </div>
-                      ) : <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p>}
+                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="border-b border-border bg-background px-3 py-4">
+                      {(() => {
+                        const compensation = toRecord(joiningSalary?.compensation)
+                        const approval = toRecord(compensation?.approval)
+                        const approvedBy = toRecord(approval?.approved_by)
+                        const assignedTo = toRecord(approval?.assigned_to)
+                        const status = readString(compensation ?? {}, ["status"], "")
+                        const approved = status === "ACTIVE" || status === "SCHEDULED"
+                        const pending = status === "PENDING_APPROVAL"
+                        const baseSalary = Number(compensation?.baseSalary)
+                        const currency = readString(compensation ?? {}, ["currency"], "TZS")
+                        const amount = Number.isFinite(baseSalary)
+                          ? `${currency} ${baseSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "—"
+
+                        return <div className="space-y-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
+                                {approved ? <FluentBadge appearance="tint" color="success">Salary approved</FluentBadge> : null}
+                                {pending ? <FluentBadge appearance="tint" color="warning">Awaiting approval</FluentBadge> : null}
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {approved
+                                  ? "The starting salary is approved and available to payroll. Future changes must use the salary revision workflow."
+                                  : pending
+                                    ? `The starting salary is waiting for ${readString(assignedTo ?? {}, ["name"], "an eligible salary approver")}.`
+                                    : "Assign the effective salary structure and route it for independent approval."}
+                              </p>
+                            </div>
+                            {canReadJoiningSalary ? <div className="flex flex-wrap gap-2">
+                              {canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
+                              <Button type="button" size="sm" variant={approved || pending ? "outline" : "default"} onClick={() => void openJoiningSalary()}>
+                                {approved || pending ? "View salary details" : "Implement salary"}
+                              </Button>
+                            </div> : null}
+                          </div>
+
+                          {compensation ? <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Base salary</p><p className="mt-1 text-sm font-semibold">{amount}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Structure</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["salaryStructureCode"], "—")}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Effective from</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["effectiveFrom"], "—")}</p></div>
+                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{approved ? "Approved by" : "Assigned approver"}</p><p className="mt-1 text-sm font-semibold">{readString((approved ? approvedBy : assignedTo) ?? {}, ["name"], "Not recorded")}</p></div>
+                          </div> : null}
+
+                          {!canReadJoiningSalary ? <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p> : null}
+                          <p className="text-xs text-muted-foreground">Payroll setup, TIN, pension, health enrollment, and verified bank account remain separate activation checks.</p>
+                        </div>
+                      })()}
                     </section>
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
@@ -7469,6 +7607,7 @@ export function OnboardingView() {
             canEdit={canManageJoiningSalary}
             canApprove={canApproveJoiningSalary}
             onChanged={() => {
+              void loadJoiningSalary()
               const row = selectedRequestRow
               if (row) void openRequestDetails(row)
             }}
@@ -7623,13 +7762,13 @@ export function OnboardingView() {
           </Dialog>
         </div>
       ) : activeTab === "workflows" && canViewOnboardingWorkflows ? (
-        <div className="space-y-2">
+        <div className="space-y-2 px-4 pb-4">
           <ResizableTable
             title="Onboarding Workflows"
             data={filteredWorkflows}
             columns={onboardingWorkflowColumns}
             loading={loading}
-            storageKey="onboarding-workflows"
+            storageKey="onboarding-workflows-v2"
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
@@ -7706,7 +7845,7 @@ export function OnboardingView() {
           >
             <SheetContent
               side="right"
-              className="w-full overflow-hidden data-[side=right]:overflow-hidden data-[side=right]:w-full sm:data-[side=right]:w-1/2 data-[side=right]:sm:max-w-none"
+              className="flex h-full w-full flex-col overflow-hidden data-[side=right]:w-full data-[side=right]:overflow-hidden sm:data-[side=right]:w-[72vw] sm:data-[side=right]:max-w-[1120px]"
             >
               <SheetHeader className="shrink-0">
                 <SheetTitle>
@@ -7836,109 +7975,57 @@ export function OnboardingView() {
                           : "This workflow has no steps yet. Click Add Step to add one."}
                     </p>
                   ) : (
-                    <HorizontalScrollContainer className="rounded-lg border border-border">
-                      <FluentTable
-                        aria-label="Workflow steps"
-                        size="small"
-                        style={{ tableLayout: "fixed", width: "100%" }}
-                      >
-                        <FluentTableHeader>
-                          <FluentTableRow>
-                            <TableHeaderCell style={{ width: "31%" }}>Step name</TableHeaderCell>
-                            <TableHeaderCell style={{ width: "26%" }}>Checklist</TableHeaderCell>
-                            <TableHeaderCell style={{ width: "28%" }}>Assignment</TableHeaderCell>
-                            <TableHeaderCell className="text-right" style={{ width: "15%" }}>
-                              Actions
-                            </TableHeaderCell>
-                          </FluentTableRow>
-                        </FluentTableHeader>
-                        <FluentTableBody>
-                          {workflowSteps.map((step, index) => (
-                            <FluentTableRow key={`step-${index}`}>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  media={<ClipboardTaskListLtr20Regular />}
-                                  description={`${toTitleCaseWords(step.step_type || "task")} · ${resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · ${step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}`}
-                                >
-                                  {step.name || `Step ${index + 1}`}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  description={step.description || undefined}
-                                  truncate
-                                >
-                                  {step.checklist_items.length > 0
-                                    ? step.checklist_items.map((item) => item.name).join(", ")
-                                    : "No checklist"}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <TableCellLayout
-                                  description={
-                                    step.assigned_user_id
-                                      ? resolveOptionLabel(
-                                          users,
-                                          step.assigned_user_id,
-                                          ["id", "user_id", "company_user_id"],
-                                          ["full_name", "name", "email"]
-                                        )
-                                      : step.assigned_department_id
-                                        ? "Whole department"
-                                        : step.assigned_role_id
-                                          ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
-                                          : step.metadata?.assigned_position_id
-                                            ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
-                                          : "Unassigned"
-                                  }
-                                >
-                                  {resolveOptionLabel(
-                                    departments,
-                                    step.assigned_department_id ?? null,
-                                    ["id", "department_id"],
-                                    ["name", "title", "code"]
-                                  )}
-                                </TableCellLayout>
-                              </FluentTableCell>
-                              <FluentTableCell>
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="size-7 p-0"
-                                    onClick={() => editWorkflowStep(step, index)}
-                                    aria-label={`Edit step ${index + 1}`}
-                                    title="Edit step"
-                                  >
-                                    <Edit16Regular data-icon="icon-only" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="size-7 p-0 text-rose-600"
-                                    onClick={() => removeWorkflowStep(index)}
-                                    aria-label={`Remove step ${index + 1}`}
-                                    title="Remove step"
-                                  >
-                                    <Delete16Regular data-icon="icon-only" />
-                                  </Button>
-                                </div>
-                              </FluentTableCell>
-                            </FluentTableRow>
-                          ))}
-                        </FluentTableBody>
-                      </FluentTable>
-                    </HorizontalScrollContainer>
+                    <div className="overflow-hidden rounded-lg border border-border bg-background" role="table" aria-label="Workflow steps">
+                      <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid" role="row">
+                        <span>Step</span><span>Checklist</span><span>Assignment</span><span>Actions</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {workflowSteps.map((step, index) => {
+                          const checklist = step.checklist_items.length > 0
+                            ? step.checklist_items.map((item) => item.name).join(", ")
+                            : "No checklist items"
+                          const assignment = step.assigned_user_id
+                            ? resolveOptionLabel(users, step.assigned_user_id, ["id", "user_id", "company_user_id"], ["full_name", "name", "email"])
+                            : step.assigned_department_id
+                              ? "Whole department"
+                              : step.assigned_role_id
+                                ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
+                                : step.metadata?.assigned_position_id
+                                  ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
+                                  : "Unassigned"
+                          const assignmentGroup = resolveOptionLabel(
+                            departments,
+                            step.assigned_department_id ?? null,
+                            ["id", "department_id"],
+                            ["name", "title", "code"],
+                          )
+                          return <div key={`step-${index}`} className="grid gap-4 px-4 py-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center" role="row">
+                            <div className="flex min-w-0 gap-3">
+                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-foreground">{step.name || `Step ${index + 1}`}</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">{toTitleCaseWords(step.step_type || "task")} · {resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · {step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}</p>
+                              </div>
+                            </div>
+                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Checklist</p><p className="truncate text-sm" title={checklist}>{checklist}</p>{step.description ? <p className="truncate text-xs text-muted-foreground" title={step.description}>{step.description}</p> : null}</div>
+                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignment</p><p className="truncate text-sm font-medium">{assignmentGroup || assignment}</p><p className="truncate text-xs text-muted-foreground">{assignmentGroup ? assignment : ""}</p></div>
+                            <div className="flex items-center gap-1 md:justify-end">
+                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0" onClick={() => editWorkflowStep(step, index)} aria-label={`Edit step ${index + 1}`} title="Edit step"><Edit16Regular data-icon="icon-only" /></Button>
+                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0 text-rose-600" onClick={() => removeWorkflowStep(index)} aria-label={`Remove step ${index + 1}`} title="Remove step"><Delete16Regular data-icon="icon-only" /></Button>
+                            </div>
+                          </div>
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <SheetFooter className="shrink-0 sm:flex-row sm:justify-end">
+              <SheetFooter className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"
+                  className="border-border bg-background text-foreground"
                   onClick={() => {
                     setWorkflowSheetOpen(false)
                     setEditingWorkflowId(null)

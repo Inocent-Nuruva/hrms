@@ -114,6 +114,10 @@ describe("employee section navigation", () => {
       { title: "Registration", url: "/dashboard/employees/registration" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
       { title: "Contracts", url: "/dashboard/employees/contracts" },
+      {
+        title: "Salary approvals",
+        url: "/dashboard/employees/salary-approvals",
+      },
     ])
   })
 

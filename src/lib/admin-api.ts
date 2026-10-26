@@ -13517,6 +13517,12 @@ export async function listEmploymentContracts(
   );
 }
 
+export async function listEmploymentContractSummary(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/employment-contracts/summary", { token }),
+  );
+}
+
 export async function listEmploymentLetterTemplates(token: string) {
   return normalizeList(
     await adminRequest<unknown>("/api/employment-letters/templates", { token }),
@@ -13701,6 +13707,19 @@ export async function getEmployeeById(id: string | number, token: string) {
     return root;
   }
   return normalizeSingle(payload);
+}
+
+export async function verifyEmployeeBankAccount(
+  token: string,
+  employeeId: string | number,
+  bankAccountId: string | number,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employees/${employeeId}/bank-accounts/${bankAccountId}/verify`,
+      { method: "POST", token, dedupe: false },
+    ),
+  );
 }
 
 function findPositionRecordById(
@@ -17518,6 +17537,60 @@ export async function getEmployeePayrollSalary(
     },
   );
   return unwrapRootRecord(payload, "employee");
+}
+
+export async function listEligibleSalaryApprovers(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvers",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listSalaryApproverCandidates(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approver-candidates",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function assignEligibleSalaryApprovers(
+  token: string,
+  companyUserIds: Array<string | number>,
+) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvers/assign",
+    {
+      method: "POST",
+      token,
+      body: { company_user_ids: companyUserIds.map(Number) },
+      dedupe: false,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function removeEligibleSalaryApprover(
+  token: string,
+  companyUserId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/employees/salary-approvers/${companyUserId}`,
+    {
+      method: "DELETE",
+      token,
+      dedupe: false,
+    },
+  );
+}
+
+export async function listSalaryApprovals(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvals",
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function assignEmployeePayrollSalary(
