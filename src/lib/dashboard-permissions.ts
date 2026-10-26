@@ -1043,6 +1043,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
   "/dashboard/employees/invite": "employees:create",
   "/dashboard/employees/contracts": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  "/dashboard/employees/salary-approvals": {
+    permissions: ["payroll:salary:approve", "payroll:profiles:read"],
+    mode: "any",
+  },
   "/dashboard/employees/offboarding": {
     permissions: ["offboarding_requests:read", "offboarding_workflows:read"],
     mode: "any",

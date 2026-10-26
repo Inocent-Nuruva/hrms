@@ -17520,6 +17520,22 @@ export async function getEmployeePayrollSalary(
   return unwrapRootRecord(payload, "employee");
 }
 
+export async function listEligibleSalaryApprovers(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvers",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listSalaryApprovals(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvals",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
 export async function assignEmployeePayrollSalary(
   token: string,
   employeeId: string | number,

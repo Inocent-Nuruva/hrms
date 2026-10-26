@@ -1348,7 +1348,7 @@ export function OnboardingView() {
     [actorPermissions, canUpdateOnboardingRequests]
   )
   const canApproveJoiningSalary = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:profiles"),
+    () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
     [actorPermissions]
   )
   const canCreateOnboardingWorkflows = React.useMemo(
