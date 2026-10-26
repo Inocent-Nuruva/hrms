@@ -9830,6 +9830,28 @@ export async function listMyLeaveEncashmentRequests(token: string) {
   );
 }
 
+export async function listLeaveEncashmentRequests(
+  token: string,
+  params?: { page?: number; limit?: number; from_date?: string; to_date?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.from_date) query.set("from_date", params.from_date);
+  if (params?.to_date) query.set("to_date", params.to_date);
+  const payload = await adminRequest<unknown>(
+    `/api/leave/encashments${query.size ? `?${query.toString()}` : ""}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    params?.page ?? 1,
+    params?.limit ?? 20,
+  );
+  return { rows, ...pagination, total: pagination.total ?? rows.length, hasMore: rows.length === (params?.limit ?? 20) };
+}
+
 export async function createMyLeaveEncashmentRequest(
   token: string,
   data: {
