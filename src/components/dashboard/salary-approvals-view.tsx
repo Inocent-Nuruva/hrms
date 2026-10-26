@@ -330,7 +330,9 @@ export function SalaryApprovalsView() {
                         return <TagPickerOption key={userId} value={userId} text={name} media={<Avatar name={name} image={photo ? { src: photo } : undefined} icon={<Person20Regular />} size={28} />}>
                           <div><div>{name}</div><div className="text-xs text-muted-foreground">{text(user, "email", "user_no")}</div></div>
                         </TagPickerOption>
-                      }) : <TagPickerOption value="__no-results">No matching people found</TagPickerOption>}
+                      }) : <TagPickerOption value="__no-results">
+                        {assignmentQuery.trim() ? "No people match your search" : "No people are available to assign"}
+                      </TagPickerOption>}
                     </TagPickerList>
                   </TagPicker>
                 </div>
