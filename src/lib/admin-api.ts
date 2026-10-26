@@ -1799,8 +1799,10 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim());
   }
-  if (params.check_in_after) searchParams.set("check_in_after", params.check_in_after);
-  if (params.check_in_before) searchParams.set("check_in_before", params.check_in_before);
+  if (params.check_in_after)
+    searchParams.set("check_in_after", params.check_in_after);
+  if (params.check_in_before)
+    searchParams.set("check_in_before", params.check_in_before);
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id));
   }
@@ -1838,7 +1840,8 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
     searchParams.set("status", params.status.trim());
   }
   if (params.late_only) searchParams.set("late_only", "true");
-  if (params.early_departure_only) searchParams.set("early_departure_only", "true");
+  if (params.early_departure_only)
+    searchParams.set("early_departure_only", "true");
   if (params.overtime_only) searchParams.set("overtime_only", "true");
   if (params.exception_type && params.exception_type.trim()) {
     searchParams.set("exception_type", params.exception_type.trim());
@@ -3073,10 +3076,17 @@ export async function adminRequest<T>(
       const response = await fetch(buildUrl(path), {
         method,
         headers: {
-          "Content-Type": "application/json",
+          ...(typeof FormData !== "undefined" && body instanceof FormData
+            ? {}
+            : { "Content-Type": "application/json" }),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body:
+          body === undefined
+            ? undefined
+            : typeof FormData !== "undefined" && body instanceof FormData
+              ? body
+              : JSON.stringify(body),
         cache: "no-store",
         signal,
       });
@@ -11285,7 +11295,11 @@ export async function listMyOnboardingRequests(
 export async function acknowledgeOnboardingRequest(
   token: string,
   id: string | number,
-  data: { accepted: boolean; acknowledgement_version: string; acknowledgement_document_id?: number },
+  data: {
+    accepted: boolean;
+    acknowledgement_version: string;
+    acknowledgement_document_id?: number;
+  },
 ) {
   const version = data.acknowledgement_version.trim();
   if (!version) {
@@ -13549,7 +13563,12 @@ export async function generateEmployeeTemplateLetter(
   return normalizeSingle(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/generate`,
-      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+      {
+        method: "POST",
+        token,
+        body: { letter_type: letterType },
+        dedupe: false,
+      },
     ),
   );
 }
@@ -13562,12 +13581,20 @@ export async function previewEmployeeTemplateLetter(
   return normalizeSingle(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/preview`,
-      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+      {
+        method: "POST",
+        token,
+        body: { letter_type: letterType },
+        dedupe: false,
+      },
     ),
   );
 }
 
-export async function listEmployeeLetterHistory(token: string, employeeId: number) {
+export async function listEmployeeLetterHistory(
+  token: string,
+  employeeId: number,
+) {
   return normalizeList(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/history`,
@@ -13598,14 +13625,19 @@ export async function downloadEmployeeLetterPreview(
     buildUrl(`/api/employment-letters/employees/${employeeId}/preview`),
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ letter_type: letterType }),
       cache: "no-store",
     },
   );
-  if (!response.ok) throw new Error(`Could not preview letter (${response.status})`);
+  if (!response.ok)
+    throw new Error(`Could not preview letter (${response.status})`);
   const payload = (await response.json()) as { content_base64?: string };
-  if (!payload.content_base64) throw new Error("Preview response did not include a PDF.");
+  if (!payload.content_base64)
+    throw new Error("Preview response did not include a PDF.");
   const binary = atob(payload.content_base64);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return new Blob([bytes], { type: "application/pdf" });
@@ -15034,19 +15066,28 @@ export async function downloadHrAttendanceCorrectionEvidence(
   documentId: string | number,
 ): Promise<{ blob: Blob; filename: string }> {
   const response = await fetch(
-    buildUrl(`/api/hr/self-service/approvals/attendance-corrections/${requestId}/documents/${documentId}/download`),
-    { headers: { Authorization: `Bearer ${token}`, accept: "*/*" }, cache: "no-store" },
-  )
+    buildUrl(
+      `/api/hr/self-service/approvals/attendance-corrections/${requestId}/documents/${documentId}/download`,
+    ),
+    {
+      headers: { Authorization: `Bearer ${token}`, accept: "*/*" },
+      cache: "no-store",
+    },
+  );
   if (!response.ok) {
-    const payload = await response.json().catch(() => null)
-    throw new Error(extractMessage(payload, response.status))
+    const payload = await response.json().catch(() => null);
+    throw new Error(extractMessage(payload, response.status));
   }
-  const disposition = response.headers.get("content-disposition") ?? ""
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+  );
   return {
     blob: await response.blob(),
-    filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? `attendance-evidence-${documentId}`),
-  }
+    filename: decodeURIComponent(
+      match?.[1] ?? match?.[2] ?? `attendance-evidence-${documentId}`,
+    ),
+  };
 }
 
 export async function approveHrAttendanceCorrectionRequest(
@@ -16074,7 +16115,9 @@ export async function patchEmployeeStatus(
   };
 
   if (
-    ["resigned", "terminated", "retired", "deceased", "exited"].includes(normalizedStatus)
+    ["resigned", "terminated", "retired", "deceased", "exited"].includes(
+      normalizedStatus,
+    )
   ) {
     const trimmedExitDate =
       typeof data.exit_date === "string" ? data.exit_date.trim() : "";
@@ -18005,6 +18048,60 @@ export async function calculatePerformanceAggregates(
   );
 }
 
+export async function publishPerformanceAggregates(
+  token: string,
+  yearId: string | number,
+  periodType: "QUARTERLY" | "ANNUAL",
+) {
+  return adminRequest<unknown>(
+    `/api/performance/financial-years/${yearId}/aggregates/publish`,
+    { method: "POST", token, body: { period_type: periodType } },
+  );
+}
+
+export async function previewKpiImport(token: string, file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return adminRequest<unknown>("/api/performance/kpi-imports/preview", {
+    method: "POST",
+    token,
+    body,
+  });
+}
+
+export async function listKpiImports(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpi-imports", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getKpiImport(token: string, batchId: string | number) {
+  return adminRequest<unknown>(`/api/performance/kpi-imports/${batchId}`, {
+    token,
+  });
+}
+
+export async function approveKpiImport(
+  token: string,
+  batchId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/kpi-imports/${batchId}/approve`,
+    { method: "POST", token },
+  );
+}
+
+export async function applyKpiImport(token: string, batchId: string | number) {
+  return adminRequest<unknown>(
+    `/api/performance/kpi-imports/${batchId}/apply`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
 /**
  * HR catalogue: GET /api/performance/periods (Performance_listPeriods).
  * There is no GET /api/performance/me/periods. Employee pages must use
@@ -18665,6 +18762,14 @@ export async function listKpiCycleReviews(
 export async function listMyKpiCycleScores(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/performance/me/kpi-scores",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyPerformanceAggregates(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/aggregates",
     { token },
   );
   return normalizeList(payload);
@@ -19343,8 +19448,13 @@ export async function downloadHrPlannedCompletedActivities(
   params: Record<string, string | number | undefined> = {},
 ) {
   const response = await fetch(
-    buildUrl(`/api/hr/activities/planned-completed/export.csv${buildRecordQuery(params)}`),
-    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+    buildUrl(
+      `/api/hr/activities/planned-completed/export.csv${buildRecordQuery(params)}`,
+    ),
+    {
+      headers: { accept: "text/csv", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
   );
   if (!response.ok) {
     const body = await response.text();
@@ -19359,8 +19469,13 @@ export async function downloadHrActivityReportExport(
   params: Record<string, string | number | undefined> = {},
 ) {
   const response = await fetch(
-    buildUrl(`/api/hr/activities/${kind}/export.csv${buildRecordQuery(params)}`),
-    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+    buildUrl(
+      `/api/hr/activities/${kind}/export.csv${buildRecordQuery(params)}`,
+    ),
+    {
+      headers: { accept: "text/csv", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
   );
   if (!response.ok) {
     const body = await response.text();
@@ -19370,10 +19485,9 @@ export async function downloadHrActivityReportExport(
 }
 
 export async function listHrActivityCategories(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/hr/activity-categories",
-    { token },
-  );
+  const payload = await adminRequest<unknown>("/api/hr/activity-categories", {
+    token,
+  });
   return normalizeList(payload);
 }
 
