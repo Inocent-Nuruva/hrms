@@ -33,6 +33,7 @@ import {
   MoneyHand20Regular,
   PersonAdd20Regular,
   Person20Regular,
+  Delete20Regular,
 } from "@fluentui/react-icons"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
@@ -46,6 +47,7 @@ import {
   listSalaryApproverCandidates,
   listPayrollSalaryStructures,
   listSalaryApprovals,
+  removeEligibleSalaryApprover,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
@@ -79,7 +81,12 @@ function personName(row: AdminRecord) {
 }
 
 function personPhoto(row: AdminRecord) {
-  return resolveBackendMediaUrl(text(row, "profile_photo_url", "profilePhotoUrl", "profile_image_source", "profileImageSource")) ?? undefined
+  const selectedAvatar = record(row.selected_default_avatar ?? row.selectedDefaultAvatar)
+  return resolveBackendMediaUrl(text(
+    row,
+    "profile_photo_url",
+    "profilePhotoUrl",
+  ) || text(selectedAvatar, "image_path", "imagePath", "file_url", "fileUrl")) ?? undefined
 }
 
 export function SalaryApprovalsView() {
@@ -94,6 +101,7 @@ export function SalaryApprovalsView() {
   const [assignmentOpen, setAssignmentOpen] = React.useState(false)
   const [assignmentLoading, setAssignmentLoading] = React.useState(false)
   const [assignmentSaving, setAssignmentSaving] = React.useState(false)
+  const [removingApproverId, setRemovingApproverId] = React.useState("")
   const [assignmentQuery, setAssignmentQuery] = React.useState("")
   const [companyUsers, setCompanyUsers] = React.useState<AdminRecord[]>([])
   const [eligibleApprovers, setEligibleApprovers] = React.useState<AdminRecord[]>([])
@@ -182,6 +190,22 @@ export function SalaryApprovalsView() {
     }
   }
 
+  async function removeApprover(approver: AdminRecord) {
+    const companyUserId = String(approver.company_user_id ?? approver.companyUserId ?? "")
+    if (!companyUserId) return
+    setRemovingApproverId(companyUserId)
+    try {
+      const token = readStoredSessionTokens().accessToken.trim()
+      if (!token) return
+      await removeEligibleSalaryApprover(token, companyUserId)
+      toast.success(`${personName(approver)} removed from salary approvers`)
+      await loadApproverManagement()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Salary approver could not be removed")
+    } finally {
+      setRemovingApproverId("")
+    }
+  }
   async function approve(row: AdminRecord) {
     const employee = record(row.employee)
     const employeeId = text(employee, "id")
@@ -343,9 +367,11 @@ export function SalaryApprovalsView() {
                       const member = companyUsers.find((user) => Number(user.company_user_id ?? user.companyUserId) === Number(approver.company_user_id ?? approver.companyUserId)) ?? approver
                       const name = personName(member)
                       const photo = personPhoto(member)
-                      return <div key={String(approver.company_user_id ?? approver.companyUserId)} className="flex items-center gap-2 rounded-md border p-2">
+                      const companyUserId = String(approver.company_user_id ?? approver.companyUserId ?? "")
+                      return <div key={companyUserId} className="flex items-center gap-2 rounded-md border p-2">
                         <Avatar name={name} image={photo ? { src: photo } : undefined} icon={<Person20Regular />} size={32} />
-                        <div className="min-w-0"><div className="truncate text-sm font-medium">{name}</div><div className="truncate text-xs text-muted-foreground">{text(member, "email")}</div></div>
+                        <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{name}</div><div className="truncate text-xs text-muted-foreground">{text(member, "email")}</div></div>
+                        <Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Remove ${name} as salary approver`} title="Remove approver" disabled={Boolean(removingApproverId)} onClick={() => void removeApprover(approver)} />
                       </div>
                     })}
                   </div>

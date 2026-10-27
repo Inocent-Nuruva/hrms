@@ -9830,6 +9830,28 @@ export async function listMyLeaveEncashmentRequests(token: string) {
   );
 }
 
+export async function listLeaveEncashmentRequests(
+  token: string,
+  params?: { page?: number; limit?: number; from_date?: string; to_date?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.from_date) query.set("from_date", params.from_date);
+  if (params?.to_date) query.set("to_date", params.to_date);
+  const payload = await adminRequest<unknown>(
+    `/api/leave/encashments${query.size ? `?${query.toString()}` : ""}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    params?.page ?? 1,
+    params?.limit ?? 20,
+  );
+  return { rows, ...pagination, total: pagination.total ?? rows.length, hasMore: rows.length === (params?.limit ?? 20) };
+}
+
 export async function createMyLeaveEncashmentRequest(
   token: string,
   data: {
@@ -13709,6 +13731,19 @@ export async function getEmployeeById(id: string | number, token: string) {
   return normalizeSingle(payload);
 }
 
+export async function verifyEmployeeBankAccount(
+  token: string,
+  employeeId: string | number,
+  bankAccountId: string | number,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employees/${employeeId}/bank-accounts/${bankAccountId}/verify`,
+      { method: "POST", token, dedupe: false },
+    ),
+  );
+}
+
 function findPositionRecordById(
   payload: unknown,
   positionId: string | number,
@@ -17558,6 +17593,19 @@ export async function assignEligibleSalaryApprovers(
   return normalizeList(payload);
 }
 
+export async function removeEligibleSalaryApprover(
+  token: string,
+  companyUserId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/employees/salary-approvers/${companyUserId}`,
+    {
+      method: "DELETE",
+      token,
+      dedupe: false,
+    },
+  );
+}
 export async function listSalaryApprovals(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/payroll/employees/salary-approvals",

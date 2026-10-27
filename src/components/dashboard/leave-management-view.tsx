@@ -93,6 +93,7 @@ import {
   confirmLeaveRequestsImport,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
+  listLeaveEncashmentRequests,
   listAllLeaveBalanceReconciliation,
   listAllLeaveBalances,
   listLeaveHolidays,
@@ -1396,8 +1397,10 @@ export function LeaveManagementView({
     String(new Date().getFullYear()),
   );
   const [leaveReportKind, setLeaveReportKind] = React.useState<
-    "balances" | "taken" | "pending"
+    "balances" | "taken" | "pending" | "encashments"
   >("taken");
+  const [encashmentRows, setEncashmentRows] = React.useState<AdminRecord[]>([]);
+  const [encashmentLoading, setEncashmentLoading] = React.useState(false);
   const [leaveReportYear, setLeaveReportYear] = React.useState(
     String(new Date().getFullYear()),
   );
@@ -3382,7 +3385,12 @@ export function LeaveManagementView({
       showErrorAlert("Enter a valid four-digit fiscal year.");
       return;
     }
-    if (leaveReportFrom && leaveReportTo && leaveReportFrom > leaveReportTo) {
+    if (
+      leaveReportKind !== "balances" &&
+      leaveReportFrom &&
+      leaveReportTo &&
+      leaveReportFrom > leaveReportTo
+    ) {
       showErrorAlert("The start date must be before or equal to the end date.");
       return;
     }
@@ -3421,6 +3429,53 @@ export function LeaveManagementView({
           readString(row, ["available_days", "remaining_days"]),
         ]);
         filename = `leave-balances-${leaveReportYear.trim()}.csv`;
+      } else if (leaveReportKind === "encashments") {
+        const result = await listLeaveEncashmentRequests(token, {
+          page: 1,
+          limit: 100,
+          from_date: leaveReportFrom || undefined,
+          to_date: leaveReportTo || undefined,
+        });
+        const selectedRows = result.rows;
+        headers = [
+          "Employee number",
+          "Employee",
+          "Leave type",
+          "Leave year",
+          "Requested days",
+          "Approved days",
+          "Status",
+          "Payroll handoff reference",
+          "Payroll handoff date",
+          "Payroll period",
+          "Amount",
+          "Currency",
+          "Payment status",
+          "Payment reference",
+          "Paid at",
+        ];
+        records = selectedRows.map((row) => {
+          const employee = asRecord(row.employee) ?? {};
+          const type = asRecord(row.leave_type) ?? {};
+          return [
+            readString(employee, ["employee_no"]),
+            employeeLabelFromRow(row),
+            readString(type, ["name", "code"]),
+            readString(row, ["fiscal_year"]),
+            readString(row, ["requested_days"]),
+            readString(row, ["approved_days"]),
+            readString(row, ["status"]),
+            readString(row, ["payroll_handoff_reference"]),
+            readString(row, ["payroll_handed_off_at"]),
+            readString(row, ["payroll_period_code"]),
+            readString(row, ["payable_amount"]),
+            readString(row, ["currency"]),
+            readString(row, ["payment_status"]),
+            readString(row, ["payment_reference"]),
+            readString(row, ["paid_at"]),
+          ];
+        });
+        filename = `leave-encashments-${leaveReportFrom || "all"}-to-${leaveReportTo || "all"}.csv`;
       } else {
         const result = await listAllLeaveRequests(token, {
           ...(leaveReportFrom ? { from_date: leaveReportFrom } : {}),
@@ -3495,6 +3550,32 @@ export function LeaveManagementView({
       );
     } finally {
       setLeaveReportLoading(false);
+    }
+  }
+
+  async function loadEncashmentRows() {
+    const token = readStoredToken();
+    if (!token) {
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
+    }
+    setEncashmentLoading(true);
+    try {
+      const result = await listLeaveEncashmentRequests(token, {
+        page: 1,
+        limit: 100,
+        from_date: leaveReportFrom || undefined,
+        to_date: leaveReportTo || undefined,
+      });
+      setEncashmentRows(result.rows);
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load leave encashments.",
+      );
+    } finally {
+      setEncashmentLoading(false);
     }
   }
 
@@ -7298,6 +7379,7 @@ export function LeaveManagementView({
                     ? [
                         { value: "taken", label: "Approved leave taken" },
                         { value: "pending", label: "Pending approvals" },
+                        { value: "encashments", label: "Leave encashments" },
                       ]
                     : []),
                 ]}
@@ -7306,7 +7388,8 @@ export function LeaveManagementView({
                   if (
                     next === "balances" ||
                     next === "taken" ||
-                    next === "pending"
+                    next === "pending" ||
+                    next === "encashments"
                   )
                     setLeaveReportKind(next);
                 }}
@@ -7373,11 +7456,87 @@ export function LeaveManagementView({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Balance reports use the selected leave year. Request reports use the
-            selected start and end date filters; leave taken includes approved
-            requests, and pending approvals includes requests awaiting manager
-            or HR review.
+            Balance reports use the selected leave year. Request and encashment
+            reports use the selected date filters; leave taken includes approved
+            requests, pending approvals includes requests awaiting review, and
+            encashments show the recorded payroll handoff and payment details.
           </p>
+          {leaveReportKind === "encashments" ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Encashment requests</h3>
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium disabled:opacity-60"
+                  onClick={() => void loadEncashmentRows()}
+                  disabled={encashmentLoading}
+                >
+                  <RefreshCw className={cn("size-4", encashmentLoading && "animate-spin")} />
+                  {encashmentLoading ? "Loading…" : "Load list"}
+                </button>
+              </div>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">Employee</th>
+                      <th className="px-3 py-2">Leave type / year</th>
+                      <th className="px-3 py-2">Days</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Payroll handoff reference</th>
+                      <th className="px-3 py-2">Payroll period</th>
+                      <th className="px-3 py-2">Amount</th>
+                      <th className="px-3 py-2">Payment status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {encashmentRows
+                      .filter((row) => {
+                        const created = readString(row, ["created_at"]).slice(0, 10);
+                        return (
+                          (!leaveReportFrom || created >= leaveReportFrom) &&
+                          (!leaveReportTo || created <= leaveReportTo)
+                        );
+                      })
+                      .map((row) => {
+                      const type = asRecord(row.leave_type) ?? {};
+                      return (
+                        <tr key={readString(row, ["id"])} className="border-t border-border">
+                          <td className="px-3 py-2">{employeeLabelFromRow(row)}</td>
+                          <td className="px-3 py-2">
+                            {readString(type, ["name", "code"])} · FY {readString(row, ["fiscal_year"])}
+                          </td>
+                          <td className="px-3 py-2">
+                            {readString(row, ["approved_days"]) || "—"} / {readString(row, ["requested_days"])}
+                          </td>
+                          <td className="px-3 py-2">{readString(row, ["status"])}</td>
+                          <td className="px-3 py-2">
+                            {readString(row, ["payroll_handoff_reference"]) || "Not handed off"}
+                          </td>
+                          <td className="px-3 py-2">{readString(row, ["payroll_period_code"]) || "—"}</td>
+                          <td className="px-3 py-2">{readString(row, ["payable_amount"]) || "—"} {readString(row, ["currency"])}</td>
+                          <td className="px-3 py-2">{readString(row, ["payment_status"]) || "Not paid"}</td>
+                        </tr>
+                      );
+                      })}
+                    {!encashmentRows.filter((row) => {
+                      const created = readString(row, ["created_at"]).slice(0, 10);
+                      return (
+                        (!leaveReportFrom || created >= leaveReportFrom) &&
+                        (!leaveReportTo || created <= leaveReportTo)
+                      );
+                    }).length ? (
+                      <tr>
+                        <td className="px-3 py-4 text-muted-foreground" colSpan={8}>
+                          {encashmentLoading ? "Loading encashments…" : "Load the list to view company encashment requests."}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
