@@ -5215,9 +5215,8 @@ export function EmployeeProfilePage({
             </Popover>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95"
+            <FluentButton
+              appearance="primary"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
                 const currentBranchId = String(
@@ -5286,10 +5285,9 @@ export function EmployeeProfilePage({
               }}
             >
               Update Profile
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 items-center border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
+            </FluentButton>
+            <FluentButton
+              appearance="secondary"
               onClick={() => {
                 setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
@@ -5311,7 +5309,7 @@ export function EmployeeProfilePage({
               }}
             >
               Update Status
-            </button>
+            </FluentButton>
           </div>
         </div>
       </div>

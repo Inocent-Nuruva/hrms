@@ -102,25 +102,41 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
     return () => window.clearTimeout(timer)
   }, [scanChecks.length, scanStep, scanning])
 
-  function startScan(row: OnboardingOverviewRow) {
-    setScanRow(row)
+  async function fetchFreshRow(requestId: number) {
+    let after = 0
+    while (true) {
+      const result = await getOnboardingOverview(token, after)
+      const refreshed = result.data.find((row) => row.id === requestId)
+      if (refreshed) return refreshed
+      if (result.next_cursor === null || result.next_cursor <= after) return null
+      after = result.next_cursor
+    }
+  }
+
+  async function startScan(row: OnboardingOverviewRow) {
+    setScanRow({ ...row, readiness: { ...row.readiness, requirements: [] } })
     setScanStep(0)
     setSelectedScanIssue(null)
-    setScanning(row.readiness.requirements.length > 0)
+    setScanning(true)
+    try {
+      const refreshed = await fetchFreshRow(row.id)
+      const current = refreshed ?? row
+      setScanRow(current)
+      setRows((rows) => rows.map((item) => item.id === current.id ? current : item))
+      setScanStep(0)
+      setScanning(current.readiness.requirements.length > 0)
+    } catch (cause) {
+      setScanRow(row)
+      setScanning(false)
+      setError(cause instanceof Error ? cause.message : "Could not refresh onboarding readiness.")
+    }
   }
 
   async function returnToScanIssues() {
     if (!scanRow) return
     setRefreshingScan(true)
     try {
-      let after = 0
-      let refreshed: OnboardingOverviewRow | null = null
-      while (!refreshed) {
-        const result = await getOnboardingOverview(token, after)
-        refreshed = result.data.find((row) => row.id === scanRow.id) ?? null
-        if (refreshed || result.next_cursor === null || result.next_cursor <= after) break
-        after = result.next_cursor
-      }
+      const refreshed = await fetchFreshRow(scanRow.id)
       if (refreshed) {
         setScanRow(refreshed)
         setRows((current) => current.map((row) => row.id === refreshed.id ? refreshed : row))
@@ -232,7 +248,7 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
                             </div>
                           </div>
                           <div className="flex items-center justify-end gap-1">
-                            <FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => startScan(row)}>Scan pending</FluentButton>
+                            <FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton>
                             <FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton>
                           </div>
                         </div>
