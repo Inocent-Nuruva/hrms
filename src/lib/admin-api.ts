@@ -9832,7 +9832,12 @@ export async function listMyLeaveEncashmentRequests(token: string) {
 
 export async function listLeaveEncashmentRequests(
   token: string,
-  params?: { page?: number; limit?: number; from_date?: string; to_date?: string },
+  params?: {
+    page?: number;
+    limit?: number;
+    from_date?: string;
+    to_date?: string;
+  },
 ) {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
@@ -9849,7 +9854,12 @@ export async function listLeaveEncashmentRequests(
     params?.page ?? 1,
     params?.limit ?? 20,
   );
-  return { rows, ...pagination, total: pagination.total ?? rows.length, hasMore: rows.length === (params?.limit ?? 20) };
+  return {
+    rows,
+    ...pagination,
+    total: pagination.total ?? rows.length,
+    hasMore: rows.length === (params?.limit ?? 20),
+  };
 }
 
 export async function createMyLeaveEncashmentRequest(
@@ -16891,6 +16901,7 @@ export interface PayrollListParams {
   payroll_run_id?: number;
   year?: number;
   status?: string;
+  export_all?: boolean;
 }
 
 function buildPayrollQuery(params: PayrollListParams = {}) {
@@ -16900,6 +16911,9 @@ function buildPayrollQuery(params: PayrollListParams = {}) {
   }
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
+  }
+  if (params.export_all === true) {
+    searchParams.set("export_all", "true");
   }
   if (params.sortBy?.trim()) {
     searchParams.set("sortBy", params.sortBy.trim());
@@ -17045,6 +17059,23 @@ export async function runPayrollRunVariance(
   return adminRequest<unknown>(
     `/api/payroll/reports/runs/${runId}/variance?comparison_run_id=${encodeURIComponent(String(comparisonRunId))}`,
     { method: "POST", token },
+  );
+}
+
+export async function reviewPayrollVariance(
+  token: string,
+  runId: string | number,
+  varianceId: string | number,
+  employeeId: string | number,
+  explanation: string,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/runs/${runId}/variance/${varianceId}/review`,
+    {
+      method: "POST",
+      token,
+      body: { employee_id: Number(employeeId), explanation },
+    },
   );
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
+import { Textarea } from "@/components/ui/textarea";
 import * as React from "react";
 import {
   Add20Regular,
@@ -115,6 +115,7 @@ import {
   validatePayrollRun,
   runPayrollReconciliation,
   runPayrollRunVariance,
+  reviewPayrollVariance,
   simulatePayrollRunPayment,
   type AdminRecord,
   upsertEmployeePayrollProfile,
@@ -460,8 +461,18 @@ const BANK_STATEMENT_HEADERS = [
 function bankStatementRowsToCsv(rows: BankPaymentEntry[]) {
   const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
   const values = rows
-    .filter((row) => row.employeeNo || row.accountMasked || row.reference || row.amount)
-    .map((row) => ["", row.employeeNo, row.accountMasked, row.reference, row.amount, row.status]);
+    .filter(
+      (row) =>
+        row.employeeNo || row.accountMasked || row.reference || row.amount,
+    )
+    .map((row) => [
+      "",
+      row.employeeNo,
+      row.accountMasked,
+      row.reference,
+      row.amount,
+      row.status,
+    ]);
   return [
     BANK_STATEMENT_HEADERS.join(","),
     ...values.map((row) => row.map(escape).join(",")),
@@ -470,7 +481,10 @@ function bankStatementRowsToCsv(rows: BankPaymentEntry[]) {
 
 function downloadBankStatementTemplate() {
   const csv = `${BANK_STATEMENT_HEADERS.join(",")}\n`;
-  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "payroll-bank-statement-template.csv");
+  downloadBlob(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    "payroll-bank-statement-template.csv",
+  );
 }
 
 function optionLabel(row: AdminRecord) {
@@ -1071,7 +1085,10 @@ function PayrollDetailsContent({
     );
     const payslips = asRecordArray(row.payslips);
     const runApprovals = asRecordArray(row.approvals);
-    const currentCalculationHash = readString(row, ["calculation_hash", "calculationHash"]);
+    const currentCalculationHash = readString(row, [
+      "calculation_hash",
+      "calculationHash",
+    ]);
     const employeeCount =
       readNumber(row, [
         "employee_count",
@@ -1176,29 +1193,59 @@ function PayrollDetailsContent({
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-sm font-semibold text-foreground">Approval workflow</h3>
+          <h3 className="text-sm font-semibold text-foreground">
+            Approval workflow
+          </h3>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             {["HR", "FINANCE", "MANAGEMENT"].map((stage) => {
-              const approval = runApprovals.find((item) =>
-                readString(item, ["stage"]).toUpperCase() === stage,
+              const approval = runApprovals.find(
+                (item) => readString(item, ["stage"]).toUpperCase() === stage,
               );
               const current = Boolean(
                 approval &&
-                  readString(approval, ["decision"]).toUpperCase() === "APPROVED" &&
-                  readString(approval, ["calculationHash", "calculation_hash"]) === currentCalculationHash,
+                readString(approval, ["decision"]).toUpperCase() ===
+                  "APPROVED" &&
+                readString(approval, [
+                  "calculationHash",
+                  "calculation_hash",
+                ]) === currentCalculationHash,
               );
               return (
-                <div key={stage} className="rounded-lg border border-border/70 p-3">
+                <div
+                  key={stage}
+                  className="rounded-lg border border-border/70 p-3"
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{prettify(stage)}</span>
-                    <Badge variant="outline" className={cn("capitalize", current ? statusTone("APPROVED") : "")}>{current ? "Approved" : "Pending"}</Badge>
+                    <span className="text-sm font-medium">
+                      {prettify(stage)}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "capitalize",
+                        current ? statusTone("APPROVED") : "",
+                      )}
+                    >
+                      {current ? "Approved" : "Pending"}
+                    </Badge>
                   </div>
-                  {current ? <p className="mt-1 text-xs text-muted-foreground">Approver #{readString(approval!, ["approvedByCompanyUserId", "approved_by_company_user_id"])}</p> : null}
+                  {current ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Approver #
+                      {readString(approval!, [
+                        "approvedByCompanyUserId",
+                        "approved_by_company_user_id",
+                      ])}
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Approvals apply only to the current calculation hash; all approvers must be different users and separate from the payroll creator.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Approvals apply only to the current calculation hash; all approvers
+            must be different users and separate from the payroll creator.
+          </p>
         </div>
 
         {payslips.length > 0 ? (
@@ -1857,12 +1904,8 @@ export function PayrollOperationsView() {
     React.useState("");
   const [mappings, setMappings] = React.useState<AdminRecord[]>([]);
   const [groups, setGroups] = React.useState<AdminRecord[]>([]);
-  const [, setGroupAssignments] = React.useState<AdminRecord[]>(
-    [],
-  );
-  const [, setOvertimePolicies] = React.useState<AdminRecord[]>(
-    [],
-  );
+  const [, setGroupAssignments] = React.useState<AdminRecord[]>([]);
+  const [, setOvertimePolicies] = React.useState<AdminRecord[]>([]);
   const [, setBonusSchemes] = React.useState<AdminRecord[]>([]);
   const [, setLeaveRules] = React.useState<AdminRecord[]>([]);
   const [recentRuns, setRecentRuns] = React.useState<AdminRecord[]>([]);
@@ -1871,6 +1914,9 @@ export function PayrollOperationsView() {
   >([]);
   const [varianceRunId, setVarianceRunId] = React.useState("");
   const [comparisonRunId, setComparisonRunId] = React.useState("");
+  const [varianceExplanations, setVarianceExplanations] = React.useState<
+    Record<string, string>
+  >({});
   const [settlementRequestId, setSettlementRequestId] = React.useState("");
   const [reportBusy, setReportBusy] = React.useState("");
   const [reportResult, setReportResult] = React.useState<AdminRecord | null>(
@@ -1925,7 +1971,8 @@ export function PayrollOperationsView() {
     allow_fresh_authenticator: true,
   });
   const [securityPolicyReason, setSecurityPolicyReason] = React.useState("");
-  const [securityPolicyLoading, setSecurityPolicyLoading] = React.useState(false);
+  const [securityPolicyLoading, setSecurityPolicyLoading] =
+    React.useState(false);
   const [securityPolicySaving, setSecurityPolicySaving] = React.useState(false);
   const [editingCalendar, setEditingCalendar] =
     React.useState<AdminRecord | null>(null);
@@ -1960,9 +2007,22 @@ export function PayrollOperationsView() {
   const [advancedForm, setAdvancedForm] = React.useState(
     emptyAdvancedPayrollForm,
   );
-  const [bankInputMode, setBankInputMode] = React.useState<"manual" | "csv">("manual");
-  const [bankPaymentRows, setBankPaymentRows] = React.useState<BankPaymentEntry[]>([
-    { id: 1, employeeNo: "", accountMasked: "", reference: "", amount: "", status: "PAID" },
+  const [reportPage, setReportPage] = React.useState(1);
+  const [reportSearch, setReportSearch] = React.useState("");
+  const [bankInputMode, setBankInputMode] = React.useState<"manual" | "csv">(
+    "manual",
+  );
+  const [bankPaymentRows, setBankPaymentRows] = React.useState<
+    BankPaymentEntry[]
+  >([
+    {
+      id: 1,
+      employeeNo: "",
+      accountMasked: "",
+      reference: "",
+      amount: "",
+      status: "PAID",
+    },
   ]);
   const [bankCsvText, setBankCsvText] = React.useState("");
   const [bankCsvName, setBankCsvName] = React.useState("");
@@ -1971,12 +2031,16 @@ export function PayrollOperationsView() {
   const [approveForm, setApproveForm] = React.useState(emptyApproveRunForm);
 
   const [processingRunId, setProcessingRunId] = React.useState("");
-  const [processTarget, setProcessTarget] = React.useState<AdminRecord | null>(null);
-  const [processAuthenticatorCode, setProcessAuthenticatorCode] = React.useState("");
+  const [processTarget, setProcessTarget] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [processAuthenticatorCode, setProcessAuthenticatorCode] =
+    React.useState("");
   const [lockingRunId, setLockingRunId] = React.useState("");
   const [validatingRunId, setValidatingRunId] = React.useState("");
   const [paidRunId, setPaidRunId] = React.useState("");
-  const [simulatingPaymentRunId, setSimulatingPaymentRunId] = React.useState("");
+  const [simulatingPaymentRunId, setSimulatingPaymentRunId] =
+    React.useState("");
   const [closingRunId, setClosingRunId] = React.useState("");
   const [reconcilingRunId, setReconcilingRunId] = React.useState("");
   const [payslipRunId, setPayslipRunId] = React.useState("");
@@ -2305,13 +2369,19 @@ export function PayrollOperationsView() {
       })
       .catch((errorObject) => {
         if (active) {
-          toast.error(errorObject instanceof Error ? errorObject.message : "Could not load payroll security settings.");
+          toast.error(
+            errorObject instanceof Error
+              ? errorObject.message
+              : "Could not load payroll security settings.",
+          );
         }
       })
       .finally(() => {
         if (active) setSecurityPolicyLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [configTab, tab]);
 
   React.useEffect(() => {
@@ -2363,7 +2433,9 @@ export function PayrollOperationsView() {
       paymentDay: readString(row, ["paymentDay", "payment_day"], "28"),
       timezone: readString(row, ["timezone"], "Africa/Dar_es_Salaam"),
       currency: readString(row, ["currency"], "TZS"),
-      isDefault: readBoolean(row, ["isDefault", "is_default"]) ? "true" : "false",
+      isDefault: readBoolean(row, ["isDefault", "is_default"])
+        ? "true"
+        : "false",
       reason: "",
     });
     setFormError(null);
@@ -2518,9 +2590,10 @@ export function PayrollOperationsView() {
                     ? "Payroll reports"
                     : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`;
 
-  const sectionDescription = tab === "reports"
-    ? "Check payroll readiness, compare runs, review final settlements, and prepare reports or accounting records."
-    : "Runs, inputs, employee profiles, periods, and setup.";
+  const sectionDescription =
+    tab === "reports"
+      ? "Check payroll readiness, compare runs, review final settlements, and prepare reports or accounting records."
+      : "Runs, inputs, employee profiles, periods, and setup.";
 
   const canMutatePayroll = canPerformPermission(actor.permissionLabels, {
     permissions: [
@@ -2724,9 +2797,39 @@ export function PayrollOperationsView() {
                 ) : null}
                 {canMutatePayroll ? (
                   <>
-                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "PENDING", 1); }}>Pending demo</button>
-                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "FAILED", 1); }}>Failed demo</button>
-                    <button type="button" className={actionButtonClass} disabled={simulatingPaymentRunId === id} onClick={(event) => { event.stopPropagation(); void onSimulateRunPayment(row, "SUCCESS", 2); }}>Retry demo</button>
+                    <button
+                      type="button"
+                      className={actionButtonClass}
+                      disabled={simulatingPaymentRunId === id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onSimulateRunPayment(row, "PENDING", 1);
+                      }}
+                    >
+                      Pending demo
+                    </button>
+                    <button
+                      type="button"
+                      className={actionButtonClass}
+                      disabled={simulatingPaymentRunId === id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onSimulateRunPayment(row, "FAILED", 1);
+                      }}
+                    >
+                      Failed demo
+                    </button>
+                    <button
+                      type="button"
+                      className={actionButtonClass}
+                      disabled={simulatingPaymentRunId === id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onSimulateRunPayment(row, "SUCCESS", 2);
+                      }}
+                    >
+                      Retry demo
+                    </button>
                   </>
                 ) : null}
                 {canMutatePayroll ? (
@@ -2982,7 +3085,7 @@ export function PayrollOperationsView() {
           key: "actions",
           label: "Actions",
           render: (row) => {
-            const id = rowId(row)
+            const id = rowId(row);
             return (
               <div className="flex gap-1">
                 <button
@@ -3164,38 +3267,43 @@ export function PayrollOperationsView() {
         {
           key: "attendance_date",
           label: "Work date",
-          render: (row) =>
-            formatAdminValue(row.work_date ?? row.workDate),
+          render: (row) => formatAdminValue(row.work_date ?? row.workDate),
         },
         {
           key: "calculated_minutes",
           label: "Calculated",
-          render: (row) => `${readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0} min`,
+          render: (row) =>
+            `${readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0} min`,
         },
         {
           key: "requested_minutes",
           label: "Requested",
-          render: (row) => `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
+          render: (row) =>
+            `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
         },
         {
           key: "approved_minutes",
           label: "Approved",
-          render: (row) => `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
+          render: (row) =>
+            `${readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0} min`,
         },
         {
           key: "payable_minutes",
           label: "Payable",
-          render: (row) => `${Math.min(
-            readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0,
-            readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0,
-          )} min`,
+          render: (row) =>
+            `${Math.min(
+              readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0,
+              readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0,
+            )} min`,
         },
         {
           key: "pending_minutes",
           label: "Unapproved calculated",
           render: (row) => {
-            const requested = readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0;
-            const calculated = readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
+            const requested =
+              readNumber(row, ["requested_minutes", "requestedMinutes"]) ?? 0;
+            const calculated =
+              readNumber(row, ["actual_minutes", "actualMinutes"]) ?? 0;
             return `${Math.max(0, calculated - requested)} min`;
           },
         },
@@ -3382,7 +3490,9 @@ export function PayrollOperationsView() {
           label: "Cut-off / Payment",
           render: (row) => (
             <div className="space-y-0.5 text-xs">
-              <p>Cut-off: {formatAdminValue(row.cutoff_date ?? row.cutoffDate)}</p>
+              <p>
+                Cut-off: {formatAdminValue(row.cutoff_date ?? row.cutoffDate)}
+              </p>
               <p className="text-muted-foreground">
                 Payment: {formatAdminValue(row.payment_date ?? row.paymentDate)}
               </p>
@@ -3409,8 +3519,9 @@ export function PayrollOperationsView() {
           label: "Actions",
           render: (row) => {
             const status = readStatus(row).toUpperCase();
-            const editable = !["LOCKED", "PAID", "CLOSED", "CANCELLED"].includes(status)
-              && !readBoolean(row, ["lockedAt", "locked_at"]);
+            const editable =
+              !["LOCKED", "PAID", "CLOSED", "CANCELLED"].includes(status) &&
+              !readBoolean(row, ["lockedAt", "locked_at"]);
             return canMutatePayroll && editable ? (
               <button
                 type="button"
@@ -3422,7 +3533,9 @@ export function PayrollOperationsView() {
               >
                 Edit dates
               </button>
-            ) : "—";
+            ) : (
+              "—"
+            );
           },
         },
       ];
@@ -3514,18 +3627,21 @@ export function PayrollOperationsView() {
         {
           key: "actions",
           label: "Actions",
-          render: (row) => canMutatePayroll ? (
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={(event) => {
-                event.stopPropagation();
-                openEditCalendar(row);
-              }}
-            >
-              Edit
-            </button>
-          ) : "—",
+          render: (row) =>
+            canMutatePayroll ? (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openEditCalendar(row);
+                }}
+              >
+                Edit
+              </button>
+            ) : (
+              "—"
+            ),
         },
       ];
     }
@@ -3967,7 +4083,9 @@ export function PayrollOperationsView() {
       await processPayrollRun(
         token,
         id,
-        authenticatorCode ? { authenticator_code: authenticatorCode } : undefined,
+        authenticatorCode
+          ? { authenticator_code: authenticatorCode }
+          : undefined,
       );
       toast.success("Payroll run queued for processing.");
       setProcessTarget(null);
@@ -4058,16 +4176,27 @@ export function PayrollOperationsView() {
     if (!token || !id) return;
     setSimulatingPaymentRunId(id);
     try {
-      const result = await simulatePayrollRunPayment(token, id, outcome, attempt);
+      const result = await simulatePayrollRunPayment(
+        token,
+        id,
+        outcome,
+        attempt,
+      );
       const recordedStatus = readString(
         asRecord(asRecord(result)?.import),
         ["status"],
         outcome,
       );
-      toast.success(`Demo payment result recorded (${recordedStatus}). No external transfer was sent.`);
+      toast.success(
+        `Demo payment result recorded (${recordedStatus}). No external transfer was sent.`,
+      );
       await loadRows({ refreshLookups: true });
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Demo payment simulation failed.");
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Demo payment simulation failed.",
+      );
     } finally {
       setSimulatingPaymentRunId("");
     }
@@ -4214,7 +4343,10 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onRunCatalogReport(reportCodeOverride?: string) {
+  async function onRunCatalogReport(
+    reportCodeOverride?: string,
+    pageOverride = reportPage,
+  ) {
     const token = readStoredToken();
     const reportCode = (reportCodeOverride ?? advancedForm.reportCode).trim();
     if (!token || !reportCode) return;
@@ -4228,9 +4360,12 @@ export function PayrollOperationsView() {
         year: advancedForm.reportYear
           ? Number(advancedForm.reportYear)
           : undefined,
-        limit: 500,
+        page: pageOverride,
+        limit: 50,
+        search: reportSearch.trim() || undefined,
       });
       setReportKind("report");
+      setReportPage(pageOverride);
       setAdvancedForm((current) => ({ ...current, reportCode }));
       setReportResult((result as AdminRecord | null) ?? { status: "ready" });
       toast.success("Payroll report loaded.");
@@ -4239,6 +4374,51 @@ export function PayrollOperationsView() {
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to load payroll report.",
+      );
+    } finally {
+      setReportBusy("");
+    }
+  }
+
+  async function onExportReportCsv(rows: AdminRecord[]) {
+    if (reportKind !== "report") {
+      downloadBlob(
+        new Blob([reportRowsToCsv(rows)], { type: "text/csv;charset=utf-8" }),
+        `payroll-${advancedForm.reportCode || reportKind || "report"}.csv`,
+      );
+      return;
+    }
+    const token = readStoredToken();
+    const reportCode = advancedForm.reportCode.trim();
+    if (!token || !reportCode) return;
+    setReportBusy("report-export");
+    try {
+      const payload = await getPayrollReport(token, reportCode, {
+        payroll_run_id: advancedForm.reportRunId
+          ? Number(advancedForm.reportRunId)
+          : undefined,
+        payroll_period_id: periodFilter ? Number(periodFilter) : undefined,
+        year: advancedForm.reportYear
+          ? Number(advancedForm.reportYear)
+          : undefined,
+        search: reportSearch.trim() || undefined,
+        page: 1,
+        limit: 50,
+        export_all: true,
+      });
+      const allRows = asRecordArray(asRecord(payload)?.rows);
+      downloadBlob(
+        new Blob([reportRowsToCsv(allRows)], {
+          type: "text/csv;charset=utf-8",
+        }),
+        `payroll-${reportCode}.csv`,
+      );
+      toast.success(`Exported ${allRows.length} filtered payroll rows.`);
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to export payroll report.",
       );
     } finally {
       setReportBusy("");
@@ -4265,6 +4445,43 @@ export function PayrollOperationsView() {
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to run variance.",
+      );
+    } finally {
+      setReportBusy("");
+    }
+  }
+
+  async function onReviewVarianceRow(row: AdminRecord) {
+    const token = readStoredToken();
+    const varianceId = readNumber(reportResult, ["id"]);
+    const employeeId = readNumber(row, ["employee_id", "employeeId"]);
+    const explanation = varianceExplanations[String(employeeId)]?.trim();
+    if (
+      !token ||
+      !varianceRunId ||
+      !varianceId ||
+      !employeeId ||
+      !explanation
+    ) {
+      toast.error("Enter an explanation before saving the review.");
+      return;
+    }
+    setReportBusy(`variance-review-${employeeId}`);
+    try {
+      const result = await reviewPayrollVariance(
+        token,
+        varianceRunId,
+        varianceId,
+        employeeId,
+        explanation,
+      );
+      setReportResult((result as AdminRecord | null) ?? reportResult);
+      toast.success(`Variance for employee ${employeeId} reviewed.`);
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to save variance review.",
       );
     } finally {
       setReportBusy("");
@@ -4314,9 +4531,15 @@ export function PayrollOperationsView() {
       const actionResult = asRecord(result);
       const normalized = asRecord(actionResult?.settlement) ?? actionResult;
       setReportResult(normalized ?? { status: "updated", id: settlementId });
-      toast.success(`Final settlement ${action.replaceAll("-", " ")} completed.`);
+      toast.success(
+        `Final settlement ${action.replaceAll("-", " ")} completed.`,
+      );
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Final settlement action failed.");
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Final settlement action failed.",
+      );
     } finally {
       setReportBusy("");
     }
@@ -4327,7 +4550,10 @@ export function PayrollOperationsView() {
     const settlementId = readString(reportResult, ["id"], "");
     if (!token || !settlementId) return;
     try {
-      const file = await downloadPayrollFinalSettlementStatement(token, settlementId);
+      const file = await downloadPayrollFinalSettlementStatement(
+        token,
+        settlementId,
+      );
       const url = URL.createObjectURL(file.blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -4335,14 +4561,15 @@ export function PayrollOperationsView() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not download settlement statement.");
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not download settlement statement.",
+      );
     }
   }
 
-  async function onGenerateBankingBatch(
-    row: AdminRecord,
-    bankReady = false,
-  ) {
+  async function onGenerateBankingBatch(row: AdminRecord, bankReady = false) {
     const token = readStoredToken();
     const id = rowId(row);
     if (!token || !id) return;
@@ -4457,26 +4684,47 @@ export function PayrollOperationsView() {
 
   async function onImportBankStatement() {
     const token = readStoredToken();
-    const fileText = bankInputMode === "csv"
-      ? bankCsvText.trim()
-      : bankStatementRowsToCsv(bankPaymentRows);
-    const completedRows = bankPaymentRows.filter((row) => row.employeeNo.trim() || row.accountMasked.trim() || row.reference.trim() || row.amount.trim());
+    const fileText =
+      bankInputMode === "csv"
+        ? bankCsvText.trim()
+        : bankStatementRowsToCsv(bankPaymentRows);
+    const completedRows = bankPaymentRows.filter(
+      (row) =>
+        row.employeeNo.trim() ||
+        row.accountMasked.trim() ||
+        row.reference.trim() ||
+        row.amount.trim(),
+    );
     if (bankInputMode === "manual") {
       if (completedRows.length === 0) {
         toast.error("Add at least one payment row before importing.");
         return;
       }
-      if (completedRows.some((row) => !row.employeeNo.trim() || !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0)) {
-        toast.error("Each payment needs an employee number and a positive amount.");
+      if (
+        completedRows.some(
+          (row) =>
+            !row.employeeNo.trim() ||
+            !Number.isFinite(Number(row.amount)) ||
+            Number(row.amount) <= 0,
+        )
+      ) {
+        toast.error(
+          "Each payment needs an employee number and a positive amount.",
+        );
         return;
       }
     }
-    if (bankInputMode === "csv" && bankCsvText.trim().split(/\r?\n/).filter(Boolean).length < 2) {
+    if (
+      bankInputMode === "csv" &&
+      bankCsvText.trim().split(/\r?\n/).filter(Boolean).length < 2
+    ) {
       toast.error("Add at least one payment row to the CSV before importing.");
       return;
     }
     if (!token || !advancedForm.bankImportRunId || !fileText.trim()) {
-      toast.error("Choose a payroll run and add at least one bank payment row.");
+      toast.error(
+        "Choose a payroll run and add at least one bank payment row.",
+      );
       return;
     }
     setReportBusy("bank-import");
@@ -4517,18 +4765,33 @@ export function PayrollOperationsView() {
       const text = await file.text();
       const header = (text.split(/\r?\n/, 1)[0] ?? "")
         .split(",")
-        .map((value) => value.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, "_"));
+        .map((value) =>
+          value.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, "_"),
+        );
       const hasAmount = header.includes("amount");
-      const hasEmployeeMatch = ["employee_no", "employee_id", "account_number_masked", "reference"].some((key) => header.includes(key));
-      if (text.trim().split(/\r?\n/).filter(Boolean).length < 2 || !hasAmount || !hasEmployeeMatch) {
-        setBankCsvError("This file needs an amount column and at least one employee or payment reference column. Download the template if you need a starting point.");
+      const hasEmployeeMatch = [
+        "employee_no",
+        "employee_id",
+        "account_number_masked",
+        "reference",
+      ].some((key) => header.includes(key));
+      if (
+        text.trim().split(/\r?\n/).filter(Boolean).length < 2 ||
+        !hasAmount ||
+        !hasEmployeeMatch
+      ) {
+        setBankCsvError(
+          "This file needs an amount column and at least one employee or payment reference column. Download the template if you need a starting point.",
+        );
         return;
       }
       setBankCsvText(text);
       setBankCsvName(file.name);
       setBankInputMode("csv");
     } catch {
-      setBankCsvError("We could not read this file. Try saving it as a CSV and upload it again.");
+      setBankCsvError(
+        "We could not read this file. Try saving it as a CSV and upload it again.",
+      );
     }
   }
 
@@ -5272,7 +5535,11 @@ export function PayrollOperationsView() {
       setFormError("Authentication or payroll period is missing.");
       return;
     }
-    if (!periodDatesForm.cutoffDate || !periodDatesForm.paymentDate || !periodDatesForm.reason.trim()) {
+    if (
+      !periodDatesForm.cutoffDate ||
+      !periodDatesForm.paymentDate ||
+      !periodDatesForm.reason.trim()
+    ) {
       setFormError("Cut-off date, payment date, and reason are required.");
       return;
     }
@@ -5289,7 +5556,11 @@ export function PayrollOperationsView() {
       setPeriodDatesForm({ cutoffDate: "", paymentDate: "", reason: "" });
       await loadRows({ refreshLookups: true });
     } catch (errorObject) {
-      setFormError(errorObject instanceof Error ? errorObject.message : "Could not update payroll period dates.");
+      setFormError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not update payroll period dates.",
+      );
     } finally {
       setSaving(false);
     }
@@ -5299,7 +5570,9 @@ export function PayrollOperationsView() {
     const token = readStoredToken();
     if (!token) return toast.error("Authentication required.");
     const loginAllowed = readBoolean(securityPolicy, ["allow_verified_login"]);
-    const freshAllowed = readBoolean(securityPolicy, ["allow_fresh_authenticator"]);
+    const freshAllowed = readBoolean(securityPolicy, [
+      "allow_fresh_authenticator",
+    ]);
     if (!loginAllowed && !freshAllowed) {
       toast.error("Enable at least one payroll generation 2FA method.");
       return;
@@ -5321,7 +5594,11 @@ export function PayrollOperationsView() {
       setSecurityPolicyReason("");
       toast.success("Payroll security policy updated.");
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not save payroll security policy.");
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not save payroll security policy.",
+      );
     } finally {
       setSecurityPolicySaving(false);
     }
@@ -5340,7 +5617,9 @@ export function PayrollOperationsView() {
         throw new Error("Scheme and effective-from date are required.");
       }
       if (!ruleForm.sourceReference.trim()) {
-        throw new Error("An official source or evidence reference is required.");
+        throw new Error(
+          "An official source or evidence reference is required.",
+        );
       }
       const bands =
         ruleForm.lowerLimit.trim() || ruleForm.ratePercent.trim()
@@ -7154,18 +7433,20 @@ export function PayrollOperationsView() {
     if (createMode === "calendar") {
       return (
         <div className="grid gap-3 md:grid-cols-2">
-          {!editingCalendar ? <Field label="Code">
-            <input
-              className={inputClass}
-              value={calendarForm.code}
-              onChange={(event) =>
-                setCalendarForm((current) => ({
-                  ...current,
-                  code: event.target.value,
-                }))
-              }
-            />
-          </Field> : null}
+          {!editingCalendar ? (
+            <Field label="Code">
+              <input
+                className={inputClass}
+                value={calendarForm.code}
+                onChange={(event) =>
+                  setCalendarForm((current) => ({
+                    ...current,
+                    code: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+          ) : null}
           <Field label="Name">
             <input
               className={inputClass}
@@ -7248,13 +7529,19 @@ export function PayrollOperationsView() {
               <Textarea
                 className={textareaClass}
                 value={calendarForm.reason}
-                onChange={(event) => setCalendarForm((current) => ({ ...current, reason: event.target.value }))}
+                onChange={(event) =>
+                  setCalendarForm((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
               />
             </Field>
           ) : null}
           {editingCalendar ? (
             <p className="text-xs text-muted-foreground md:col-span-2">
-              Calendar defaults apply to periods generated in the future. Existing periods keep their saved dates.
+              Calendar defaults apply to periods generated in the future.
+              Existing periods keep their saved dates.
             </p>
           ) : null}
         </div>
@@ -8676,31 +8963,81 @@ export function PayrollOperationsView() {
       ) : tab === "reports" ? (
         <div className="space-y-4">
           <div className="rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 dark:border-blue-900/60 dark:bg-blue-950/20">
-            <p className="text-sm font-semibold text-foreground">How to use these tools</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Check setup before processing, compare two runs to see what changed, and calculate final pay for an offboarding request. These tools create checks and reports; start or process payroll from the Runs tab.
+            <p className="text-sm font-semibold text-foreground">
+              How to use these tools
             </p>
-            <nav aria-label="Payroll report tasks" className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Check setup before processing, compare two runs to see what
+              changed, and calculate final pay for an offboarding request. These
+              tools create checks and reports; start or process payroll from the
+              Runs tab.
+            </p>
+            <nav
+              aria-label="Payroll report tasks"
+              className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+            >
               {[
-                { href: "#payroll-reconciliation", icon: <CheckmarkCircle20Regular aria-hidden="true" />, title: "1. Check setup", detail: "Find blockers before a run" },
-                { href: "#payroll-run-comparison", icon: <ArrowSwap20Regular aria-hidden="true" />, title: "2. Compare runs", detail: "See what changed" },
-                { href: "#payroll-final-settlement", icon: <PersonMoney20Regular aria-hidden="true" />, title: "3. Final pay", detail: "Review an exit settlement" },
-                { href: "#payroll-bank-match", icon: <BuildingBank20Regular aria-hidden="true" />, title: "4. Match bank results", detail: "Record payments already sent" },
+                {
+                  href: "#payroll-reconciliation",
+                  icon: <CheckmarkCircle20Regular aria-hidden="true" />,
+                  title: "1. Check setup",
+                  detail: "Find blockers before a run",
+                },
+                {
+                  href: "#payroll-run-comparison",
+                  icon: <ArrowSwap20Regular aria-hidden="true" />,
+                  title: "2. Compare runs",
+                  detail: "See what changed",
+                },
+                {
+                  href: "#payroll-final-settlement",
+                  icon: <PersonMoney20Regular aria-hidden="true" />,
+                  title: "3. Final pay",
+                  detail: "Review an exit settlement",
+                },
+                {
+                  href: "#payroll-bank-match",
+                  icon: <BuildingBank20Regular aria-hidden="true" />,
+                  title: "4. Match bank results",
+                  detail: "Record payments already sent",
+                },
               ].map((step) => (
-                <a key={step.href} href={step.href} className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left transition hover:bg-muted/40">
+                <a
+                  key={step.href}
+                  href={step.href}
+                  className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left transition hover:bg-muted/40"
+                >
                   <span className="text-primary">{step.icon}</span>
-                  <span className="min-w-0"><span className="block text-xs font-semibold text-foreground">{step.title}</span><span className="block truncate text-[11px] text-muted-foreground">{step.detail}</span></span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-foreground">
+                      {step.title}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {step.detail}
+                    </span>
+                  </span>
                 </a>
               ))}
             </nav>
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="grid gap-0 lg:grid-cols-3">
-              <div id="payroll-reconciliation" className="scroll-mt-24 space-y-3 border-border p-4 lg:border-r">
+              <div
+                id="payroll-reconciliation"
+                className="scroll-mt-24 space-y-3 border-border p-4 lg:border-r"
+              >
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-semibold"><CheckmarkCircle20Regular aria-hidden="true" className="text-primary" />Reconciliation</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <CheckmarkCircle20Regular
+                      aria-hidden="true"
+                      className="text-primary"
+                    />
+                    Reconciliation
+                  </h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Find missing employee payroll profiles, salary mappings, or setup items that could stop payroll from running. This check does not create a payroll run.
+                    Find missing employee payroll profiles, salary mappings, or
+                    setup items that could stop payroll from running. This check
+                    does not create a payroll run.
                   </p>
                 </div>
                 <button
@@ -8715,11 +9052,22 @@ export function PayrollOperationsView() {
                   Run reconciliation
                 </button>
               </div>
-              <div id="payroll-run-comparison" className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-l-0 lg:border-r lg:border-t-0">
+              <div
+                id="payroll-run-comparison"
+                className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-l-0 lg:border-r lg:border-t-0"
+              >
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-semibold"><ArrowSwap20Regular aria-hidden="true" className="text-primary" />Run variance</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <ArrowSwap20Regular
+                      aria-hidden="true"
+                      className="text-primary"
+                    />
+                    Run variance
+                  </h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Select two runs to see differences in payroll totals and employee amounts. Choose the first run, then the run you want to compare it with.
+                    Select two runs to see differences in payroll totals and
+                    employee amounts. Choose the first run, then the run you
+                    want to compare it with.
                   </p>
                 </div>
                 <FluentSelect
@@ -8772,11 +9120,22 @@ export function PayrollOperationsView() {
                   Compare runs
                 </button>
               </div>
-              <div id="payroll-final-settlement" className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-t-0">
+              <div
+                id="payroll-final-settlement"
+                className="scroll-mt-24 space-y-3 border-t border-border p-4 lg:border-t-0"
+              >
                 <div>
-                  <h2 className="flex items-center gap-2 text-sm font-semibold"><PersonMoney20Regular aria-hidden="true" className="text-primary" />Final settlement</h2>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <PersonMoney20Regular
+                      aria-hidden="true"
+                      className="text-primary"
+                    />
+                    Final settlement
+                  </h2>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Calculate final pay for an employee leaving the company. Select the offboarding request to review its settlement details.
+                    Calculate final pay for an employee leaving the company.
+                    Select the offboarding request to review its settlement
+                    details.
                   </p>
                 </div>
                 <FluentSelect
@@ -8808,52 +9167,172 @@ export function PayrollOperationsView() {
                   ) : null}
                   Calculate final pay
                 </button>
-                {reportKind === "settlement" && readString(reportResult, ["id"], "") ? (
+                {reportKind === "settlement" &&
+                readString(reportResult, ["id"], "") ? (
                   <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <span>Settlement #{readString(reportResult, ["id"], "-")}</span>
-                      <Badge variant="outline">{prettify(readString(reportResult, ["status"], "unknown"))}</Badge>
+                      <span>
+                        Settlement #{readString(reportResult, ["id"], "-")}
+                      </span>
+                      <Badge variant="outline">
+                        {prettify(
+                          readString(reportResult, ["status"], "unknown"),
+                        )}
+                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Gross {readString(reportResult, ["grossSettlement", "gross_settlement"], "0.00")} ·
-                      Deductions {readString(reportResult, ["deductionTotal", "deduction_total"], "0.00")} ·
-                      Net {readString(reportResult, ["netSettlement", "net_settlement"], "0.00")}
+                      Gross{" "}
+                      {readString(
+                        reportResult,
+                        ["grossSettlement", "gross_settlement"],
+                        "0.00",
+                      )}{" "}
+                      · Deductions{" "}
+                      {readString(
+                        reportResult,
+                        ["deductionTotal", "deduction_total"],
+                        "0.00",
+                      )}{" "}
+                      · Net{" "}
+                      {readString(
+                        reportResult,
+                        ["netSettlement", "net_settlement"],
+                        "0.00",
+                      )}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {readString(reportResult, ["status"], "") === "CALCULATED" || readString(reportResult, ["status"], "") === "REJECTED" ? (
-                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("submit")}>Submit for approval</button>
+                      {readString(reportResult, ["status"], "") ===
+                        "CALCULATED" ||
+                      readString(reportResult, ["status"], "") ===
+                        "REJECTED" ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={reportBusy === "settlement-action"}
+                          onClick={() => void onFinalSettlementAction("submit")}
+                        >
+                          Submit for approval
+                        </button>
                       ) : null}
-                      {readString(reportResult, ["status"], "") === "SUBMITTED" ? (
+                      {readString(reportResult, ["status"], "") ===
+                      "SUBMITTED" ? (
                         <>
-                          <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("decision", { decision: "APPROVE", comments: "Demo Finance approval" })}>Approve</button>
-                          <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("decision", { decision: "REJECT", comments: "Returned for demo correction" })}>Reject</button>
+                          <button
+                            type="button"
+                            className={actionButtonClass}
+                            disabled={reportBusy === "settlement-action"}
+                            onClick={() =>
+                              void onFinalSettlementAction("decision", {
+                                decision: "APPROVE",
+                                comments: "Demo Finance approval",
+                              })
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className={actionButtonClass}
+                            disabled={reportBusy === "settlement-action"}
+                            onClick={() =>
+                              void onFinalSettlementAction("decision", {
+                                decision: "REJECT",
+                                comments: "Returned for demo correction",
+                              })
+                            }
+                          >
+                            Reject
+                          </button>
                         </>
                       ) : null}
-                      {readString(reportResult, ["status"], "") === "APPROVED" || readString(reportResult, ["status"], "").startsWith("PAYMENT_") ? (
-                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("simulate-payment", { outcome: "SUCCESS", attempt: readString(reportResult, ["status"], "") === "APPROVED" ? 1 : 2 })}>{readString(reportResult, ["status"], "") === "APPROVED" ? "Simulate payment" : "Retry simulated payment"}</button>
+                      {readString(reportResult, ["status"], "") ===
+                        "APPROVED" ||
+                      readString(reportResult, ["status"], "").startsWith(
+                        "PAYMENT_",
+                      ) ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={reportBusy === "settlement-action"}
+                          onClick={() =>
+                            void onFinalSettlementAction("simulate-payment", {
+                              outcome: "SUCCESS",
+                              attempt:
+                                readString(reportResult, ["status"], "") ===
+                                "APPROVED"
+                                  ? 1
+                                  : 2,
+                            })
+                          }
+                        >
+                          {readString(reportResult, ["status"], "") ===
+                          "APPROVED"
+                            ? "Simulate payment"
+                            : "Retry simulated payment"}
+                        </button>
                       ) : null}
                       {readString(reportResult, ["status"], "") === "PAID" ? (
-                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("reconcile")}>Reconcile payment</button>
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={reportBusy === "settlement-action"}
+                          onClick={() =>
+                            void onFinalSettlementAction("reconcile")
+                          }
+                        >
+                          Reconcile payment
+                        </button>
                       ) : null}
-                      {readString(reportResult, ["status"], "") === "RECONCILED" ? (
-                        <button type="button" className={actionButtonClass} disabled={reportBusy === "settlement-action"} onClick={() => void onFinalSettlementAction("close")}>Close settlement</button>
+                      {readString(reportResult, ["status"], "") ===
+                      "RECONCILED" ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          disabled={reportBusy === "settlement-action"}
+                          onClick={() => void onFinalSettlementAction("close")}
+                        >
+                          Close settlement
+                        </button>
                       ) : null}
-                      { ["APPROVED", "PAID", "RECONCILED", "CLOSED"].includes(readString(reportResult, ["status"], "")) ? (
-                        <button type="button" className={actionButtonClass} onClick={() => void onDownloadSettlementStatement()}>Download statement</button>
+                      {["APPROVED", "PAID", "RECONCILED", "CLOSED"].includes(
+                        readString(reportResult, ["status"], ""),
+                      ) ? (
+                        <button
+                          type="button"
+                          className={actionButtonClass}
+                          onClick={() => void onDownloadSettlementStatement()}
+                        >
+                          Download statement
+                        </button>
                       ) : null}
                     </div>
-                    <p className="text-[11px] text-muted-foreground">Payments are simulated only when backend PAYROLL_DEMO_MODE=true. Finance approval requires a different user from the preparer.</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Payments are simulated only when backend
+                      PAYROLL_DEMO_MODE=true. Finance approval requires a
+                      different user from the preparer.
+                    </p>
                   </div>
                 ) : null}
               </div>
             </div>
           </div>
-          <div id="payroll-readiness" className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4">
+          <div
+            id="payroll-readiness"
+            className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4"
+          >
             <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
               <div>
-                <h2 className="flex items-center gap-2 text-sm font-semibold"><CheckmarkCircle20Regular aria-hidden="true" className="text-primary" />Deployment readiness</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <CheckmarkCircle20Regular
+                    aria-hidden="true"
+                    className="text-primary"
+                  />
+                  Deployment readiness
+                </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Check whether payroll is ready to run, and review connected services and payroll notifications. Use this when setting up or troubleshooting payroll.
+                  Check whether payroll is ready to run, and review connected
+                  services and payroll notifications. Use this when setting up
+                  or troubleshooting payroll.
                 </p>
                 {reportKind === "readiness" && reportResult ? (
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -8962,14 +9441,24 @@ export function PayrollOperationsView() {
               </div>
             </div>
           </div>
-          <div id="payroll-report-catalog" className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4">
+          <div
+            id="payroll-report-catalog"
+            className="scroll-mt-24 overflow-hidden rounded-xl border border-border bg-card p-4"
+          >
             <div className="mb-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold"><DocumentSearch20Regular aria-hidden="true" className="text-primary" />Generate a payroll report</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <DocumentSearch20Regular
+                  aria-hidden="true"
+                  className="text-primary"
+                />
+                Generate a payroll report
+              </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Choose a report and optionally narrow it to a payroll run or year. Use the catalog to see available reports.
+                Choose a report and optionally narrow it to a payroll run or
+                year. Use the catalog to see available reports.
               </p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_auto_auto_auto] lg:items-end">
+            <div className="grid gap-3 lg:grid-cols-[1fr_1fr_0.75fr_1fr_auto_auto_auto] lg:items-end">
               <Field label="Report type">
                 <FluentSelect
                   ariaLabel="Report type"
@@ -9036,6 +9525,15 @@ export function PayrollOperationsView() {
                   }
                 />
               </Field>
+              <Field label="Filter results (optional)">
+                <input
+                  className={inputClass}
+                  value={reportSearch}
+                  onChange={(event) => setReportSearch(event.target.value)}
+                  maxLength={100}
+                  placeholder="Employee, component, or dimension"
+                />
+              </Field>
               <button
                 type="button"
                 className={secondaryButtonClass}
@@ -9053,7 +9551,7 @@ export function PayrollOperationsView() {
                 disabled={
                   reportBusy === "catalog-report" || !advancedForm.reportCode
                 }
-                onClick={() => void onRunCatalogReport()}
+                onClick={() => void onRunCatalogReport(undefined, 1)}
               >
                 {reportBusy === "catalog-report" ? (
                   <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
@@ -9079,92 +9577,367 @@ export function PayrollOperationsView() {
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
-            <div id="payroll-bank-match" className="scroll-mt-24 rounded-xl border border-border bg-card p-4">
+            <div
+              id="payroll-bank-match"
+              className="scroll-mt-24 rounded-xl border border-border bg-card p-4"
+            >
               <div className="mb-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold"><BuildingBank20Regular aria-hidden="true" className="text-primary" />Match bank payments to a payroll run</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <BuildingBank20Regular
+                    aria-hidden="true"
+                    className="text-primary"
+                  />
+                  Match bank payments to a payroll run
+                </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Record the results of a payment batch your bank has already processed. Choose a run, enter payments below or upload a CSV, then match the rows to employees. This does not send money.
+                  Record the results of a payment batch your bank has already
+                  processed. Choose a run, enter payments below or upload a CSV,
+                  then match the rows to employees. This does not send money.
                 </p>
               </div>
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Step 1 · Payroll run to match">
-                  <FluentSelect
-                    ariaLabel="Payroll run to match"
-                    className="w-full"
-                    value={advancedForm.bankImportRunId}
-                    placeholder="Choose a payroll run"
-                    onChange={(value) =>
-                      setAdvancedForm((current) => ({
-                        ...current,
-                        bankImportRunId: value,
-                      }))
-                    }
-                    options={[
-                      { value: "", label: "Choose a payroll run" },
-                      ...recentRuns.map((row) => ({
-                        value: rowId(row),
-                        label:
-                          readPeriodLabel(row) !== "-"
-                            ? readPeriodLabel(row)
-                            : `Run #${rowId(row)}`,
-                      })),
-                    ]}
-                  />
-                </Field>
-                  <p className="self-end pb-2 text-xs text-muted-foreground">Choose the payroll run whose bank payments you are checking.</p>
+                    <FluentSelect
+                      ariaLabel="Payroll run to match"
+                      className="w-full"
+                      value={advancedForm.bankImportRunId}
+                      placeholder="Choose a payroll run"
+                      onChange={(value) =>
+                        setAdvancedForm((current) => ({
+                          ...current,
+                          bankImportRunId: value,
+                        }))
+                      }
+                      options={[
+                        { value: "", label: "Choose a payroll run" },
+                        ...recentRuns.map((row) => ({
+                          value: rowId(row),
+                          label:
+                            readPeriodLabel(row) !== "-"
+                              ? readPeriodLabel(row)
+                              : `Run #${rowId(row)}`,
+                        })),
+                      ]}
+                    />
+                  </Field>
+                  <p className="self-end pb-2 text-xs text-muted-foreground">
+                    Choose the payroll run whose bank payments you are checking.
+                  </p>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/15 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold">Step 2 · Add payment details</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Enter payments one by one, or upload a CSV statement from your bank.</p>
+                      <p className="text-sm font-semibold">
+                        Step 2 · Add payment details
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Enter payments one by one, or upload a CSV statement
+                        from your bank.
+                      </p>
                     </div>
-                    <div role="group" aria-label="Payment entry method" className="inline-flex rounded-md border border-border bg-background p-1">
-                      <button type="button" aria-pressed={bankInputMode === "manual"} className={cn("rounded px-3 py-1.5 text-xs font-medium", bankInputMode === "manual" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => setBankInputMode("manual")}>Enter payments</button>
-                      <button type="button" aria-pressed={bankInputMode === "csv"} className={cn("rounded px-3 py-1.5 text-xs font-medium", bankInputMode === "csv" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")} onClick={() => setBankInputMode("csv")}>Upload CSV</button>
+                    <div
+                      role="group"
+                      aria-label="Payment entry method"
+                      className="inline-flex rounded-md border border-border bg-background p-1"
+                    >
+                      <button
+                        type="button"
+                        aria-pressed={bankInputMode === "manual"}
+                        className={cn(
+                          "rounded px-3 py-1.5 text-xs font-medium",
+                          bankInputMode === "manual"
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted",
+                        )}
+                        onClick={() => setBankInputMode("manual")}
+                      >
+                        Enter payments
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={bankInputMode === "csv"}
+                        className={cn(
+                          "rounded px-3 py-1.5 text-xs font-medium",
+                          bankInputMode === "csv"
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted",
+                        )}
+                        onClick={() => setBankInputMode("csv")}
+                      >
+                        Upload CSV
+                      </button>
                     </div>
                   </div>
                   {bankInputMode === "manual" ? (
                     <div className="mt-3 space-y-2">
                       {bankPaymentRows.map((row, index) => (
-                        <div key={row.id} className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_auto] xl:items-end">
-                          <Field label={`Employee number · row ${index + 1}`}><input className={inputClass} value={row.employeeNo} placeholder="e.g. EMP-0101" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, employeeNo: event.target.value } : entry))} /></Field>
-                          <Field label="Masked bank account"><input className={inputClass} value={row.accountMasked} placeholder="Optional · ****1234" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, accountMasked: event.target.value } : entry))} /></Field>
-                          <Field label="Bank reference"><input className={inputClass} value={row.reference} placeholder="Optional · e.g. PAY-1001" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, reference: event.target.value } : entry))} /></Field>
-                          <Field label="Amount paid"><input className={inputClass} type="number" min="0" step="0.01" value={row.amount} placeholder="0.00" onChange={(event) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, amount: event.target.value } : entry))} /></Field>
-                          <Field label="Bank result"><FluentSelect ariaLabel={`Bank result for row ${index + 1}`} className="w-full" value={row.status} onChange={(value) => setBankPaymentRows((rows) => rows.map((entry) => entry.id === row.id ? { ...entry, status: value } : entry))} options={[{ value: "PAID", label: "Paid" }, { value: "FAILED", label: "Failed" }, { value: "PENDING", label: "Pending" }]} /></Field>
-                          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40" aria-label={`Remove payment row ${index + 1}`} disabled={bankPaymentRows.length === 1} onClick={() => setBankPaymentRows((rows) => rows.filter((entry) => entry.id !== row.id))}><Delete20Regular aria-hidden="true" /></button>
+                        <div
+                          key={row.id}
+                          className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_auto] xl:items-end"
+                        >
+                          <Field label={`Employee number · row ${index + 1}`}>
+                            <input
+                              className={inputClass}
+                              value={row.employeeNo}
+                              placeholder="e.g. EMP-0101"
+                              onChange={(event) =>
+                                setBankPaymentRows((rows) =>
+                                  rows.map((entry) =>
+                                    entry.id === row.id
+                                      ? {
+                                          ...entry,
+                                          employeeNo: event.target.value,
+                                        }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field label="Masked bank account">
+                            <input
+                              className={inputClass}
+                              value={row.accountMasked}
+                              placeholder="Optional · ****1234"
+                              onChange={(event) =>
+                                setBankPaymentRows((rows) =>
+                                  rows.map((entry) =>
+                                    entry.id === row.id
+                                      ? {
+                                          ...entry,
+                                          accountMasked: event.target.value,
+                                        }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field label="Bank reference">
+                            <input
+                              className={inputClass}
+                              value={row.reference}
+                              placeholder="Optional · e.g. PAY-1001"
+                              onChange={(event) =>
+                                setBankPaymentRows((rows) =>
+                                  rows.map((entry) =>
+                                    entry.id === row.id
+                                      ? {
+                                          ...entry,
+                                          reference: event.target.value,
+                                        }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field label="Amount paid">
+                            <input
+                              className={inputClass}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={row.amount}
+                              placeholder="0.00"
+                              onChange={(event) =>
+                                setBankPaymentRows((rows) =>
+                                  rows.map((entry) =>
+                                    entry.id === row.id
+                                      ? { ...entry, amount: event.target.value }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field label="Bank result">
+                            <FluentSelect
+                              ariaLabel={`Bank result for row ${index + 1}`}
+                              className="w-full"
+                              value={row.status}
+                              onChange={(value) =>
+                                setBankPaymentRows((rows) =>
+                                  rows.map((entry) =>
+                                    entry.id === row.id
+                                      ? { ...entry, status: value }
+                                      : entry,
+                                  ),
+                                )
+                              }
+                              options={[
+                                { value: "PAID", label: "Paid" },
+                                { value: "FAILED", label: "Failed" },
+                                { value: "PENDING", label: "Pending" },
+                              ]}
+                            />
+                          </Field>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-40"
+                            aria-label={`Remove payment row ${index + 1}`}
+                            disabled={bankPaymentRows.length === 1}
+                            onClick={() =>
+                              setBankPaymentRows((rows) =>
+                                rows.filter((entry) => entry.id !== row.id),
+                              )
+                            }
+                          >
+                            <Delete20Regular aria-hidden="true" />
+                          </button>
                         </div>
                       ))}
-                      <button type="button" className={secondaryButtonClass} onClick={() => setBankPaymentRows((rows) => [...rows, { id: Date.now(), employeeNo: "", accountMasked: "", reference: "", amount: "", status: "PAID" }])}><Add20Regular aria-hidden="true" />Add another payment</button>
+                      <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        onClick={() =>
+                          setBankPaymentRows((rows) => [
+                            ...rows,
+                            {
+                              id: Date.now(),
+                              employeeNo: "",
+                              accountMasked: "",
+                              reference: "",
+                              amount: "",
+                              status: "PAID",
+                            },
+                          ])
+                        }
+                      >
+                        <Add20Regular aria-hidden="true" />
+                        Add another payment
+                      </button>
                     </div>
                   ) : (
                     <div className="mt-3 rounded-md border border-dashed border-border bg-background p-4">
-                      <input ref={bankFileInputRef} type="file" accept=".csv,text/csv" className="sr-only" aria-label="Choose bank statement CSV" onChange={(event) => { void onBankStatementFileSelected(event.target.files?.[0] ?? null); event.currentTarget.value = ""; }} />
+                      <input
+                        ref={bankFileInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="sr-only"
+                        aria-label="Choose bank statement CSV"
+                        onChange={(event) => {
+                          void onBankStatementFileSelected(
+                            event.target.files?.[0] ?? null,
+                          );
+                          event.currentTarget.value = "";
+                        }}
+                      />
                       <div className="flex flex-wrap items-center gap-3">
-                        <button type="button" className={secondaryButtonClass} onClick={() => bankFileInputRef.current?.click()}><CloudArrowUp20Regular aria-hidden="true" />Choose CSV file</button>
-                        <button type="button" className={secondaryButtonClass} onClick={downloadBankStatementTemplate}><DocumentBulletList20Regular aria-hidden="true" />Download CSV template</button>
-                        {bankCsvName ? <span className="text-xs text-muted-foreground">{bankCsvName} · {Math.max(0, bankCsvText.trim().split(/\r?\n/).filter(Boolean).length - 1)} payment rows</span> : null}
-                        {bankCsvName ? <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => { setBankCsvText(""); setBankCsvName(""); setBankCsvError(""); }}>Remove file</button> : null}
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          onClick={() => bankFileInputRef.current?.click()}
+                        >
+                          <CloudArrowUp20Regular aria-hidden="true" />
+                          Choose CSV file
+                        </button>
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          onClick={downloadBankStatementTemplate}
+                        >
+                          <DocumentBulletList20Regular aria-hidden="true" />
+                          Download CSV template
+                        </button>
+                        {bankCsvName ? (
+                          <span className="text-xs text-muted-foreground">
+                            {bankCsvName} ·{" "}
+                            {Math.max(
+                              0,
+                              bankCsvText.trim().split(/\r?\n/).filter(Boolean)
+                                .length - 1,
+                            )}{" "}
+                            payment rows
+                          </span>
+                        ) : null}
+                        {bankCsvName ? (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-primary hover:underline"
+                            onClick={() => {
+                              setBankCsvText("");
+                              setBankCsvName("");
+                              setBankCsvError("");
+                            }}
+                          >
+                            Remove file
+                          </button>
+                        ) : null}
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-muted-foreground">CSV must include an <strong>amount</strong> column and at least one matching field: <strong>employee_no</strong>, <strong>employee_id</strong>, <strong>account_number_masked</strong>, or <strong>reference</strong>. Maximum file size: 5 MB.</p>
-                      {bankCsvError ? <p role="alert" className="mt-2 text-xs font-medium text-destructive">{bankCsvError}</p> : null}
+                      <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                        CSV must include an <strong>amount</strong> column and
+                        at least one matching field:{" "}
+                        <strong>employee_no</strong>,{" "}
+                        <strong>employee_id</strong>,{" "}
+                        <strong>account_number_masked</strong>, or{" "}
+                        <strong>reference</strong>. Maximum file size: 5 MB.
+                      </p>
+                      {bankCsvError ? (
+                        <p
+                          role="alert"
+                          className="mt-2 text-xs font-medium text-destructive"
+                        >
+                          {bankCsvError}
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 </div>
                 <details className="rounded-md border border-border px-3 py-2">
-                  <summary className="cursor-pointer text-xs font-medium text-foreground">Optional batch details</summary>
+                  <summary className="cursor-pointer text-xs font-medium text-foreground">
+                    Optional batch details
+                  </summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <Field label="Bank batch ID"><input className={inputClass} value={advancedForm.bankBatchId} onChange={(event) => setAdvancedForm((current) => ({ ...current, bankBatchId: event.target.value }))} placeholder="Optional" /></Field>
-                    <Field label="Payment reference"><input className={inputClass} value={advancedForm.paymentReference} onChange={(event) => setAdvancedForm((current) => ({ ...current, paymentReference: event.target.value }))} placeholder="Optional" /></Field>
-                    <Field label="Payment date"><DateInput className={inputClass} value={advancedForm.paymentDate} onChange={(event) => setAdvancedForm((current) => ({ ...current, paymentDate: event.target.value }))} /></Field>
+                    <Field label="Bank batch ID">
+                      <input
+                        className={inputClass}
+                        value={advancedForm.bankBatchId}
+                        onChange={(event) =>
+                          setAdvancedForm((current) => ({
+                            ...current,
+                            bankBatchId: event.target.value,
+                          }))
+                        }
+                        placeholder="Optional"
+                      />
+                    </Field>
+                    <Field label="Payment reference">
+                      <input
+                        className={inputClass}
+                        value={advancedForm.paymentReference}
+                        onChange={(event) =>
+                          setAdvancedForm((current) => ({
+                            ...current,
+                            paymentReference: event.target.value,
+                          }))
+                        }
+                        placeholder="Optional"
+                      />
+                    </Field>
+                    <Field label="Payment date">
+                      <DateInput
+                        className={inputClass}
+                        value={advancedForm.paymentDate}
+                        onChange={(event) =>
+                          setAdvancedForm((current) => ({
+                            ...current,
+                            paymentDate: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
                   </div>
                 </details>
                 <button
                   type="button"
                   className={primaryButtonClass}
-                  disabled={reportBusy === "bank-import" || !advancedForm.bankImportRunId || (bankInputMode === "csv" && !bankCsvText.trim())}
+                  disabled={
+                    reportBusy === "bank-import" ||
+                    !advancedForm.bankImportRunId ||
+                    (bankInputMode === "csv" && !bankCsvText.trim())
+                  }
                   onClick={() => void onImportBankStatement()}
                 >
                   {reportBusy === "bank-import" ? (
@@ -9185,11 +9958,21 @@ export function PayrollOperationsView() {
                 </button>
               </div>
             </div>
-            <div id="payroll-journal" className="scroll-mt-24 rounded-xl border border-border bg-card p-4">
+            <div
+              id="payroll-journal"
+              className="scroll-mt-24 rounded-xl border border-border bg-card p-4"
+            >
               <div className="mb-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold"><DocumentBulletList20Regular aria-hidden="true" className="text-primary" />Accounting journal</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <DocumentBulletList20Regular
+                    aria-hidden="true"
+                    className="text-primary"
+                  />
+                  Accounting journal
+                </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Export a journal batch, mark it as posted to your accounting system, or reverse a posted batch when correcting an entry.
+                  Export a journal batch, mark it as posted to your accounting
+                  system, or reverse a posted batch when correcting an entry.
                 </p>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
@@ -9243,7 +10026,7 @@ export function PayrollOperationsView() {
                     }
                   />
                 </Field>
-                  <Field label="Export format">
+                <Field label="Export format">
                   <FluentSelect
                     ariaLabel="Export format"
                     className="w-full"
@@ -9731,18 +10514,65 @@ export function PayrollOperationsView() {
                     ) : null}
                     {reportRows && reportRows.length > 0 ? (
                       <div className="space-y-2">
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-between gap-3">
+                          {(() => {
+                            const pagination = asRecord(
+                              reportResult.pagination,
+                            );
+                            if (!pagination) return <span />;
+                            const currentPage =
+                              readNumber(pagination, ["page"]) ?? 1;
+                            const totalPages =
+                              readNumber(pagination, ["total_pages"]) ?? 1;
+                            const totalRows =
+                              readNumber(pagination, ["total_rows"]) ??
+                              reportRows.length;
+                            return (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>
+                                  {totalRows} filtered rows · page {currentPage}{" "}
+                                  of {Math.max(totalPages, 1)}
+                                </span>
+                                <button
+                                  type="button"
+                                  className={secondaryButtonClass}
+                                  disabled={
+                                    currentPage <= 1 ||
+                                    reportBusy === "catalog-report"
+                                  }
+                                  onClick={() =>
+                                    void onRunCatalogReport(
+                                      undefined,
+                                      currentPage - 1,
+                                    )
+                                  }
+                                >
+                                  Previous
+                                </button>
+                                <button
+                                  type="button"
+                                  className={secondaryButtonClass}
+                                  disabled={
+                                    currentPage >= totalPages ||
+                                    reportBusy === "catalog-report"
+                                  }
+                                  onClick={() =>
+                                    void onRunCatalogReport(
+                                      undefined,
+                                      currentPage + 1,
+                                    )
+                                  }
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            );
+                          })()}
                           <button
                             type="button"
                             className={secondaryButtonClass}
-                            onClick={() =>
-                              downloadBlob(
-                                new Blob([reportRowsToCsv(reportRows)], {
-                                  type: "text/csv;charset=utf-8",
-                                }),
-                                `payroll-${advancedForm.reportCode || reportKind || "report"}.csv`,
-                              )
-                            }
+                            disabled={reportBusy === "report-export"}
+                            onClick={() => void onExportReportCsv(reportRows)}
                           >
                             Export CSV
                           </button>
@@ -9761,6 +10591,11 @@ export function PayrollOperationsView() {
                                       {prettify(key)}
                                     </th>
                                   ))}
+                                {reportKind === "variance" ? (
+                                  <th className="px-3 py-2 text-left font-semibold">
+                                    Review explanation
+                                  </th>
+                                ) : null}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -9776,6 +10611,68 @@ export function PayrollOperationsView() {
                                         {formatAdminValue(row[key])}
                                       </td>
                                     ))}
+                                  {reportKind === "variance" ? (
+                                    <td className="min-w-64 px-3 py-2">
+                                      <div className="flex min-w-64 items-center gap-2">
+                                        <Textarea
+                                          value={
+                                            varianceExplanations[
+                                              String(
+                                                readNumber(row, [
+                                                  "employee_id",
+                                                  "employeeId",
+                                                ]) ?? "",
+                                              )
+                                            ] ??
+                                            readString(row, ["explanation"], "")
+                                          }
+                                          onChange={(event) =>
+                                            setVarianceExplanations(
+                                              (current) => ({
+                                                ...current,
+                                                [String(
+                                                  readNumber(row, [
+                                                    "employee_id",
+                                                    "employeeId",
+                                                  ]) ?? "",
+                                                )]: event.target.value,
+                                              }),
+                                            )
+                                          }
+                                          placeholder="Explain this change"
+                                          rows={2}
+                                          maxLength={2000}
+                                          disabled={
+                                            readString(row, [
+                                              "explanation_status",
+                                            ]) === "REVIEWED" ||
+                                            reportBusy ===
+                                              `variance-review-${readNumber(row, ["employee_id", "employeeId"])}`
+                                          }
+                                        />
+                                        <button
+                                          type="button"
+                                          className={secondaryButtonClass}
+                                          onClick={() =>
+                                            void onReviewVarianceRow(row)
+                                          }
+                                          disabled={
+                                            readString(row, [
+                                              "explanation_status",
+                                            ]) === "REVIEWED" ||
+                                            reportBusy ===
+                                              `variance-review-${readNumber(row, ["employee_id", "employeeId"])}`
+                                          }
+                                        >
+                                          {readString(row, [
+                                            "explanation_status",
+                                          ]) === "REVIEWED"
+                                            ? "Reviewed"
+                                            : "Save review"}
+                                        </button>
+                                      </div>
+                                    </td>
+                                  ) : null}
                                 </tr>
                               ))}
                             </tbody>
@@ -9792,37 +10689,67 @@ export function PayrollOperationsView() {
       ) : tab === "configuration" && configTab === "security" ? (
         <section className="space-y-5 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div>
-            <h2 className="text-base font-semibold">Payroll generation security</h2>
+            <h2 className="text-base font-semibold">
+              Payroll generation security
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Enable at least one method. Operators can generate payroll with a 2FA verified login or a fresh authenticator code, based on the methods you allow.
+              Enable at least one method. Operators can generate payroll with a
+              2FA verified login or a fresh authenticator code, based on the
+              methods you allow.
             </p>
           </div>
           {securityPolicyLoading ? (
-            <p className="text-sm text-muted-foreground">Loading payroll security policy…</p>
+            <p className="text-sm text-muted-foreground">
+              Loading payroll security policy…
+            </p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
                 <input
                   type="checkbox"
-                  checked={readBoolean(securityPolicy, ["allow_verified_login"])}
+                  checked={readBoolean(securityPolicy, [
+                    "allow_verified_login",
+                  ])}
                   disabled={!canMutatePayroll || securityPolicySaving}
-                  onChange={(event) => setSecurityPolicy((current) => ({ ...current, allow_verified_login: event.target.checked }))}
+                  onChange={(event) =>
+                    setSecurityPolicy((current) => ({
+                      ...current,
+                      allow_verified_login: event.target.checked,
+                    }))
+                  }
                 />
                 <span>
-                  <span className="block text-sm font-medium">Verified 2FA login</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">Allow generation from a session that completed authenticator verification during sign-in.</span>
+                  <span className="block text-sm font-medium">
+                    Verified 2FA login
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Allow generation from a session that completed authenticator
+                    verification during sign-in.
+                  </span>
                 </span>
               </label>
               <label className="flex cursor-pointer gap-3 rounded-lg border border-border p-4">
                 <input
                   type="checkbox"
-                  checked={readBoolean(securityPolicy, ["allow_fresh_authenticator"])}
+                  checked={readBoolean(securityPolicy, [
+                    "allow_fresh_authenticator",
+                  ])}
                   disabled={!canMutatePayroll || securityPolicySaving}
-                  onChange={(event) => setSecurityPolicy((current) => ({ ...current, allow_fresh_authenticator: event.target.checked }))}
+                  onChange={(event) =>
+                    setSecurityPolicy((current) => ({
+                      ...current,
+                      allow_fresh_authenticator: event.target.checked,
+                    }))
+                  }
                 />
                 <span>
-                  <span className="block text-sm font-medium">Fresh authenticator code</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">Require a new six-digit code when payroll is generated. Codes are single-use for payroll generation.</span>
+                  <span className="block text-sm font-medium">
+                    Fresh authenticator code
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Require a new six-digit code when payroll is generated.
+                    Codes are single-use for payroll generation.
+                  </span>
                 </span>
               </label>
             </div>
@@ -9836,15 +10763,30 @@ export function PayrollOperationsView() {
             />
           </Field>
           <div className="rounded-lg border border-border/70 bg-muted/30 p-4">
-            <h3 className="text-sm font-semibold">Mandatory payroll approvals</h3>
-            <p className="mt-1 text-xs text-muted-foreground">All three stages are required in order. The run creator cannot approve; each stage must be approved by a different user, using the same calculation hash.</p>
+            <h3 className="text-sm font-semibold">
+              Mandatory payroll approvals
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              All three stages are required in order. The run creator cannot
+              approve; each stage must be approved by a different user, using
+              the same calculation hash.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              {["HR", "Finance", "Management"].map((stage) => <Badge key={stage} variant="outline">{stage} required</Badge>)}
+              {["HR", "Finance", "Management"].map((stage) => (
+                <Badge key={stage} variant="outline">
+                  {stage} required
+                </Badge>
+              ))}
             </div>
           </div>
           {canMutatePayroll ? (
             <div className="flex justify-end">
-              <button type="button" className={primaryButtonClass} disabled={securityPolicySaving || securityPolicyLoading} onClick={() => void onSaveSecurityPolicy()}>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={securityPolicySaving || securityPolicyLoading}
+                onClick={() => void onSaveSecurityPolicy()}
+              >
                 {securityPolicySaving ? "Saving…" : "Save security policy"}
               </button>
             </div>
@@ -9852,226 +10794,273 @@ export function PayrollOperationsView() {
         </section>
       ) : (
         <div className="space-y-4">
-        <ResizableTable
-          title={sectionTitle}
-          data={rows}
-          columns={columns}
-          loading={loading}
-          itemsPerPage={20}
-          showExport={false}
-          storageKey={`operations-payroll-${tab}-${configTab}`}
-          toolbarStart={
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-foreground">
-                {sectionTitle}
-              </h2>
-            </div>
-          }
-          toolbarActions={
-            <>
-              <SearchToggleField
-                className="min-w-0"
-                placeholder="Search payroll"
-                value={search}
-                onChange={setSearch}
-              />
-              {["runs", "inputs", "sources", "profiles"].includes(tab) ? (
-                <FluentSelect
-                  ariaLabel="Payroll period"
-                  value={periodFilter}
-                  placeholder="All periods"
-                  onChange={setPeriodFilter}
-                  options={[
-                    { value: "", label: "All periods" },
-                    ...periods.flatMap((row) => {
-                      const id = readNumber(row, ["id"]);
-                      if (id === null) return [];
-                      return [{ value: String(id), label: readPeriodLabel(row) }];
-                    }),
-                  ]}
-                />
-              ) : null}
-              {[
-                "runs",
-                "inputs",
-                "sources",
-                "profiles",
-                "periods",
-              ].includes(tab) ? (
-                <input
-                  className="h-10 w-28 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value)}
-                  placeholder="Status"
-                />
-              ) : null}
-              {canCreate ? (
-                <button
-                  type="button"
-                  className={primaryButtonClass}
-                  onClick={() =>
-                    openCreate(
-                      tab === "runs"
-                        ? "run"
-                        : tab === "inputs"
-                          ? "input"
-                          : tab === "sources"
-                            ? "source"
-                            : tab === "profiles"
-                              ? "profile"
-                              : tab === "periods"
-                                ? "period"
-                                : configTab === "components"
-                                  ? "component"
-                                  : configTab === "calendars"
-                                    ? "calendar"
-                                    : configTab === "structures"
-                                      ? "structure"
-                                      : configTab === "schemes"
-                                        ? "scheme"
-                                        : configTab === "mappings"
-                                          ? "mapping"
-                                          : configTab === "groups"
-                                            ? "group"
-                                            : configTab === "assignments"
-                                              ? "assignment"
-                                              : configTab === "overtime"
-                                                ? "overtime"
-                                                : configTab === "bonus"
-                                                  ? "bonus"
-                                                  : "leaveRule",
-                    )
-                  }
-                >
-                  <Add20Regular className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">
-                    {tab === "periods" ? "Generate period" : "Create"}
-                  </span>
-                </button>
-              ) : null}
-              {tab === "configuration" && configTab === "schemes" ? (
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={openRuleDialog}
-                >
-                  <Add20Regular className="h-3.5 w-3.5" />
-                  Add rule
-                </button>
-              ) : null}
-              {tab === "inputs" && canMutatePayroll ? (
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={() => openCreate("adjustment")}
-                >
-                  <Add20Regular className="h-3.5 w-3.5" />
-                  Adjustment
-                </button>
-              ) : null}
-              {tab === "sources" && canMutatePayroll ? (
-                <>
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => openCreate("sourceImport")}
-                  >
-                    <Add20Regular className="h-3.5 w-3.5" />
-                    Import
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButtonClass}
-                    onClick={() => openCreate("sourceGenerate")}
-                  >
-                    <Add20Regular className="h-3.5 w-3.5" />
-                    Generate
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background"
-                disabled={loading}
-                onClick={() => void loadRows({ refreshLookups: true })}
-                aria-label="Refresh"
-                title="Refresh"
-              >
-                <ArrowClockwise20Regular
-                  className={cn(
-                    "h-3.5 w-3.5 text-primary",
-                    loading && "animate-spin",
-                  )}
-                />
-              </button>
-            </>
-          }
-          onRowSelect={(_, row) => {
-            if (!row) return;
-            void openDetail(row);
-          }}
-        />
-        {tab === "configuration" && configTab === "schemes" ? (
-          <section className="rounded-xl border border-border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">Statutory rule versions</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Verify each rule against its source evidence. A different user from the rule creator must approve it.
-                </p>
+          <ResizableTable
+            title={sectionTitle}
+            data={rows}
+            columns={columns}
+            loading={loading}
+            itemsPerPage={20}
+            showExport={false}
+            storageKey={`operations-payroll-${tab}-${configTab}`}
+            toolbarStart={
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-semibold text-foreground">
+                  {sectionTitle}
+                </h2>
               </div>
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                disabled={loading}
-                onClick={() => void loadRows({ refreshLookups: true })}
-              >
-                Refresh rules
-              </button>
-            </div>
-            <div className="mt-3 space-y-2">
-              {statutoryRules.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
-                  No statutory rule versions found.
-                </p>
-              ) : statutoryRules.map((rule) => {
-                const id = rowId(rule);
-                const scheme = asRecord(rule.scheme);
-                const configuration = asRecord(rule.configuration);
-                const status = readStatus(rule).toUpperCase();
-                const busy = approvingStatutoryRuleId === id;
-                return (
-                  <div key={id} className="grid gap-3 rounded-lg border border-border/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium">
-                          {readString(scheme, ["name", "code"], "Statutory scheme")} · v{readString(rule, ["version_number", "versionNumber"], "1")}
-                        </p>
-                        <Badge variant="outline" className={cn("capitalize", statusTone(status))}>{prettify(status)}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {prettify(readString(rule, ["calculation_method", "calculationMethod"], ""))} · Effective {formatAdminValue(rule.effective_from ?? rule.effectiveFrom)} to {formatAdminValue(rule.effective_to ?? rule.effectiveTo)} · {asRecordArray(rule.bands).length} tax band(s)
-                      </p>
-                      <p className="break-words text-xs text-muted-foreground">
-                        Source: {readString(configuration, ["source_reference", "sourceReference"], "Missing source reference")}
-                      </p>
-                    </div>
-                    {status === "DRAFT" && canApproveStatutoryRule ? (
-                      <button
-                        type="button"
-                        className={primaryButtonClass}
-                        disabled={busy || !readString(configuration, ["source_reference", "sourceReference"])}
-                        onClick={() => void onApproveStatutoryRule(rule)}
+            }
+            toolbarActions={
+              <>
+                <SearchToggleField
+                  className="min-w-0"
+                  placeholder="Search payroll"
+                  value={search}
+                  onChange={setSearch}
+                />
+                {["runs", "inputs", "sources", "profiles"].includes(tab) ? (
+                  <FluentSelect
+                    ariaLabel="Payroll period"
+                    value={periodFilter}
+                    placeholder="All periods"
+                    onChange={setPeriodFilter}
+                    options={[
+                      { value: "", label: "All periods" },
+                      ...periods.flatMap((row) => {
+                        const id = readNumber(row, ["id"]);
+                        if (id === null) return [];
+                        return [
+                          { value: String(id), label: readPeriodLabel(row) },
+                        ];
+                      }),
+                    ]}
+                  />
+                ) : null}
+                {["runs", "inputs", "sources", "profiles", "periods"].includes(
+                  tab,
+                ) ? (
+                  <input
+                    className="h-10 w-28 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    placeholder="Status"
+                  />
+                ) : null}
+                {canCreate ? (
+                  <button
+                    type="button"
+                    className={primaryButtonClass}
+                    onClick={() =>
+                      openCreate(
+                        tab === "runs"
+                          ? "run"
+                          : tab === "inputs"
+                            ? "input"
+                            : tab === "sources"
+                              ? "source"
+                              : tab === "profiles"
+                                ? "profile"
+                                : tab === "periods"
+                                  ? "period"
+                                  : configTab === "components"
+                                    ? "component"
+                                    : configTab === "calendars"
+                                      ? "calendar"
+                                      : configTab === "structures"
+                                        ? "structure"
+                                        : configTab === "schemes"
+                                          ? "scheme"
+                                          : configTab === "mappings"
+                                            ? "mapping"
+                                            : configTab === "groups"
+                                              ? "group"
+                                              : configTab === "assignments"
+                                                ? "assignment"
+                                                : configTab === "overtime"
+                                                  ? "overtime"
+                                                  : configTab === "bonus"
+                                                    ? "bonus"
+                                                    : "leaveRule",
+                      )
+                    }
+                  >
+                    <Add20Regular className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">
+                      {tab === "periods" ? "Generate period" : "Create"}
+                    </span>
+                  </button>
+                ) : null}
+                {tab === "configuration" && configTab === "schemes" ? (
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    onClick={openRuleDialog}
+                  >
+                    <Add20Regular className="h-3.5 w-3.5" />
+                    Add rule
+                  </button>
+                ) : null}
+                {tab === "inputs" && canMutatePayroll ? (
+                  <button
+                    type="button"
+                    className={secondaryButtonClass}
+                    onClick={() => openCreate("adjustment")}
+                  >
+                    <Add20Regular className="h-3.5 w-3.5" />
+                    Adjustment
+                  </button>
+                ) : null}
+                {tab === "sources" && canMutatePayroll ? (
+                  <>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => openCreate("sourceImport")}
+                    >
+                      <Add20Regular className="h-3.5 w-3.5" />
+                      Import
+                    </button>
+                    <button
+                      type="button"
+                      className={secondaryButtonClass}
+                      onClick={() => openCreate("sourceGenerate")}
+                    >
+                      <Add20Regular className="h-3.5 w-3.5" />
+                      Generate
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background"
+                  disabled={loading}
+                  onClick={() => void loadRows({ refreshLookups: true })}
+                  aria-label="Refresh"
+                  title="Refresh"
+                >
+                  <ArrowClockwise20Regular
+                    className={cn(
+                      "h-3.5 w-3.5 text-primary",
+                      loading && "animate-spin",
+                    )}
+                  />
+                </button>
+              </>
+            }
+            onRowSelect={(_, row) => {
+              if (!row) return;
+              void openDetail(row);
+            }}
+          />
+          {tab === "configuration" && configTab === "schemes" ? (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Statutory rule versions
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Verify each rule against its source evidence. A different
+                    user from the rule creator must approve it.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={secondaryButtonClass}
+                  disabled={loading}
+                  onClick={() => void loadRows({ refreshLookups: true })}
+                >
+                  Refresh rules
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {statutoryRules.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+                    No statutory rule versions found.
+                  </p>
+                ) : (
+                  statutoryRules.map((rule) => {
+                    const id = rowId(rule);
+                    const scheme = asRecord(rule.scheme);
+                    const configuration = asRecord(rule.configuration);
+                    const status = readStatus(rule).toUpperCase();
+                    const busy = approvingStatutoryRuleId === id;
+                    return (
+                      <div
+                        key={id}
+                        className="grid gap-3 rounded-lg border border-border/70 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                       >
-                        {busy ? "Approving…" : "Approve rule"}
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium">
+                              {readString(
+                                scheme,
+                                ["name", "code"],
+                                "Statutory scheme",
+                              )}{" "}
+                              · v
+                              {readString(
+                                rule,
+                                ["version_number", "versionNumber"],
+                                "1",
+                              )}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={cn("capitalize", statusTone(status))}
+                            >
+                              {prettify(status)}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {prettify(
+                              readString(
+                                rule,
+                                ["calculation_method", "calculationMethod"],
+                                "",
+                              ),
+                            )}{" "}
+                            · Effective{" "}
+                            {formatAdminValue(
+                              rule.effective_from ?? rule.effectiveFrom,
+                            )}{" "}
+                            to{" "}
+                            {formatAdminValue(
+                              rule.effective_to ?? rule.effectiveTo,
+                            )}{" "}
+                            · {asRecordArray(rule.bands).length} tax band(s)
+                          </p>
+                          <p className="break-words text-xs text-muted-foreground">
+                            Source:{" "}
+                            {readString(
+                              configuration,
+                              ["source_reference", "sourceReference"],
+                              "Missing source reference",
+                            )}
+                          </p>
+                        </div>
+                        {status === "DRAFT" && canApproveStatutoryRule ? (
+                          <button
+                            type="button"
+                            className={primaryButtonClass}
+                            disabled={
+                              busy ||
+                              !readString(configuration, [
+                                "source_reference",
+                                "sourceReference",
+                              ])
+                            }
+                            onClick={() => void onApproveStatutoryRule(rule)}
+                          >
+                            {busy ? "Approving…" : "Approve rule"}
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          ) : null}
         </div>
       )}
 
@@ -10197,7 +11186,6 @@ export function PayrollOperationsView() {
           </DialogHeader>
           <Field label="Effective from">
             <DateInput
-
               className={inputClass}
               value={versionEffectiveFrom}
               onChange={(event) => setVersionEffectiveFrom(event.target.value)}
@@ -10269,13 +11257,18 @@ export function PayrollOperationsView() {
         }
       />
 
-      <Dialog open={createOpen} onOpenChange={(open) => {
-        setCreateOpen(open);
-        if (!open) setEditingCalendar(null);
-      }}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setEditingCalendar(null);
+        }}
+      >
         <DialogPopup className="flex max-h-[90vh] w-[min(980px,96vw)] flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{editingCalendar ? "Edit payroll calendar" : createButtonLabel}</DialogTitle>
+            <DialogTitle>
+              {editingCalendar ? "Edit payroll calendar" : createButtonLabel}
+            </DialogTitle>
             <DialogDescription>
               {createMode === "profile"
                 ? "Create or update an employee payroll profile."
@@ -10310,8 +11303,8 @@ export function PayrollOperationsView() {
                   : editingCalendar
                     ? "Save changes"
                     : createMode === "period"
-                    ? "Generate"
-                    : "Create"}
+                      ? "Generate"
+                      : "Create"}
               </button>
             </div>
           </DialogFooter>
@@ -10331,8 +11324,10 @@ export function PayrollOperationsView() {
           <DialogHeader>
             <DialogTitle>Generate payroll run</DialogTitle>
             <DialogDescription>
-              {`Run ${readString(processTarget, ["runNo", "run_no"], rowId(processTarget))} will be calculated and sent through HR, Finance, and Management approval.`}
-              {" "}If your current login completed 2FA, you may continue without a code. Otherwise enter a fresh authenticator code if that method is enabled.
+              {`Run ${readString(processTarget, ["runNo", "run_no"], rowId(processTarget))} will be calculated and sent through HR, Finance, and Management approval.`}{" "}
+              If your current login completed 2FA, you may continue without a
+              code. Otherwise enter a fresh authenticator code if that method is
+              enabled.
             </DialogDescription>
           </DialogHeader>
           <Field label="Fresh six-digit authenticator code (optional for verified login)">
@@ -10342,20 +11337,40 @@ export function PayrollOperationsView() {
               autoComplete="one-time-code"
               maxLength={6}
               value={processAuthenticatorCode}
-              onChange={(event) => setProcessAuthenticatorCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(event) =>
+                setProcessAuthenticatorCode(
+                  event.target.value.replace(/\D/g, "").slice(0, 6),
+                )
+              }
             />
           </Field>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setProcessTarget(null)}>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setProcessTarget(null)}
+            >
               Cancel
             </button>
             <button
               type="button"
               className={primaryButtonClass}
-              disabled={processingRunId === rowId(processTarget) || (processAuthenticatorCode.length > 0 && processAuthenticatorCode.length !== 6)}
-              onClick={() => processTarget && void onProcessRun(processTarget, processAuthenticatorCode || undefined)}
+              disabled={
+                processingRunId === rowId(processTarget) ||
+                (processAuthenticatorCode.length > 0 &&
+                  processAuthenticatorCode.length !== 6)
+              }
+              onClick={() =>
+                processTarget &&
+                void onProcessRun(
+                  processTarget,
+                  processAuthenticatorCode || undefined,
+                )
+              }
             >
-              {processingRunId === rowId(processTarget) ? "Processing…" : "Generate payroll"}
+              {processingRunId === rowId(processTarget)
+                ? "Processing…"
+                : "Generate payroll"}
             </button>
           </DialogFooter>
         </DialogPopup>
@@ -10374,38 +11389,65 @@ export function PayrollOperationsView() {
           <DialogHeader>
             <DialogTitle>Edit payroll period dates</DialogTitle>
             <DialogDescription>
-              Edit before payroll processing. Locked, paid, closed, or cancelled periods cannot be changed. Each change is audited.
+              Edit before payroll processing. Locked, paid, closed, or cancelled
+              periods cannot be changed. Each change is audited.
             </DialogDescription>
           </DialogHeader>
-          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+          {formError ? (
+            <p className="text-sm text-rose-600">{formError}</p>
+          ) : null}
           <div className="grid gap-3">
             <Field label="Cut-off date">
               <DateInput
                 className={inputClass}
                 value={periodDatesForm.cutoffDate}
-                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, cutoffDate: event.target.value }))}
+                onChange={(event) =>
+                  setPeriodDatesForm((current) => ({
+                    ...current,
+                    cutoffDate: event.target.value,
+                  }))
+                }
               />
             </Field>
             <Field label="Payment date">
               <DateInput
                 className={inputClass}
                 value={periodDatesForm.paymentDate}
-                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, paymentDate: event.target.value }))}
+                onChange={(event) =>
+                  setPeriodDatesForm((current) => ({
+                    ...current,
+                    paymentDate: event.target.value,
+                  }))
+                }
               />
             </Field>
             <Field label="Reason for change">
               <Textarea
                 className={textareaClass}
                 value={periodDatesForm.reason}
-                onChange={(event) => setPeriodDatesForm((current) => ({ ...current, reason: event.target.value }))}
+                onChange={(event) =>
+                  setPeriodDatesForm((current) => ({
+                    ...current,
+                    reason: event.target.value,
+                  }))
+                }
               />
             </Field>
           </div>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setPeriodDatesTarget(null)}>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setPeriodDatesTarget(null)}
+            >
               Cancel
             </button>
-            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onSavePeriodDates()}>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={saving}
+              onClick={() => void onSavePeriodDates()}
+            >
               {saving ? "Saving…" : "Save dates"}
             </button>
           </DialogFooter>
@@ -10440,15 +11482,19 @@ export function PayrollOperationsView() {
                             String(
                               readNumber(rule, ["schemeId", "scheme_id"]) ??
                                 readNumber(
-                                  (rule.scheme as AdminRecord | undefined) ?? {},
+                                  (rule.scheme as AdminRecord | undefined) ??
+                                    {},
                                   ["id"],
                                 ) ??
                                 "",
                             ) === value,
                         )
-                        .map((rule) =>
-                          readNumber(rule, ["versionNumber", "version_number"]) ??
-                          0,
+                        .map(
+                          (rule) =>
+                            readNumber(rule, [
+                              "versionNumber",
+                              "version_number",
+                            ]) ?? 0,
                         ),
                     );
                     setRuleForm((current) => ({
