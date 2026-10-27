@@ -14729,13 +14729,26 @@ export async function listMyProfileUpdateRequests(
     `/api/me/profile-update-requests${query}`,
     { token },
   );
-  const rows = normalizeList(payload);
+  const legacyRows = normalizeList(payload);
+  // Keep legacy request history readable while new submissions use the
+  // field-policy workflow. The two histories have separate IDs and statuses.
+  const canonicalRows = await listMyProfileChangeRequests(token, {
+    page: fallbackPage,
+    limit: fallbackLimit,
+  }).catch(() => []);
+  const rows = [...legacyRows, ...canonicalRows]
+    .sort((left, right) => {
+      const leftDate = String(left.created_at ?? left.createdAt ?? "")
+      const rightDate = String(right.created_at ?? right.createdAt ?? "")
+      return rightDate.localeCompare(leftDate)
+    })
+    .slice(0, fallbackLimit)
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,
     fallbackLimit,
   );
-  return { rows, ...pagination };
+  return { rows, ...pagination, total: (pagination.total ?? 0) + canonicalRows.length };
 }
 
 export async function getMyProfileUpdateRequest(
@@ -21502,6 +21515,16 @@ export async function getManagerDashboard(
   params: Record<string, string | number | undefined> = {},
 ) {
   return getHrDashboard(token, "manager", params);
+}
+
+export async function getManagerActivitySummary(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<AdminRecord>(
+    `/api/manager/activity-summary${buildRecordQuery(params)}`,
+    { token },
+  );
 }
 
 export async function listManagerActionItems(

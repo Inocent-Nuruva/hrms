@@ -23,6 +23,7 @@ import {
 } from "@/components/dashboard/talent-visuals"
 import {
   getManagerDashboard,
+  getManagerActivitySummary,
   getManagerTeamMember,
   listManagerActionItems,
   listManagerTeam,
@@ -39,7 +40,7 @@ import { readStoredSessionTokens } from "@/lib/session-client"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
-export type ManagerSelfTab = "overview" | "members" | "attendance" | "actions"
+export type ManagerSelfTab = "overview" | "members" | "attendance" | "actions" | "activity-summary"
 
 function readStoredToken() {
   return readStoredSessionTokens().accessToken.trim()
@@ -66,6 +67,9 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
   const [actionStatus, setActionStatus] = React.useState("")
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
+  const [summaryPeriodType, setSummaryPeriodType] = React.useState("MONTHLY")
+  const [summaryAnchorDate, setSummaryAnchorDate] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [activitySummary, setActivitySummary] = React.useState<AdminRecord | null>(null)
 
   const load = React.useCallback(async () => {
     // Do not make manager API calls until the current access context is ready.
@@ -129,6 +133,17 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
         }),
       )
     }
+    if (activeTab === "activity-summary") {
+      tasks.push(
+        getManagerActivitySummary(token, {
+          period_type: summaryPeriodType,
+          anchor_date: summaryAnchorDate,
+        }).then(setActivitySummary).catch((errorObject) => {
+          setActivitySummary(null)
+          throw errorObject
+        }),
+      )
+    }
     const results = await Promise.allSettled(tasks)
     const first = results.find((result) => result.status === "rejected")
     if (first && first.status === "rejected") {
@@ -139,18 +154,46 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
       setError(first.reason instanceof Error ? first.reason.message : "Could not load manager data.")
     }
     setLoading(false)
-  }, [actionStatus, activeTab, actor.ready, dateFrom, dateTo, directOnly, leaveIfForbidden])
+  }, [actionStatus, activeTab, actor.ready, dateFrom, dateTo, directOnly, leaveIfForbidden, summaryAnchorDate, summaryPeriodType])
 
   React.useEffect(() => {
     if (!actor.ready) return
     void load()
   }, [actor.ready, load])
 
-  const rows =
-    activeTab === "attendance" ? attendance : activeTab === "actions" ? actions : members
+  const activitySummaryRows = Array.isArray(activitySummary?.data)
+    ? activitySummary.data.filter((row): row is AdminRecord => typeof row === "object" && row !== null && !Array.isArray(row))
+    : []
+  const rows = activeTab === "attendance"
+    ? attendance
+    : activeTab === "actions"
+      ? actions
+      : activeTab === "activity-summary"
+        ? activitySummaryRows
+        : members
   const visible = rows.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
+    if (activeTab === "activity-summary") {
+      return [
+        { key: "employee", label: "Employee", render: (row) => readString(row, ["employee_name"], employeeLabel(row)) },
+        { key: "submitted", label: "Submitted days", render: (row) => readNumber(row, ["submitted_days"]) ?? 0 },
+        { key: "missing", label: "Missing days", render: (row) => readNumber(row, ["missing_days"]) ?? 0 },
+        { key: "approved", label: "Approved reports", render: (row) => readNumber(row, ["approved_reports"]) ?? 0 },
+        { key: "late", label: "Late reports", render: (row) => readNumber(row, ["late_reports"]) ?? 0 },
+        { key: "states", label: "Report states", render: (row) => {
+          const counts = row.report_status_counts
+          if (!counts || typeof counts !== "object" || Array.isArray(counts)) return "—"
+          const entries = Object.entries(counts as Record<string, unknown>)
+            .filter(([, count]) => typeof count === "number" && count > 0)
+            .map(([status, count]) => `${prettify(status)} ${count}`)
+          return entries.length ? entries.join(" · ") : "—"
+        } },
+        { key: "planned", label: "Planned work", render: (row) => readNumber(row, ["planned_activities"]) ?? 0 },
+        { key: "completed", label: "Completed", render: (row) => readNumber(row, ["completed_activities"]) ?? 0 },
+        { key: "rate", label: "Completion", render: (row) => { const rate = readNumber(row, ["completion_rate"]); return rate === null ? "—" : `${rate}%` } },
+      ]
+    }
     if (activeTab === "attendance") {
       return [
         { key: "employee", label: "Employee", render: (row) => employeeLabel(row) },
@@ -203,7 +246,7 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
-              {activeTab === "members" ? "Team members" : activeTab === "attendance" ? "Team attendance" : "Action items"}
+              {activeTab === "members" ? "Team members" : activeTab === "attendance" ? "Team attendance" : activeTab === "activity-summary" ? "Team activity summary" : "Action items"}
             </h1>
             <p className="text-sm text-muted-foreground">One backend page at a time — filters are sent on the request.</p>
           </div>
@@ -230,6 +273,21 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
                 <DateInput className={inputClass + " max-w-40"} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
               </>
             ) : null}
+            {activeTab === "activity-summary" ? (
+              <>
+                <FluentSelect
+                  ariaLabel="Summary period"
+                  className="max-w-44"
+                  value={summaryPeriodType}
+                  onChange={setSummaryPeriodType}
+                  options={[
+                    { value: "WEEKLY", label: "Calendar week" },
+                    { value: "MONTHLY", label: "Calendar month" },
+                  ]}
+                />
+                <DateInput className={inputClass + " max-w-40"} value={summaryAnchorDate} onChange={(event) => setSummaryAnchorDate(event.target.value)} />
+              </>
+            ) : null}
             {activeTab === "actions" ? (
               <FluentSelect
                 ariaLabel="Action status"
@@ -246,6 +304,20 @@ export function ManagerSelfView({ activeTab }: { activeTab: ManagerSelfTab }) {
               />
             ) : null}
           </div>
+          {activeTab === "activity-summary" ? (
+            <>
+            <p className="text-sm text-muted-foreground">
+              {readString(activitySummary?.period as AdminRecord | null, ["date_from"], "")} – {readString(activitySummary?.period as AdminRecord | null, ["date_to"], "")}
+              {readString(activitySummary?.period as AdminRecord | null, ["period_type"], "") ? ` · ${prettify(readString(activitySummary?.period as AdminRecord | null, ["period_type"], ""))}` : ""}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricTile label="Team members" value={readNumber(activitySummary?.totals as AdminRecord | null, ["team_members"]) ?? 0} />
+              <MetricTile label="Eligible days" value={readNumber(activitySummary?.totals as AdminRecord | null, ["eligible_days"]) ?? 0} />
+              <MetricTile label="Missing days" value={readNumber(activitySummary?.totals as AdminRecord | null, ["missing_days"]) ?? 0} />
+              <MetricTile label="Planned / completed" value={`${readNumber(activitySummary?.totals as AdminRecord | null, ["planned_activities"]) ?? 0} / ${readNumber(activitySummary?.totals as AdminRecord | null, ["completed_activities"]) ?? 0}`} />
+            </div>
+            </>
+          ) : null}
           {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable

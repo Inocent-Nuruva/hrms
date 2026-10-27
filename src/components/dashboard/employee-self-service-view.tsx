@@ -54,7 +54,6 @@ import {
   PeopleAdd20Regular,
   PeopleTeam20Color,
   Person20Color,
-  PersonKey20Color,
   ArrowSync20Regular,
   DocumentPdf20Regular,
   Eye20Regular,
@@ -95,7 +94,10 @@ import {
   listLeavePolicies,
   listMyLeaveRequests,
   listLeaveTypes,
-  createMyProfileUpdateRequest,
+  createMyProfileChangeRequest,
+  getMyProfileChangeRequest,
+  submitMyProfileChangeRequest,
+  cancelMyProfileChangeRequest,
   getMyProfileUpdateRequest,
   listMyProfileUpdateRequests,
   listMyTeamAttendance,
@@ -3158,8 +3160,8 @@ function ProfileUpdatesTab({
 }: {
   profileUpdateRequests: AdminRecord[]
   openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
-  onSubmitRequest: (id: number | string) => Promise<void>
-  onCancelRequest: (id: number | string) => Promise<void>
+  onSubmitRequest: (id: number | string, requestType?: string) => Promise<void>
+  onCancelRequest: (id: number | string, requestType?: string) => Promise<void>
   loading: boolean
 }) {
   const statusCounts = React.useMemo(() => {
@@ -3207,14 +3209,6 @@ function ProfileUpdatesTab({
       fields: ["profile_photo_url"] as EditableUserField[],
       label: "Profile Picture",
       icon: Camera20Color,
-    },
-    {
-      key: "password",
-      title: "Password",
-      description: "Update sign-in password",
-      fields: ["password"] as EditableUserField[],
-      label: "Password",
-      icon: PersonKey20Color,
     },
   ]
 
@@ -3403,7 +3397,7 @@ function ProfileUpdatesTab({
                             size="sm"
                             className="h-7 bg-primary px-2 text-[10px] font-semibold uppercase tracking-wide !text-white"
                             disabled={loading}
-                            onClick={() => void onSubmitRequest(requestId)}
+                            onClick={() => void onSubmitRequest(requestId, readString(row, ["request_type"], ""))}
                           >
                             Submit
                           </Button>
@@ -3415,7 +3409,7 @@ function ProfileUpdatesTab({
                             variant="outline"
                             className="h-7 border-rose-300 px-2 text-[10px] font-semibold uppercase tracking-wide text-rose-700 hover:bg-rose-50 hover:text-rose-700"
                             disabled={loading}
-                            onClick={() => void onCancelRequest(requestId)}
+                            onClick={() => void onCancelRequest(requestId, readString(row, ["request_type"], ""))}
                           >
                             Cancel
                           </Button>
@@ -3828,14 +3822,6 @@ function ProfileSummaryTab({
           <ProfileSummaryFieldRow label="Phone" value={phone} />
           <ProfileSummaryFieldRow label="Employee ID" value={empId} />
           <FluentCardFooter className="mt-2 flex flex-wrap items-center gap-1 !px-0 !py-0">
-            <FluentButton
-              type="button"
-              appearance="subtle"
-              size="small"
-              onClick={() => openSectionEditor("password", "Password", ["password"])}
-            >
-              Change Password
-            </FluentButton>
             <FluentButton
               type="button"
               appearance="subtle"
@@ -4262,11 +4248,15 @@ export function EmployeeSelfServiceProfileView() {
         continue
       }
       if (nextValue === baseEditorValues[field].trim()) continue
-      const apiField = field === "phone" ? "phone_number" : field
-      requestedChanges[apiField] = nextValue
+      requestedChanges[field] = nextValue
     }
     if (!Object.keys(requestedChanges).length) {
       setSectionError("Nothing to update for this section.")
+      setSectionErrorLines([])
+      return
+    }
+    if ("password" in requestedChanges) {
+      setSectionError("Password changes must use the account password-change flow, not an HR profile-change request.")
       setSectionErrorLines([])
       return
     }
@@ -4274,37 +4264,43 @@ export function EmployeeSelfServiceProfileView() {
     setSectionError(null)
     setSectionErrorLines([])
     try {
-      const requestPayload: AdminRecord = {
-        requested_changes: requestedChanges,
-        reason: `Requested changes to ${sectionEditor.title.toLowerCase()}.`,
+      const groups: Array<{ request_type: string; changes: AdminRecord }> = []
+      const fieldGroups: Array<[string, string[]]> = [
+        ["PERSONAL_INFORMATION", ["first_name", "last_name"]],
+        ["CONTACT_INFORMATION", ["email", "phone"]],
+        ["ADDRESS_INFORMATION", ["city"]],
+      ]
+      for (const [request_type, fields] of fieldGroups) {
+        const changes = Object.fromEntries(
+          fields
+            .filter((field) => field in requestedChanges)
+            .map((field) => [field, requestedChanges[field]]),
+        )
+        if (Object.keys(changes).length) groups.push({ request_type, changes })
       }
+      if (!groups.length) throw new Error("No supported personal profile changes were selected.")
 
-      const createdRequest = asRecord(await createMyProfileUpdateRequest(token, requestPayload))
-      const requestId = readProfileUpdateRequestId(createdRequest)
-      if (requestId !== null) {
-        try {
-          const submittedRequest = await submitMyProfileUpdateRequest(token, requestId)
-          void notifySubmittedRequestApprovers({
-            kind: "profile_update_request",
-            token,
-            request: submittedRequest ?? createdRequest,
-            loadRequest: () => getMyProfileUpdateRequest(token, requestId),
-          })
-          setMessage(`${sectionEditor.title} update submitted for HR approval.`)
-        } catch (errorObject) {
-          const status =
-            typeof errorObject === "object" && errorObject !== null && "status" in errorObject
-              ? Number((errorObject as { status?: number }).status)
-              : null
-          if (status === 404) {
-            setMessage(`${sectionEditor.title} update saved as a draft. Submit it from Update Requests.`)
-          } else {
-            throw errorObject
-          }
-        }
-      } else {
-        setMessage(`${sectionEditor.title} update saved as a draft.`)
+      // Create all typed drafts before submitting any. If draft creation fails,
+      // any created drafts remain editable and visible in request history.
+      const drafts: AdminRecord[] = []
+      for (const group of groups) {
+        drafts.push(asRecord(await createMyProfileChangeRequest(token, {
+          ...group,
+          reason: `Requested changes to ${sectionEditor.title.toLowerCase()}.`,
+        })) ?? {})
       }
+      for (const draft of drafts) {
+        const requestId = readProfileUpdateRequestId(draft)
+        if (requestId === null) throw new Error("The profile change draft did not return a request ID.")
+        const submittedRequest = asRecord(await submitMyProfileChangeRequest(token, requestId))
+        void notifySubmittedRequestApprovers({
+          kind: "profile_update_request",
+          token,
+          request: submittedRequest,
+          loadRequest: () => getMyProfileChangeRequest(token, requestId),
+        })
+      }
+      setMessage(`${sectionEditor.title} update submitted for HR approval.`)
       setSectionEditor(null)
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
         page: 1,
@@ -4343,7 +4339,7 @@ export function EmployeeSelfServiceProfileView() {
     openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
   }, [activeTab, editTarget, openSectionEditor, sectionEditor])
 
-  const handleSubmitProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+  const handleSubmitProfileUpdateRequest = React.useCallback(async (id: number | string, requestType = "") => {
     if (!token) {
       setMessage("Session expired. Please sign in again.")
       return
@@ -4352,12 +4348,17 @@ export function EmployeeSelfServiceProfileView() {
     setSectionSaving(true)
     setMessage(null)
     try {
-      const request = await submitMyProfileUpdateRequest(token, id)
+      const canonical = Boolean(requestType)
+      const request = canonical
+        ? await submitMyProfileChangeRequest(token, id)
+        : await submitMyProfileUpdateRequest(token, id)
       void notifySubmittedRequestApprovers({
         kind: "profile_update_request",
         token,
         request: asRecord(request) ?? {},
-        loadRequest: () => getMyProfileUpdateRequest(token, id),
+        loadRequest: () => canonical
+          ? getMyProfileChangeRequest(token, id)
+          : getMyProfileUpdateRequest(token, id),
       })
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
       setProfileUpdateRequests(profileUpdatesResult.rows)
@@ -4370,7 +4371,7 @@ export function EmployeeSelfServiceProfileView() {
     }
   }, [token])
 
-  const handleCancelProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+  const handleCancelProfileUpdateRequest = React.useCallback(async (id: number | string, requestType = "") => {
     if (!token) {
       setMessage("Session expired. Please sign in again.")
       return
@@ -4379,7 +4380,8 @@ export function EmployeeSelfServiceProfileView() {
     setSectionSaving(true)
     setMessage(null)
     try {
-      await cancelMyProfileUpdateRequest(token, id)
+      if (requestType) await cancelMyProfileChangeRequest(token, id)
+      else await cancelMyProfileUpdateRequest(token, id)
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
       setProfileUpdateRequests(profileUpdatesResult.rows)
       setMessage("Profile update request cancelled.")

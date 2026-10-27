@@ -514,6 +514,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/me/team/overview" },
       { title: "Members", url: "/dashboard/me/team/members" },
       { title: "Attendance", url: "/dashboard/me/team/attendance" },
+      { title: "Activity summary", url: "/dashboard/me/team/activity-summary" },
       { title: "Actions", url: "/dashboard/me/team/actions" },
     ],
   },
