@@ -5017,6 +5017,7 @@ export function OnboardingView() {
         <div className="space-y-2">
           <ResizableTable
             title="Employee Invitations"
+            className="px-3 pb-3"
             data={filteredInvitations}
             columns={invitationColumns}
             loading={loading}
@@ -5222,6 +5223,7 @@ export function OnboardingView() {
           ) : (
           <ResizableTable
             title="Onboarding Requests"
+            className="px-3 pb-3"
             data={filteredRequests}
             columns={onboardingRequestColumns}
             loading={loading}

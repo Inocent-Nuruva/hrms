@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
-import { extractProfilePhotoUrl, getEmployeeById, getOnboardingOverview, type OnboardingOverviewRow } from "@/lib/admin-api"
+import { completeOnboardingRequest, extractProfilePhotoUrl, getEmployeeById, getOnboardingOverview, type OnboardingOverviewRow } from "@/lib/admin-api"
 import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview, type OnboardingOverviewFilters } from "@/lib/onboarding-overview"
 
 export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
@@ -43,6 +43,22 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
         if (result.next_cursor === null) break
         if (result.next_cursor <= after) throw new Error("Overview pagination did not advance. Please refresh.")
         after = result.next_cursor
+      }
+      const activationResults = await Promise.allSettled(
+        [...collected.values()]
+          .filter((row) => row.readiness.ready_to_activate)
+          .map((row) => completeOnboardingRequest(token, row.id)),
+      )
+      if (activationResults.some((result) => result.status === "fulfilled")) {
+        collected.clear()
+        after = 0
+        while (!cancelled) {
+          const result = await getOnboardingOverview(token, after)
+          for (const row of result.data) collected.set(row.id, row)
+          if (result.next_cursor === null) break
+          if (result.next_cursor <= after) throw new Error("Overview pagination did not advance. Please refresh.")
+          after = result.next_cursor
+        }
       }
       if (!cancelled) setRows([...collected.values()])
       const photoEntries = await Promise.all(
@@ -107,7 +123,13 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
     while (true) {
       const result = await getOnboardingOverview(token, after)
       const refreshed = result.data.find((row) => row.id === requestId)
-      if (refreshed) return refreshed
+      if (refreshed) {
+        if (refreshed.readiness.ready_to_activate) {
+          await completeOnboardingRequest(token, refreshed.id)
+          return null
+        }
+        return refreshed
+      }
       if (result.next_cursor === null || result.next_cursor <= after) return null
       after = result.next_cursor
     }
@@ -120,6 +142,12 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
     setScanning(true)
     try {
       const refreshed = await fetchFreshRow(row.id)
+      if (!refreshed) {
+        setScanRow(null)
+        setScanning(false)
+        setRevision((value) => value + 1)
+        return
+      }
       const current = refreshed ?? row
       setScanRow(current)
       setRows((rows) => rows.map((item) => item.id === current.id ? current : item))
@@ -140,6 +168,9 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
       if (refreshed) {
         setScanRow(refreshed)
         setRows((current) => current.map((row) => row.id === refreshed.id ? refreshed : row))
+      } else {
+        setScanRow(null)
+        setRevision((value) => value + 1)
       }
       setSelectedScanIssue(null)
     } catch (cause) {
