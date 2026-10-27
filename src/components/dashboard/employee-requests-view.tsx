@@ -68,7 +68,7 @@ import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { RequestActionInbox } from "./request-action-inbox"
 import { listAllMyActionItems } from "@/lib/admin-api"
-import { isOpenAction } from "./request-inbox-utils"
+import { isEmployeeRequestAction, isOpenAction } from "./request-inbox-utils"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
 
@@ -441,8 +441,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     }
   }
 
-  const pendingActions = actions.filter(isOpenAction).length
-  const doneActions = actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length
+  const requestActions = actions.filter(isEmployeeRequestAction)
+  const pendingActions = requestActions.filter(isOpenAction).length
+  const doneActions = requestActions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length
 
   const rows =
     activeTab === "timeline"
@@ -753,11 +754,11 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               ]
 
   return (
-    <section className="w-full min-w-0 space-y-4">
+    <section className={cn("w-full min-w-0", activeTab === "actions" ? "flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden" : "space-y-4")}>
       <header
         className={cn(
           "flex min-w-0 flex-col gap-3 border-b border-border bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
-          pageBleedClass,
+          activeTab !== "actions" && pageBleedClass,
         )}
       >
         <div className="min-w-0">

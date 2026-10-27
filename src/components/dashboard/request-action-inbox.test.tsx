@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   completeOffboardingTask: vi.fn(),
   leaveRequestApprovalAction: vi.fn(),
   reportMyActionItemIssue: vi.fn(),
+  getOnboardingRequest: vi.fn(),
 }))
 vi.mock("@/lib/admin-api", () => api)
 vi.mock("@/lib/session-client", () => ({ readStoredSessionTokens: () => ({ accessToken: "session-token" }) }))
@@ -40,6 +41,11 @@ const task = {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  api.getOnboardingRequest.mockResolvedValue({
+    employee_details_review: {
+      sections: [{ key: "personal", label: "Personal details", status: "pending", fields: [{ label: "First name", value: "Amina" }] }],
+    },
+  })
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
   vi.stubGlobal("matchMedia", () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }))
@@ -57,6 +63,11 @@ async function click(text: string) {
   if (!button) throw new Error(`Missing button: ${text}`)
   await act(async () => button.click())
 }
+async function selectRequest(name = "Amina John") {
+  const button = container.querySelector<HTMLButtonElement>(`button[aria-label="Review requests for ${name}"]`)
+  if (!button) throw new Error(`Missing request row for: ${name}`)
+  await act(async () => button.click())
+}
 async function writeComment(value: string) {
   const textarea = container.querySelector("textarea")!
   await act(async () => {
@@ -67,9 +78,8 @@ async function writeComment(value: string) {
 describe("grouped request review", () => {
   it("shows the intended employee and reports a reason without completing work", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
-    expect(container.querySelector("textarea")).toBeNull()
-    await click("Review requests")
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Amina John")
+    await selectRequest()
+    expect(container.textContent).toContain("Amina John")
     expect(container.textContent).toContain("EMP-30")
     await click("Report issue to HR")
     expect(api.reportMyActionItemIssue).not.toHaveBeenCalled()
@@ -82,15 +92,39 @@ describe("grouped request review", () => {
   })
   it("approves the selected request from its dialog with a comment", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceEntityType: "ONBOARDING_REQUEST", sourceEntityId: 20 }]} loading={false} onRefresh={refresh} />))
-    await click("Review requests")
+    await selectRequest()
     await writeComment("Reviewed and approved.")
-    await click("Approve request")
+    await click("Approve and continue")
     expect(api.approveOnboardingRequest).toHaveBeenCalledWith("session-token", "20", { approve: true, comments: "Reviewed and approved." })
+  })
+  it("does not send the approval-only property when returning a request", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceEntityType: "ONBOARDING_REQUEST", sourceEntityId: 20 }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    await writeComment("The bank details need correction.")
+    await click("Return for correction")
+    expect(api.rejectOnboardingRequest).toHaveBeenCalledWith("session-token", "20", { comments: "The bank details need correction." })
+  })
+  it("routes employee detail submissions to their required section-by-section review", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{
+      ...task,
+      actionType: "APPROVAL",
+      sourceEntityType: "ONBOARDING_REQUEST",
+      sourceEntityId: 20,
+      actionUrl: "/dashboard/employees/onboarding?request_id=20&workspace_tab=employee-details",
+      metadata: { onboarding_request_id: 20, stage: "employee_details_review" },
+    }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    expect(container.textContent).toContain("Submitted onboarding sections")
+    expect(container.textContent).toContain("Personal details")
+    expect(container.textContent).toContain("First name: Amina")
+    expect(container.querySelector("textarea")).toBeNull()
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent === "Approve and continue")).toBe(false)
+    expect([...container.querySelectorAll('a[href="/dashboard/employees/onboarding?request_id=20&workspace_tab=employee-details"]')].some((link) => link.textContent?.includes("Review sections"))).toBe(true)
   })
   it("keeps workflow-gated tasks disabled and preserves comments after a failed issue submission", async () => {
     api.reportMyActionItemIssue.mockRejectedValueOnce(new Error("Network unavailable"))
     await act(async () => root.render(<RequestActionInbox actions={[{ ...task, is_actionable: false }]} loading={false} onRefresh={refresh} />))
-    await click("Review requests")
+    await selectRequest()
     const complete = [...container.querySelectorAll("button")].find((button) => button.textContent === "Mark item complete")
     expect(complete?.disabled).toBe(true)
     await writeComment("Email cannot be provisioned yet.")
