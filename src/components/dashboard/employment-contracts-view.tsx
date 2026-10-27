@@ -5,7 +5,15 @@ import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react"
-import { FileText, Plus, RefreshCw, Upload } from "lucide-react";
+import { Plus } from "lucide-react";
+import {
+  ArrowClockwise20Regular,
+  ArrowUpload20Regular,
+  DocumentPdf20Regular,
+  History20Regular,
+  Open20Regular,
+} from "@fluentui/react-icons"
+import { Button as FluentButton } from "@fluentui/react-components"
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   attachEmploymentContract,
@@ -87,6 +95,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
   const [employeeSearch, setEmployeeSearch] = React.useState("")
   const [contractFilter, setContractFilter] = React.useState<"all" | "contracted" | "not-contracted">("all")
   const [contractedEmployeeIds, setContractedEmployeeIds] = React.useState<Set<number> | null>(null)
+  const [documentHistory, setDocumentHistory] = React.useState<Record<number, AdminRecord[]>>({})
 
   const selected = employee ?? employees.find((employee) => Number(employee.id) === employeeId)
   const normalizedSearch = employeeSearch.trim().toLowerCase()
@@ -113,7 +122,19 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
 
   const refresh = React.useCallback(async (id: number) => {
     if (!access || !id) return
-    try { setContracts(await listEmploymentContracts(access, id)) }
+    try {
+      const nextContracts = await listEmploymentContracts(access, id)
+      setContracts(nextContracts)
+      const histories = await Promise.all(nextContracts.map(async (contract) => {
+        const contractId = Number(contract.id)
+        const response = await fetch(`${API_BASE_URL}/api/employment-contracts/${contractId}/documents`, {
+          headers: { Authorization: `Bearer ${access}` },
+        })
+        if (!response.ok) return [contractId, []] as const
+        return [contractId, await response.json() as AdminRecord[]] as const
+      }))
+      setDocumentHistory(Object.fromEntries(histories))
+    }
     catch (cause) { toast.error(cause instanceof Error ? cause.message : "Contracts could not be loaded") }
   }, [access])
 
@@ -183,9 +204,10 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
     finally { setBusy(false) }
   }
 
-  async function open(id: number) {
+  async function open(id: number, documentId?: number) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/employment-contracts/${id}/document`, {
+      const suffix = documentId ? `/documents/${documentId}` : "/document"
+      const response = await fetch(`${API_BASE_URL}/api/employment-contracts/${id}${suffix}`, {
         headers: { Authorization: `Bearer ${access}` },
       })
       if (!response.ok) throw new Error("Contract document could not be opened")
@@ -203,7 +225,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><h2 className="text-lg font-semibold">Employment contracts</h2><p className="text-sm text-muted-foreground">{employee ? employeeOptionLabel(employee) : "Issue and review employee contract versions"}</p></div>
       <div className="flex items-end gap-2">
-        <Button size="sm" variant="outline" disabled={!employeeId} onClick={() => void refresh(employeeId)} title="Refresh"><RefreshCw className="size-4" /></Button>
+        <FluentButton appearance="secondary" icon={<ArrowClockwise20Regular />} disabled={!employeeId} onClick={() => void refresh(employeeId)} title="Refresh contracts" aria-label="Refresh contracts" />
         {canManage ? <Button size="sm" disabled={!employeeId} onClick={() => { setForm({ start_date: String(selected?.hire_date ?? "").slice(0, 10), contract_type: "UNSPECIFIED" }); setShowForm(true) }}><Plus className="size-4" /> Contract</Button> : null}
       </div>
     </div>
@@ -253,13 +275,41 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
 
     {employeeId ? <section className="border-t">
       <div className="border-b py-3 text-sm font-semibold">Versions</div>
-      {contracts.length ? contracts.map((contract) => <div key={Number(contract.id)} className="flex flex-wrap items-center justify-between gap-3 border-b py-3 text-sm">
-        <div><p className="font-medium">Version {String(contract.version)} · {String(contract.contractType).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{String(contract.startDate)}{contract.endDate ? ` to ${String(contract.endDate)}` : ""} · {String(contract.status)}</p></div>
-        <div className="flex gap-2">
-          {contract.documentId ? <Button size="sm" variant="outline" onClick={() => void open(Number(contract.id))}><FileText className="size-4" /> Open</Button> : null}
-          {canManage && contract.status === "ISSUED" ? <label className="inline-flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-1.5 text-sm"><Upload className="size-4" /> Attach PDF<input className="sr-only" type="file" accept=".pdf" disabled={busy} onChange={(event) => void attach(Number(contract.id), event.target.files?.[0])} /></label> : null}
-        </div>
-      </div>) : <p className="py-6 text-sm text-muted-foreground">No contract versions yet.</p>}
+      {contracts.length ? contracts.map((contract) => {
+        const contractId = Number(contract.id)
+        const documents = documentHistory[contractId] ?? []
+        const hasDocument = Boolean(contract.documentId)
+        return <article key={contractId} className="my-3 overflow-hidden rounded-lg border border-[#d7e3f4] bg-gradient-to-br from-[#f7fbff] via-background to-[#eef5ff] shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-background dark:to-slate-900">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="rounded-lg bg-[#e5f1fb] p-2 text-[#0f6cbd] dark:bg-[#12395c]"><DocumentPdf20Regular /></div>
+              <div>
+                <p className="font-semibold">Version {String(contract.version)} · {String(contract.contractType).replaceAll("_", " ")}</p>
+                <p className="text-xs text-muted-foreground">{String(contract.startDate)}{contract.endDate ? ` to ${String(contract.endDate)}` : ""} · {String(contract.status)}</p>
+                {hasDocument && contract.status === "ISSUED" ? <p className="mt-1 text-xs font-medium text-[#8a6100]">PDF attached · awaiting employee signature</p> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {hasDocument ? <FluentButton appearance="secondary" icon={<Open20Regular />} onClick={() => void open(contractId)}>Open current PDF</FluentButton> : null}
+              {canManage && contract.status === "ISSUED" ? <>
+                <FluentButton appearance="primary" icon={<ArrowUpload20Regular />} disabled={busy} onClick={() => document.getElementById(`contract-pdf-${contractId}`)?.click()}>
+                  {hasDocument ? "Reattach PDF" : "Attach PDF"}
+                </FluentButton>
+                <input id={`contract-pdf-${contractId}`} className="sr-only" type="file" accept=".pdf,application/pdf" disabled={busy} onChange={(event) => void attach(contractId, event.target.files?.[0])} />
+              </> : null}
+            </div>
+          </div>
+          {documents.length ? <div className="border-t border-[#d7e3f4] bg-background/75 px-4 py-3 dark:border-slate-700">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><History20Regular /> Document history</div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {documents.map((document, index) => <button key={Number(document.id)} type="button" className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60" onClick={() => void open(contractId, Number(document.id))}>
+                <span className="min-w-0"><span className="block truncate text-sm font-medium">{String(document.original_file_name ?? `Contract document ${index + 1}`)}</span><span className="block text-xs text-muted-foreground">{document.created_at ? new Date(String(document.created_at)).toLocaleString() : "Attached document"}{index === 0 ? " · Current" : ""}</span></span>
+                <Open20Regular className="shrink-0" />
+              </button>)}
+            </div>
+          </div> : null}
+        </article>
+      }) : <p className="py-6 text-sm text-muted-foreground">No contract versions yet.</p>}
     </section> : null}
 
     {showForm ? <form onSubmit={(event) => void issue(event)} className="border-t py-4">
