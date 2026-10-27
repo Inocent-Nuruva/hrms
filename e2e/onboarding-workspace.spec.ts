@@ -105,7 +105,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       await expect(page.getByText("1 of 1 open requests", { exact: false })).toBeVisible()
       await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
       await expect(page.getByText("Activation overview · Amina Test")).toBeVisible()
-      await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
+      await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
       await expect(page.getByRole("button", { name: "Manage contract for Signed contract covering the start date", exact: true })).toBeVisible()
       const dialog = page.getByRole("region", { name: "Employee onboarding workspace", exact: true })
       const sheet = page.getByRole("dialog", { name: "Employee onboarding workspace", exact: true })
@@ -193,7 +193,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.goto("/dashboard/employees/onboarding?request_id=55")
     await page.getByRole("button", { name: "More information about Starting salary review", exact: true }).hover()
     await expect(page.getByText("Waiting on a prerequisite:", { exact: false })).toBeVisible()
-    await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     await page.screenshot({ path: test.info().outputPath("waiting-on-approval.png"), fullPage: true })
   })
 
