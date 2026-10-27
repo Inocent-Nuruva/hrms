@@ -333,6 +333,7 @@ export function FinanceOperationsView({
   const [reportFilters, setReportFilters] = React.useState<
     Record<string, string>
   >({});
+  const [reportPage, setReportPage] = React.useState(1);
   const [reportData, setReportData] = React.useState<AdminRecord | null>(null);
   const [auditTimeline, setAuditTimeline] = React.useState<AdminRecord[]>([]);
   const [reportLoading, setReportLoading] = React.useState(false);
@@ -429,6 +430,11 @@ export function FinanceOperationsView({
       const params = {
         date_from: reportFilters.date_from || undefined,
         date_to: reportFilters.date_to || undefined,
+        as_of: reportFilters.as_of || undefined,
+        page: reportPage,
+        limit: 20,
+        sort_by: reportFilters.sort_by || undefined,
+        sort_order: reportFilters.sort_order || undefined,
       };
       const [report, audit] = await Promise.all([
         LOAN_REPORT_TYPES.has(selectedReport)
@@ -449,7 +455,7 @@ export function FinanceOperationsView({
     } finally {
       setReportLoading(false);
     }
-  }, [reportFilters.date_from, reportFilters.date_to, selectedReport]);
+  }, [reportFilters.as_of, reportFilters.date_from, reportFilters.date_to, reportFilters.sort_by, reportFilters.sort_order, reportPage, selectedReport]);
 
   React.useEffect(() => {
     if (!canAccess || activeTab !== "reports") return;
@@ -585,6 +591,9 @@ export function FinanceOperationsView({
         await exportEmployeeFinanceReport(token, selectedReport, format, {
           date_from: reportFilters.date_from || undefined,
           date_to: reportFilters.date_to || undefined,
+          as_of: reportFilters.as_of || undefined,
+          sort_by: reportFilters.sort_by || undefined,
+          sort_order: reportFilters.sort_order || undefined,
         }),
       );
     } catch (errorObject) {
@@ -1586,7 +1595,7 @@ export function FinanceOperationsView({
                   ariaLabel="Report"
                   className="w-full"
                   value={selectedReport}
-                  onChange={setSelectedReport}
+                  onChange={(value) => { setSelectedReport(value); setReportPage(1); }}
                   options={financeReportTypes}
                 />
               </label>
@@ -1605,6 +1614,12 @@ export function FinanceOperationsView({
                     }
                   />
                 </label>
+                {selectedReport === "outstanding" ? (
+                  <label className="grid gap-1.5 text-sm sm:col-span-2">
+                    <span className="font-medium">Overdue as of</span>
+                    <DateInput className={inputClass} value={reportFilters.as_of ?? ""} onChange={(event) => { setReportPage(1); setReportFilters((current) => ({ ...current, as_of: event.target.value })); }} />
+                  </label>
+                ) : null}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">To</span>
                   <DateInput
@@ -1781,6 +1796,15 @@ export function FinanceOperationsView({
                 showExport={false}
                 storageKey={`finance-report-${selectedReport}`}
               />
+              {asRecord(reportData?.pagination) ? (
+                <div className="flex items-center justify-between border-t border-border px-4 py-3 text-sm">
+                  <span>{String(asRecord(reportData?.pagination)?.total_rows ?? 0)} rows · page {reportPage} of {String(asRecord(reportData?.pagination)?.total_pages ?? 0)}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className={secondaryButtonClass} disabled={reportPage <= 1 || reportLoading} onClick={() => setReportPage((page) => Math.max(1, page - 1))}>Previous</button>
+                    <button type="button" className={secondaryButtonClass} disabled={reportPage >= Number(asRecord(reportData?.pagination)?.total_pages ?? 0) || reportLoading} onClick={() => setReportPage((page) => page + 1)}>Next</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-border bg-card">
