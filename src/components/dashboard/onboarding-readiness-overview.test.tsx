@@ -48,7 +48,7 @@ describe("onboarding activation overview", () => {
     expect(container.textContent).toContain("1 activation requirements outstanding")
     expect(container.textContent).toContain("Responsible: HR / Employee")
     expect(button("Activate employee").disabled).toBe(true)
-    await act(async () => button("Review Signed contract").click())
+    await act(async () => button("Open requirement").click())
     expect(navigate).toHaveBeenCalledWith("contracts", "contract")
     expect(container.textContent).not.toContain("Provide laptop")
     await act(async () => button("Show completed requirements (1)").click())
