@@ -5370,7 +5370,11 @@ export function OnboardingView() {
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                   <div className="w-full space-y-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm sm:grid-cols-2">
+                      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">1</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Request details</p><p className="text-xs text-slate-500">Choose the employee and the workflow that will guide their onboarding.</p></div>
+                      </div>
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
                         Request title
                         <Input
@@ -5480,6 +5484,11 @@ export function OnboardingView() {
                         </Select>
                       </label>
 
+                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">2</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Schedule</p><p className="text-xs text-slate-500">Decide whether to start now and set the expected onboarding dates.</p></div>
+                      </div>
+
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                         When to start
                         <Select
@@ -5537,6 +5546,11 @@ export function OnboardingView() {
                         />
                       </label>
 
+                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">3</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Notes</p><p className="text-xs text-slate-500">Add optional context for HR, managers, and other owners.</p></div>
+                      </div>
+
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
                         Description
                         <Input
@@ -5553,8 +5567,9 @@ export function OnboardingView() {
                       </label>
                     </div>
 
-                    <div className="border-t border-slate-200 pt-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
                       <div className="flex items-center gap-2">
+                        <span className="mr-1 flex size-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">4</span>
                         <Checkbox
                           id="include-provisioning"
                           checked={requestProvisioningEnabled}
