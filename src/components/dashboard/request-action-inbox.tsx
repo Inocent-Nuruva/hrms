@@ -4,7 +4,7 @@ import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 import * as React from "react"
 import { Avatar, Badge as FluentBadge, Field } from "@fluentui/react-components"
 import { Search, ArrowRight, SlidersHorizontal, ChevronDown, X } from "lucide-react"
-import { CheckmarkCircleColor, ClipboardTaskColor, PeopleColor } from "@fluentui/react-icons"
+import { ClipboardTaskColor } from "@fluentui/react-icons"
 import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/animate-ui/components/base/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -53,7 +53,6 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     readString(selected, ["actionType", "action_type"]).toUpperCase() === "APPROVAL"
   const canAct = selected && isOpenAction(selected) && selected.is_actionable !== false && Boolean(reference?.requestId)
   const modules = [...new Set(actions.map((row) => readString(row, ["sourceModule", "source_module"])).filter(Boolean))].sort()
-  const groupCount = filterAndGroupActions(actions, { ...defaultInboxFilters, status: "all" }).length
   const pages = Math.max(1, Math.ceil(groups.length / 12))
   const currentPage = Math.min(groupPage, pages)
   const evidenceRequired = context.completion_evidence_required === true
@@ -63,6 +62,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     .filter((value) => value !== "all").length
   const resultItemCount = groups.reduce((total, group) => total + group.items.length, 0)
   const hasSearchOrAdvancedFilters = Boolean(filters.search.trim()) || advancedFilterCount > 0
+  const hasActiveFilters = hasSearchOrAdvancedFilters || filters.status !== defaultInboxFilters.status
 
   React.useEffect(() => {
     if (!evidenceRequired || !requestId || !sourceType) return
@@ -135,28 +135,6 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid overflow-hidden rounded-xl border bg-card sm:grid-cols-3 sm:divide-x sm:divide-border">
-        {[
-          { label: "People", hint: "Request owners", value: groupCount, icon: PeopleColor, color: "brand" as const },
-          { label: "Awaiting action", hint: "Needs your response", value: actions.filter(isOpenAction).length, icon: ClipboardTaskColor, color: "warning" as const },
-          { label: "Completed", hint: "Finished items", value: actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length, icon: CheckmarkCircleColor, color: "success" as const },
-        ].map(({ label, hint, value, icon: Icon, color }) => (
-          <div key={label} className="flex min-h-24 items-center gap-3 border-b border-border p-4 last:border-b-0 sm:border-b-0">
-            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/35 [&_svg]:size-6">
-              <Icon aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-sm font-medium text-foreground">{label}</p>
-                <FluentBadge appearance="tint" color={color} shape="rounded" size="medium" className="min-w-8 justify-center tabular-nums">
-                  {loading ? "…" : value}
-                </FluentBadge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-            </div>
-          </div>
-        ))}
-      </div>
       <div className="flex flex-col gap-2 border-y bg-card py-2">
         <div className="flex flex-wrap items-center gap-2 px-1">
           <div className="min-w-56 flex-1 sm:w-64 sm:flex-none">
@@ -190,9 +168,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
             Filters{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
             <ChevronDown data-icon="inline-end" className={cn("transition-transform", filtersOpen && "rotate-180")} aria-hidden />
           </Button>
-          <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground" aria-live="polite">
-            {groups.length} {groups.length === 1 ? "person" : "people"} · {resultItemCount} {resultItemCount === 1 ? "item" : "items"}
-          </span>
+          {resultItemCount > 0 ? <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground" aria-live="polite">{resultItemCount} {resultItemCount === 1 ? "item" : "items"}</span> : <span className="ml-auto" />}
           {hasSearchOrAdvancedFilters ? (
             <Button
               variant="ghost"
@@ -214,8 +190,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       </div>
       {loading ? <p role="status" className="py-10 text-center text-muted-foreground">Loading assigned requests…</p> : groups.length === 0 ? (
         <div className="rounded-xl border border-dashed p-10 text-center">
-          <h2 className="font-semibold">No matching requests</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Try another search or reset the filters.</p>
+          <h2 className="font-semibold">{hasActiveFilters ? "No results" : "You’re all caught up"}</h2>
+          {hasActiveFilters ? <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}>Clear filters</Button> : null}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">

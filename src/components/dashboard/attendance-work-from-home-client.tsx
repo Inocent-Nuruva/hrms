@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Badge as FluentBadge } from "@fluentui/react-components"
-import { CalendarDays, CheckCircle2, Clock3, Home, Inbox, RefreshCw, Send, XCircle } from "lucide-react"
+import { Badge as FluentBadge, Button as FluentButton, Field, Input as FluentInput, MessageBar, MessageBarBody, Textarea as FluentTextarea } from "@fluentui/react-components"
+import { ArrowClockwise20Regular, CalendarLtr20Regular, CheckmarkCircle20Regular, Clock20Regular, DismissCircle20Regular, Home20Regular, MailInbox20Regular, Send20Regular } from "@fluentui/react-icons"
 import {
   cancelAttendanceWorkFromHomeRequest,
   createAttendanceWorkFromHomeRequest,
@@ -11,9 +11,7 @@ import {
 } from "@/lib/admin-api"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 
 type WorkFromHomeRequest = {
   id: number
@@ -24,6 +22,8 @@ type WorkFromHomeRequest = {
   reason: string
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   review_comment?: string | null
+  approval_stage?: string | null
+  waiting_on?: string | null
 }
 
 function readToken() {
@@ -178,7 +178,7 @@ export function AttendanceWorkFromHomeClient() {
     <main className="flex w-full flex-col gap-5 px-4 py-5 sm:px-5">
       <header className="flex items-start gap-3 border-b border-border pb-4">
         <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Home className="size-5" aria-hidden />
+          <Home20Regular aria-hidden />
         </span>
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Work from home</h1>
@@ -188,8 +188,8 @@ export function AttendanceWorkFromHomeClient() {
         </div>
       </header>
 
-      {message ? <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p> : null}
-      {error ? <p role="alert" className="border-l-4 border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
+      {message ? <MessageBar intent="success"><MessageBarBody>{message}</MessageBarBody></MessageBar> : null}
+      {error ? <MessageBar intent="error"><MessageBarBody>{error}</MessageBarBody></MessageBar> : null}
 
       {canRequest ? (
         <form onSubmit={submitRequest} className="grid gap-3 border-y border-border py-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_1fr_auto] sm:items-end">
@@ -197,22 +197,18 @@ export function AttendanceWorkFromHomeClient() {
             <h2 className="font-semibold text-foreground">New remote-work request</h2>
             <p className="text-xs text-muted-foreground">Approval must cover every requested date.</p>
           </div>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            Start date
-            <Input required type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            End date
-            <Input required type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            Reason
-            <Textarea required maxLength={2000} rows={1} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why do you need to work remotely?" className="min-h-8 resize-none" />
-          </label>
-          <Button disabled={saving} type="submit" size="sm" className="gap-2">
-            <Send aria-hidden />
+          <Field label="Start date" required>
+            <DatePickerPresets value={startDate} onChange={setStartDate} placeholder="Select start date" />
+          </Field>
+          <Field label="End date" required validationMessage={startDate && endDate && endDate < startDate ? "End date cannot be before the start date." : undefined} validationState={startDate && endDate && endDate < startDate ? "error" : "none"}>
+            <DatePickerPresets value={endDate} onChange={setEndDate} placeholder="Select end date" />
+          </Field>
+          <Field label="Reason" required>
+            <FluentTextarea required maxLength={2000} resize="none" value={reason} onChange={(_event, data) => setReason(data.value)} placeholder="Why do you need to work remotely?" className="min-h-8" />
+          </Field>
+          <FluentButton disabled={saving || !startDate || !endDate || endDate < startDate || !reason.trim()} type="submit" appearance="primary" icon={<Send20Regular />}>
             {saving ? "Submitting…" : "Submit request"}
-          </Button>
+          </FluentButton>
         </form>
       ) : null}
 
@@ -225,16 +221,15 @@ export function AttendanceWorkFromHomeClient() {
           <FluentBadge appearance="tint" color="warning" shape="rounded">{pendingCount} pending</FluentBadge>
           <FluentBadge appearance="tint" color="success" shape="rounded">{approvedCount} approved</FluentBadge>
           <FluentBadge appearance="tint" color="informative" shape="rounded">{closedCount} closed</FluentBadge>
-          <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading || saving} className="gap-2">
-            <RefreshCw className={loading ? "animate-spin" : undefined} aria-hidden />
+          <FluentButton type="button" appearance="secondary" size="small" icon={<ArrowClockwise20Regular className={loading ? "animate-spin" : undefined} />} onClick={() => void refresh()} disabled={loading || saving}>
             Refresh
-          </Button>
+          </FluentButton>
         </div>
         {loading ? <p role="status" className="py-8 text-center text-sm text-muted-foreground">Loading requests…</p> : null}
         {!loading && requests.length === 0 ? (
           <div className="flex items-center gap-3 py-8">
             <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <Inbox className="size-5" aria-hidden />
+              <MailInbox20Regular aria-hidden />
             </span>
             <div>
               <p className="font-medium text-foreground">{canReview ? "No requests need review" : "No remote-work requests yet"}</p>
@@ -247,7 +242,7 @@ export function AttendanceWorkFromHomeClient() {
             <article key={request.id} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
               <div className="flex min-w-0 items-start gap-3">
                 <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <CalendarDays className="size-4" aria-hidden />
+                  <CalendarLtr20Regular aria-hidden />
                 </span>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -256,18 +251,19 @@ export function AttendanceWorkFromHomeClient() {
                   </div>
                   <p className="mt-0.5 text-sm tabular-nums text-muted-foreground">{request.start_date}{request.end_date !== request.start_date ? ` – ${request.end_date}` : ""}</p>
                   <p className="mt-1 text-sm text-foreground/80">{request.reason}</p>
+                  {request.status === "PENDING" ? <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><p className="font-semibold">Waiting for approval</p><p className="mt-0.5">{request.waiting_on || request.approval_stage || "Attendance or HR reviewer"}</p></div> : null}
                   {request.review_comment ? <p className="mt-1 text-xs text-muted-foreground">Review note: {request.review_comment}</p> : null}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 md:justify-end">
                 {canReview && request.status === "PENDING" ? (
                   <>
-                    <Input aria-label={`Review note for request ${request.id}`} value={comments[request.id] ?? ""} onChange={(event) => setComments((current) => ({ ...current, [request.id]: event.target.value }))} placeholder="Comment or rejection reason" className="min-w-48" />
-                    <Button type="button" size="sm" disabled={saving} onClick={() => void review(request, "APPROVE")} className="gap-1.5"><CheckCircle2 aria-hidden />Approve</Button>
-                    <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void review(request, "REJECT")} className="gap-1.5"><XCircle aria-hidden />Reject</Button>
+                    <FluentInput aria-label={`Review note for request ${request.id}`} value={comments[request.id] ?? ""} onChange={(_event, data) => setComments((current) => ({ ...current, [request.id]: data.value }))} placeholder="Comment or rejection reason" className="min-w-48" />
+                    <FluentButton type="button" size="small" appearance="primary" icon={<CheckmarkCircle20Regular />} disabled={saving} onClick={() => void review(request, "APPROVE")}>Approve</FluentButton>
+                    <FluentButton type="button" size="small" appearance="secondary" icon={<DismissCircle20Regular />} disabled={saving} onClick={() => void review(request, "REJECT")}>Reject</FluentButton>
                   </>
                 ) : null}
-                {canRequest && request.status === "PENDING" ? <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void cancel(request)} className="gap-1.5"><Clock3 aria-hidden />Cancel request</Button> : null}
+                {canRequest && request.status === "PENDING" ? <FluentButton type="button" size="small" appearance="secondary" icon={<Clock20Regular />} disabled={saving} onClick={() => void cancel(request)}>Cancel request</FluentButton> : null}
               </div>
             </article>
           ))}
