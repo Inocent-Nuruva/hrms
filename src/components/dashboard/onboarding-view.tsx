@@ -3838,7 +3838,6 @@ export function OnboardingView() {
       setBankVerificationLoading(false)
     }
   }
-
   const loadJoiningSalary = React.useCallback(async () => {
     const token = readStoredToken()
     const employeeId = readNumber(

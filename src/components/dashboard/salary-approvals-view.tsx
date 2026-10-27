@@ -206,7 +206,6 @@ export function SalaryApprovalsView() {
       setRemovingApproverId("")
     }
   }
-
   async function approve(row: AdminRecord) {
     const employee = record(row.employee)
     const employeeId = text(employee, "id")
