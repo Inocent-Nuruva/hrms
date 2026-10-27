@@ -1423,6 +1423,7 @@ export function OnboardingView() {
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
   const [workspaceTab, setWorkspaceTab] = React.useState("overview")
+  const [readinessRevision, setReadinessRevision] = React.useState(0)
   const [workflowMapVisible, setWorkflowMapVisible] = React.useState(false)
   const [handoffRequirement, setHandoffRequirement] = React.useState<{ id: string; label: string } | null>(null)
   const workspaceRequestRef = React.useRef<number | null>(null)
@@ -3832,6 +3833,7 @@ export function OnboardingView() {
       showSuccessAlert("Bank account verified successfully.")
       await openBankVerification()
       if (selectedRequestRow) await openRequestDetails(selectedRequestRow)
+      setReadinessRevision((current) => current + 1)
     } catch (cause) {
       showErrorAlert(cause instanceof Error ? cause.message : "Bank account could not be verified.")
     } finally {
@@ -5206,7 +5208,17 @@ export function OnboardingView() {
             </div>
           ) : null}
           {!isEmployeeMode && requestPresentation === "overview" ? (
-            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id) => void openRequestDetails({ id })} />
+            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id, requirement) => {
+              if (requirement?.id === "independently approved starting salary") {
+                window.location.assign("/dashboard/employees/salary-approvals")
+                return
+              }
+              void openRequestDetails({ id }).then(() => {
+                if (requirement?.action === "payroll" || requirement?.action === "contracts") setWorkspaceTab("payroll")
+                else if (requirement?.action === "tasks" || requirement?.action === "approvals") setWorkspaceTab("tasks")
+                else if (requirement?.action === "details") setWorkspaceTab("details")
+              })
+            }} />
           ) : (
           <ResizableTable
             title="Onboarding Requests"
@@ -6057,7 +6069,7 @@ export function OnboardingView() {
                   <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} image={workspaceEmployeePhoto ? { src: workspaceEmployeePhoto } : undefined} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
                 </div>
                 <div className="flex flex-col items-start gap-2"><FluentBadge appearance="tint" color={selectedRequestSummary.status === "completed" ? "success" : "informative"}>{toTitleCaseWords(readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employment_status"], "onboarding"))}</FluentBadge><p className="text-xs text-muted-foreground">Request {toTitleCaseWords(selectedRequestSummary.status)} · Updated {selectedRequestSummary.updated}</p></div>
-                <div id="onboarding-activation-summary" className="absolute right-0 top-0" />
+                <div id="onboarding-activation-summary" className="min-w-[16rem] flex-1 sm:max-w-sm" />
               </header>
               <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
                 <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">Payroll & contract</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
@@ -6080,7 +6092,7 @@ export function OnboardingView() {
                         employeeName={selectedRequestSummary.employee}
                         canActivate={canCompleteOnboardingRequests}
                         saving={saving}
-                        refreshKey={String(selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? "")}
+                        refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}:${readinessRevision}`}
                         summaryTargetId="onboarding-activation-summary"
                         onDiscuss={(id, label) => setHandoffRequirement({ id, label })}
                         onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
@@ -6573,7 +6585,7 @@ export function OnboardingView() {
                     )
                   })()}
 
-                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3">
+                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Approval trail</p>
                       {approvalSummary.pending.length > 0 ? (

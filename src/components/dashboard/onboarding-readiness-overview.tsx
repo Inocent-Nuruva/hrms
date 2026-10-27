@@ -3,7 +3,7 @@
 import * as React from "react"
 import { createPortal } from "react-dom"
 import { Badge, Button, Card, CardHeader, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, MessageBar, MessageBarBody, ProgressBar, Spinner, Text, Tooltip } from "@fluentui/react-components"
-import { CheckmarkCircle20Regular, Clock20Regular, ArrowRight20Regular, Info20Regular } from "@fluentui/react-icons"
+import { ArrowClockwise20Regular, CheckmarkCircle20Regular, Clock20Regular, ArrowRight20Regular, Info20Regular } from "@fluentui/react-icons"
 import { getOnboardingReadiness, type OnboardingReadiness, type OnboardingReadinessRequirement } from "@/lib/admin-api"
 
 function requirementGuidance(requirement: OnboardingReadinessRequirement) {
@@ -87,20 +87,28 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
   const title = readiness?.closed
     ? readiness.request_status === "completed" ? "Onboarding finalized" : "Onboarding closed"
     : readiness?.ready_to_activate ? "Ready for activation" : `${readiness?.blocker_count ?? 0} activation requirements outstanding`
-  const summary = readiness ? <Card aria-label="Activation readiness" className="absolute right-0 top-0 z-30 w-[min(25rem,calc(100vw-2rem))] shadow-lg">
-    <div className="flex items-start justify-between gap-3">
+  const summary = readiness ? <div aria-label="Activation readiness" className="flex min-w-0 flex-col gap-2">
+    <div className="flex items-start justify-between gap-2">
       <div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="text-xs text-muted-foreground">{readiness.completed_required}/{readiness.total_required} complete · {readiness.employee_status?.replaceAll("_", " ")}</p></div>
       <Tooltip relationship="description" content="All mandatory checks must pass. Authorized HR workflow actions can activate automatically; when payroll or contracts finishes last, refresh and activate manually."><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About employee activation" /></Tooltip>
     </div>
     <ProgressBar value={readiness.total_required ? readiness.completed_required / readiness.total_required : 0} aria-label="Activation readiness progress" color={readiness.ready_to_activate ? "success" : "brand"} />
-    {canActivate && !readiness.closed ? <Button appearance="primary" size="small" disabled={!readiness.ready_to_activate || loading || saving} onClick={() => setConfirming(true)}>Activate employee</Button> : null}
-  </Card> : null
+    {canActivate && !readiness.closed && readiness.ready_to_activate ? <Button appearance="primary" size="small" disabled={loading || saving} onClick={() => setConfirming(true)}>Activate employee</Button> : null}
+  </div> : null
   const summaryTarget = summaryTargetId && typeof document !== "undefined" ? document.getElementById(summaryTargetId) : null
   return (
     <section aria-label={`Activation overview · ${employeeName}`} className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Activation overview · {employeeName}</h2>
-        <Button disabled={loading || saving} onClick={() => setRevision((current) => current + 1)}>Refresh readiness</Button>
+        <Tooltip relationship="label" content="Refresh readiness">
+          <Button
+            appearance="subtle"
+            aria-label="Refresh readiness"
+            icon={<ArrowClockwise20Regular />}
+            disabled={loading || saving}
+            onClick={() => setRevision((current) => current + 1)}
+          />
+        </Tooltip>
       </div>
       {error ? <MessageBar intent="error"><MessageBarBody><strong>Readiness unavailable</strong><p>{error} Activation is disabled until a fresh check succeeds.</p></MessageBarBody></MessageBar> : !readiness ? <Spinner label="Checking activation requirements…" /> : <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Onboarding stages">
