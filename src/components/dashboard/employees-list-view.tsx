@@ -19,6 +19,7 @@ import {
   Switch as FluentSwitch,
   TableCellLayout,
 } from "@fluentui/react-components";
+import { FluentSearchBox } from "@/components/common/fluent-search-box";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,11 +68,11 @@ import { env } from "@/lib/env";
 import {
   Add16Regular,
   ArrowClockwise16Regular,
+  PersonDelete16Regular,
 } from "@fluentui/react-icons";
 import {
   KeyRound,
   Trash2,
-  UserX,
   UsersIcon,
 } from "lucide-react";
 import {
@@ -447,7 +448,7 @@ export function EmployeesListView({
   const canArchiveEmployees =
     directoryMode === "current" &&
     canPerformPermission(actor.permissionLabels, "employees:delete");
-  const canDeleteOnboardingEmployees = canArchiveEmployees;
+  const canDeleteEmployeesPermanently = canArchiveEmployees;
   const canAddEmployee =
     directoryMode === "current" &&
     actor.ready &&
@@ -1177,18 +1178,18 @@ export function EmployeesListView({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
-            {canDeleteOnboardingEmployees && canDeletePermanently(row) ? (
+            {canDeleteEmployeesPermanently && canDeletePermanently(row) ? (
               <button
                 type="button"
                 className="inline-flex size-7 items-center justify-center rounded-md text-rose-700 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                title="Delete permanently (onboarding only)"
+                title="Delete employee permanently"
                 aria-label={`Permanently delete ${employeeDisplayName(row)}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   openPermanentDelete(row);
                 }}
               >
-                <UserX className="h-3.5 w-3.5" />
+                <PersonDelete16Regular />
               </button>
             ) : null}
           </div>
@@ -1196,7 +1197,7 @@ export function EmployeesListView({
       },
     ],
     [
-      canDeleteOnboardingEmployees,
+      canDeleteEmployeesPermanently,
       canManageTwoFactor,
       canRemoveEmployee,
       openPermanentDelete,
@@ -1283,10 +1284,10 @@ export function EmployeesListView({
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Search employees</span>
-              <Input
+              <FluentSearchBox
                 size="small"
                 aria-label="Search employees"
-                className="[&>input]:!h-[26px] [&>input]:!text-xs"
+                className="w-full"
                 placeholder="Name, employee number…"
                 value={query.search}
                 onChange={(_event, data) => {
@@ -1446,9 +1447,11 @@ export function EmployeesListView({
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently delete employee?</AlertDialogTitle>
             <AlertDialogDescription>
-              {permanentDeleteTarget?.name} and all of their onboarding records,
-              documents and uploaded files will be removed. Their login is also
-              deleted unless another company uses it. This cannot be undone.
+              {permanentDeleteTarget?.name} and all employee-owned records—including
+              onboarding, employment, attendance, payroll and performance data,
+              documents, and uploaded files—will be removed. Their company access
+              will be removed, and their login will also be deleted unless another
+              company uses it. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
 

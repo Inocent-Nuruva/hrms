@@ -2403,7 +2403,7 @@ function Section({
             <AlertDialogTitle>{isContactsSection ? "Remove contact" : "Confirm Delete"}</AlertDialogTitle>
             <AlertDialogDescription>
               {isContactsSection
-                ? "This contact will be removed from the active employee profile. It will remain in historical records for audit purposes."
+                ? "The contact row will remain for audit history, but its email and phone values will be cleared. For an exited employee, matching login contact values will also be released for reuse."
                 : `Are you sure you want to delete this ${title.toLowerCase()} record? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>

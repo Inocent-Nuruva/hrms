@@ -1386,7 +1386,7 @@ export function OnboardingView() {
   const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
   const [invitationSearch, setInvitationSearch] = React.useState("")
   const [invitationStatusFilter, setInvitationStatusFilter] =
-    React.useState<EmployeeInvitationHistoryStatus>("pending")
+    React.useState<EmployeeInvitationHistoryStatus>("all")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [requestPresentation, setRequestPresentation] = React.useState("overview")
@@ -4972,7 +4972,7 @@ export function OnboardingView() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              Pending Invitations
+              Invitations
               {invitations.length > 0 ? ` (${invitations.length})` : ""}
             </button>
           ) : null}
@@ -5021,7 +5021,7 @@ export function OnboardingView() {
             data={filteredInvitations}
             columns={invitationColumns}
             loading={loading}
-            storageKey="pending-employee-invitations"
+            storageKey="employee-invitations"
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
@@ -5058,7 +5058,7 @@ export function OnboardingView() {
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
                 onClick={() => void reloadAll("invitations", true)}
                 disabled={loading}
-                aria-label="Refresh pending invitations"
+                aria-label="Refresh invitations"
                 title="Refresh"
               >
                 <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />

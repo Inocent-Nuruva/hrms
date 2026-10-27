@@ -1043,7 +1043,7 @@ export function EmployeeInviteView() {
                 href="/dashboard/employees/onboarding?tab=invitations"
                 className="!no-underline hover:!no-underline focus:!no-underline"
               >
-                View pending invitations
+                View invitations
               </Button>
             ) : null}
           </div>

@@ -6,11 +6,11 @@ export const INVITATION_STATUS_FILTERS: Array<{
   value: EmployeeInvitationHistoryStatus
   label: string
 }> = [
+  { value: "all", label: "All invitations" },
   { value: "pending", label: "Pending" },
+  { value: "accepted", label: "Done" },
   { value: "expired", label: "Expired" },
-  { value: "accepted", label: "Accepted" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "all", label: "All statuses" },
 ]
 
 /**

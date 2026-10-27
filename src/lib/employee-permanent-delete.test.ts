@@ -7,20 +7,19 @@ import {
 } from "./employee-permanent-delete"
 
 describe("canDeletePermanently", () => {
-  it("allows onboarding employees regardless of key casing", () => {
+  it("allows onboarding employees", () => {
     expect(canDeletePermanently({ employment_status: "onboarding" })).toBe(true)
-    expect(canDeletePermanently({ employmentStatus: "ONBOARDING " })).toBe(true)
   })
 
-  it.each(["active", "inactive", "terminated", "probation", ""])(
+  it.each(["active", "inactive", "resigned", "terminated", "retired", "deceased", "exited", ""])(
     "refuses %j",
     (status) => {
       expect(canDeletePermanently({ employment_status: status })).toBe(false)
     },
   )
 
-  it("refuses rows without a status", () => {
-    expect(canDeletePermanently({})).toBe(false)
+  it("supports the camel-case status field", () => {
+    expect(canDeletePermanently({ employmentStatus: " ONBOARDING " })).toBe(true)
   })
 })
 

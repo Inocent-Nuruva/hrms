@@ -16218,9 +16218,9 @@ export interface PermanentEmployeeDeletionResponse {
 }
 
 /**
- * Permanently delete an employee who is still onboarding, with their records.
- * The backend refuses (409) once the employee has working history, supervises
- * others, or has device access; the message explains why.
+ * Permanently delete an employee with their owned records. The backend refuses
+ * while the employee supervises other records or has provisioned physical
+ * access; the response explains the blocker.
  */
 export async function deleteEmployeePermanently(
   token: string,

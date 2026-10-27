@@ -1,11 +1,21 @@
 "use client"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, InfoIcon } from "lucide-react";
-import { SearchSparkle20Regular as SearchIcon } from "@fluentui/react-icons"
+import {
+  Badge,
+  Button,
+  Checkbox,
+  ProgressBar,
+  Switch,
+} from "@fluentui/react-components"
+import {
+  ChevronDown16Regular,
+  ChevronRight16Regular,
+  Info16Regular,
+} from "@fluentui/react-icons"
 
-import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import {
@@ -100,14 +110,9 @@ export function PermissionPicker({
     options.length > 0 ? Math.round((selectedNames.length / options.length) * 100) : 0
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col gap-2", className)}>
-      <div
-        className={cn(
-          "shrink-0 space-y-2",
-          compact ? "" : "rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2.5",
-        )}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+      <div className={cn("shrink-0", compact ? "space-y-2" : "overflow-hidden border-b border-border bg-card")}>
+        <div className={cn("flex flex-wrap items-center justify-between gap-3", compact ? "" : "px-4 py-3")}>
           {compact ? (
             <p className="text-xs tabular-nums text-slate-500">
               {loading && options.length === 0 ? (
@@ -122,72 +127,45 @@ export function PermissionPicker({
               )}
             </p>
           ) : (
-            <div className="flex items-center gap-2">
-              <div
-                className="relative size-9 shrink-0 rounded-full"
-                style={{
-                  background: `conic-gradient(var(--primary) ${selectedPct}%, hsl(var(--muted)) 0)`,
-                }}
-                title={`${selectedPct}% of catalog`}
-              >
-                <div className="absolute inset-[3px] flex items-center justify-center rounded-full bg-background text-[10px] font-semibold tabular-nums text-foreground">
+            <div className="min-w-[15rem] flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge appearance="filled" color="brand" size="medium">
                   {selectedPct}%
-                </div>
-              </div>
-              <div className="min-w-0">
+                </Badge>
                 <p className="text-sm font-semibold tabular-nums text-foreground">
-                  {selectedNames.length}
-                  <span className="font-normal text-muted-foreground">
-                    {" "}
-                    / {options.length}
-                  </span>
+                  {selectedNames.length} of {options.length} permissions enabled
                 </p>
-                <p className="text-[11px] text-muted-foreground">permissions selected</p>
               </div>
+              <ProgressBar value={selectedPct / 100} thickness="medium" aria-label={`${selectedPct}% of permissions enabled`} />
             </div>
           )}
-          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-            <button
-              type="button"
-              aria-pressed={enabledOnly}
-              className={cn(
-                "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-                enabledOnly
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted",
-              )}
-              onClick={() => setEnabledOnly((current) => !current)}
-            >
-              Enabled only
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted"
-              onClick={() => onChange(options.map((option) => option.name))}
-            >
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Switch
+              checked={enabledOnly}
+              label="Enabled only"
+              onChange={(_event, data) => setEnabledOnly(data.checked)}
+            />
+            <Button appearance="secondary" size="small" onClick={() => onChange(options.map((option) => option.name))}>
               Select all
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted"
-              onClick={() => onChange([])}
-            >
+            </Button>
+            <Button appearance="subtle" size="small" onClick={() => onChange([])}>
               Deselect all
-            </button>
+            </Button>
           </div>
         </div>
 
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-primary" />
-          <Input
+        <div className={cn(compact ? "" : "border-t border-border px-4 py-3")}>
+          <FluentSearchBox
+            size="medium"
+            aria-label="Search permissions"
             value={query}
-            onChange={(event) => {
-              const next = event.target.value
+            onChange={(_event, data) => {
+              const next = data.value
               setQuery(next)
               onQueryChange?.(next)
             }}
             placeholder="Search permissions…"
-            className="h-8 border-slate-300 bg-white pl-8 text-xs dark:border-border dark:bg-background"
+            className="w-full max-w-xl"
           />
         </div>
       </div>
@@ -195,7 +173,7 @@ export function PermissionPicker({
       {/* Single scroll region — no nested group scrollbars */}
       <div
         className={cn(
-          "min-h-0 space-y-1 overflow-y-auto overscroll-contain pr-0.5",
+          "min-h-0 overflow-y-auto overscroll-contain border-b border-border bg-card",
           compact ? "min-h-40 max-h-64" : "flex-1",
         )}
       >
@@ -219,77 +197,47 @@ export function PermissionPicker({
             const isOpen = openGroups[group] ?? (compact || selectedInGroup > 0)
 
             return (
-              <section
-                key={group}
-                className={cn(
-                  "overflow-hidden rounded-md border bg-card",
-                  selectedInGroup > 0 ? "border-primary/30" : "border-slate-200 dark:border-border"
-                )}
-              >
-                <div className="flex items-center gap-1 border-b border-slate-100 bg-slate-50/80 dark:border-border dark:bg-muted/20">
+              <section key={group} className="border-b border-border last:border-b-0">
+                <div className={cn("flex items-center gap-2", isOpen ? "bg-muted/35" : "hover:bg-muted/25")}>
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left"
                     onClick={() =>
                       setOpenGroups((prev) => ({ ...prev, [group]: !isOpen }))
                     }
                   >
-                    <ChevronDownIcon
-                      className={cn(
-                        "size-3.5 shrink-0 text-slate-400 transition-transform",
-                        !isOpen && "-rotate-90"
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-primary">
+                    {isOpen ? <ChevronDown16Regular /> : <ChevronRight16Regular />}
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                       {group}
                     </span>
-                    <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
-                      {selectedInGroup}/{groupOptions.length}
-                    </span>
+                    <Badge appearance="tint" color={selectedInGroup > 0 ? "brand" : "subtle"} size="small">
+                      {selectedInGroup} / {groupOptions.length}
+                    </Badge>
                   </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "shrink-0 px-2 py-1.5 text-[10px] font-medium",
-                      allSelected ? "text-primary" : "text-slate-500 hover:text-slate-800"
-                    )}
-                    onClick={() => toggleGroup(groupOptions, !allSelected)}
-                  >
-                    {allSelected ? "Deselect" : "All"}
-                  </button>
+                  <Checkbox
+                    className="mr-2"
+                    aria-label={`${allSelected ? "Deselect" : "Select"} all ${group} permissions`}
+                    checked={allSelected ? true : selectedInGroup > 0 ? "mixed" : false}
+                    onChange={() => toggleGroup(groupOptions, !allSelected)}
+                  />
                 </div>
 
                 {isOpen ? (
-                  <ul>
+                  <ul className="divide-y divide-border/70">
                     {groupOptions.map((option) => {
                       const checked = isPermissionSelected(option, selectedSet)
                       return (
-                        <li key={option.name} className="flex items-center gap-1 pr-1">
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={checked}
+                        <li key={option.name} className={cn("flex items-center gap-2 px-3 py-2", checked && "bg-primary/[0.04]")}>
+                          <Checkbox
+                            checked={checked}
                             aria-label={option.label}
-                            className={cn(
-                              "flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-2 py-1 text-left",
-                              checked ? "bg-primary/[0.06]" : "hover:bg-slate-50 dark:hover:bg-muted/40"
-                            )}
-                            onClick={() => toggle(option)}
-                          >
-                            <span
-                              className={cn(
-                                "inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border",
-                                checked
-                                  ? "border-primary bg-primary text-white"
-                                  : "border-slate-300 bg-white dark:border-border dark:bg-background"
-                              )}
-                            >
-                              {checked ? <CheckIcon className="size-2.5" strokeWidth={3} /> : null}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-xs text-slate-900 dark:text-foreground">
+                            onChange={() => toggle(option)}
+                          />
+                          <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => toggle(option)}>
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                               {option.label}
                             </span>
-                            <span className="hidden max-w-[9rem] shrink-0 truncate font-mono text-[10px] text-slate-400 sm:block">
+                            <span className="hidden max-w-[14rem] shrink-0 truncate font-mono text-xs text-muted-foreground lg:block">
                               {option.name}
                             </span>
                           </button>
@@ -304,7 +252,7 @@ export function PermissionPicker({
                                   />
                                 }
                               >
-                                <InfoIcon className="size-3" />
+                                <Info16Regular />
                               </TooltipTrigger>
                               <TooltipContent
                                 side="top"
