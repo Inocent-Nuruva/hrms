@@ -71,8 +71,11 @@ async function selectRequest(name = "Amina John") {
 async function writeComment(value: string) {
   const textarea = container.querySelector("textarea")!
   await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, value)
-    textarea.dispatchEvent(new Event("input", { bubbles: true }))
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!
+    setter.call(textarea, value)
+    const event = new Event("input", { bubbles: true })
+    Object.defineProperty(event, "target", { value: textarea })
+    textarea.dispatchEvent(event)
   })
 }
 describe("grouped request review", () => {
