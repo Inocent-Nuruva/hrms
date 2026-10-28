@@ -960,6 +960,10 @@ const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
     "timetable_rotation_rules:read",
     "employee_timetables:read",
     "self_service_requests:approve",
+    "access_credentials:read",
+    "access_credentials:update",
+    "employee_access_credentials:read",
+    "attendance_devices:update",
   ],
   mode: "any",
 }
@@ -1062,6 +1066,15 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
   "/dashboard/employees/profile-change-requests": "self_service_requests:approve",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
+  "/dashboard/attendance/biometric-access": {
+    permissions: [
+      "access_credentials:read",
+      "access_credentials:update",
+      "employee_access_credentials:read",
+      "attendance_devices:update",
+    ],
+    mode: "any",
+  },
   "/dashboard/attendance/settings": "attendance_policies:read",
   "/dashboard/attendance/policies": "attendance_policies:read",
   "/dashboard/attendance/devices": "attendance_devices:read",

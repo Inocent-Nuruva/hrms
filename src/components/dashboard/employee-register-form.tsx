@@ -3,6 +3,7 @@
 import { DateInput } from "@/components/ui/date-input"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
+import Link from "next/link"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { env } from "@/lib/env"
@@ -1253,6 +1254,14 @@ function MultiSelectChecklist({
 export function EmployeeRegisterForm() {
   const actor = useDashboardActor()
   const isRegisteringOthers = actor.ready && hasPermission(actor.permissionLabels, EMPLOYEE_REGISTRATION_PERMISSION)
+  const canConfigureEmployeeProvisioning =
+    actor.ready && hasPermission(actor.permissionLabels, "onboarding_requests:create")
+  const canConfigureTechnicalAccess =
+    actor.ready &&
+    hasPermission(actor.permissionLabels, {
+      permissions: ["access_credentials:update", "attendance_devices:update"],
+      mode: "any",
+    })
   const [currentStep, setCurrentStep] = React.useState<RegisterStep>("details")
   const [tabDirection, setTabDirection] = React.useState<"forward" | "backward">("forward")
   const [form, setForm] = React.useState<RegisterFormState>(EMPTY_FORM)
@@ -2865,8 +2874,17 @@ export function EmployeeRegisterForm() {
     const selectedReportsToId =
       readRecordId(selectedReportsToRecord ?? null) ?? (form.reportsTo ? Number(form.reportsTo) || null : null)
 
+    const registrationProvisioningEnabled = isInviteMode
+      ? onboarding.enabled
+      : isRegisteringOthers && canConfigureEmployeeProvisioning
+    const provisioningDraft = canConfigureTechnicalAccess
+      ? onboarding
+      : {
+          ...onboarding,
+          deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+        }
     const { error: onboardingError, onboarding: onboardingPayload } = buildEmployeeOnboardingInput({
-      enabled: onboarding.enabled,
+      enabled: registrationProvisioningEnabled,
       autoStart: onboarding.autoStart,
       workflowId: onboarding.workflowId,
       title: onboarding.title,
@@ -2875,7 +2893,7 @@ export function EmployeeRegisterForm() {
       plannedCompletionDate: onboarding.plannedCompletionDate,
       submit: onboarding.submit,
       fallbackEmployeeNo: employeeNoForCreate,
-      provisioningDraft: onboarding,
+      provisioningDraft,
     })
     if (onboardingError) {
       toast.error(onboardingError)
@@ -2965,7 +2983,7 @@ export function EmployeeRegisterForm() {
       }
       const createdEmployeeId = readRecordId(normalizedResponse)
       let onboardingRequest = normalizedResponse.onboarding_request ?? null
-      if (!onboardingRequest && createdEmployeeId !== null && isRegisteringOthers) {
+      if (!onboardingRequest && onboardingPayload && createdEmployeeId !== null && isRegisteringOthers) {
         const selectedWorkflowId =
           onboarding.workflowId && onboarding.workflowId !== "none" ? Number(onboarding.workflowId) : null
         const defaultWorkflow =
@@ -3702,32 +3720,33 @@ export function EmployeeRegisterForm() {
                   ) : null}
                 </div>
 
-                {isRegisteringOthers && !isInviteMode ? (
+                {isRegisteringOthers && !isInviteMode && canConfigureEmployeeProvisioning ? (
                   <div className="mt-8 rounded-xl border border-border bg-muted/40 p-4 sm:p-5">
                     <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold text-foreground">Optional onboarding</h3>
+                      <div className="flex items-start gap-2">
+                        <div>
+                          <h3 className="text-base font-semibold text-foreground">Onboarding and attendance</h3>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Assign the employee&apos;s role, branch access, onboarding workflow, and attendance schedule.
+                          </p>
+                        </div>
                         <InfoTooltip
-                          label="About optional onboarding"
-                          content="Configure onboarding workflow and provisioning once during employee registration."
+                          label="About onboarding and attendance"
+                          content="This HR setup area is controlled by the onboarding_requests:create permission. Biometric and device access are managed separately under Attendance."
                         />
                       </div>
-                      <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
-                        <Switch
-                          checked={onboarding.enabled}
-                          onCheckedChange={(checked) =>
-                            setOnboarding((previous) => ({
-                              ...(checked ? previous : createEmptyOnboardingForm()),
-                              enabled: checked,
-                            }))
-                          }
-                        />
-                        <span className="text-sm font-medium text-foreground">Enable</span>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Link className="font-medium text-primary hover:underline" href="/dashboard/attendance/shift-assignments">
+                          Manage shift assignments
+                        </Link>
+                        <span className="text-muted-foreground">·</span>
+                        <Link className="font-medium text-primary hover:underline" href="/dashboard/attendance/employee-timetables">
+                          Manage employee timetables
+                        </Link>
                       </div>
                     </div>
 
-                    {onboarding.enabled ? (
-                      <div className="mt-5 space-y-6">
+                    <div className="mt-5 space-y-6">
                         <div className="grid gap-4 md:grid-cols-2">
                           <Field label="Onboarding workflow" htmlFor="onboarding-workflow" delayMs={30}>
                             <Select
@@ -3852,6 +3871,44 @@ export function EmployeeRegisterForm() {
                             emptyText="No branches available."
                             hint="Optional branch access assignments to attach during onboarding."
                           />
+                        </div>
+
+                        <div className="grid gap-4 rounded-xl border border-border bg-card p-4 md:grid-cols-2">
+                          <div className="md:col-span-2">
+                            <p className="text-sm font-semibold text-foreground">Attendance assignment</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Choose how this employee receives their working schedule. The complete setup remains in the Attendance workspace.
+                            </p>
+                          </div>
+                          <Field label="Attendance mode" htmlFor="provisioning-attendance-mode" delayMs={75}>
+                            <Select
+                              value={onboarding.attendanceMode || "none"}
+                              onValueChange={(value) =>
+                                setOnboarding((previous) => ({
+                                  ...previous,
+                                  attendanceMode:
+                                    value === "shift" || value === "timetable" ? value : "",
+                                  shiftAssignment:
+                                    value === "shift"
+                                      ? previous.shiftAssignment
+                                      : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+                                  timetableAssignment:
+                                    value === "timetable"
+                                      ? previous.timetableAssignment
+                                      : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+                                }))
+                              }
+                            >
+                              <SelectTrigger id="provisioning-attendance-mode" className="w-full">
+                                <SelectValue placeholder="Use company default" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Use company default</SelectItem>
+                                <SelectItem value="shift">Assign a shift</SelectItem>
+                                <SelectItem value="timetable">Assign a timetable</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
                         </div>
 
                         {onboarding.attendanceMode === "shift" ? (
@@ -4004,7 +4061,7 @@ export function EmployeeRegisterForm() {
                           </div>
                         ) : null}
 
-                        <div className="rounded-xl border border-border bg-card p-4">
+                        {canConfigureTechnicalAccess ? <div className="rounded-xl border border-border bg-card p-4">
                           <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-foreground">Device and access control setup</p>
@@ -4222,9 +4279,8 @@ export function EmployeeRegisterForm() {
                               </div>
                             </div>
                           ) : null}
-                        </div>
+                        </div> : null}
                       </div>
-                    ) : null}
                   </div>
                 ) : null}
               </TabsContent>

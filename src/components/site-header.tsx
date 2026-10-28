@@ -172,11 +172,11 @@ export function SiteHeader({
   return (
     <header
       data-slot="site-header"
-      className="site-header sticky top-0 z-50 flex h-(--header-height) shrink-0 items-center border-b border-border bg-card transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)"
+      className="site-header sticky top-0 z-50 flex h-auto shrink-0 flex-col border-b border-border bg-card transition-[width,height] ease-linear md:h-(--header-height) md:flex-row md:items-center group-has-data-[collapsible=icon]/sidebar-wrapper:md:h-(--header-height)"
     >
       <div
         className={cn(
-          "flex w-full min-w-0 items-center gap-2 px-2.5 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
+          "flex min-h-(--header-height) w-full min-w-0 items-center gap-2 px-2.5 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
           !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
         )}
       >
@@ -306,6 +306,11 @@ export function SiteHeader({
           />
         </div>
       </div>
+      {scope !== "platform" ? (
+        <div className="flex w-full items-center justify-center border-t border-border/60 px-2.5 py-2 md:hidden">
+          <DashboardAttendanceQuickActions mobile />
+        </div>
+      ) : null}
     </header>
   )
 }

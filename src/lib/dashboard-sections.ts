@@ -79,6 +79,15 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
 
 export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
   {
+    title: "Biometric Access",
+    items: [
+      {
+        title: "Biometric Access",
+        url: "/dashboard/attendance/biometric-access",
+      },
+    ],
+  },
+  {
     title: "Attendance Operations",
     items: [
       {

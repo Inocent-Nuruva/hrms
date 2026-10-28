@@ -498,6 +498,7 @@ const adminSearchIndex = [
   { title: "Employees / Profile Changes", url: "/dashboard/employees/profile-change-requests", section: "Employees", keywords: ["employee", "profile", "change request"] },
   { title: "Employees / Offboarding", url: "/dashboard/employees/offboarding", section: "Employees", keywords: ["employee", "exit"] },
   { title: "Employees / Onboarding", url: "/dashboard/employees/onboarding", section: "Employees", keywords: ["employee", "workflow", "request", "approve"] },
+  { title: "Attendance / Biometric Access", url: "/dashboard/attendance/biometric-access", section: "Technical Access", keywords: ["employee", "device", "credential", "card", "fingerprint", "pin", "biometric"] },
   { title: "Attendance / Attendance Setup / Policies", url: "/dashboard/attendance/policies", section: "Attendance Setup", keywords: ["attendance", "policies"] },
   { title: "Attendance / Attendance Setup / Holiday Groups", url: "/dashboard/attendance/holiday-groups", section: "Attendance Setup", keywords: ["attendance", "holiday groups", "calendar"] },
   { title: "Attendance / Attendance Setup / Holidays", url: "/dashboard/attendance/holidays", section: "Attendance Setup", keywords: ["attendance", "holidays"] },

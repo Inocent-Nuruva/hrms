@@ -6246,6 +6246,13 @@ export async function listAttendanceWorkFromHomeRequests(
   );
 }
 
+export async function listTeamAttendanceWorkFromHomeRequests(token: string) {
+  return adminRequest<unknown>(
+    "/api/attendance/work-from-home/requests/team",
+    { token },
+  );
+}
+
 export async function reviewAttendanceWorkFromHomeRequest(
   token: string,
   id: string | number,
@@ -6263,6 +6270,16 @@ export async function cancelAttendanceWorkFromHomeRequest(
 ) {
   return adminRequest<unknown>(
     `/api/attendance/work-from-home/requests/${id}/cancel`,
+    { method: "PATCH", token, body: {} },
+  );
+}
+
+export async function cancelManagedAttendanceWorkFromHomeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests/${id}/cancel-managed`,
     { method: "PATCH", token, body: {} },
   );
 }
@@ -20529,6 +20546,17 @@ export async function addMyFinanceApplicationGuarantor(
       body: data,
     },
   );
+}
+
+export async function searchMyFinanceGuarantorCandidates(
+  token: string,
+  search: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/guarantor-candidates?search=${encodeURIComponent(search)}`,
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function listMyFinanceApplicationGuarantors(
