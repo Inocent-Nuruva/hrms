@@ -14738,17 +14738,21 @@ export async function listMyProfileUpdateRequests(
   }).catch(() => []);
   const rows = [...legacyRows, ...canonicalRows]
     .sort((left, right) => {
-      const leftDate = String(left.created_at ?? left.createdAt ?? "")
-      const rightDate = String(right.created_at ?? right.createdAt ?? "")
-      return rightDate.localeCompare(leftDate)
+      const leftDate = String(left.created_at ?? left.createdAt ?? "");
+      const rightDate = String(right.created_at ?? right.createdAt ?? "");
+      return rightDate.localeCompare(leftDate);
     })
-    .slice(0, fallbackLimit)
+    .slice(0, fallbackLimit);
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,
     fallbackLimit,
   );
-  return { rows, ...pagination, total: (pagination.total ?? 0) + canonicalRows.length };
+  return {
+    rows,
+    ...pagination,
+    total: (pagination.total ?? 0) + canonicalRows.length,
+  };
 }
 
 export async function getMyProfileUpdateRequest(
@@ -21720,6 +21724,14 @@ export interface AnalyticsDashboardKindMap {
   "sales-field": "sales-field";
 }
 
+export type AnalyticsSalesFieldDetailMetric =
+  | "PLANNED_VISITS"
+  | "COMPLETED_PLANNED_VISITS"
+  | "UNPLANNED_COMPLETED_VISITS"
+  | "CUSTOMER_VISITS"
+  | "BROKER_INTERMEDIARY_VISITS"
+  | "OPPORTUNITIES";
+
 export type AnalyticsDashboardKind = keyof AnalyticsDashboardKindMap;
 
 export interface AnalyticsCustomReportPayload extends AnalyticsQueryParams {
@@ -21840,6 +21852,56 @@ export async function getHrDashboard(
   return unwrapRoleDashboardPayload(payload);
 }
 
+export async function createHrDocumentRequirement(
+  token: string,
+  payload: {
+    document_type_code: string;
+    label: string;
+    branch_ids?: number[];
+    department_ids?: number[];
+    employment_types?: string[];
+    effective_from?: string;
+    effective_to?: string;
+  },
+) {
+  const result = await adminRequest<unknown>(
+    "/api/dashboards/hr/document-requirements",
+    { token, method: "POST", body: payload },
+  );
+  return normalizeSingle(result) ?? asRecord(result);
+}
+
+export async function deleteHrDocumentRequirement(
+  token: string,
+  requirementId: number,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export async function getHrDocumentComplianceDetails(
+  token: string,
+  requirementId: number,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}/details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function getManagementPublishedScoreDetails(
+  token: string,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/management/performance-details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
 export async function getSystemHealth(token?: string) {
   const payload = await adminRequest<unknown>("/api/health", {
     token: token ?? "",
@@ -21949,6 +22011,34 @@ export async function getAnalyticsDashboard(
     {
       token,
     },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getAnalyticsSalesFieldDetails(
+  token: string,
+  params: AnalyticsQueryParams & {
+    metric: AnalyticsSalesFieldDetailMetric;
+    page?: number;
+    limit?: number;
+    currency?: string;
+  },
+) {
+  const searchParams = new URLSearchParams(
+    buildAnalyticsQuery(params).replace(/^\?/, ""),
+  );
+  searchParams.set("metric", params.metric);
+  if (params.page && Number.isInteger(params.page) && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params.limit && Number.isInteger(params.limit) && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.currency?.trim())
+    searchParams.set("currency", params.currency.trim());
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/dashboards/sales-field/details?${searchParams.toString()}`,
+    { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }

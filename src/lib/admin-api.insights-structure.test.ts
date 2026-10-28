@@ -6,6 +6,7 @@ import {
   getHrAttendanceSetupStatus,
   getHrAttendanceSchedulePreview,
   getHrDashboard,
+  getHrDocumentComplianceDetails,
   getHrLaunchReadiness,
   getHrLaunchReadinessEmployees,
   getMyDashboard,
@@ -28,6 +29,29 @@ describe("insights, readiness, and payroll report API helpers", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("requests paginated employee compliance details with the selected scope", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ pagination: { page: 2, total: 21 }, items: [] }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await getHrDocumentComplianceDetails("token", 17, {
+      date_from: "2026-10-01",
+      date_to: "2026-10-28",
+      employee_id: 44,
+      state: "EXPIRED",
+      search: "E100",
+      page: 2,
+      limit: 20,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8888/api/dashboards/hr/document-requirements/17/details?date_from=2026-10-01&date_to=2026-10-28&employee_id=44&state=EXPIRED&search=E100&page=2&limit=20",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect(result).toEqual(expect.objectContaining({ pagination: { page: 2, total: 21 } }))
   })
 
   it("loads HR dashboards, health, launch readiness, and security events", async () => {
