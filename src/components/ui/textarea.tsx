@@ -137,15 +137,22 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       if (editor.innerHTML !== html) editor.innerHTML = html;
     }, [currentValue, richText]);
 
-    const emitChange = (nextValue: string) => {
-      const textarea = hiddenRef.current;
-      if (!textarea) return;
-      textarea.value = nextValue;
+    const notifyChange = (
+      textarea: HTMLTextAreaElement,
+      nextValue: string,
+    ) => {
       const event = {
         target: textarea,
         currentTarget: textarea,
       } as React.ChangeEvent<HTMLTextAreaElement>;
       onChange?.(event, { value: nextValue });
+    };
+
+    const emitChange = (nextValue: string) => {
+      const textarea = hiddenRef.current;
+      if (!textarea) return;
+      textarea.value = nextValue;
+      notifyChange(textarea, nextValue);
     };
 
     const runCommand = (command: string) => {
@@ -261,6 +268,9 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             aria-hidden="true"
             value={currentValue}
             readOnly
+            onInput={(event) =>
+              notifyChange(event.currentTarget, event.currentTarget.value)
+            }
           />
         </div>
       );
