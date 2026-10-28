@@ -2345,6 +2345,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [validateBusy, setValidateBusy] = React.useState(false)
   const [validateResult, setValidateResult] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [wifiScanMessage, setWifiScanMessage] = React.useState<string | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
@@ -3312,6 +3313,28 @@ export function AttendanceManagementView({ section }: { section: string }) {
     </TeachingPopover>
   ) : null
 
+  const scanCurrentWifi = React.useCallback(async () => {
+    setWifiScanMessage(null)
+    const connection = (navigator as Navigator & {
+      connection?: { type?: string; ssid?: string; bssid?: string }
+    }).connection
+    const ssid = connection?.ssid?.trim()
+    const bssid = connection?.bssid?.trim()
+    if (ssid) {
+      setCreateValues((current) => ({
+        ...current,
+        ssid,
+        ...(bssid ? { bssid } : {}),
+        name: current.name?.trim() ? current.name : ssid,
+      }))
+      setWifiScanMessage(`Found connected network “${ssid}”. Review the remaining settings before saving.`)
+      return
+    }
+    setWifiScanMessage(
+      "This browser cannot scan nearby Wi-Fi networks. Open this form on a supported managed device, or copy the SSID and BSSID from the device or router settings."
+    )
+  }, [])
+
   const wifiDetailsHelperControl = activeSection === "wifi-networks" ? (
     <TeachingPopover appearance="brand" positioning="below-start">
       <TeachingPopoverTrigger>
@@ -3331,15 +3354,15 @@ export function AttendanceManagementView({ section }: { section: string }) {
         <TeachingPopoverBody>
           <TeachingPopoverTitle>Find the approved network details</TeachingPopoverTitle>
           <div className="grid gap-3 text-sm leading-relaxed">
-            <p>
-              Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
-            </p>
+            <p>Use the button below to fill the connected SSID and BSSID when the device exposes them. Browsers generally block nearby Wi-Fi scans; security type and allowed CIDRs must be confirmed from network settings.</p>
             <ol className="grid list-decimal gap-1.5 pl-4">
               <li>Connect a phone or laptop to the target Wi-Fi.</li>
               <li>Copy the SSID and BSSID from the device network settings.</li>
               <li>Confirm the security type and allowed CIDRs in the router or LAN configuration.</li>
             </ol>
           </div>
+          <Button appearance="primary" onClick={() => void scanCurrentWifi()} className="mt-3">Search current Wi-Fi</Button>
+          {wifiScanMessage ? <p role="status" className="mt-2 text-sm">{wifiScanMessage}</p> : null}
         </TeachingPopoverBody>
         <TeachingPopoverFooter primary="Got it" className="[&_.fui-Button]:!text-[var(--primary)]" />
       </TeachingPopoverSurface>
