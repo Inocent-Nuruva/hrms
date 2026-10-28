@@ -3335,38 +3335,21 @@ export function AttendanceManagementView({ section }: { section: string }) {
     )
   }, [])
 
-  const wifiDetailsHelperControl = activeSection === "wifi-networks" ? (
-    <TeachingPopover appearance="brand" positioning="below-start">
-      <TeachingPopoverTrigger>
-        <Button
-          appearance="subtle"
-          icon={<Wifi24Color className="size-5" />}
-          className="w-fit [grid-column:1/-1]"
-        >
-          Wi-Fi details helper
-        </Button>
-      </TeachingPopoverTrigger>
-      <TeachingPopoverSurface
-        className="!w-[min(28rem,calc(100vw-1.5rem))] !max-w-[28rem]"
-        style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
-      >
-        <TeachingPopoverHeader>Wi-Fi setup guidance</TeachingPopoverHeader>
-        <TeachingPopoverBody>
-          <TeachingPopoverTitle>Find the approved network details</TeachingPopoverTitle>
-          <div className="grid gap-3 text-sm leading-relaxed">
-            <p>Use the button below to fill the connected SSID and BSSID when the device exposes them. Browsers generally block nearby Wi-Fi scans; security type and allowed CIDRs must be confirmed from network settings.</p>
-            <ol className="grid list-decimal gap-1.5 pl-4">
-              <li>Connect a phone or laptop to the target Wi-Fi.</li>
-              <li>Copy the SSID and BSSID from the device network settings.</li>
-              <li>Confirm the security type and allowed CIDRs in the router or LAN configuration.</li>
-            </ol>
+  const wifiDetailsHelperControl = activeSection === "wifi-networks" && createOpen ? (
+    <section className="[grid-column:1/-1] rounded-lg border border-border bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Wifi24Color className="size-5" />
+          <div>
+            <h3 className="text-sm font-semibold">Find a Wi-Fi network</h3>
+            <p className="text-xs text-muted-foreground">Search for the connected network and fill the SSID and BSSID when available.</p>
           </div>
-          <Button appearance="primary" onClick={() => void scanCurrentWifi()} className="mt-3">Search current Wi-Fi</Button>
-          {wifiScanMessage ? <p role="status" className="mt-2 text-sm">{wifiScanMessage}</p> : null}
-        </TeachingPopoverBody>
-        <TeachingPopoverFooter primary="Got it" className="[&_.fui-Button]:!text-[var(--primary)]" />
-      </TeachingPopoverSurface>
-    </TeachingPopover>
+        </div>
+        <Button appearance="primary" onClick={() => void scanCurrentWifi()}>Search current Wi-Fi</Button>
+      </div>
+      {wifiScanMessage ? <p role="status" className="mt-3 text-sm text-muted-foreground">{wifiScanMessage}</p> : null}
+      <p className="mt-2 text-xs text-muted-foreground">Nearby network scanning is restricted in most browsers. Confirm security type and allowed IP CIDRs from your router or network settings.</p>
+    </section>
   ) : null
 
   const deviceFiltersControl =
@@ -3654,7 +3637,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
               >
                 {renderMissingPrerequisites(editValues, () => setEditOpen(false))}
-                {wifiDetailsHelperControl}
                 {activeSection === "geofences" ? (
                   <AttendanceGeofenceMapEditor
                     type={editValues.type ?? "CIRCLE"}
