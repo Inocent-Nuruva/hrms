@@ -1337,10 +1337,10 @@ export function OnboardingView() {
     () => canPerformPermission(actorPermissions, "payroll:profiles:read"),
     [actorPermissions]
   )
-  const canReadJoiningSalary = canReadPayrollProfile || canUpdateOnboardingRequests
+  const canReadJoiningSalary = canReadPayrollProfile
   const canManageJoiningSalary = React.useMemo(
-    () => canPerformPermission(actorPermissions, "payroll:profiles") || canUpdateOnboardingRequests,
-    [actorPermissions, canUpdateOnboardingRequests]
+    () => canPerformPermission(actorPermissions, "payroll:profiles"),
+    [actorPermissions]
   )
   const canApproveJoiningSalary = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
@@ -6089,7 +6089,7 @@ export function OnboardingView() {
                 <div id="onboarding-activation-summary" className="min-w-[16rem] flex-1 sm:max-w-sm" />
               </header>
               <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
-                <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">Payroll & contract</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
+                <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">{canReadPayrollProfile ? "Payroll & contract" : "Contract"}</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
               </FluentTabList></div>
 
               {requestDetailsLoading ? (
@@ -6108,6 +6108,7 @@ export function OnboardingView() {
                         requestId={readCurrentRequestId()!}
                         employeeName={selectedRequestSummary.employee}
                         canActivate={canCompleteOnboardingRequests}
+                        canViewPayroll={canReadPayrollProfile}
                         saving={saving}
                         refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}:${readinessRevision}`}
                         summaryTargetId="onboarding-activation-summary"
@@ -6447,7 +6448,7 @@ export function OnboardingView() {
                     ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
                   </section>
 
-                    <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="border-b border-border bg-background px-3 py-4">
+                    {canReadPayrollProfile ? <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="border-b border-border bg-background px-3 py-4">
                       {(() => {
                         const compensation = toRecord(joiningSalary?.compensation)
                         const approval = toRecord(compensation?.approval)
@@ -6497,7 +6498,7 @@ export function OnboardingView() {
                           <p className="text-xs text-muted-foreground">Payroll setup, TIN, pension, health enrollment, and verified bank account remain separate activation checks.</p>
                         </div>
                       })()}
-                    </section>
+                    </section> : null}
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
                   <details hidden={workspaceTab !== "overview"} className="bg-background p-3">

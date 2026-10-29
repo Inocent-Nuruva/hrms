@@ -180,7 +180,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.getByRole("searchbox", { name: "Search onboarding overview" }).fill("Amina")
     await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
     await page.getByRole("button", { name: "Manage contract for Signed contract covering the start date", exact: true }).click()
-    await expect(page.getByRole("tab", { name: "Payroll & contract", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(page.getByRole("tab", { name: "Contract", exact: true })).toHaveAttribute("aria-selected", "true")
     await page.getByRole("button", { name: "← Back to onboarding", exact: true }).click()
     await expect(page.getByRole("searchbox", { name: "Search onboarding overview" })).toHaveValue("Amina")
     await expect(page).not.toHaveURL(/request_id=/)

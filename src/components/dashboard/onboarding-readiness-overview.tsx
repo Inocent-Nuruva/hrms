@@ -20,11 +20,12 @@ function requirementActionLabel(requirement: OnboardingReadinessRequirement) {
   return "Open requirement"
 }
 
-export function OnboardingReadinessOverview({ token, requestId, employeeName, canActivate, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
+export function OnboardingReadinessOverview({ token, requestId, employeeName, canActivate, canViewPayroll = false, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
   token: string
   requestId: number
   employeeName: string
   canActivate: boolean
+  canViewPayroll?: boolean
   saving: boolean
   onActivate: () => void
   onNavigate: (action: OnboardingReadinessRequirement["action"], requirementId: string) => void
@@ -70,9 +71,12 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
     }
   }, [token, requestId, revision, refreshKey, saving])
   const complete = (item: OnboardingReadinessRequirement) => ["complete", "skipped"].includes(item.status)
-  const outstanding = readiness?.requirements.filter((item) => item.required && !complete(item)) ?? []
-  const optional = readiness?.requirements.filter((item) => !item.required && !complete(item)) ?? []
-  const completed = readiness?.requirements.filter(complete) ?? []
+  const visibleRequirements = readiness?.requirements.filter((item) => canViewPayroll || item.action !== "payroll") ?? []
+  const outstanding = visibleRequirements.filter((item) => item.required && !complete(item))
+  const optional = visibleRequirements.filter((item) => !item.required && !complete(item))
+  const completed = visibleRequirements.filter(complete)
+  const visibleRequired = visibleRequirements.filter((item) => item.required)
+  const visibleCompletedRequired = visibleRequired.filter(complete).length
   const groups = new Map<string, OnboardingReadinessRequirement[]>()
   for (const requirement of outstanding) {
     const key = `${requirement.owner} · ${requirement.action === "payroll" ? "Payroll & salary" : requirement.group}`
@@ -81,18 +85,18 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
   const stages = [
     { label: "Registration & review", actions: ["details"] },
     { label: "Checklist & approvals", actions: ["tasks", "approvals"] },
-    { label: "Payroll & salary", actions: ["payroll"] },
+    ...(canViewPayroll ? [{ label: "Payroll & salary", actions: ["payroll"] }] : []),
     { label: "Employment contract", actions: ["contracts"] },
   ]
   const title = readiness?.closed
     ? readiness.request_status === "completed" ? "Onboarding finalized" : "Onboarding closed"
-    : readiness?.ready_to_activate ? "Ready for activation" : `${readiness?.blocker_count ?? 0} activation requirements outstanding`
+    : outstanding.length === 0 ? "Visible requirements complete" : `${outstanding.length} activation requirements outstanding`
   const summary = readiness ? <div aria-label="Activation readiness" className="flex min-w-0 flex-col gap-2">
     <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="text-xs text-muted-foreground">{readiness.completed_required}/{readiness.total_required} complete · {readiness.employee_status?.replaceAll("_", " ")}</p></div>
+      <div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="text-xs text-muted-foreground">{visibleCompletedRequired}/{visibleRequired.length} visible checks complete · {readiness.employee_status?.replaceAll("_", " ")}</p></div>
       <Tooltip relationship="description" content="All mandatory checks must pass. Authorized HR workflow actions can activate automatically; when payroll or contracts finishes last, refresh and activate manually."><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About employee activation" /></Tooltip>
     </div>
-    <ProgressBar value={readiness.total_required ? readiness.completed_required / readiness.total_required : 0} aria-label="Activation readiness progress" color={readiness.ready_to_activate ? "success" : "brand"} />
+    <ProgressBar value={visibleRequired.length ? visibleCompletedRequired / visibleRequired.length : 1} aria-label="Visible activation readiness progress" color={outstanding.length === 0 ? "success" : "brand"} />
     {canActivate && !readiness.closed && readiness.ready_to_activate ? <Button appearance="primary" size="small" disabled={loading || saving} onClick={() => setConfirming(true)}>Activate employee</Button> : null}
   </div> : null
   const summaryTarget = summaryTargetId && typeof document !== "undefined" ? document.getElementById(summaryTargetId) : null
@@ -113,7 +117,7 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
       {error ? <MessageBar intent="error"><MessageBarBody><strong>Readiness unavailable</strong><p>{error} Activation is disabled until a fresh check succeeds.</p></MessageBarBody></MessageBar> : !readiness ? <Spinner label="Checking activation requirements…" /> : <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Onboarding stages">
           {stages.map((stage) => {
-            const items = readiness.requirements.filter((item) => item.required && stage.actions.includes(item.action))
+            const items = visibleRequirements.filter((item) => item.required && stage.actions.includes(item.action))
             const remaining = items.filter((item) => !complete(item))
             return <Card key={stage.label}><CardHeader image={remaining.length ? <Clock20Regular /> : <CheckmarkCircle20Regular />} header={<Text weight="semibold">{stage.label}</Text>} description={items.length ? remaining.length ? `${remaining.length} remaining` : "Required checks complete" : "No required checks"} /></Card>
           })}
@@ -121,7 +125,7 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
         {summaryTarget ? createPortal(summary, summaryTarget) : summary}
         <div className="min-w-0">
           <div className="flex min-w-0 flex-col gap-4">
-            {readiness.closed ? <MessageBar intent={readiness.request_status === "completed" ? "success" : "info"}><MessageBarBody><strong>{title}</strong><p>Employee status: {readiness.employee_status?.replaceAll("_", " ")}.</p><Button onClick={() => onNavigate("details", "employee-profile")}>Open employee profile</Button></MessageBarBody></MessageBar> : <MessageBar intent={readiness.ready_to_activate ? "success" : "info"}><MessageBarBody><strong>{readiness.ready_to_activate ? "All mandatory checks are satisfied" : "Next best action"}</strong><p>{readiness.next_action ? `${readiness.next_action.label} · Responsible: ${readiness.next_action.owner}` : "Authorized HR can review and activate this employee."}</p></MessageBarBody></MessageBar>}
+            {readiness.closed ? <MessageBar intent={readiness.request_status === "completed" ? "success" : "info"}><MessageBarBody><strong>{title}</strong><p>Employee status: {readiness.employee_status?.replaceAll("_", " ")}.</p><Button onClick={() => onNavigate("details", "employee-profile")}>Open employee profile</Button></MessageBarBody></MessageBar> : <MessageBar intent={outstanding.length === 0 ? "success" : "info"}><MessageBarBody><strong>{outstanding.length === 0 ? "All visible checks are satisfied" : "Next best action"}</strong><p>{outstanding[0] ? `${outstanding[0].label} · Responsible: ${outstanding[0].owner}` : canViewPayroll ? "Authorized HR can review and activate this employee." : "Additional restricted checks may remain for payroll or other authorized teams."}</p></MessageBarBody></MessageBar>}
             {!readiness.closed ? <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">{Array.from(groups, ([group, requirements]) => <section key={group} className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-gradient-to-br from-background via-background to-muted/45 shadow-sm">
               <header className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-4 py-3">
                 <div className="min-w-0"><h3 className="truncate text-sm font-semibold">{group}</h3><p className="text-xs text-muted-foreground">{requirements.length} outstanding</p></div>

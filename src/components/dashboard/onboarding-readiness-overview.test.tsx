@@ -36,8 +36,8 @@ afterEach(async () => {
   container.remove()
   vi.unstubAllGlobals()
 })
-async function render(canActivate = true) {
-  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} saving={false} onActivate={activate} onNavigate={navigate} />))
+async function render(canActivate = true, canViewPayroll = false) {
+  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} canViewPayroll={canViewPayroll} saving={false} onActivate={activate} onNavigate={navigate} />))
 }
 function button(label: string) {
   return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
@@ -69,6 +69,23 @@ describe("onboarding activation overview", () => {
     getReadiness.mockResolvedValue({ ...data, ready_to_activate: true })
     await render(false)
     expect(button("Activate employee")).toBeUndefined()
+  })
+  it("hides payroll requirements unless payroll read access is granted", async () => {
+    const payrollRequirement = { id: "TIN", label: "Tax identification number", group: "Employment & payroll", owner: "Payroll", required: true, status: "pending", action: "payroll" }
+    getReadiness.mockResolvedValue({ ...data, blocker_count: 2, total_required: 3, next_action: payrollRequirement, requirements: [payrollRequirement, ...data.requirements] })
+    await render()
+    expect(container.textContent).not.toContain("Tax identification number")
+    expect(container.textContent).not.toContain("Payroll & salary")
+    expect(container.textContent).toContain("1 activation requirements outstanding")
+    await act(async () => root.unmount())
+    container.remove()
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await render(true, true)
+    expect(container.textContent).toContain("Tax identification number")
+    expect(container.textContent).toContain("Payroll & salary")
+    expect(container.textContent).toContain("2 activation requirements outstanding")
   })
   it("fails closed and lets HR retry a failed readiness check", async () => {
     getReadiness.mockRejectedValueOnce(new Error("Unavailable"))
