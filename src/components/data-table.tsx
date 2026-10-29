@@ -4123,10 +4123,8 @@ export function DataTable({
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
                     onChange={handleRolePermissionsChange}
-                    className={cn(
-                      "min-h-0 flex-1",
-                      membersBusy ? "pointer-events-none opacity-70" : "",
-                    )}
+                    selectionDisabled={membersBusy}
+                    className="min-h-0 flex-1"
                   />
                 ) : (
                   <div className="min-h-0 flex-1 overflow-y-auto">

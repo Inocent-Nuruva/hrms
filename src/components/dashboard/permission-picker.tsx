@@ -47,6 +47,7 @@ export function PermissionPicker({
   compact = false,
   loading = false,
   reviewSelected = false,
+  selectionDisabled = false,
 }: {
   options: PermissionOption[]
   selectedNames: string[]
@@ -56,6 +57,7 @@ export function PermissionPicker({
   compact?: boolean
   loading?: boolean
   reviewSelected?: boolean
+  selectionDisabled?: boolean
 }) {
   const [query, setQuery] = React.useState("")
   const [enabledOnly, setEnabledOnly] = React.useState(reviewSelected)
@@ -90,10 +92,12 @@ export function PermissionPicker({
   }, [enabledOnly, grouped, query])
 
   const toggle = (option: PermissionOption) => {
+    if (selectionDisabled) return
     onChange(togglePermissionSelection(option, selectedNames))
   }
 
   const toggleGroup = (groupOptions: PermissionOption[], selectAll: boolean) => {
+    if (selectionDisabled) return
     const aliases = new Set(groupOptions.flatMap((option) => permissionAliases(option)))
     const names = groupOptions.map((option) => option.name)
     if (selectAll) {
@@ -145,10 +149,10 @@ export function PermissionPicker({
               label="Enabled only"
               onChange={(_event, data) => setEnabledOnly(data.checked)}
             />
-            <Button appearance="secondary" size="small" onClick={() => onChange(options.map((option) => option.name))}>
+            <Button appearance="secondary" size="small" disabled={selectionDisabled} onClick={() => onChange(options.map((option) => option.name))}>
               Select all
             </Button>
-            <Button appearance="subtle" size="small" onClick={() => onChange([])}>
+            <Button appearance="subtle" size="small" disabled={selectionDisabled} onClick={() => onChange([])}>
               Deselect all
             </Button>
           </div>
@@ -218,6 +222,7 @@ export function PermissionPicker({
                     className="mr-2"
                     aria-label={`${allSelected ? "Deselect" : "Select"} all ${group} permissions`}
                     checked={allSelected ? true : selectedInGroup > 0 ? "mixed" : false}
+                    disabled={selectionDisabled}
                     onChange={() => toggleGroup(groupOptions, !allSelected)}
                   />
                 </div>
@@ -231,9 +236,10 @@ export function PermissionPicker({
                           <Checkbox
                             checked={checked}
                             aria-label={option.label}
+                            disabled={selectionDisabled}
                             onChange={() => toggle(option)}
                           />
-                          <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => toggle(option)}>
+                          <button type="button" disabled={selectionDisabled} className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-not-allowed" onClick={() => toggle(option)}>
                             <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                               {option.label}
                             </span>

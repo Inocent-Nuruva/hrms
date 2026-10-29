@@ -649,6 +649,48 @@ export function DepartmentsView() {
   const canManageDepartmentAccess =
     permissionsReady && canPerformPermission(actorPermissions, "departments:manage-access")
 
+  const departmentGroups = React.useMemo(() => {
+    const grouped = new Map<string, { branchId: number | null; branchLabel: string; rows: AdminRecord[] }>()
+
+    for (const row of rows) {
+      const branchId = readNumber(row, ["branch_id", "branchId"])
+      const directBranchName = readString(row, ["branch_name", "branchName"])
+      const matchedBranch =
+        branchId === null
+          ? null
+          : branches.find((branch) => readNumber(branch, ["id"]) === branchId)
+      const branchLabel =
+        directBranchName !== "-"
+          ? directBranchName
+          : branchId === null
+            ? "Company-wide departments"
+            : matchedBranch
+              ? readString(matchedBranch, ["name", "code"])
+              : `Branch ${branchId}`
+      const key = branchId === null ? "company-wide" : `branch-${branchId}`
+      const current = grouped.get(key)
+
+      if (current) {
+        current.rows.push(row)
+      } else {
+        grouped.set(key, { branchId, branchLabel, rows: [row] })
+      }
+    }
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        rows: [...group.rows].sort((left, right) =>
+          readString(left, ["name"]).localeCompare(readString(right, ["name"])),
+        ),
+      }))
+      .sort((left, right) => {
+        if (left.branchId === null) return -1
+        if (right.branchId === null) return 1
+        return left.branchLabel.localeCompare(right.branchLabel)
+      })
+  }, [branches, rows])
+
   const accessColumns: Column<AdminRecord>[] = [
     {
       key: "user",
@@ -772,15 +814,9 @@ export function DepartmentsView() {
     <div className="space-y-2">
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-      <ResizableTable
-        title="Department"
-        data={rows}
-        columns={departmentColumns}
-        itemsPerPage={20}
-        loading={loading}
-        storageKey="departments"
-        toolbarStart={
-          <>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 shadow-sm">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <SearchToggleField
               className="min-w-0 !w-auto !max-w-[12rem] !flex-none"
               placeholder="Search department"
@@ -806,10 +842,28 @@ export function DepartmentsView() {
                 { value: "inactive", label: "inactive" },
               ]}
             />
-          </>
-        }
-        toolbarActions={
-          <>
+            <FluentSelect
+              ariaLabel="Filter departments by branch"
+              size="small"
+              className="!w-[11rem] !max-w-[11rem] !flex-none"
+              value={query.branch_id > 0 ? String(query.branch_id) : ""}
+              placeholder="All branches"
+              onChange={(value) => {
+                setPage(1)
+                setQuery((previous) => ({ ...previous, branch_id: value ? Number(value) : 0 }))
+              }}
+              options={[
+                { value: "", label: "All branches" },
+                ...branches.flatMap((branch) => {
+                  const id = readNumber(branch, ["id"])
+                  return id === null
+                    ? []
+                    : [{ value: String(id), label: readString(branch, ["name", "code"]) }]
+                }),
+              ]}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             {canCreateDepartments ? (
               <button
                 type="button"
@@ -836,9 +890,52 @@ export function DepartmentsView() {
             >
               <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
             </button>
-          </>
-        }
-      />
+          </div>
+        </div>
+
+        {!loading && departmentGroups.length === 0 ? (
+          <ResizableTable
+            title="Department"
+            data={[]}
+            columns={departmentColumns}
+            itemsPerPage={20}
+            loading={false}
+            storageKey="departments-empty"
+            showToolbar={false}
+            emptyContent={
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No departments match the selected filters.
+              </div>
+            }
+          />
+        ) : (
+          departmentGroups.map((group) => (
+            <section
+              key={group.branchId === null ? "company-wide" : `branch-${group.branchId}`}
+              className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm"
+            >
+              <div className="flex items-center justify-between border-b border-border/70 bg-muted/35 px-4 py-2.5">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">{group.branchLabel}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {group.rows.length} {group.rows.length === 1 ? "department" : "departments"}
+                  </p>
+                </div>
+              </div>
+              <ResizableTable
+                title={`${group.branchLabel} department`}
+                data={group.rows}
+                columns={departmentColumns}
+                itemsPerPage={20}
+                loading={loading}
+                storageKey={`departments-${group.branchId ?? "company-wide"}`}
+                showToolbar={false}
+                frameClassName="!rounded-none !border-0"
+              />
+            </section>
+          ))
+        )}
+      </div>
 
       {openCreate ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
