@@ -4,13 +4,23 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
 import * as React from "react";
-import { PlusIcon, RefreshCwIcon, UploadIcon } from "lucide-react";
+import { RefreshCwIcon, UploadIcon } from "lucide-react";
+import {
+  Add20Regular,
+  AppsList24Regular,
+  ArrowClockwise20Regular,
+  ArrowTrending24Regular,
+  CheckmarkCircle20Regular,
+  DocumentBulletList24Regular,
+  Money24Regular,
+  Wallet24Regular,
+} from "@fluentui/react-icons";
+import { Button, Checkbox, Field, Input } from "@fluentui/react-components";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
 import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
 import {
-  HeroBand,
   MetricTile,
   StatusChip,
   StatusStack,
@@ -20,6 +30,7 @@ import {
   employeeLabel,
   inputClass,
   optionLabel,
+  pageBleedClass,
   prettify,
   primaryButtonClass,
   readNumber,
@@ -159,9 +170,9 @@ function sumRecordAmounts(rows: AdminRecord[], keys: string[]) {
     return sum + (value ?? 0);
   }, 0);
 }
-
-
-
+
+
+
 
 const LOAN_REPORT_TYPES = new Set([
   "applications",
@@ -193,8 +204,8 @@ const financeReportTypes = [
 function reportRows(report: AdminRecord | null) {
   return statementArray(report, "rows");
 }
-
-
+
+
 
 function parseCsvList(value?: string) {
   return (value ?? "")
@@ -246,6 +257,35 @@ function saveBlob(file: { blob: Blob; filename: string }) {
 }
 
 type TierDraft = { minimum_amount: string; maximum_amount: string; stages: string[] };
+
+function FinanceInputField({
+  label,
+  value,
+  onValueChange,
+  disabled,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  type?: React.ComponentProps<typeof Input>["type"];
+}) {
+  return (
+    <Field label={label}>
+      <Input
+        appearance="outline"
+        type={type}
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={(_event, data) => onValueChange(data.value)}
+      />
+    </Field>
+  );
+}
 
 function tiersFromProduct(row: AdminRecord | null): TierDraft[] {
   const approval = asRecord(row?.approvalConfiguration ?? row?.approval_configuration);
@@ -333,6 +373,7 @@ export function FinanceOperationsView({
   const [reportFilters, setReportFilters] = React.useState<
     Record<string, string>
   >({});
+  const [reportPage, setReportPage] = React.useState(1);
   const [reportData, setReportData] = React.useState<AdminRecord | null>(null);
   const [auditTimeline, setAuditTimeline] = React.useState<AdminRecord[]>([]);
   const [reportLoading, setReportLoading] = React.useState(false);
@@ -429,6 +470,11 @@ export function FinanceOperationsView({
       const params = {
         date_from: reportFilters.date_from || undefined,
         date_to: reportFilters.date_to || undefined,
+        as_of: reportFilters.as_of || undefined,
+        page: reportPage,
+        limit: 20,
+        sort_by: reportFilters.sort_by || undefined,
+        sort_order: reportFilters.sort_order || undefined,
       };
       const [report, audit] = await Promise.all([
         LOAN_REPORT_TYPES.has(selectedReport)
@@ -449,7 +495,7 @@ export function FinanceOperationsView({
     } finally {
       setReportLoading(false);
     }
-  }, [reportFilters.date_from, reportFilters.date_to, selectedReport]);
+  }, [reportFilters.as_of, reportFilters.date_from, reportFilters.date_to, reportFilters.sort_by, reportFilters.sort_order, reportPage, selectedReport]);
 
   React.useEffect(() => {
     if (!canAccess || activeTab !== "reports") return;
@@ -585,6 +631,9 @@ export function FinanceOperationsView({
         await exportEmployeeFinanceReport(token, selectedReport, format, {
           date_from: reportFilters.date_from || undefined,
           date_to: reportFilters.date_to || undefined,
+          as_of: reportFilters.as_of || undefined,
+          sort_by: reportFilters.sort_by || undefined,
+          sort_order: reportFilters.sort_order || undefined,
         }),
       );
     } catch (errorObject) {
@@ -1140,9 +1189,24 @@ export function FinanceOperationsView({
         {
           key: "status",
           label: "Status",
-          render: (row) => (
-            <StatusChip value={readString(row, ["status"], "ACTIVE")} />
-          ),
+          render: (row) => {
+            const status = readString(row, ["status"], "ACTIVE").toUpperCase();
+            const tone =
+              status === "ACTIVE"
+                ? "text-emerald-600 dark:text-emerald-400"
+                : status === "RETIRED"
+                  ? "text-muted-foreground"
+                  : status === "DRAFT"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-primary";
+
+            return (
+              <span className={`inline-flex items-center gap-2 text-sm font-medium ${tone}`}>
+                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
+                {prettify(status)}
+              </span>
+            );
+          },
         },
         {
           key: "actions",
@@ -1419,7 +1483,7 @@ export function FinanceOperationsView({
   const currentReportRows = reportRows(reportData);
   const reportTotals =
     asRecord(reportData?.totals) ?? asRecord(reportData?.buckets);
-
+
 
   if (!canAccess) return null;
 
@@ -1427,60 +1491,159 @@ export function FinanceOperationsView({
     <section className="space-y-4">
       <TalentDoodleSprites />
       {activeTab === "overview" ? (
-        <>
-          <HeroBand
-            eyebrow="Finance"
-            title="Staff loans and advances"
-            description="Products, applications, and accounts you are allowed to operate."
-            actions={
-              <button
-                type="button"
-                className={secondaryButtonClass}
+        <div className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}>
+          <div className="relative overflow-hidden border-b border-border bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-7 text-primary-foreground sm:px-8 sm:py-8">
+            <div className="finance-hero-drift pointer-events-none absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+            <div className="finance-hero-orbit pointer-events-none absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+            <div className="finance-hero-band pointer-events-none absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+            <div className="finance-hero-line pointer-events-none absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
+            <div className="finance-hero-dot pointer-events-none absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
+            <div className="finance-hero-dot finance-hero-dot-delayed pointer-events-none absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary-foreground/20" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex max-w-2xl items-center gap-5">
+                <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" aria-hidden="true" />
+                <div className="h-12 w-px shrink-0 bg-primary-foreground/25" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">
+                    Finance workspace
+                  </p>
+                  <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:text-3xl">
+                    Staff loans and advances
+                  </h1>
+                </div>
+              </div>
+              <Button
+                appearance="transparent"
+                size="large"
+                icon={
+                  loading ? (
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowClockwise20Regular aria-hidden="true" />
+                  )
+                }
+                aria-label="Refresh finance overview"
+                title="Refresh"
+                className="!min-w-0 !text-primary-foreground hover:!bg-primary-foreground/10"
                 onClick={() => void load()}
                 disabled={loading}
-              >
-                {loading ? (
-                  <FluentLoadingIndicator className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCwIcon className="size-4" />
-                )}
-                Refresh
-              </button>
-            }
-          />
+              />
+            </div>
+          </div>
           {error ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <div className="m-5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricTile
-              label="Open accounts"
-              value={
-                readNumber(dashboard, ["open_accounts", "openAccounts"]) ??
-                accounts.length
-              }
-            />
-            <MetricTile label="Applications" value={applications.length} />
-            <MetricTile label="Products" value={products.length} />
-            <MetricTile
-              label="Outstanding"
-              value={readString(
-                dashboard,
-                ["outstanding", "outstanding_balance"],
-                "—",
-              )}
-            />
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold">Application mix</h2>
-            <div className="mt-4">
-              <StatusStack items={statusChartItems(applications)} />
+          <div className="p-4 sm:p-6">
+            <div className="grid border-y border-border sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "Open accounts",
+                  value:
+                    readNumber(dashboard, ["open_accounts", "openAccounts"]) ??
+                    accounts.length,
+                  hint: "Currently being serviced",
+                  icon: Wallet24Regular,
+                },
+                {
+                  label: "Applications",
+                  value: applications.length,
+                  hint: "Across all stages",
+                  icon: DocumentBulletList24Regular,
+                },
+                {
+                  label: "Available products",
+                  value: products.length,
+                  hint: "Ready for employees",
+                  icon: AppsList24Regular,
+                },
+                {
+                  label: "Outstanding balance",
+                  value: readString(
+                    dashboard,
+                    ["outstanding", "outstanding_balance"],
+                    "—",
+                  ),
+                  hint: "Across open accounts",
+                  icon: Money24Regular,
+                },
+              ].map((metric, index) => {
+                const Icon = metric.icon;
+                return (
+                  <div
+                    key={metric.label}
+                    className={`flex min-h-28 items-start gap-4 px-3 py-5 sm:px-5 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
+                  >
+                    <Icon className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {metric.label}
+                      </p>
+                      <p className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
+                        {metric.value}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{metric.hint}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(260px,0.55fr)]">
+              <section className="border-y border-border py-5 xl:pr-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">Application pipeline</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Distribution of applications by their current status.
+                    </p>
+                  </div>
+                  <ArrowTrending24Regular className="size-6 shrink-0 text-primary" aria-hidden="true" />
+                </div>
+                <div className="mt-6">
+                  {applications.length ? (
+                    <StatusStack items={statusChartItems(applications)} />
+                  ) : (
+                    <div className="flex min-h-28 flex-col items-center justify-center px-4 text-center">
+                      <DocumentBulletList24Regular className="text-muted-foreground" aria-hidden="true" />
+                      <p className="mt-2 text-sm font-medium text-foreground">No applications yet</p>
+                      <p className="mt-1 text-xs text-muted-foreground">New applications will appear here as they are submitted.</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="border-y border-border py-5 xl:pl-5">
+                <h2 className="text-base font-semibold text-foreground">Portfolio snapshot</h2>
+                <p className="mt-1 text-sm text-muted-foreground">A quick view of finance activity.</p>
+                <dl className="mt-5 divide-y divide-border">
+                  <div className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                    <dt className="text-sm text-muted-foreground">Products in catalogue</dt>
+                    <dd className="text-sm font-semibold text-foreground">{products.length}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-3">
+                    <dt className="text-sm text-muted-foreground">Applications per product</dt>
+                    <dd className="text-sm font-semibold text-foreground">
+                      {products.length ? (applications.length / products.length).toFixed(1) : "0.0"}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-3 last:pb-0">
+                    <dt className="text-sm text-muted-foreground">Open account ratio</dt>
+                    <dd className="text-sm font-semibold text-foreground">
+                      {applications.length
+                        ? `${Math.round(((readNumber(dashboard, ["open_accounts", "openAccounts"]) ?? accounts.length) / applications.length) * 100)}%`
+                        : "0%"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
             </div>
           </div>
-        </>
+        </div>
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className={activeTab === "products" ? `${pageBleedClass} flex flex-col gap-4 border-y border-border bg-muted/20 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7` : "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"}>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
               {activeTab === "products"
@@ -1500,24 +1663,35 @@ export function FinanceOperationsView({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              {loading ? (
-                <FluentLoadingIndicator className="size-4 animate-spin" />
-              ) : (
-                <RefreshCwIcon className="size-4" />
-              )}
-              Refresh
-            </button>
+            {activeTab === "products" ? (
+              <Button
+                appearance="subtle"
+                icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwise20Regular />}
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                Refresh
+              </Button>
+            ) : (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-4" />
+                )}
+                Refresh
+              </button>
+            )}
             {activeTab === "products" ? (
               <>
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
+                <Button
+                  appearance="secondary"
+                  icon={<CheckmarkCircle20Regular />}
                   onClick={() => {
                     const token = readStoredToken();
                     if (!token) return;
@@ -1536,14 +1710,14 @@ export function FinanceOperationsView({
                   }}
                 >
                   Check eligibility
-                </button>
-                <button
-                  type="button"
-                  className={primaryButtonClass}
+                </Button>
+                <Button
+                  appearance="primary"
+                  icon={<Add20Regular />}
                   onClick={() => openProductForm("product", null)}
                 >
-                  <PlusIcon className="size-4" /> New product
-                </button>
+                  New product
+                </Button>
               </>
             ) : null}
             {activeTab === "accounts" ? (
@@ -1586,7 +1760,7 @@ export function FinanceOperationsView({
                   ariaLabel="Report"
                   className="w-full"
                   value={selectedReport}
-                  onChange={setSelectedReport}
+                  onChange={(value) => { setSelectedReport(value); setReportPage(1); }}
                   options={financeReportTypes}
                 />
               </label>
@@ -1605,6 +1779,12 @@ export function FinanceOperationsView({
                     }
                   />
                 </label>
+                {selectedReport === "outstanding" ? (
+                  <label className="grid gap-1.5 text-sm sm:col-span-2">
+                    <span className="font-medium">Overdue as of</span>
+                    <DateInput className={inputClass} value={reportFilters.as_of ?? ""} onChange={(event) => { setReportPage(1); setReportFilters((current) => ({ ...current, as_of: event.target.value })); }} />
+                  </label>
+                ) : null}
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">To</span>
                   <DateInput
@@ -1781,6 +1961,15 @@ export function FinanceOperationsView({
                 showExport={false}
                 storageKey={`finance-report-${selectedReport}`}
               />
+              {asRecord(reportData?.pagination) ? (
+                <div className="flex items-center justify-between border-t border-border px-4 py-3 text-sm">
+                  <span>{String(asRecord(reportData?.pagination)?.total_rows ?? 0)} rows · page {reportPage} of {String(asRecord(reportData?.pagination)?.total_pages ?? 0)}</span>
+                  <div className="flex gap-2">
+                    <button type="button" className={secondaryButtonClass} disabled={reportPage <= 1 || reportLoading} onClick={() => setReportPage((page) => Math.max(1, page - 1))}>Previous</button>
+                    <button type="button" className={secondaryButtonClass} disabled={reportPage >= Number(asRecord(reportData?.pagination)?.total_pages ?? 0) || reportLoading} onClick={() => setReportPage((page) => page + 1)}>Next</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-xl border border-border bg-card">
@@ -1815,25 +2004,62 @@ export function FinanceOperationsView({
       ) : null}
 
       {activeTab !== "overview" && activeTab !== "reports" ? (
-        <div className="space-y-3">
-          <SearchToggleField
-            value={search}
-            onChange={setSearch}
-            placeholder="Search"
-          />
+        <div className={activeTab === "products" ? `${pageBleedClass} space-y-0` : "space-y-3"}>
+          {activeTab === "products" ? (
+            <div className="grid border-b border-border bg-background sm:grid-cols-3">
+              <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:border-b-0 sm:border-r sm:px-7">
+                <AppsList24Regular className="shrink-0 text-primary" />
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Products</p>
+                  <p className="text-lg font-semibold text-foreground">{products.length}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:border-b-0 sm:border-r sm:px-7">
+                <CheckmarkCircle20Regular className="size-6 shrink-0 text-primary" />
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {products.filter((product) => readString(product, ["status"], "ACTIVE") === "ACTIVE").length}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-5 py-4 sm:px-7">
+                <DocumentBulletList24Regular className="shrink-0 text-primary" />
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Product types</p>
+                  <p className="text-lg font-semibold text-foreground">
+                    {new Set(products.map((product) => readString(product, ["productType", "product_type"], "STAFF_LOAN"))).size}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className={activeTab === "products" ? "flex items-center justify-between gap-3 border-b border-border bg-background px-5 py-3 sm:px-7" : undefined}>
+            <SearchToggleField
+              value={search}
+              onChange={setSearch}
+              placeholder={activeTab === "products" ? "Search finance products" : "Search"}
+              label={activeTab === "products" ? "Search finance products" : "Search"}
+            />
+            {activeTab === "products" ? (
+              <span className="text-xs text-muted-foreground">{visible.length} shown</span>
+            ) : null}
+          </div>
           {error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {error}
             </div>
           ) : null}
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className={activeTab === "products" ? "overflow-hidden bg-background" : "overflow-hidden rounded-xl border border-border bg-card"}>
             <ResizableTable
-              title="Finance records"
+              title={activeTab === "products" ? "Finance products" : "Finance records"}
               data={visible}
               columns={columns}
               loading={loading}
               itemsPerPage={20}
               showExport={false}
+              showToolbar={activeTab !== "products"}
+              frameClassName={activeTab === "products" ? "!rounded-none !border-x-0 !shadow-none" : undefined}
               storageKey={`finance-${activeTab}`}
               onRowSelect={(_, row) => {
                 if (!row) return;
@@ -2930,55 +3156,34 @@ export function FinanceOperationsView({
             createMode === "product-edit" ||
             createMode === "product-version" ? (
               <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Type</span>
-                  <FluentSelect
-                    ariaLabel="Type"
-                    className="w-full"
-                    value={form.product_type ?? "STAFF_LOAN"}
-                    onChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        product_type: value,
-                      }))
-                    }
-                    options={[
-                      { value: "STAFF_LOAN", label: "Staff loan" },
-                      { value: "SALARY_ADVANCE", label: "Salary advance" },
-                    ]}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Code</span>
-                  <input
-                    className={inputClass}
-                    disabled={createMode === "product-version"}
-                    value={form.code ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        code: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Name</span>
-                  <input
-                    className={inputClass}
-                    value={form.name ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        name: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Description</span>
+                <FluentSelect
+                  label="Type"
+                  ariaLabel="Type"
+                  className="w-full"
+                  value={form.product_type ?? "STAFF_LOAN"}
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, product_type: value }))
+                  }
+                  options={[
+                    { value: "STAFF_LOAN", label: "Staff loan" },
+                    { value: "SALARY_ADVANCE", label: "Salary advance" },
+                  ]}
+                />
+                <FinanceInputField
+                  label="Code"
+                  disabled={createMode === "product-version"}
+                  value={form.code ?? ""}
+                  onValueChange={(value) => setForm((current) => ({ ...current, code: value }))}
+                />
+                <FinanceInputField
+                  label="Name"
+                  value={form.name ?? ""}
+                  onValueChange={(value) => setForm((current) => ({ ...current, name: value }))}
+                />
+                <Field label="Description">
                   <Textarea
-                    className={textareaClass}
+                    resize="vertical"
+                    className="min-h-24"
                     value={form.description ?? ""}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -2987,7 +3192,7 @@ export function FinanceOperationsView({
                       }))
                     }
                   />
-                </label>
+                </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Interest method</span>
@@ -3008,19 +3213,12 @@ export function FinanceOperationsView({
                       ]}
                     />
                   </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Annual interest %</span>
-                    <input
-                      className={inputClass}
-                      value={form.annual_interest_rate ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          annual_interest_rate: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
+                  <FinanceInputField
+                    label="Annual interest %"
+                    type="number"
+                    value={form.annual_interest_rate ?? ""}
+                    onValueChange={(value) => setForm((current) => ({ ...current, annual_interest_rate: value }))}
+                  />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5 text-sm">
@@ -3039,17 +3237,13 @@ export function FinanceOperationsView({
                       ]}
                     />
                   </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Fee value</span>
-                    <input
-                      className={inputClass}
-                      disabled={(form.processing_fee_method ?? "NONE") === "NONE"}
-                      value={form.processing_fee_value ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, processing_fee_value: event.target.value }))
-                      }
-                    />
-                  </label>
+                  <FinanceInputField
+                    label="Fee value"
+                    type="number"
+                    disabled={(form.processing_fee_method ?? "NONE") === "NONE"}
+                    value={form.processing_fee_value ?? ""}
+                    onValueChange={(value) => setForm((current) => ({ ...current, processing_fee_value: value }))}
+                  />
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Late-payment penalty</span>
                     <FluentSelect
@@ -3066,24 +3260,21 @@ export function FinanceOperationsView({
                       ]}
                     />
                   </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Penalty value</span>
-                    <input
-                      className={inputClass}
-                      disabled={(form.penalty_method ?? "NONE") === "NONE"}
-                      value={form.penalty_value ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, penalty_value: event.target.value }))
-                      }
-                    />
-                  </label>
+                  <FinanceInputField
+                    label="Penalty value"
+                    type="number"
+                    disabled={(form.penalty_method ?? "NONE") === "NONE"}
+                    value={form.penalty_value ?? ""}
+                    onValueChange={(value) => setForm((current) => ({ ...current, penalty_value: value }))}
+                  />
                 </div>
                 <div className="grid gap-2 rounded-lg border border-border p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">Approval stages by amount</span>
-                    <button
-                      type="button"
-                      className={actionButtonClass}
+                    <Button
+                      appearance="subtle"
+                      size="small"
+                      icon={<Add20Regular />}
                       onClick={() =>
                         setTiers((current) => [
                           ...current,
@@ -3092,7 +3283,7 @@ export function FinanceOperationsView({
                       }
                     >
                       Add tier
-                    </button>
+                    </Button>
                   </div>
                   {tiers.length ? null : (
                     <p className="text-xs text-muted-foreground">
@@ -3101,52 +3292,55 @@ export function FinanceOperationsView({
                   )}
                   {tiers.map((tier, index) => (
                     <div key={index} className="grid gap-2 rounded-md bg-muted/40 p-2 sm:grid-cols-[1fr_1fr_auto]">
-                      <input
-                        className={inputClass}
+                      <FinanceInputField
+                        label="From amount"
+                        type="number"
                         placeholder="From amount"
                         value={tier.minimum_amount}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setTiers((current) =>
                             current.map((item, itemIndex) =>
-                              itemIndex === index ? { ...item, minimum_amount: event.target.value } : item,
+                              itemIndex === index ? { ...item, minimum_amount: value } : item,
                             ),
                           )
                         }
                       />
-                      <input
-                        className={inputClass}
+                      <FinanceInputField
+                        label="To amount"
+                        type="number"
                         placeholder="To amount (blank = no limit)"
                         value={tier.maximum_amount}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setTiers((current) =>
                             current.map((item, itemIndex) =>
-                              itemIndex === index ? { ...item, maximum_amount: event.target.value } : item,
+                              itemIndex === index ? { ...item, maximum_amount: value } : item,
                             ),
                           )
                         }
                       />
-                      <button
-                        type="button"
-                        className={actionButtonClass}
+                      <Button
+                        appearance="subtle"
+                        size="small"
                         onClick={() =>
                           setTiers((current) => current.filter((_, itemIndex) => itemIndex !== index))
                         }
                       >
                         Remove
-                      </button>
+                      </Button>
                       <div className="flex flex-wrap gap-3 sm:col-span-3">
                         {["MANAGER", "HR", "FINANCE", "MANAGEMENT"].map((stage) => (
-                          <label key={stage} className="flex items-center gap-1.5 text-xs">
-                            <input
-                              type="checkbox"
+                          <Checkbox
+                              key={stage}
+                              label={prettify(stage)}
+                              className="text-xs"
                               checked={tier.stages.includes(stage)}
-                              onChange={(event) =>
+                              onChange={(_event, data) =>
                                 setTiers((current) =>
                                   current.map((item, itemIndex) =>
                                     itemIndex === index
                                       ? {
                                           ...item,
-                                          stages: event.target.checked
+                                          stages: data.checked
                                             ? [...item.stages, stage]
                                             : item.stages.filter((value) => value !== stage),
                                         }
@@ -3155,146 +3349,45 @@ export function FinanceOperationsView({
                                 )
                               }
                             />
-                            {prettify(stage)}
-                          </label>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Minimum amount</span>
-                    <input
-                      className={inputClass}
-                      value={form.minimum_amount ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          minimum_amount: event.target.value,
-                        }))
+                  {([
+                    ["minimum_amount", "Minimum amount"],
+                    ["maximum_amount", "Maximum amount"],
+                    ["minimum_term_months", "Minimum term (months)"],
+                    ["maximum_term_months", "Maximum term (months)"],
+                    ["maximum_salary_multiple", "Max salary multiple"],
+                    ["maximum_installment_percentage", "Max installment %"],
+                    ["minimum_service_months", "Minimum service months"],
+                    ["maximum_active_accounts", "Max active accounts"],
+                  ] as const).map(([key, label]) => (
+                    <FinanceInputField
+                      key={key}
+                      label={label}
+                      type="number"
+                      value={form[key] ?? ""}
+                      onValueChange={(value) =>
+                        setForm((current) => ({ ...current, [key]: value }))
                       }
                     />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Maximum amount</span>
-                    <input
-                      className={inputClass}
-                      value={form.maximum_amount ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          maximum_amount: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Minimum term (months)</span>
-                    <input
-                      className={inputClass}
-                      value={form.minimum_term_months ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          minimum_term_months: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Maximum term (months)</span>
-                    <input
-                      className={inputClass}
-                      value={form.maximum_term_months ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          maximum_term_months: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Max salary multiple</span>
-                    <input
-                      className={inputClass}
-                      value={form.maximum_salary_multiple ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          maximum_salary_multiple: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Max installment %</span>
-                    <input
-                      className={inputClass}
-                      value={form.maximum_installment_percentage ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          maximum_installment_percentage: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Minimum service months</span>
-                    <input
-                      className={inputClass}
-                      value={form.minimum_service_months ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          minimum_service_months: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Max active accounts</span>
-                    <input
-                      className={inputClass}
-                      value={form.maximum_active_accounts ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          maximum_active_accounts: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
+                  ))}
                 </div>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Required document types</span>
-                  <input
-                    className={inputClass}
-                    placeholder="PAYSLIP, ID_COPY"
-                    value={form.required_document_types ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        required_document_types: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Required guarantors</span>
-                  <input
-                    className={inputClass}
-                    value={form.required_guarantors ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        required_guarantors: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                <FinanceInputField
+                  label="Required document types"
+                  placeholder="PAYSLIP, ID_COPY"
+                  value={form.required_document_types ?? ""}
+                  onValueChange={(value) => setForm((current) => ({ ...current, required_document_types: value }))}
+                />
+                <FinanceInputField
+                  label="Required guarantors"
+                  type="number"
+                  value={form.required_guarantors ?? ""}
+                  onValueChange={(value) => setForm((current) => ({ ...current, required_guarantors: value }))}
+                />
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[
                     ["requires_confirmation", "Requires employee confirmation"],
@@ -3307,26 +3400,21 @@ export function FinanceOperationsView({
                       "Allow additional repayment",
                     ],
                   ].map(([key, label]) => (
-                    <label
+                    <Checkbox
                       key={key}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
+                      label={label}
                         checked={
                           (form[key] ??
                             (key.startsWith("allow_") ? "true" : "false")) ===
                           "true"
                         }
-                        onChange={(event) =>
+                        onChange={(_event, data) =>
                           setForm((current) => ({
                             ...current,
-                            [key]: event.target.checked ? "true" : "false",
+                            [key]: data.checked ? "true" : "false",
                           }))
                         }
-                      />
-                      {label}
-                    </label>
+                    />
                   ))}
                 </div>
                 <label className="grid gap-1.5 text-sm">
@@ -3454,16 +3542,14 @@ export function FinanceOperationsView({
             ) : null}
           </div>
           <DialogFooter>
-            <button
-              type="button"
-              className={secondaryButtonClass}
+            <Button
+              appearance="secondary"
               onClick={() => setCreateOpen(false)}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className={primaryButtonClass}
+            </Button>
+            <Button
+              appearance="primary"
               onClick={() => void onSave()}
               disabled={saving}
             >
@@ -3472,7 +3558,7 @@ export function FinanceOperationsView({
               ) : (
                 "Save"
               )}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

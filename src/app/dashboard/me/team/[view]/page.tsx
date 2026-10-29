@@ -10,6 +10,7 @@ const ALLOWED_VIEWS = new Set<ManagerSelfTab>([
   "members",
   "attendance",
   "actions",
+  "activity-summary",
 ])
 
 interface SelfTeamViewPageProps {

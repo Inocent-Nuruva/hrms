@@ -1,5 +1,6 @@
 import type { AdminRecord } from "@/lib/admin-api"
 import { readString, rowId } from "./talent-visuals"
+import { resolveBackendMediaUrl } from "@/lib/backend-media-url"
 
 export function recordValue(value: unknown): AdminRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as AdminRecord : {}
@@ -8,20 +9,30 @@ export function recordValue(value: unknown): AdminRecord {
 export function actionSubject(row: AdminRecord) {
   const employee = recordValue(row.subject_employee)
   const metadata = recordValue(row.metadata)
-  const employeeId = readString(employee, ["id"]) || readString(metadata, ["employee_id"])
-  const name = readString(employee, ["name"]) || readString(metadata, ["employee_name"]) || "Employee details unavailable"
+  const employeeId = readString(employee, ["id"]) || readString(row, ["assigneeEmployeeId", "assignee_employee_id"]) || readString(metadata, ["employeeId", "employee_id"])
+  const name = readString(employee, ["name"]) || readString(metadata, ["employeeName", "employee_name"]) || "Employee details unavailable"
   const requestId = readString(metadata, ["onboarding_request_id", "offboarding_request_id"])
+  const defaultAvatar = recordValue(employee.selected_default_avatar ?? employee.selectedDefaultAvatar)
+  const photoUrl = resolveBackendMediaUrl(
+    readString(employee, ["profile_photo_url", "profilePhotoUrl"]) ||
+    readString(defaultAvatar, ["image_path", "imagePath", "file_url", "fileUrl"]),
+  ) ?? undefined
   return {
     key: employeeId ? `employee:${employeeId}` : `request:${readString(row, ["sourceModule", "source_module"])}:${requestId || rowId(row)}`,
     name,
     number: readString(employee, ["employee_no"]),
     department: readString(employee, ["department"]),
     position: readString(employee, ["position"]),
+    photoUrl,
   }
 }
 
 export function isOpenAction(row: AdminRecord) {
   return ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(readString(row, ["status"], "OPEN").toUpperCase())
+}
+
+export function isEmployeeRequestAction(row: AdminRecord) {
+  return readString(row, ["sourceEntityType", "source_entity_type"]).toUpperCase() !== "DAILY_ACTIVITY_REPORT"
 }
 
 export function actionReference(row: AdminRecord) {
@@ -42,6 +53,9 @@ export function filterAndGroupActions(actions: AdminRecord[], filters: InboxFilt
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime()
   for (const row of actions) {
+    if (!isEmployeeRequestAction(row)) continue
+    const sourceKey = readString(row, ["sourceKey", "source_key"])
+    if (sourceKey.startsWith("daily-activity:missing-escalation:")) continue
     const subject = actionSubject(row)
     const sourceModule = readString(row, ["sourceModule", "source_module"])
     const kind = readString(row, ["actionType", "action_type"]).toUpperCase()

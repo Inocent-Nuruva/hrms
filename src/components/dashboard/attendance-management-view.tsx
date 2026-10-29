@@ -2345,6 +2345,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   const [validateBusy, setValidateBusy] = React.useState(false)
   const [validateResult, setValidateResult] = React.useState<string | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [wifiScanMessage, setWifiScanMessage] = React.useState<string | null>(null)
   const [editOpen, setEditOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [detailsOpen, setDetailsOpen] = React.useState(false)
@@ -3312,38 +3313,43 @@ export function AttendanceManagementView({ section }: { section: string }) {
     </TeachingPopover>
   ) : null
 
-  const wifiDetailsHelperControl = activeSection === "wifi-networks" ? (
-    <TeachingPopover appearance="brand" positioning="below-start">
-      <TeachingPopoverTrigger>
-        <Button
-          appearance="subtle"
-          icon={<Wifi24Color className="size-5" />}
-          className="w-fit [grid-column:1/-1]"
-        >
-          Wi-Fi details helper
-        </Button>
-      </TeachingPopoverTrigger>
-      <TeachingPopoverSurface
-        className="!w-[min(28rem,calc(100vw-1.5rem))] !max-w-[28rem]"
-        style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
-      >
-        <TeachingPopoverHeader>Wi-Fi setup guidance</TeachingPopoverHeader>
-        <TeachingPopoverBody>
-          <TeachingPopoverTitle>Find the approved network details</TeachingPopoverTitle>
-          <div className="grid gap-3 text-sm leading-relaxed">
-            <p>
-              Browsers cannot read saved or current SSID, BSSID, security type, or allowed CIDRs directly from a device.
-            </p>
-            <ol className="grid list-decimal gap-1.5 pl-4">
-              <li>Connect a phone or laptop to the target Wi-Fi.</li>
-              <li>Copy the SSID and BSSID from the device network settings.</li>
-              <li>Confirm the security type and allowed CIDRs in the router or LAN configuration.</li>
-            </ol>
+  const scanCurrentWifi = React.useCallback(async () => {
+    setWifiScanMessage(null)
+    const connection = (navigator as Navigator & {
+      connection?: { type?: string; ssid?: string; bssid?: string }
+    }).connection
+    const ssid = connection?.ssid?.trim()
+    const bssid = connection?.bssid?.trim()
+    if (ssid) {
+      setCreateValues((current) => ({
+        ...current,
+        ssid,
+        ...(bssid ? { bssid } : {}),
+        name: current.name?.trim() ? current.name : ssid,
+      }))
+      setWifiScanMessage(`Found connected network “${ssid}”. Review the remaining settings before saving.`)
+      return
+    }
+    setWifiScanMessage(
+      "This browser cannot scan nearby Wi-Fi networks. Open this form on a supported managed device, or copy the SSID and BSSID from the device or router settings."
+    )
+  }, [])
+
+  const wifiDetailsHelperControl = activeSection === "wifi-networks" && createOpen ? (
+    <section className="[grid-column:1/-1] rounded-lg border border-border bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Wifi24Color className="size-5" />
+          <div>
+            <h3 className="text-sm font-semibold">Find a Wi-Fi network</h3>
+            <p className="text-xs text-muted-foreground">Search for the connected network and fill the SSID and BSSID when available.</p>
           </div>
-        </TeachingPopoverBody>
-        <TeachingPopoverFooter primary="Got it" className="[&_.fui-Button]:!text-[var(--primary)]" />
-      </TeachingPopoverSurface>
-    </TeachingPopover>
+        </div>
+        <Button appearance="primary" onClick={() => void scanCurrentWifi()}>Search current Wi-Fi</Button>
+      </div>
+      {wifiScanMessage ? <p role="status" className="mt-3 text-sm text-muted-foreground">{wifiScanMessage}</p> : null}
+      <p className="mt-2 text-xs text-muted-foreground">Nearby network scanning is restricted in most browsers. Confirm security type and allowed IP CIDRs from your router or network settings.</p>
+    </section>
   ) : null
 
   const deviceFiltersControl =
@@ -3631,7 +3637,6 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   : "grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-3 overflow-y-auto pr-1 pb-2 sm:grid-cols-2"}
               >
                 {renderMissingPrerequisites(editValues, () => setEditOpen(false))}
-                {wifiDetailsHelperControl}
                 {activeSection === "geofences" ? (
                   <AttendanceGeofenceMapEditor
                     type={editValues.type ?? "CIRCLE"}

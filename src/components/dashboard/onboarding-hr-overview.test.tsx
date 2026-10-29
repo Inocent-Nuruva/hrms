@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { OnboardingHrOverview } from "./onboarding-hr-overview"
 
 const getOverview = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/admin-api", () => ({ getOnboardingOverview: getOverview }))
+const completeOnboarding = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/admin-api", () => ({
+  completeOnboardingRequest: completeOnboarding,
+  extractProfilePhotoUrl: () => null,
+  getEmployeeById: vi.fn().mockRejectedValue(new Error("No photo")),
+  getOnboardingOverview: getOverview,
+}))
 let root: Root
 let container: HTMLDivElement
 const open = vi.fn()
@@ -20,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   getOverview.mockResolvedValue({ data: [row], next_cursor: null })
+  completeOnboarding.mockResolvedValue({})
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -36,11 +43,12 @@ function button(label: string) {
   return [...container.querySelectorAll("button")].find((entry) => (entry.getAttribute("aria-label") ?? entry.textContent?.trim()) === label)!
 }
 describe("HR onboarding overview", () => {
-  it("loads every batch before showing complete counts and opens the existing request dialog", async () => {
+  it("loads every batch, activates ready employees, refreshes, and opens the existing request dialog", async () => {
     getOverview.mockResolvedValueOnce({ data: [row], next_cursor: 1 }).mockResolvedValueOnce({ data: [{ ...row, id: 2, employee_name: "Neema David", stage: "Ready for activation", blockers: [], owners: [], overdue: false, readiness: { ready_to_activate: true, completed_required: 10, total_required: 10 } }], next_cursor: null })
     await render()
     expect(getOverview).toHaveBeenNthCalledWith(2, "token", 1)
-    expect(container.textContent).toContain("2 of 2 open requests · 1 ready for activation · 1 overdue")
+    expect(completeOnboarding).toHaveBeenCalledWith("token", 2)
+    expect(container.textContent).toContain("1 of 1 open requests · 0 ready for activation · 1 overdue")
     expect(container.textContent).toContain("Signed contract")
     expect(container.textContent).toContain("Responsible: HR / Employee")
     await act(async () => button("Review onboarding for Amina Ali").click())

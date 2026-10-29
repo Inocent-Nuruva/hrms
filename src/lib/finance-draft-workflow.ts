@@ -33,6 +33,31 @@ export interface FinanceWorkflowApi {
   addGuarantor: (id: string, employeeId: number) => Promise<unknown>;
   submit: (id: string) => Promise<unknown>;
 }
+
+const GUARANTOR_FORM_PREFIX = "GUARANTOR_FORM::";
+
+function completedDocumentKey(row: RecordData) {
+  const type = String(row.documentType ?? row.document_type ?? "")
+    .trim()
+    .toUpperCase();
+  const metadata =
+    row.metadata &&
+    typeof row.metadata === "object" &&
+    !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const guarantorId = Number(
+    metadata.guarantor_employee_id ?? metadata.guarantorEmployeeId,
+  );
+  if (
+    type === "GUARANTOR_FORM" &&
+    Number.isSafeInteger(guarantorId) &&
+    guarantorId > 0
+  ) {
+    return `${GUARANTOR_FORM_PREFIX}${guarantorId}`;
+  }
+  return type;
+}
 function amountKey(value: unknown): string | null {
   const parsed = z
     .string()
@@ -141,11 +166,7 @@ export async function resumeFinanceDraft(
         (row) =>
           !["REJECTED", "DELETED"].includes(String(row.status).toUpperCase()),
       )
-      .map((row) =>
-        String(row.documentType ?? row.document_type ?? "")
-          .trim()
-          .toUpperCase(),
-      ),
+      .map(completedDocumentKey),
     completedGuarantors: guarantors
       .map((row) =>
         Number(row.guarantorEmployeeId ?? row.guarantor_employee_id),

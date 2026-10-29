@@ -1,6 +1,3 @@
-// Permanent delete is only offered for employees still in onboarding; the
-// backend enforces the same rule and the remaining safety checks.
-
 type StatusSource = Record<string, unknown>
 
 export function employmentStatusOf(row: StatusSource): string {

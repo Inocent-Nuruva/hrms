@@ -855,6 +855,11 @@ export const api = {
   async getMyPerformanceSummary() {
     return request<Record<string, unknown>>('/api/performance/me/summary');
   },
+  async listMyPerformanceAggregates() {
+    return normalizeList(
+      await request<unknown>('/api/performance/me/aggregates'),
+    );
+  },
   async createMyPerformanceKpi(data: Record<string, unknown>) {
     return request<Record<string, unknown>>('/api/performance/me/kpis', { method: 'POST', body: data });
   },

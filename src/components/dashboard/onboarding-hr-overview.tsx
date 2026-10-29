@@ -1,19 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { Badge as FluentBadge, Button as FluentButton, CounterBadge, DrawerBody, DrawerFooter, DrawerHeader, DrawerHeaderTitle, OverlayDrawer, ProgressBar, Tooltip } from "@fluentui/react-components"
-import { ArrowClockwise20Regular, ArrowRight20Regular, CheckmarkCircle20Regular, Dismiss20Regular, DismissCircle20Regular, DocumentArrowDown20Regular, Filter20Regular, Info20Regular, Person20Regular, Scan20Regular, Wrench20Regular } from "@fluentui/react-icons"
+import { Badge as FluentBadge, Button as FluentButton, CounterBadge, DrawerBody, DrawerFooter, DrawerHeader, DrawerHeaderTitle, OverlayDrawer, ProgressBar, Spinner, Tooltip } from "@fluentui/react-components"
+import { ArrowClockwise20Regular, ArrowLeft20Regular, ArrowRight20Regular, Dismiss20Regular, DismissCircle20Regular, DocumentArrowDown20Regular, Filter20Regular, Info20Regular, Person20Regular, Scan20Regular, Wrench20Regular } from "@fluentui/react-icons"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
-import { extractProfilePhotoUrl, getEmployeeById, getOnboardingOverview, type OnboardingOverviewRow } from "@/lib/admin-api"
+import { completeOnboardingRequest, extractProfilePhotoUrl, getEmployeeById, getOnboardingOverview, type OnboardingOverviewRow } from "@/lib/admin-api"
 import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview, type OnboardingOverviewFilters } from "@/lib/onboarding-overview"
 
 export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   token: string
   detailsOpen: boolean
-  onOpen: (requestId: number) => void
+  onOpen: (requestId: number, requirement?: OnboardingOverviewRow["readiness"]["requirements"][number]) => void
 }) {
   const [rows, setRows] = React.useState<OnboardingOverviewRow[]>([])
   const [employeePhotos, setEmployeePhotos] = React.useState<Record<number, string>>({})
@@ -26,6 +26,8 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   const [scanRow, setScanRow] = React.useState<OnboardingOverviewRow | null>(null)
   const [scanStep, setScanStep] = React.useState(0)
   const [scanning, setScanning] = React.useState(false)
+  const [selectedScanIssue, setSelectedScanIssue] = React.useState<OnboardingOverviewRow["readiness"]["requirements"][number] | null>(null)
+  const [refreshingScan, setRefreshingScan] = React.useState(false)
   React.useEffect(() => {
     if (detailsOpen) return
     let cancelled = false
@@ -41,6 +43,22 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
         if (result.next_cursor === null) break
         if (result.next_cursor <= after) throw new Error("Overview pagination did not advance. Please refresh.")
         after = result.next_cursor
+      }
+      const activationResults = await Promise.allSettled(
+        [...collected.values()]
+          .filter((row) => row.readiness.ready_to_activate)
+          .map((row) => completeOnboardingRequest(token, row.id)),
+      )
+      if (activationResults.some((result) => result.status === "fulfilled")) {
+        collected.clear()
+        after = 0
+        while (!cancelled) {
+          const result = await getOnboardingOverview(token, after)
+          for (const row of result.data) collected.set(row.id, row)
+          if (result.next_cursor === null) break
+          if (result.next_cursor <= after) throw new Error("Overview pagination did not advance. Please refresh.")
+          after = result.next_cursor
+        }
       }
       if (!cancelled) setRows([...collected.values()])
       const photoEntries = await Promise.all(
@@ -100,10 +118,66 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
     return () => window.clearTimeout(timer)
   }, [scanChecks.length, scanStep, scanning])
 
-  function startScan(row: OnboardingOverviewRow) {
-    setScanRow(row)
+  async function fetchFreshRow(requestId: number) {
+    let after = 0
+    while (true) {
+      const result = await getOnboardingOverview(token, after)
+      const refreshed = result.data.find((row) => row.id === requestId)
+      if (refreshed) {
+        if (refreshed.readiness.ready_to_activate) {
+          await completeOnboardingRequest(token, refreshed.id)
+          return null
+        }
+        return refreshed
+      }
+      if (result.next_cursor === null || result.next_cursor <= after) return null
+      after = result.next_cursor
+    }
+  }
+
+  async function startScan(row: OnboardingOverviewRow) {
+    setScanRow({ ...row, readiness: { ...row.readiness, requirements: [] } })
     setScanStep(0)
-    setScanning(row.readiness.requirements.length > 0)
+    setSelectedScanIssue(null)
+    setScanning(true)
+    try {
+      const refreshed = await fetchFreshRow(row.id)
+      if (!refreshed) {
+        setScanRow(null)
+        setScanning(false)
+        setRevision((value) => value + 1)
+        return
+      }
+      const current = refreshed ?? row
+      setScanRow(current)
+      setRows((rows) => rows.map((item) => item.id === current.id ? current : item))
+      setScanStep(0)
+      setScanning(current.readiness.requirements.length > 0)
+    } catch (cause) {
+      setScanRow(row)
+      setScanning(false)
+      setError(cause instanceof Error ? cause.message : "Could not refresh onboarding readiness.")
+    }
+  }
+
+  async function returnToScanIssues() {
+    if (!scanRow) return
+    setRefreshingScan(true)
+    try {
+      const refreshed = await fetchFreshRow(scanRow.id)
+      if (refreshed) {
+        setScanRow(refreshed)
+        setRows((current) => current.map((row) => row.id === refreshed.id ? refreshed : row))
+      } else {
+        setScanRow(null)
+        setRevision((value) => value + 1)
+      }
+      setSelectedScanIssue(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not refresh onboarding readiness.")
+    } finally {
+      setRefreshingScan(false)
+    }
   }
 
   function exportScan() {
@@ -205,7 +279,7 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
                             </div>
                           </div>
                           <div className="flex items-center justify-end gap-1">
-                            <FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => startScan(row)}>Scan pending</FluentButton>
+                            <FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton>
                             <FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton>
                           </div>
                         </div>
@@ -222,46 +296,48 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
                 <FluentButton size="small" disabled={page === pageCount} onClick={() => setPagination({ filterKey, page: page + 1 })}>Next page</FluentButton>
               </div>
             </nav> : null}
-            <OverlayDrawer open={Boolean(scanRow)} onOpenChange={(_, data) => { if (!data.open) { setScanRow(null); setScanning(false) } }} position="end" size="medium" style={{ width: "min(620px, 100vw)" }}>
+            <OverlayDrawer open={Boolean(scanRow)} onOpenChange={(_, data) => { if (!data.open) { setScanRow(null); setSelectedScanIssue(null); setScanning(false) } }} position="end" size="medium" style={{ width: "min(620px, 100vw)" }}>
               <DrawerHeader>
                 <DrawerHeaderTitle action={<FluentButton appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close readiness scan" onClick={() => { setScanRow(null); setScanning(false) }} />}>
-                  Onboarding readiness scan
+                  {selectedScanIssue ? "Complete onboarding step" : "Onboarding readiness scan"}
                 </DrawerHeaderTitle>
               </DrawerHeader>
               <DrawerBody className="flex flex-col gap-5">
-                <div>
+                {selectedScanIssue ? <>
+                  <FluentButton className="self-start" appearance="subtle" icon={<ArrowLeft20Regular />} disabled={refreshingScan} onClick={() => void returnToScanIssues()}>{refreshingScan ? "Refreshing…" : "Back to remaining issues"}</FluentButton>
+                  <div className="rounded-xl border border-border p-5">
+                    <div className="flex items-start gap-3"><DismissCircle20Regular className="mt-0.5 shrink-0 text-red-600" /><div><h3 className="font-semibold">{selectedScanIssue.label}</h3><p className="mt-1 text-sm text-muted-foreground">Responsible: {selectedScanIssue.owner}</p></div></div>
+                    <p className="mt-5 text-sm text-muted-foreground">Complete this requirement in its authorized workspace. This scan stays open; return here afterward and the remaining list will refresh automatically.</p>
+                    <FluentButton className="mt-5" appearance="primary" icon={<ArrowRight20Regular />} onClick={() => { if (scanRow) onOpen(scanRow.id, selectedScanIssue) }}>
+                      {selectedScanIssue.id === "bank account" ? "Open bank verification" : selectedScanIssue.id === "independently approved starting salary" ? "Open salary approval" : selectedScanIssue.id === "signed employment contract" ? "Open contract completion" : "Open step workspace"}
+                    </FluentButton>
+                  </div>
+                </> : <>
+                <div className="text-center">
                   <p className="font-semibold">{scanRow?.employee_name || scanRow?.employee_no}</p>
-                  <p className="text-sm text-muted-foreground">{scanning ? `Checking ${scanChecks[scanStep]?.label ?? "employee readiness"}…` : "Scan complete"}</p>
+                  <p className="text-sm text-muted-foreground">{scanning ? "Scanning onboarding readiness" : "Scan complete"}</p>
                 </div>
-                <ProgressBar value={scanChecks.length ? (scanning ? scanStep + 1 : scanChecks.length) / scanChecks.length : 1} thickness="large" />
-                <ol className="space-y-3" aria-live="polite">
-                  {scanChecks.map((item, index) => {
-                    const checked = !scanning || index < scanStep
-                    const active = scanning && index === scanStep
-                    const pending = checked && item.required && item.status !== "complete" && item.status !== "skipped"
-                    return (
-                      <li key={item.id} className={`flex gap-3 rounded-lg border p-3 transition ${active ? "border-primary bg-primary/[0.06] shadow-sm" : "border-border"}`}>
-                        <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${pending ? "text-red-600" : checked ? "bg-emerald-50 text-emerald-700" : active ? "bg-primary text-primary-foreground animate-pulse" : "bg-muted text-muted-foreground"}`}>
-                          {pending ? <DismissCircle20Regular /> : checked ? <CheckmarkCircle20Regular /> : <Scan20Regular />}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium">{active ? `Inspecting ${item.group.toLowerCase()} records` : item.label}</p>
-                          <p className="text-xs text-muted-foreground">{active ? `Verifying ${item.owner} ownership and completion evidence…` : `${item.owner} · ${item.status}`}</p>
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ol>
+                {scanning ? <div className="flex min-h-64 flex-col items-center justify-center gap-6 text-center" aria-live="polite">
+                  <Spinner size="huge" labelPosition="below" label="Scanning employee readiness" />
+                  <div key={scanStep} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <p className="font-medium">Checking {scanChecks[scanStep]?.label ?? "employee readiness"}…</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Reviewing {scanChecks[scanStep]?.owner ?? "assigned owner"} records and completion evidence</p>
+                  </div>
+                  <div className="w-full max-w-md">
+                    <ProgressBar value={scanChecks.length ? (scanStep + 1) / scanChecks.length : 1} thickness="large" />
+                    <p className="mt-2 text-xs tabular-nums text-muted-foreground">{Math.min(scanStep + 1, scanChecks.length)} of {scanChecks.length} checks</p>
+                  </div>
+                </div> : null}
                 {!scanning ? (
-                  <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <div className="rounded-lg border border-border p-4">
                     <p className="font-semibold">{pendingScanChecks.length ? `${pendingScanChecks.length} issue${pendingScanChecks.length === 1 ? "" : "s"} need attention` : "No pending issues found"}</p>
-                    {pendingScanChecks.length ? <ul className="mt-3 space-y-2 text-sm">{pendingScanChecks.map((item) => <li key={item.id}><span className="font-medium">{item.label}</span><span className="text-muted-foreground"> · {item.waiting_reason || `Responsible: ${item.owner}`}</span></li>)}</ul> : <p className="mt-1 text-sm text-muted-foreground">All mandatory onboarding checks are complete.</p>}
+                    {pendingScanChecks.length ? <ul className="mt-3 divide-y divide-border text-sm">{pendingScanChecks.map((item) => <li key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"><DismissCircle20Regular className="shrink-0 text-red-600" /><div className="min-w-0 flex-1"><p className="font-medium">{item.label}</p><p className="text-muted-foreground">{item.waiting_reason || `Responsible: ${item.owner}`}</p></div><FluentButton size="small" appearance="primary" icon={<Wrench20Regular />} onClick={() => setSelectedScanIssue(item)} aria-label={`Complete ${item.label}`}>Complete step</FluentButton></li>)}</ul> : <p className="mt-1 text-sm text-muted-foreground">All mandatory onboarding checks are complete.</p>}
                   </div>
                 ) : null}
+                </>}
               </DrawerBody>
               <DrawerFooter>
-                <FluentButton icon={<DocumentArrowDown20Regular />} disabled={scanning || !scanRow} onClick={exportScan}>Export results</FluentButton>
-                <FluentButton appearance="primary" icon={<Wrench20Regular />} disabled={scanning || pendingScanChecks.length === 0} onClick={() => { if (scanRow) onOpen(scanRow.id); setScanRow(null) }}>Fix issues</FluentButton>
+                {!selectedScanIssue ? <FluentButton icon={<DocumentArrowDown20Regular />} disabled={scanning || !scanRow} onClick={exportScan}>Export results</FluentButton> : null}
               </DrawerFooter>
             </OverlayDrawer>
           </>

@@ -19,7 +19,7 @@ import {
   tokens,
 } from "@fluentui/react-components"
 import {
-  Home24Regular,
+  Home24Color,
   ArrowSort20Regular,
   Pin20Filled,
   Pin20Regular,
@@ -48,7 +48,7 @@ const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
 const PINNED_LINKS_STORAGE_KEY = "hrms.sidebar.pinned-links.v1"
 const NAV_SORT_STORAGE_KEY = "hrms.sidebar.sort-order.v1"
 const NAV_USAGE_STORAGE_KEY = "hrms.sidebar.link-usage.v1"
-const Home = Home24Regular
+const Home = Home24Color
 
 const sidebarIconColors: Record<string, string> = {
   "Access Control": tokens.colorPalettePurpleForeground2,
@@ -611,7 +611,7 @@ export function NavMain({
 
       {todoItem?.items?.length ? (() => {
         const isActive = nodeContainsCurrentPath(todoItem, currentPath)
-        const Icon = todoItem.icon
+        const Icon = todoItem.activeIcon ?? todoItem.icon
         const value = categoryValue(todoItem)
         return (
           <NavCategory key={value} value={value}>
@@ -698,7 +698,7 @@ export function NavMain({
 
       {arrangedItems.map((item) => {
         const isActive = nodeContainsCurrentPath(item, currentPath)
-        const Icon = item.icon
+        const Icon = item.activeIcon ?? item.icon
 
         if (item.items?.length) {
           const value = categoryValue(item)
@@ -712,7 +712,7 @@ export function NavMain({
               >
                 <AttentionLabel
                   title={item.title}
-                  attention={nodeNeedsAttention(item, attentionUrls)}
+                  attention={item.title === "Attendance" ? false : nodeNeedsAttention(item, attentionUrls)}
                   className={styles.label}
                 />
               </NavCategoryItem>

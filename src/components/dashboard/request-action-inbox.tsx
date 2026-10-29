@@ -3,26 +3,33 @@ import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import * as React from "react"
 import { Avatar, Badge as FluentBadge, Field } from "@fluentui/react-components"
-import { Search, ArrowRight, SlidersHorizontal, ChevronDown, X } from "lucide-react"
-import { CheckmarkCircleColor, ClipboardTaskColor, PeopleColor } from "@fluentui/react-icons"
-import { Dialog, DialogPopup, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/animate-ui/components/base/dialog"
+import { Search, ChevronRight, X } from "lucide-react"
+import { CalendarLtrRegular, FilterRegular, FlagRegular, OpenRegular, PersonRegular } from "@fluentui/react-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
   approveOnboardingRequest, rejectOnboardingRequest, approveOffboardingRequest, rejectOffboardingRequest,
   completeOnboardingTask, completeOffboardingTask, leaveRequestApprovalAction, reportMyActionItemIssue,
-  listOnboardingDocuments, listOffboardingDocuments,
+  getOnboardingRequest, listOnboardingDocuments, listOffboardingDocuments,
   type AdminRecord,
 } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { formatDate, prettify, readString, rowId, StatusChip } from "./talent-visuals"
 import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
 import { cn } from "@/lib/utils"
+
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid items-center gap-2 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-5">
+      <span className="text-sm font-semibold text-foreground">{label}</span>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
 
 export function RequestActionInbox({ actions, loading, onRefresh }: {
   actions: AdminRecord[]
@@ -38,31 +45,68 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [documentsLoading, setDocumentsLoading] = React.useState(false)
   const [documentsError, setDocumentsError] = React.useState("")
+  const [reviewDetails, setReviewDetails] = React.useState<AdminRecord | null>(null)
+  const [reviewDetailsLoading, setReviewDetailsLoading] = React.useState(false)
+  const [reviewDetailsError, setReviewDetailsError] = React.useState("")
   const [groupPage, setGroupPage] = React.useState(1)
   const [filtersOpen, setFiltersOpen] = React.useState(false)
+  const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(() => new Set())
   const groups = React.useMemo(() => filterAndGroupActions(actions, filters), [actions, filters])
   const selected = actions.find((row) => rowId(row) === selectedId)
   const subject = selected ? actionSubject(selected) : null
-  const siblings = selected ? actions.filter((row) => actionSubject(row).key === subject?.key) : []
   const reference = selected ? actionReference(selected) : null
   const context = recordValue(selected?.request_context)
   const metadata = recordValue(selected?.metadata)
   const comments = Array.isArray(metadata.issue_comments) ? metadata.issue_comments.map(recordValue) : []
+  const requiresDetailedReview = readString(metadata, ["stage"]) === "employee_details_review"
   const isTask = reference && ["ONBOARDING_TASK", "OFFBOARDING_TASK"].includes(reference.type)
+  const isReminder = readString(selected, ["actionType", "action_type"]).toUpperCase() === "REMINDER"
   const isApproval = reference && ["ONBOARDING_REQUEST", "OFFBOARDING_REQUEST", "LEAVE_REQUEST"].includes(reference.type) &&
     readString(selected, ["actionType", "action_type"]).toUpperCase() === "APPROVAL"
-  const canAct = selected && isOpenAction(selected) && selected.is_actionable !== false && Boolean(reference?.requestId)
+  const canAct = selected && isOpenAction(selected) && selected.is_actionable !== false && Boolean(reference?.requestId) && !requiresDetailedReview
   const modules = [...new Set(actions.map((row) => readString(row, ["sourceModule", "source_module"])).filter(Boolean))].sort()
-  const groupCount = filterAndGroupActions(actions, { ...defaultInboxFilters, status: "all" }).length
   const pages = Math.max(1, Math.ceil(groups.length / 12))
   const currentPage = Math.min(groupPage, pages)
+  const visibleGroups = React.useMemo(() => groups.slice((currentPage - 1) * 12, currentPage * 12), [currentPage, groups])
   const evidenceRequired = context.completion_evidence_required === true
   const requestId = reference?.requestId
   const sourceType = reference?.type
+  const employeeDetailsReview = recordValue(reviewDetails?.employee_details_review)
+  const reviewSections = Array.isArray(employeeDetailsReview.sections)
+    ? employeeDetailsReview.sections.map(recordValue)
+    : []
   const advancedFilterCount = [filters.module, filters.kind, filters.priority, filters.due]
     .filter((value) => value !== "all").length
   const resultItemCount = groups.reduce((total, group) => total + group.items.length, 0)
   const hasSearchOrAdvancedFilters = Boolean(filters.search.trim()) || advancedFilterCount > 0
+  const hasActiveFilters = hasSearchOrAdvancedFilters || filters.status !== defaultInboxFilters.status
+  const actionUrl = readString(selected, ["actionUrl", "action_url"])
+  const safeActionUrl = actionUrl.startsWith("/") && !actionUrl.startsWith("//")
+    ? actionUrl
+    : requiresDetailedReview && requestId
+      ? `/dashboard/employees/onboarding?request_id=${requestId}&workspace_tab=employee-details`
+      : ""
+  const sourceModule = prettify(readString(selected, ["sourceModule", "source_module"], "Request"))
+  const priority = prettify(readString(selected, ["priority"], "MEDIUM"))
+  const dueDate = formatDate(selected?.dueAt ?? selected?.due_at)
+  const selectedStatus = readString(selected, ["status"], "OPEN")
+  const displayStatus = requiresDetailedReview && selected && isOpenAction(selected) ? "Awaiting review" : selectedStatus
+  const decisionHelp = requiresDetailedReview
+    ? "Open the onboarding workspace and review every submitted section. Approve complete sections or return individual sections with clear correction notes."
+    : isReminder
+      ? "This reminder stays open until the required report is submitted. Review the details below and report a blocker to HR when follow-up is required."
+    : reference?.type === "ONBOARDING_REQUEST"
+    ? "Confirm that the employee-submitted onboarding information is complete and ready for HR to continue. Approval moves the request to the next onboarding stage; declining returns it with your reason."
+    : isApproval
+      ? "Review the request details and confirm whether it should proceed. Add a clear reason when declining so the requester knows what must change."
+      : "Confirm that the assigned work has actually been completed for this employee. If it cannot be completed, report the blocker instead of marking it complete."
+
+  React.useEffect(() => {
+    const selectionIsVisible = visibleGroups.some((group) => group.items.some((item) => rowId(item) === selectedId))
+    if (!selectionIsVisible && visibleGroups[0]?.items[0] && !busy) {
+      select(visibleGroups[0].items[0])
+    }
+  }, [busy, selectedId, visibleGroups])
 
   React.useEffect(() => {
     if (!evidenceRequired || !requestId || !sourceType) return
@@ -79,6 +123,25 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     return () => { cancelled = true }
   }, [evidenceRequired, requestId, sourceType])
 
+  React.useEffect(() => {
+    if (!requiresDetailedReview || !requestId) {
+      setReviewDetails(null)
+      setReviewDetailsError("")
+      return
+    }
+    let cancelled = false
+    setReviewDetails(null)
+    setReviewDetailsError("")
+    setReviewDetailsLoading(true)
+    void getOnboardingRequest(readStoredSessionTokens().accessToken, requestId)
+      .then((details) => { if (!cancelled) setReviewDetails(details) })
+      .catch((failure) => {
+        if (!cancelled) setReviewDetailsError(failure instanceof Error ? failure.message : "Submitted details could not be loaded.")
+      })
+      .finally(() => { if (!cancelled) setReviewDetailsLoading(false) })
+    return () => { cancelled = true }
+  }, [requestId, requiresDetailedReview])
+
   function updateFilter(key: keyof InboxFilters, value: string) {
     setFilters((current) => ({ ...current, [key]: value }))
     setGroupPage(1)
@@ -88,6 +151,14 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     setComment("")
     setEvidenceId("")
     setError("")
+  }
+  function toggleGroup(groupKey: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current)
+      if (next.has(groupKey)) next.delete(groupKey)
+      else next.add(groupKey)
+      return next
+    })
   }
   async function submit(mode: "approve" | "reject" | "complete" | "issue") {
     if (!selected || !reference || busy) return
@@ -105,7 +176,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     setError("")
     try {
       let onboardingResult: unknown
-      const data = { comments: comment.trim(), approve: mode === "approve" }
+      const comments = comment.trim()
       if (mode === "issue") {
         await reportMyActionItemIssue(token, selectedId, comment.trim())
       } else if (mode === "complete") {
@@ -116,11 +187,13 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
         })
         if (reference.type === "ONBOARDING_TASK") onboardingResult = result
       } else if (reference.type === "ONBOARDING_REQUEST") {
-        onboardingResult = await (mode === "approve" ? approveOnboardingRequest : rejectOnboardingRequest)(token, reference.requestId, data)
+        onboardingResult = mode === "approve"
+          ? await approveOnboardingRequest(token, reference.requestId, { approve: true, comments })
+          : await rejectOnboardingRequest(token, reference.requestId, { comments })
       } else if (reference.type === "OFFBOARDING_REQUEST") {
-        await (mode === "approve" ? approveOffboardingRequest : rejectOffboardingRequest)(token, reference.requestId, data)
+        await (mode === "approve" ? approveOffboardingRequest : rejectOffboardingRequest)(token, reference.requestId, { comments })
       } else if (reference.type === "LEAVE_REQUEST") {
-        await leaveRequestApprovalAction(token, reference.requestId, { action: mode, comments: comment.trim() })
+        await leaveRequestApprovalAction(token, reference.requestId, { action: mode, comments })
       } else {
         throw new Error("Open the full request to review this action.")
       }
@@ -134,156 +207,170 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="grid overflow-hidden rounded-xl border bg-card sm:grid-cols-3 sm:divide-x sm:divide-border">
-        {[
-          { label: "People", hint: "Request owners", value: groupCount, icon: PeopleColor, color: "brand" as const },
-          { label: "Awaiting action", hint: "Needs your response", value: actions.filter(isOpenAction).length, icon: ClipboardTaskColor, color: "warning" as const },
-          { label: "Completed", hint: "Finished items", value: actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length, icon: CheckmarkCircleColor, color: "success" as const },
-        ].map(({ label, hint, value, icon: Icon, color }) => (
-          <div key={label} className="flex min-h-24 items-center gap-3 border-b border-border p-4 last:border-b-0 sm:border-b-0">
-            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/35 [&_svg]:size-6">
-              <Icon aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-sm font-medium text-foreground">{label}</p>
-                <FluentBadge appearance="tint" color={color} shape="rounded" size="medium" className="min-w-8 justify-center tabular-nums">
-                  {loading ? "…" : value}
-                </FluentBadge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="grid min-h-0 flex-1 overflow-hidden border-b bg-card lg:grid-cols-[minmax(300px,36%)_1fr]">
+        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b lg:border-b-0 lg:border-r">
+          <div className="relative z-20 shrink-0 border-b bg-card px-2 py-2">
+            <div className="group/search min-w-0">
+              <Input
+                type="search"
+                size="medium"
+                aria-label="Search requests"
+                placeholder="Search requests"
+                value={filters.search}
+                onChange={(event) => updateFilter("search", event.target.value)}
+                contentBefore={<Search aria-hidden />}
+                contentAfter={(
+                  <div className="flex items-center">
+                    <Button variant="ghost" size="icon-sm" className={cn("rounded-sm opacity-0 transition-opacity group-hover/search:opacity-100 group-focus-within/search:opacity-100", (filtersOpen || hasActiveFilters) && "bg-primary/5 text-primary opacity-100")} aria-expanded={filtersOpen} aria-controls="request-search-filters" aria-label="Search filters" title="Search filters" onClick={() => setFiltersOpen((open) => !open)}><FilterRegular aria-hidden /></Button>
+                    {hasActiveFilters ? <Button variant="ghost" size="icon-sm" className="rounded-sm" aria-label="Clear search and filters" title="Clear search and filters" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}><X aria-hidden /></Button> : null}
+                  </div>
+                )}
+                className="rounded-none border-0 shadow-none focus-within:ring-0"
+              />
             </div>
+            {filtersOpen ? <div id="request-search-filters" className="absolute left-0 right-0 top-full z-30 border-b bg-card px-4 py-3 shadow-xl">
+              <div className="divide-y">
+                <FilterRow label="Status"><FluentSelect ariaLabel="Filter by status" size="small" value={filters.status} onChange={(value) => updateFilter("status", value)} options={[{ value: "open", label: "Awaiting action" }, { value: "all", label: "All statuses" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }]} /></FilterRow>
+                <FilterRow label="Request type"><FluentSelect ariaLabel="Filter by request type" size="small" value={filters.module} onChange={(value) => updateFilter("module", value)} options={[{ value: "all", label: "All request types" }, ...modules.map((value) => ({ value, label: prettify(value) }))]} /></FilterRow>
+                <FilterRow label="Action"><FluentSelect ariaLabel="Filter by action" size="small" value={filters.kind} onChange={(value) => updateFilter("kind", value)} options={[{ value: "all", label: "All actions" }, { value: "APPROVAL", label: "Approvals" }, { value: "TASK", label: "Checklist tasks" }]} /></FilterRow>
+                <FilterRow label="Priority"><FluentSelect ariaLabel="Filter by priority" size="small" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={[{ value: "all", label: "All priorities" }, ...["URGENT", "HIGH", "MEDIUM", "LOW"].map((value) => ({ value, label: prettify(value) }))]} /></FilterRow>
+                <FilterRow label="Due date"><FluentSelect ariaLabel="Filter by due date" size="small" value={filters.due} onChange={(value) => updateFilter("due", value)} options={[{ value: "all", label: "Any due date" }, { value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "none", label: "No due date" }]} /></FilterRow>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
+                <span className="text-xs text-muted-foreground" aria-live="polite">{resultItemCount} {resultItemCount === 1 ? "item" : "items"}</span>
+                <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1) }}>Clear</Button><Button size="sm" onClick={() => setFiltersOpen(false)}>Apply</Button></div>
+              </div>
+            </div> : null}
           </div>
-        ))}
-      </div>
-      <div className="flex flex-col gap-2 border-y bg-card py-2">
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          <div className="min-w-56 flex-1 sm:w-64 sm:flex-none">
-            <Input
-              type="search"
-              size="medium"
-              aria-label="Search requests"
-              placeholder="Search requests"
-              value={filters.search}
-              onChange={(event) => updateFilter("search", event.target.value)}
-              contentBefore={<Search aria-hidden />}
-            />
-          </div>
-          <div className="w-40 shrink-0">
-            <FluentSelect
-              ariaLabel="Filter by status"
-              size="small"
-              value={filters.status}
-              onChange={(value) => updateFilter("status", value)}
-              options={[{ value: "open", label: "Awaiting action" }, { value: "all", label: "All statuses" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }]}
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn("h-8 shrink-0 gap-1.5", (filtersOpen || advancedFilterCount > 0) && "border-primary/40 bg-primary/5 text-primary")}
-            aria-expanded={filtersOpen}
-            onClick={() => setFiltersOpen((open) => !open)}
-          >
-            <SlidersHorizontal data-icon="inline-start" aria-hidden />
-            Filters{advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}
-            <ChevronDown data-icon="inline-end" className={cn("transition-transform", filtersOpen && "rotate-180")} aria-hidden />
-          </Button>
-          <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground" aria-live="polite">
-            {groups.length} {groups.length === 1 ? "person" : "people"} · {resultItemCount} {resultItemCount === 1 ? "item" : "items"}
-          </span>
-          {hasSearchOrAdvancedFilters ? (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Clear search and filters"
-              title="Clear search and filters"
-              onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}
-            >
-              <X aria-hidden />
-            </Button>
-          ) : null}
-        </div>
-        {filtersOpen ? <div className="grid gap-2 border-t px-1 pt-2 sm:grid-cols-2 lg:grid-cols-4">
-          <FluentSelect ariaLabel="Filter by request type" size="small" value={filters.module} onChange={(value) => updateFilter("module", value)} options={[{ value: "all", label: "All request types" }, ...modules.map((value) => ({ value, label: prettify(value) }))]} />
-          <FluentSelect ariaLabel="Filter by action" size="small" value={filters.kind} onChange={(value) => updateFilter("kind", value)} options={[{ value: "all", label: "All actions" }, { value: "APPROVAL", label: "Approvals" }, { value: "TASK", label: "Checklist tasks" }]} />
-          <FluentSelect ariaLabel="Filter by priority" size="small" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={[{ value: "all", label: "All priorities" }, ...["URGENT", "HIGH", "MEDIUM", "LOW"].map((value) => ({ value, label: prettify(value) }))]} />
-          <FluentSelect ariaLabel="Filter by due date" size="small" value={filters.due} onChange={(value) => updateFilter("due", value)} options={[{ value: "all", label: "Any due date" }, { value: "overdue", label: "Overdue" }, { value: "today", label: "Due today" }, { value: "none", label: "No due date" }]} />
-        </div> : null}
-      </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {loading ? <p role="status" className="py-10 text-center text-muted-foreground">Loading assigned requests…</p> : groups.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-10 text-center">
-          <h2 className="font-semibold">No matching requests</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Try another search or reset the filters.</p>
+        <div className="p-10 text-center">
+          <h2 className="font-semibold">{hasActiveFilters ? "No results" : "You’re all caught up"}</h2>
+          {hasActiveFilters ? <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}>Clear filters</Button> : null}
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {groups.slice((currentPage - 1) * 12, currentPage * 12).map((group) => (
-            <article key={group.subject.key} className="relative flex flex-col overflow-hidden rounded-xl border border-primary/20 bg-card shadow-sm transition before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary hover:-translate-y-px hover:shadow-md">
-              <div className="flex items-start gap-3 border-b border-border/70 bg-primary/5 px-5 py-4">
-                <Avatar name={group.subject.name} color="brand" size={48} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Requested for</p>
-                  <h2 className="mt-0.5 truncate text-lg font-semibold text-foreground">{group.subject.name}</h2>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee details not provided"}</p>
-                </div>
-                <FluentBadge appearance="tint" color="brand" shape="rounded" size="medium">
-                  {group.items.length} {group.items.length === 1 ? "item" : "items"}
-                </FluentBadge>
+        <div className="flex flex-col divide-y divide-border/80">
+          {visibleGroups.map((group) => {
+            const active = group.items.some((item) => rowId(item) === selectedId)
+            const unattended = group.items.some(isOpenAction)
+            const expanded = expandedGroups.has(group.subject.key)
+            return <div key={group.subject.key} className={cn("relative before:absolute before:inset-y-0 before:left-0 before:w-1", active ? "bg-primary/10 before:bg-primary" : "before:bg-transparent")}>
+              <div className="flex items-center transition hover:bg-muted/60">
+                {group.items.length > 1 ? (
+                  <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key)}>
+                    <ChevronRight className={cn("size-4 transition-transform", expanded && "rotate-90", active && "text-primary")} aria-hidden />
+                  </button>
+                ) : <span className="ml-2 size-8 shrink-0" aria-hidden />}
+                <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-1 pr-3 text-left" onClick={() => select(group.items[0])}>
+                  <Avatar name={group.subject.name} image={group.subject.photoUrl ? { src: group.subject.photoUrl } : undefined} color="brand" size={48} />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-base font-semibold text-foreground">{group.subject.name}</h2>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee profile"}</p>
+                    <p className="mt-1 truncate text-sm text-foreground/80">{readString(group.items[0], ["description"]) || readString(group.items[0], ["title"], "Review the assigned request")}</p>
+                  </div>
+                  <FluentBadge appearance="tint" color={unattended ? "warning" : "success"} size="small" className="shrink-0">
+                    {unattended ? "Not attended" : "Attended"}
+                  </FluentBadge>
+                </button>
               </div>
-              <ul className="flex flex-col gap-2 px-5 py-4 text-sm">
-                {group.items.slice(0, 3).map((row) => (
-                  <li key={rowId(row)} className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5">
-                    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-background [&_svg]:size-5">
-                      <ClipboardTaskColor aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{readString(row, ["title"], "Assigned request")}</span>
-                    <Badge variant="secondary" className="shrink-0">{prettify(readString(row, ["sourceModule", "source_module"]))}</Badge>
-                  </li>
-                ))}
-                {group.items.length > 3 ? <li className="px-3 text-xs text-muted-foreground">+{group.items.length - 3} more items</li> : null}
-              </ul>
-              <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-muted/15 px-5 py-3">
-                <FluentBadge appearance="tint" color="warning" shape="rounded" size="medium">
-                  {group.items.filter(isOpenAction).length} awaiting action
-                </FluentBadge>
-                <Button size="sm" className="gap-2" onClick={() => select(group.items[0])}>
-                  Review requests
-                  <ArrowRight data-icon="inline-end" aria-hidden />
-                </Button>
-              </div>
-            </article>
-          ))}
+              {expanded ? <div className="divide-y border-t bg-background/80 pl-12">
+                {group.items.map((item) => {
+                  const itemActive = rowId(item) === selectedId
+                  const itemUnattended = isOpenAction(item)
+                  return <button key={rowId(item)} type="button" aria-label={`Review ${readString(item, ["title"], "request")}`} aria-current={itemActive ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/60", itemActive && "bg-primary/5")} onClick={() => select(item)}>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{readString(item, ["title"], "Assigned request")}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{readString(item, ["description"]) || prettify(readString(item, ["sourceModule", "source_module"], "Request"))}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="text-[11px] text-muted-foreground">{formatDate(item.dueAt ?? item.due_at)}</span>
+                      <FluentBadge appearance="tint" color={itemUnattended ? "warning" : "success"} size="small">
+                        {itemUnattended ? "Not attended" : "Attended"}
+                      </FluentBadge>
+                    </div>
+                  </button>
+                })}
+              </div> : null}
+            </div>
+          })}
         </div>
       )}
-      {pages > 1 ? <div className="flex items-center justify-end gap-3"><Button variant="outline" disabled={currentPage === 1} onClick={() => setGroupPage(currentPage - 1)}>Previous</Button><span className="text-sm">{currentPage} / {pages}</span><Button variant="outline" disabled={currentPage === pages} onClick={() => setGroupPage(currentPage + 1)}>Next</Button></div> : null}
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !busy) setSelectedId("") }}>
-        <DialogPopup className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Requests for {subject?.name}</DialogTitle>
-            <DialogDescription>{[subject?.number, subject?.department, subject?.position].filter(Boolean).join(" · ") || "Review the intended recipient before completing or approving any item."}</DialogDescription>
-          </DialogHeader>
-          {selected ? <div className="grid min-h-0 shrink-0 gap-5 px-5 pb-3 md:grid-cols-[220px_1fr]">
-            <div className="md:hidden">
-              <FluentSelect label="Employee requests" value={selectedId} disabled={busy} onChange={(value) => { const row = siblings.find((item) => rowId(item) === value); if (row) select(row) }} options={siblings.map((row) => ({ value: rowId(row), label: readString(row, ["title"], "Request") }))} />
-            </div>
-            <nav aria-label="Employee requests" className="hidden max-h-80 flex-col gap-2 overflow-auto md:flex">
-              {siblings.map((row) => <button key={rowId(row)} type="button" disabled={busy} onClick={() => select(row)} aria-current={rowId(row) === selectedId ? "true" : undefined} className={cn("rounded-lg border p-3 text-left text-sm", rowId(row) === selectedId ? "border-primary bg-muted" : "hover:bg-muted")}>
-                <span className="block font-medium">{readString(row, ["title"], "Request")}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">{prettify(readString(row, ["sourceModule", "source_module"]))} · {prettify(readString(row, ["status"], "OPEN"))}</span>
-              </button>)}
-            </nav>
-            <div className="flex min-w-0 flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{readString(selected, ["title"])}</h3><StatusChip value={readString(selected, ["status"], "OPEN")} /></div>
-              <div className="rounded-lg bg-muted p-3 text-sm"><span className="text-muted-foreground">Provide this item / service to: </span><strong>{subject?.name}</strong>{subject?.number ? ` (${subject.number})` : ""}</div>
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{readString(selected, ["description"]) || "Review this assigned item and record your decision below."}</p>
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <div><dt className="text-muted-foreground">Due</dt><dd>{formatDate(selected.dueAt ?? selected.due_at)}</dd></div>
-                <div><dt className="text-muted-foreground">Priority</dt><dd>{prettify(readString(selected, ["priority"], "MEDIUM"))}</dd></div>
-                {context.reason ? <div className="col-span-2"><dt className="text-muted-foreground">Request reason</dt><dd className="whitespace-pre-wrap">{String(context.reason)}</dd></div> : null}
-                {context.start_date ? <div className="col-span-2"><dt className="text-muted-foreground">Requested dates</dt><dd>{formatDate(context.start_date)} – {formatDate(context.end_date)}</dd></div> : null}
-              </dl>
+          </div>
+      {pages > 1 ? <div className="flex items-center justify-center gap-3 border-t p-3"><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setGroupPage(currentPage - 1)}>Previous</Button><span className="text-sm">{currentPage} / {pages}</span><Button variant="outline" size="sm" disabled={currentPage === pages} onClick={() => setGroupPage(currentPage + 1)}>Next</Button></div> : null}
+        </aside>
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
+          <header className="flex min-h-10 shrink-0 items-center border-b px-5 py-2">
+            <h2 className="font-semibold">{selected ? readString(selected, ["title"], "Review assigned request") : "Review assigned request"}</h2>
+          </header>
+          {selected ? <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4"><div className="flex flex-col gap-4">
+              <section className="overflow-hidden rounded-xl border border-primary/20 bg-card">
+                <div className="flex flex-col gap-4 bg-primary/5 p-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 gap-3">
+                    <Avatar name={subject?.name} image={subject?.photoUrl ? { src: subject.photoUrl } : undefined} color="brand" size={48} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">{requiresDetailedReview ? "Detailed review required" : isApproval ? "Decision required" : "Assigned work"}</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{decisionHelp}</p>
+                    </div>
+                  </div>
+                  <StatusChip value={displayStatus} />
+                </div>
+                <dl className="grid border-t sm:grid-cols-3">
+                  <div className="flex gap-3 border-b p-4 sm:border-b-0 sm:border-r">
+                    <PersonRegular className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+                    <div><dt className="text-xs font-medium text-muted-foreground">Employee</dt><dd className="mt-0.5 font-medium">{subject?.name}</dd><dd className="text-xs text-muted-foreground">{[subject?.number, subject?.department, subject?.position].filter(Boolean).join(" · ") || "No employee details"}</dd></div>
+                  </div>
+                  <div className="flex gap-3 border-b p-4 sm:border-b-0 sm:border-r">
+                    <CalendarLtrRegular className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+                    <div><dt className="text-xs font-medium text-muted-foreground">Due date</dt><dd className="mt-0.5 font-medium">{dueDate === "—" ? "No deadline set" : dueDate}</dd><dd className="text-xs text-muted-foreground">{sourceModule}</dd></div>
+                  </div>
+                  <div className="flex gap-3 p-4">
+                    <FlagRegular className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+                    <div><dt className="text-xs font-medium text-muted-foreground">Priority</dt><dd className="mt-0.5 font-medium">{priority}</dd><dd className="text-xs text-muted-foreground">Assigned to you</dd></div>
+                  </div>
+                </dl>
+              </section>
+              {!requiresDetailedReview ? <section className="rounded-xl border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-semibold">What you are reviewing</h4>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{readString(selected, ["description"]) || readString(selected, ["title"]) || "Review this assigned request and record your decision."}</p>
+                  </div>
+                </div>
+                {context.reason || context.start_date ? <dl className="mt-4 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2">
+                  {context.reason ? <div className="sm:col-span-2"><dt className="font-medium">Reason provided</dt><dd className="mt-1 whitespace-pre-wrap text-muted-foreground">{String(context.reason)}</dd></div> : null}
+                  {context.start_date ? <div><dt className="font-medium">Requested period</dt><dd className="mt-1 text-muted-foreground">{formatDate(context.start_date)} – {formatDate(context.end_date)}</dd></div> : null}
+                </dl> : null}
+              </section> : null}
+              {requiresDetailedReview ? <section className="overflow-hidden rounded-xl border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+                  <div>
+                    <h4 className="font-semibold">Submitted onboarding sections</h4>
+                    <p className="mt-0.5 text-sm text-muted-foreground">Review the employee’s information below. Section decisions are recorded in the onboarding workspace.</p>
+                  </div>
+                  {safeActionUrl ? <Button render={<a href={safeActionUrl} />} size="sm"><OpenRegular data-icon="inline-start" aria-hidden />Review sections</Button> : null}
+                </div>
+                {reviewDetailsLoading ? <p role="status" className="p-4 text-sm text-muted-foreground">Loading submitted sections…</p> : reviewDetailsError ? <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div>
+                    <p role="alert" className="font-medium text-destructive">Submitted sections are unavailable</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{reviewDetailsError} Open the onboarding workspace to verify whether this request still exists.</p>
+                  </div>
+                  {safeActionUrl ? <Button render={<a href={safeActionUrl} />} variant="outline" size="sm"><OpenRegular data-icon="inline-start" aria-hidden />Open onboarding</Button> : null}
+                </div> : reviewSections.length ? <div className="divide-y">
+                  {reviewSections.map((section) => {
+                    const fields = Array.isArray(section.fields) ? section.fields.map(recordValue) : []
+                    const status = readString(section, ["status"], "pending")
+                    return <div key={readString(section, ["key", "label"])} className="grid gap-2 px-4 py-3 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:items-start">
+                      <div>
+                        <p className="font-medium">{readString(section, ["label"], "Onboarding section")}</p>
+                        {readString(section, ["comment"]) ? <p className="mt-1 text-xs text-muted-foreground">{readString(section, ["comment"])}</p> : null}
+                      </div>
+                      <p className="text-sm leading-6 text-muted-foreground">{fields.map((field) => `${readString(field, ["label"])}: ${readString(field, ["value"], "Not provided")}`).join(" · ") || "No information submitted"}</p>
+                      <StatusChip value={status} />
+                    </div>
+                  })}
+                </div> : <p className="p-4 text-sm text-muted-foreground">No submitted sections were returned for this request.</p>}
+              </section> : null}
               {selected.is_actionable === false && isOpenAction(selected) ? <Alert><AlertDescription>This item is waiting for an earlier workflow step. You can still report an issue to HR.</AlertDescription></Alert> : null}
               {comments.length ? <section className="flex flex-col gap-2"><h4 className="text-sm font-medium">Reported issues</h4>{comments.map((entry, index) => <div key={readString(entry, ["id"], String(index))} className="rounded-lg border p-3"><p className="whitespace-pre-wrap text-sm">{readString(entry, ["comment"])}</p><p className="mt-1 text-xs text-muted-foreground">{readString(entry, ["author"])} · {formatDate(entry.created_at)}</p></div>)}</section> : null}
               {isOpenAction(selected) ? <>
@@ -291,22 +378,19 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   <FluentSelect label="Supporting document" value={evidenceId} onChange={setEvidenceId} disabled={busy || documentsLoading} placeholder={documentsLoading ? "Loading documents…" : "Select an attached document"} options={documents.map((document) => ({ value: rowId(document), label: readString(document, ["title", "name", "file_name", "document_type"], "Supporting document") }))} />
                   {documentsError || (!documentsLoading && documents.length === 0) ? <p className="text-sm text-muted-foreground">{documentsError || "No supporting documents are attached. Open the full request or ask HR to attach the required evidence."}</p> : null}
                 </div> : null}
-                <Field label="Comment or reason" hint="For example: We cannot provide a laptop because stock is unavailable. Reporting an issue keeps the item open.">
-                  <Textarea aria-label="Comment or reason" value={comment} maxLength={1000} onChange={(event) => setComment(event.target.value)} disabled={busy} placeholder="Add completion notes, or explain what is preventing you from proceeding…" />
-                </Field>
+                {!requiresDetailedReview ? <Field label={isApproval ? "Decision note" : isReminder ? "Issue or follow-up note" : "Completion note or blocker"} hint={isApproval ? "Required when declining. Add a note when approval needs useful context." : isReminder ? "Explain the blocker or follow-up needed before reporting this issue to HR." : "Describe what was completed, or explain the blocker before reporting an issue."}>
+                  <Textarea aria-label="Comment or reason" value={comment} maxLength={1000} onChange={(event) => setComment(event.target.value)} disabled={busy} placeholder={isApproval ? "Add context for your approval, or explain what must be corrected…" : isReminder ? "Explain why the report is still missing or what support is required…" : "Summarize the completed work or explain what is preventing completion…"} />
+                </Field> : null}
                 {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
                 <div className="flex flex-wrap gap-2">
-                  {isApproval ? <><Button disabled={!canAct || busy || loading} onClick={() => void submit("approve")}>Approve request</Button><Button variant="outline" disabled={!canAct || busy || loading} onClick={() => void submit("reject")}>Decline with reason</Button></> : null}
+                  {isApproval && !requiresDetailedReview ? <><Button disabled={!canAct || busy || loading} onClick={() => void submit("approve")}>Approve and continue</Button><Button variant="outline" disabled={!canAct || busy || loading} onClick={() => void submit("reject")}>Return for correction</Button></> : null}
                   {isTask ? <Button disabled={!canAct || busy || loading} onClick={() => void submit("complete")}>Mark item complete</Button> : null}
-                  <Button variant="outline" disabled={busy || loading} onClick={() => void submit("issue")}>{busy ? "Saving…" : "Report issue to HR"}</Button>
+                  {!requiresDetailedReview ? <Button variant="outline" disabled={busy || loading} onClick={() => void submit("issue")}>{busy ? "Saving…" : "Report issue to HR"}</Button> : null}
                 </div>
               </> : null}
-              {readString(selected, ["actionUrl", "action_url"]).startsWith("/") && !readString(selected, ["actionUrl", "action_url"]).startsWith("//") ? <a className="text-sm text-primary underline" href={readString(selected, ["actionUrl", "action_url"])}>Open full request</a> : null}
-            </div>
-          </div> : null}
-          <DialogFooter><Button variant="outline" disabled={busy} onClick={() => setSelectedId("")}>Close</Button></DialogFooter>
-        </DialogPopup>
-      </Dialog>
+          </div></div> : <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">Select a request to review its details.</div>}
+        </section>
+      </div>
     </div>
   )
 }

@@ -6246,6 +6246,13 @@ export async function listAttendanceWorkFromHomeRequests(
   );
 }
 
+export async function listTeamAttendanceWorkFromHomeRequests(token: string) {
+  return adminRequest<unknown>(
+    "/api/attendance/work-from-home/requests/team",
+    { token },
+  );
+}
+
 export async function reviewAttendanceWorkFromHomeRequest(
   token: string,
   id: string | number,
@@ -6263,6 +6270,16 @@ export async function cancelAttendanceWorkFromHomeRequest(
 ) {
   return adminRequest<unknown>(
     `/api/attendance/work-from-home/requests/${id}/cancel`,
+    { method: "PATCH", token, body: {} },
+  );
+}
+
+export async function cancelManagedAttendanceWorkFromHomeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests/${id}/cancel-managed`,
     { method: "PATCH", token, body: {} },
   );
 }
@@ -9832,7 +9849,12 @@ export async function listMyLeaveEncashmentRequests(token: string) {
 
 export async function listLeaveEncashmentRequests(
   token: string,
-  params?: { page?: number; limit?: number; from_date?: string; to_date?: string },
+  params?: {
+    page?: number;
+    limit?: number;
+    from_date?: string;
+    to_date?: string;
+  },
 ) {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
@@ -9849,7 +9871,12 @@ export async function listLeaveEncashmentRequests(
     params?.page ?? 1,
     params?.limit ?? 20,
   );
-  return { rows, ...pagination, total: pagination.total ?? rows.length, hasMore: rows.length === (params?.limit ?? 20) };
+  return {
+    rows,
+    ...pagination,
+    total: pagination.total ?? rows.length,
+    hasMore: rows.length === (params?.limit ?? 20),
+  };
 }
 
 export async function createMyLeaveEncashmentRequest(
@@ -14719,13 +14746,30 @@ export async function listMyProfileUpdateRequests(
     `/api/me/profile-update-requests${query}`,
     { token },
   );
-  const rows = normalizeList(payload);
+  const legacyRows = normalizeList(payload);
+  // Keep legacy request history readable while new submissions use the
+  // field-policy workflow. The two histories have separate IDs and statuses.
+  const canonicalRows = await listMyProfileChangeRequests(token, {
+    page: fallbackPage,
+    limit: fallbackLimit,
+  }).catch(() => []);
+  const rows = [...legacyRows, ...canonicalRows]
+    .sort((left, right) => {
+      const leftDate = String(left.created_at ?? left.createdAt ?? "");
+      const rightDate = String(right.created_at ?? right.createdAt ?? "");
+      return rightDate.localeCompare(leftDate);
+    })
+    .slice(0, fallbackLimit);
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,
     fallbackLimit,
   );
-  return { rows, ...pagination };
+  return {
+    rows,
+    ...pagination,
+    total: (pagination.total ?? 0) + canonicalRows.length,
+  };
 }
 
 export async function getMyProfileUpdateRequest(
@@ -16195,9 +16239,9 @@ export interface PermanentEmployeeDeletionResponse {
 }
 
 /**
- * Permanently delete an employee who is still onboarding, with their records.
- * The backend refuses (409) once the employee has working history, supervises
- * others, or has device access; the message explains why.
+ * Permanently delete an employee with their owned records. The backend refuses
+ * while the employee supervises other records or has provisioned physical
+ * access; the response explains the blocker.
  */
 export async function deleteEmployeePermanently(
   token: string,
@@ -16891,6 +16935,7 @@ export interface PayrollListParams {
   payroll_run_id?: number;
   year?: number;
   status?: string;
+  export_all?: boolean;
 }
 
 function buildPayrollQuery(params: PayrollListParams = {}) {
@@ -16900,6 +16945,9 @@ function buildPayrollQuery(params: PayrollListParams = {}) {
   }
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
+  }
+  if (params.export_all === true) {
+    searchParams.set("export_all", "true");
   }
   if (params.sortBy?.trim()) {
     searchParams.set("sortBy", params.sortBy.trim());
@@ -17045,6 +17093,23 @@ export async function runPayrollRunVariance(
   return adminRequest<unknown>(
     `/api/payroll/reports/runs/${runId}/variance?comparison_run_id=${encodeURIComponent(String(comparisonRunId))}`,
     { method: "POST", token },
+  );
+}
+
+export async function reviewPayrollVariance(
+  token: string,
+  runId: string | number,
+  varianceId: string | number,
+  employeeId: string | number,
+  explanation: string,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/runs/${runId}/variance/${varianceId}/review`,
+    {
+      method: "POST",
+      token,
+      body: { employee_id: Number(employeeId), explanation },
+    },
   );
 }
 
@@ -20483,6 +20548,17 @@ export async function addMyFinanceApplicationGuarantor(
   );
 }
 
+export async function searchMyFinanceGuarantorCandidates(
+  token: string,
+  search: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/guarantor-candidates?search=${encodeURIComponent(search)}`,
+    { token },
+  );
+  return normalizeList(payload);
+}
+
 export async function listMyFinanceApplicationGuarantors(
   token: string,
   applicationId: string | number,
@@ -21473,6 +21549,16 @@ export async function getManagerDashboard(
   return getHrDashboard(token, "manager", params);
 }
 
+export async function getManagerActivitySummary(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<AdminRecord>(
+    `/api/manager/activity-summary${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
 export async function listManagerActionItems(
   token: string,
   params: Record<string, string | number | undefined> = {},
@@ -21666,6 +21752,14 @@ export interface AnalyticsDashboardKindMap {
   "sales-field": "sales-field";
 }
 
+export type AnalyticsSalesFieldDetailMetric =
+  | "PLANNED_VISITS"
+  | "COMPLETED_PLANNED_VISITS"
+  | "UNPLANNED_COMPLETED_VISITS"
+  | "CUSTOMER_VISITS"
+  | "BROKER_INTERMEDIARY_VISITS"
+  | "OPPORTUNITIES";
+
 export type AnalyticsDashboardKind = keyof AnalyticsDashboardKindMap;
 
 export interface AnalyticsCustomReportPayload extends AnalyticsQueryParams {
@@ -21786,6 +21880,56 @@ export async function getHrDashboard(
   return unwrapRoleDashboardPayload(payload);
 }
 
+export async function createHrDocumentRequirement(
+  token: string,
+  payload: {
+    document_type_code: string;
+    label: string;
+    branch_ids?: number[];
+    department_ids?: number[];
+    employment_types?: string[];
+    effective_from?: string;
+    effective_to?: string;
+  },
+) {
+  const result = await adminRequest<unknown>(
+    "/api/dashboards/hr/document-requirements",
+    { token, method: "POST", body: payload },
+  );
+  return normalizeSingle(result) ?? asRecord(result);
+}
+
+export async function deleteHrDocumentRequirement(
+  token: string,
+  requirementId: number,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export async function getHrDocumentComplianceDetails(
+  token: string,
+  requirementId: number,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}/details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function getManagementPublishedScoreDetails(
+  token: string,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/management/performance-details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
 export async function getSystemHealth(token?: string) {
   const payload = await adminRequest<unknown>("/api/health", {
     token: token ?? "",
@@ -21895,6 +22039,34 @@ export async function getAnalyticsDashboard(
     {
       token,
     },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getAnalyticsSalesFieldDetails(
+  token: string,
+  params: AnalyticsQueryParams & {
+    metric: AnalyticsSalesFieldDetailMetric;
+    page?: number;
+    limit?: number;
+    currency?: string;
+  },
+) {
+  const searchParams = new URLSearchParams(
+    buildAnalyticsQuery(params).replace(/^\?/, ""),
+  );
+  searchParams.set("metric", params.metric);
+  if (params.page && Number.isInteger(params.page) && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params.limit && Number.isInteger(params.limit) && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.currency?.trim())
+    searchParams.set("currency", params.currency.trim());
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/dashboards/sales-field/details?${searchParams.toString()}`,
+    { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }

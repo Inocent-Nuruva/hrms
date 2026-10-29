@@ -1386,7 +1386,7 @@ export function OnboardingView() {
   const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
   const [invitationSearch, setInvitationSearch] = React.useState("")
   const [invitationStatusFilter, setInvitationStatusFilter] =
-    React.useState<EmployeeInvitationHistoryStatus>("pending")
+    React.useState<EmployeeInvitationHistoryStatus>("all")
   const [requestSearch, setRequestSearch] = React.useState("")
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
   const [requestPresentation, setRequestPresentation] = React.useState("overview")
@@ -1423,6 +1423,7 @@ export function OnboardingView() {
   })
   const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
   const [workspaceTab, setWorkspaceTab] = React.useState("overview")
+  const [readinessRevision, setReadinessRevision] = React.useState(0)
   const [workflowMapVisible, setWorkflowMapVisible] = React.useState(false)
   const [handoffRequirement, setHandoffRequirement] = React.useState<{ id: string; label: string } | null>(null)
   const workspaceRequestRef = React.useRef<number | null>(null)
@@ -3832,6 +3833,7 @@ export function OnboardingView() {
       showSuccessAlert("Bank account verified successfully.")
       await openBankVerification()
       if (selectedRequestRow) await openRequestDetails(selectedRequestRow)
+      setReadinessRevision((current) => current + 1)
     } catch (cause) {
       showErrorAlert(cause instanceof Error ? cause.message : "Bank account could not be verified.")
     } finally {
@@ -4970,7 +4972,7 @@ export function OnboardingView() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              Pending Invitations
+              Invitations
               {invitations.length > 0 ? ` (${invitations.length})` : ""}
             </button>
           ) : null}
@@ -5015,10 +5017,11 @@ export function OnboardingView() {
         <div className="space-y-2">
           <ResizableTable
             title="Employee Invitations"
+            className="px-3 pb-3"
             data={filteredInvitations}
             columns={invitationColumns}
             loading={loading}
-            storageKey="pending-employee-invitations"
+            storageKey="employee-invitations"
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
@@ -5055,7 +5058,7 @@ export function OnboardingView() {
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
                 onClick={() => void reloadAll("invitations", true)}
                 disabled={loading}
-                aria-label="Refresh pending invitations"
+                aria-label="Refresh invitations"
                 title="Refresh"
               >
                 <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
@@ -5206,10 +5209,21 @@ export function OnboardingView() {
             </div>
           ) : null}
           {!isEmployeeMode && requestPresentation === "overview" ? (
-            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id) => void openRequestDetails({ id })} />
+            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id, requirement) => {
+              if (requirement?.id === "independently approved starting salary") {
+                window.location.assign("/dashboard/employees/salary-approvals")
+                return
+              }
+              void openRequestDetails({ id }).then(() => {
+                if (requirement?.action === "payroll" || requirement?.action === "contracts") setWorkspaceTab("payroll")
+                else if (requirement?.action === "tasks" || requirement?.action === "approvals") setWorkspaceTab("tasks")
+                else if (requirement?.action === "details") setWorkspaceTab("details")
+              })
+            }} />
           ) : (
           <ResizableTable
             title="Onboarding Requests"
+            className="px-3 pb-3"
             data={filteredRequests}
             columns={onboardingRequestColumns}
             loading={loading}
@@ -5356,7 +5370,11 @@ export function OnboardingView() {
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                   <div className="w-full space-y-5">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm sm:grid-cols-2">
+                      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">1</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Request details</p><p className="text-xs text-slate-500">Choose the employee and the workflow that will guide their onboarding.</p></div>
+                      </div>
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
                         Request title
                         <Input
@@ -5466,6 +5484,11 @@ export function OnboardingView() {
                         </Select>
                       </label>
 
+                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">2</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Schedule</p><p className="text-xs text-slate-500">Decide whether to start now and set the expected onboarding dates.</p></div>
+                      </div>
+
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700">
                         When to start
                         <Select
@@ -5523,6 +5546,11 @@ export function OnboardingView() {
                         />
                       </label>
 
+                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">3</span>
+                        <div><p className="text-sm font-semibold text-slate-900">Notes</p><p className="text-xs text-slate-500">Add optional context for HR, managers, and other owners.</p></div>
+                      </div>
+
                       <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
                         Description
                         <Input
@@ -5539,8 +5567,9 @@ export function OnboardingView() {
                       </label>
                     </div>
 
-                    <div className="border-t border-slate-200 pt-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
                       <div className="flex items-center gap-2">
+                        <span className="mr-1 flex size-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">4</span>
                         <Checkbox
                           id="include-provisioning"
                           checked={requestProvisioningEnabled}
@@ -6057,7 +6086,7 @@ export function OnboardingView() {
                   <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} image={workspaceEmployeePhoto ? { src: workspaceEmployeePhoto } : undefined} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
                 </div>
                 <div className="flex flex-col items-start gap-2"><FluentBadge appearance="tint" color={selectedRequestSummary.status === "completed" ? "success" : "informative"}>{toTitleCaseWords(readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employment_status"], "onboarding"))}</FluentBadge><p className="text-xs text-muted-foreground">Request {toTitleCaseWords(selectedRequestSummary.status)} · Updated {selectedRequestSummary.updated}</p></div>
-                <div id="onboarding-activation-summary" className="absolute right-0 top-0" />
+                <div id="onboarding-activation-summary" className="min-w-[16rem] flex-1 sm:max-w-sm" />
               </header>
               <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
                 <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">Payroll & contract</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
@@ -6080,7 +6109,7 @@ export function OnboardingView() {
                         employeeName={selectedRequestSummary.employee}
                         canActivate={canCompleteOnboardingRequests}
                         saving={saving}
-                        refreshKey={String(selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? "")}
+                        refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}:${readinessRevision}`}
                         summaryTargetId="onboarding-activation-summary"
                         onDiscuss={(id, label) => setHandoffRequirement({ id, label })}
                         onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
@@ -6573,7 +6602,7 @@ export function OnboardingView() {
                     )
                   })()}
 
-                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3">
+                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Approval trail</p>
                       {approvalSummary.pending.length > 0 ? (

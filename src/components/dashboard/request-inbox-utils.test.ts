@@ -26,4 +26,18 @@ describe("request inbox grouping and filters", () => {
     expect(filterAndGroupActions([{ id: 5 }, { id: 6 }], defaultInboxFilters)).toHaveLength(2)
     expect(actionReference({ sourceEntityType: "ONBOARDING_TASK", sourceEntityId: 9, metadata: { onboarding_request_id: 7 } })).toEqual({ type: "ONBOARDING_TASK", id: "9", requestId: "7" })
   })
+  it("hides legacy missing-report escalation items", () => {
+    const groups = filterAndGroupActions([
+      { id: 7, status: "OPEN", sourceKey: "daily-activity:missing-escalation:manager:10:2026-10-20" },
+      { id: 8, status: "OPEN", sourceKey: "daily-activity:missing:10:2026-10-20" },
+    ], defaultInboxFilters)
+    expect(groups.flatMap((group) => group.items).map((row) => row.id)).toEqual([8])
+  })
+  it("keeps daily activity reports out of employee requests", () => {
+    const groups = filterAndGroupActions([
+      { id: 9, status: "OPEN", sourceEntityType: "DAILY_ACTIVITY_REPORT", title: "Submit daily activity report" },
+      { id: 10, status: "OPEN", sourceEntityType: "ONBOARDING_TASK", title: "Provide laptop" },
+    ], defaultInboxFilters)
+    expect(groups.flatMap((group) => group.items).map((row) => row.id)).toEqual([10])
+  })
 })

@@ -42,12 +42,15 @@ async function render(canActivate = true) {
 function button(label: string) {
   return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
 }
+function labelledButton(label: string) {
+  return [...document.querySelectorAll("button")].find((entry) => entry.getAttribute("aria-label") === label)!
+}
 describe("onboarding activation overview", () => {
   it("shows blockers and prevents activation until ready", async () => {
     await render()
     expect(container.textContent).toContain("1 activation requirements outstanding")
     expect(container.textContent).toContain("Responsible: HR / Employee")
-    expect(button("Activate employee").disabled).toBe(true)
+    expect(button("Activate employee")).toBeUndefined()
     await act(async () => button("Open requirement").click())
     expect(navigate).toHaveBeenCalledWith("contracts", "contract")
     expect(container.textContent).not.toContain("Provide laptop")
@@ -72,7 +75,7 @@ describe("onboarding activation overview", () => {
     await render()
     expect(container.textContent).toContain("Readiness unavailable")
     expect(button("Activate employee")).toBeUndefined()
-    await act(async () => button("Refresh readiness").click())
+    await act(async () => labelledButton("Refresh readiness").click())
     expect(getReadiness).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain("Signed contract")
   })

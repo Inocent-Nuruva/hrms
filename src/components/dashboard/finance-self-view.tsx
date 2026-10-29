@@ -18,16 +18,41 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   CheckCircle2Icon,
   FileTextIcon,
-  PlusIcon,
-  RefreshCwIcon,
   ShieldCheckIcon,
   XCircleIcon,
 } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store";
+import {
+  Avatar,
+  Button,
+  Checkbox,
+  Field,
+  Input,
+  Tag,
+  TagPicker,
+  TagPickerControl,
+  TagPickerGroup,
+  TagPickerInput,
+  TagPickerList,
+  TagPickerOption,
+} from "@fluentui/react-components";
+import {
+  Add20Regular,
+  AppsList24Regular,
+  ArrowLeft20Regular,
+  ArrowClockwise20Regular,
+  ArrowRight20Regular,
+  CheckmarkCircle20Regular,
+  DocumentBulletList24Regular,
+  Person20Regular,
+  TextBold20Regular,
+  TextBulletListLtr20Regular,
+  TextItalic20Regular,
+  TextNumberListLtr20Regular,
+  Wallet24Regular,
+} from "@fluentui/react-icons";
 
 import {
-  CompactStatStrip,
-  HeroBand,
   StatusChip,
   TalentDoodleSprites,
   actionButtonClass,
@@ -35,6 +60,7 @@ import {
   asRecordArray,
   inputClass,
   optionLabel,
+  pageBleedClass,
   prettify,
   primaryButtonClass,
   readNumber,
@@ -68,6 +94,7 @@ import {
   listMyFinanceApplicationDocuments,
   listMyFinanceApplicationGuarantors,
   listMyFinanceGuarantorRequests,
+  searchMyFinanceGuarantorCandidates,
   submitMyFinanceApplication,
   uploadMyFinanceApplicationDocument,
   withdrawMyFinanceApplication,
@@ -83,6 +110,37 @@ function readStoredToken() {
 }
 
 const wizardSteps = ["Product", "Terms", "Support", "Review"];
+const financeAmountPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/;
+const guarantorFormType = "GUARANTOR_FORM";
+
+function guarantorFormKey(employeeId: number) {
+  return `${guarantorFormType}::${employeeId}`;
+}
+
+function friendlyFinanceError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+
+  if (
+    /requested_amount.*must match|requested amount.*regular expression/i.test(
+      message,
+    )
+  ) {
+    return "Enter a valid amount with up to two decimal places.";
+  }
+  if (
+    /requested_term_months.*integer|requested term.*whole number/i.test(message)
+  ) {
+    return "Enter the repayment period as a whole number of months.";
+  }
+  if (/product_id.*(required|number|integer)/i.test(message)) {
+    return "Select a finance product before continuing.";
+  }
+  if (/must match .*regular expression/i.test(message)) {
+    return "Check the highlighted value and enter it in the expected format.";
+  }
+
+  return message;
+}
 
 function readStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -148,6 +206,203 @@ function eligibilityChecks(eligibility: AdminRecord | null) {
   return asRecordArray(eligibility?.checks);
 }
 
+function guarantorCandidateLabel(candidate: AdminRecord) {
+  const firstName = readString(candidate, ["firstName", "first_name"]);
+  const middleName = readString(candidate, ["middleName", "middle_name"]);
+  const lastName = readString(candidate, ["lastName", "last_name"]);
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+  const employeeNumber = readString(candidate, ["employeeNo", "employee_no"]);
+
+  if (fullName && employeeNumber) return `${fullName} · ${employeeNumber}`;
+  return fullName || employeeNumber || "Employee";
+}
+
+function escapePurposeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function purposeMarkdownToHtml(value: string) {
+  const inline = (text: string) =>
+    escapePurposeHtml(text)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/_(.+?)_/g, "<em>$1</em>");
+  const lines = value.split("\n");
+  const output: string[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const unordered = /^-\s+(.*)$/.exec(line);
+    const ordered = /^\d+\.\s+(.*)$/.exec(line);
+    if (unordered) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const match = /^-\s+(.*)$/.exec(lines[index]);
+        if (!match) break;
+        items.push(`<li>${inline(match[1])}</li>`);
+        index += 1;
+      }
+      output.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+    if (ordered) {
+      const items: string[] = [];
+      while (index < lines.length) {
+        const match = /^\d+\.\s+(.*)$/.exec(lines[index]);
+        if (!match) break;
+        items.push(`<li>${inline(match[1])}</li>`);
+        index += 1;
+      }
+      output.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+    output.push(line ? `<div>${inline(line)}</div>` : "<div><br></div>");
+    index += 1;
+  }
+  return output.join("");
+}
+
+function purposeEditorToMarkdown(root: HTMLElement) {
+  const renderInline = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (!(node instanceof HTMLElement)) return "";
+    const content = Array.from(node.childNodes).map(renderInline).join("");
+    if (node.tagName === "BR") return "\n";
+    if (node.tagName === "B" || node.tagName === "STRONG") {
+      return `**${content}**`;
+    }
+    if (node.tagName === "I" || node.tagName === "EM") {
+      return `_${content}_`;
+    }
+    return content;
+  };
+
+  return Array.from(root.childNodes)
+    .map((node) => {
+      if (!(node instanceof HTMLElement)) return renderInline(node);
+      if (node.tagName === "UL" || node.tagName === "OL") {
+        return Array.from(node.children)
+          .map((item, index) => {
+            const marker = node.tagName === "OL" ? `${index + 1}.` : "-";
+            return `${marker} ${Array.from(item.childNodes).map(renderInline).join("")}`;
+          })
+          .join("\n");
+      }
+      return renderInline(node);
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+}
+
+function PurposeRichTextEditor({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const editorRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || document.activeElement === editor) return;
+    const html = purposeMarkdownToHtml(value);
+    if (editor.innerHTML !== html) editor.innerHTML = html;
+  }, [value]);
+
+  const runCommand = (command: string) => {
+    if (disabled) return;
+    editorRef.current?.focus();
+    document.execCommand(command);
+    if (editorRef.current) onChange(purposeEditorToMarkdown(editorRef.current));
+  };
+
+  return (
+    <div className="overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring/30">
+      <div
+        role="toolbar"
+        aria-label="Purpose formatting"
+        className="flex items-center gap-1 border-b border-border bg-muted/30 px-2 py-1"
+      >
+        {[
+          ["Bold", "bold", <TextBold20Regular key="bold" />],
+          ["Italic", "italic", <TextItalic20Regular key="italic" />],
+          [
+            "Bulleted list",
+            "insertUnorderedList",
+            <TextBulletListLtr20Regular key="bullets" />,
+          ],
+          [
+            "Numbered list",
+            "insertOrderedList",
+            <TextNumberListLtr20Regular key="numbers" />,
+          ],
+        ].map(([label, command, icon]) => (
+          <Button
+            key={String(command)}
+            type="button"
+            appearance="subtle"
+            size="small"
+            icon={icon as React.ReactElement}
+            aria-label={String(label)}
+            title={String(label)}
+            disabled={disabled}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => runCommand(String(command))}
+          />
+        ))}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          Rich text
+        </span>
+      </div>
+      <div
+        ref={editorRef}
+        role="textbox"
+        aria-label="Purpose"
+        aria-multiline="true"
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        data-placeholder="Describe what the funds will be used for"
+        className="min-h-28 px-3 py-2 text-sm leading-6 text-foreground outline-none empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] [&_ol]:ml-6 [&_ol]:list-decimal [&_ul]:ml-6 [&_ul]:list-disc"
+        onInput={(event) =>
+          onChange(purposeEditorToMarkdown(event.currentTarget))
+        }
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            const selection = window.getSelection();
+            const anchor = selection?.anchorNode;
+            const anchorElement =
+              anchor instanceof HTMLElement ? anchor : anchor?.parentElement;
+            const listItem = anchorElement?.closest("li");
+            if (listItem?.textContent?.trim()) {
+              event.preventDefault();
+              document.execCommand("insertParagraph");
+              window.requestAnimationFrame(() => {
+                if (editorRef.current) {
+                  onChange(purposeEditorToMarkdown(editorRef.current));
+                }
+              });
+              return;
+            }
+          }
+          if (!(event.ctrlKey || event.metaKey)) return;
+          const key = event.key.toLowerCase();
+          if (key === "b" || key === "i") {
+            event.preventDefault();
+            runCommand(key === "b" ? "bold" : "italic");
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 export function FinanceSelfView() {
   const leaveIfForbidden = useLeaveIfForbidden();
   const session = React.useSyncExternalStore(
@@ -171,6 +426,12 @@ export function FinanceSelfView() {
   const [guarantorRequests, setGuarantorRequests] = React.useState<
     AdminRecord[]
   >([]);
+  const [guarantorCandidates, setGuarantorCandidates] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [guarantorSearch, setGuarantorSearch] = React.useState("");
+  const [guarantorSearchLoading, setGuarantorSearchLoading] =
+    React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [mounted, setMounted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -258,6 +519,51 @@ export function FinanceSelfView() {
   }, [load, session.credentialVersion]);
 
   React.useEffect(() => {
+    const search = guarantorSearch.trim();
+    if (!createOpen || wizardStep !== 2 || search.length < 2) {
+      setGuarantorSearchLoading(false);
+      return;
+    }
+
+    const token = readStoredToken();
+    if (!token) return;
+    let active = true;
+    setGuarantorSearchLoading(true);
+    const timeout = window.setTimeout(() => {
+      void searchMyFinanceGuarantorCandidates(token, search)
+        .then((candidates) => {
+          if (!active) return;
+          setGuarantorCandidates((current) => {
+            const merged = new Map(
+              current.map((candidate) => [rowId(candidate), candidate]),
+            );
+            candidates.forEach((candidate) =>
+              merged.set(rowId(candidate), candidate),
+            );
+            return [...merged.values()];
+          });
+        })
+        .catch((errorObject) => {
+          if (active) {
+            toast.error(
+              errorObject instanceof Error
+                ? errorObject.message
+                : "Could not search employees.",
+            );
+          }
+        })
+        .finally(() => {
+          if (active) setGuarantorSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [createOpen, guarantorSearch, wizardStep]);
+
+  React.useEffect(() => {
     checkpointRef.current = null;
     setCheckpoint(null);
     setForm({});
@@ -296,6 +602,19 @@ export function FinanceSelfView() {
   const guarantorIds = [
     ...new Set(parseGuarantorIds(form.guarantor_employee_ids)),
   ];
+  const guarantorCandidateById = new Map(
+    guarantorCandidates.map((candidate) => [rowId(candidate), candidate]),
+  );
+  const requiresGuarantorForms = requiredDocuments.some(
+    (type) => type.trim().toUpperCase() === guarantorFormType,
+  );
+  const ordinaryRequiredDocuments = requiredDocuments.filter(
+    (type) => type.trim().toUpperCase() !== guarantorFormType,
+  );
+  const requiredDocumentKeys = [
+    ...ordinaryRequiredDocuments,
+    ...(requiresGuarantorForms ? guarantorIds.map(guarantorFormKey) : []),
+  ];
   const checks = eligibilityChecks(eligibility);
   const eligible = eligibility
     ? readString(eligibility, ["eligible"]) === "true"
@@ -308,8 +627,68 @@ export function FinanceSelfView() {
       form.requested_term_months &&
       form.purpose,
     ) &&
-      requiredDocuments.every((type) => Boolean(documentFiles[type])) &&
+      requiredDocumentKeys.every((type) => Boolean(documentFiles[type])) &&
       guarantorIds.length >= requiredGuarantors);
+
+  function wizardStepError(step: number) {
+    if (step === 0) {
+      return currentProduct ? null : "Select a finance product to continue.";
+    }
+    if (step === 1) {
+      if (!financeAmountPattern.test(form.requested_amount ?? "")) {
+        return "Enter a valid amount with up to two decimal places.";
+      }
+      const term = Number(form.requested_term_months);
+      if (!Number.isSafeInteger(term) || term < 1) {
+        return "Enter the repayment period as a whole number of months.";
+      }
+      if (!form.purpose?.trim()) {
+        return "Describe what the loan or advance will be used for.";
+      }
+      if (eligibilityLoading) {
+        return "Please wait while eligibility is being checked.";
+      }
+      if (!eligibility) {
+        return "Eligibility could not be confirmed yet. Check the amount and term.";
+      }
+      if (!eligible) {
+        return "The eligibility requirements must pass before continuing.";
+      }
+      return null;
+    }
+    if (step === 2) {
+      if (guarantorIds.length < requiredGuarantors) {
+        return `Select at least ${requiredGuarantors} guarantor${requiredGuarantors === 1 ? "" : "s"}.`;
+      }
+      const missingDocuments = requiredDocumentKeys.filter(
+        (type) => !documentFiles[type],
+      );
+      if (missingDocuments.length) {
+        return "Upload every required document and guarantor form before reviewing.";
+      }
+    }
+    return null;
+  }
+
+  function moveToWizardStep(target: number) {
+    if (target <= wizardStep) {
+      setFormError(null);
+      setWizardStep(target);
+      return;
+    }
+    for (let step = wizardStep; step < target; step += 1) {
+      const message = wizardStepError(step);
+      if (message) {
+        setFormError(message);
+        setWizardStep(step);
+        return;
+      }
+    }
+    setFormError(null);
+    setWizardStep(target);
+  }
+
+  const currentWizardStepBlocked = Boolean(wizardStepError(wizardStep));
 
   React.useEffect(() => {
     let active = true;
@@ -327,6 +706,17 @@ export function FinanceSelfView() {
         active = false;
       };
     }
+    if (!financeAmountPattern.test(form.requested_amount)) {
+      setFormError("Enter a valid amount with up to two decimal places.");
+      return () => {
+        active = false;
+      };
+    }
+    setFormError((current) =>
+      current === "Enter a valid amount with up to two decimal places."
+        ? null
+        : current,
+    );
     const timer = window.setTimeout(() => {
       if (!active) return;
       setEligibilityLoading(true);
@@ -342,9 +732,7 @@ export function FinanceSelfView() {
           if (active) {
             setEligibility(null);
             setFormError(
-              error instanceof Error
-                ? error.message
-                : "Could not evaluate eligibility.",
+              friendlyFinanceError(error, "Could not evaluate eligibility."),
             );
           }
         })
@@ -364,7 +752,7 @@ export function FinanceSelfView() {
     session.credentialVersion,
   ]);
 
-  async function onCreate() {
+  async function handleCreateApplication(startedAt: number) {
     if (createInFlight.current || !recoveryKey) return;
     const actor = getSessionSnapshot();
     const token = actor.tokens?.accessToken;
@@ -384,7 +772,7 @@ export function FinanceSelfView() {
     try {
       let initial = checkpointRef.current;
       if (!initial) {
-        const missingDocuments = requiredDocuments.filter(
+        const missingDocuments = requiredDocumentKeys.filter(
           (type) => !documentFiles[type],
         );
         if (missingDocuments.length)
@@ -404,11 +792,11 @@ export function FinanceSelfView() {
         initial = {
           payload,
           form: { ...form },
-          requiredDocuments,
+          requiredDocuments: requiredDocumentKeys,
           guarantorIds,
           autoSubmit: form.auto_submit === "true",
           draftId: null,
-          startedAt: Date.now(),
+          startedAt,
           creationPending: false,
           completedDocuments: [],
           completedGuarantors: [],
@@ -427,11 +815,20 @@ export function FinanceSelfView() {
           applications: () => listMyFinanceApplications(token),
           documents: (id) => listMyFinanceApplicationDocuments(token, id),
           guarantors: (id) => listMyFinanceApplicationGuarantors(token, id),
-          upload: async (id, type, file) =>
-            uploadMyFinanceApplicationDocument(token, id, {
-              document_type: type,
+          upload: async (id, type, file) => {
+            const [documentType, guarantorEmployeeId] = type.split("::");
+            return uploadMyFinanceApplicationDocument(token, id, {
+              document_type: documentType,
               file: await fileToBase64UploadDto(file),
-            }),
+              ...(guarantorEmployeeId
+                ? {
+                    metadata: {
+                      guarantor_employee_id: Number(guarantorEmployeeId),
+                    },
+                  }
+                : {}),
+            });
+          },
           addGuarantor: (id, employeeId) =>
             addMyFinanceApplicationGuarantor(token, id, {
               guarantor_employee_id: employeeId,
@@ -466,9 +863,7 @@ export function FinanceSelfView() {
           window.sessionStorage.removeItem(recoveryKey);
         }
         setFormError(
-          error instanceof Error
-            ? error.message
-            : "Could not complete the application.",
+          friendlyFinanceError(error, "Could not complete the application."),
         );
       }
     } finally {
@@ -537,12 +932,24 @@ export function FinanceSelfView() {
                 <button
                   type="button"
                   className={actionButtonClass}
-                  title={readString(row, ["decisionComments", "decision_comments"], "")}
+                  title={readString(
+                    row,
+                    ["decisionComments", "decision_comments"],
+                    "",
+                  )}
                   onClick={() => {
                     setCorrectTarget(row);
                     setCorrectForm({
-                      requested_amount: readString(row, ["requestedAmount", "requested_amount"], ""),
-                      requested_term_months: readString(row, ["requestedTermMonths", "requested_term_months"], ""),
+                      requested_amount: readString(
+                        row,
+                        ["requestedAmount", "requested_amount"],
+                        "",
+                      ),
+                      requested_term_months: readString(
+                        row,
+                        ["requestedTermMonths", "requested_term_months"],
+                        "",
+                      ),
                       purpose: readString(row, ["purpose"], ""),
                     });
                   }}
@@ -581,96 +988,98 @@ export function FinanceSelfView() {
                 </button>
               ) : null}
               {status !== "DRAFT" ? null : (
-              <button
-                type="button"
-                className={actionButtonClass}
-                disabled={busyId === `sub-${id}`}
-                onClick={() => {
-                  const token = readStoredToken();
-                  if (!token || !id) return;
-                  setBusyId(`sub-${id}`);
-                  void submitMyFinanceApplication(token, id)
-                    .then(() => {
-                      toast.success("Submitted.");
-                      return load();
-                    })
-                    .catch((errorObject) =>
-                      toast.error(
-                        errorObject instanceof Error
-                          ? errorObject.message
-                          : "Could not submit.",
-                      ),
-                    )
-                    .finally(() => setBusyId(""));
-                }}
-              >
-                Submit
-              </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `sub-${id}`}
+                  onClick={() => {
+                    const token = readStoredToken();
+                    if (!token || !id) return;
+                    setBusyId(`sub-${id}`);
+                    void submitMyFinanceApplication(token, id)
+                      .then(() => {
+                        toast.success("Submitted.");
+                        return load();
+                      })
+                      .catch((errorObject) =>
+                        toast.error(
+                          errorObject instanceof Error
+                            ? errorObject.message
+                            : "Could not submit.",
+                        ),
+                      )
+                      .finally(() => setBusyId(""));
+                  }}
+                >
+                  Submit
+                </button>
               )}
               {status !== "PENDING_EMPLOYEE_ACCEPTANCE" ? null : (
-              <button
-                type="button"
-                className={actionButtonClass}
-                disabled={busyId === `acc-${id}`}
-                onClick={() => {
-                  const token = readStoredToken();
-                  if (!token || !id) return;
-                  setBusyId(`acc-${id}`);
-                  void acceptMyFinanceApplication(token, id)
-                    .then(() => {
-                      toast.success("Accepted.");
-                      return load();
-                    })
-                    .catch((errorObject) =>
-                      toast.error(
-                        errorObject instanceof Error
-                          ? errorObject.message
-                          : "Could not accept.",
-                      ),
-                    )
-                    .finally(() => setBusyId(""));
-                }}
-              >
-                Accept
-              </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `acc-${id}`}
+                  onClick={() => {
+                    const token = readStoredToken();
+                    if (!token || !id) return;
+                    setBusyId(`acc-${id}`);
+                    void acceptMyFinanceApplication(token, id)
+                      .then(() => {
+                        toast.success("Accepted.");
+                        return load();
+                      })
+                      .catch((errorObject) =>
+                        toast.error(
+                          errorObject instanceof Error
+                            ? errorObject.message
+                            : "Could not accept.",
+                        ),
+                      )
+                      .finally(() => setBusyId(""));
+                  }}
+                >
+                  Accept
+                </button>
               )}
               {!inProgress ? null : (
-              <button
-                type="button"
-                className={actionButtonClass}
-                disabled={busyId === `wd-${id}`}
-                onClick={() => {
-                  const token = readStoredToken();
-                  if (!token || !id) return;
-                  setBusyId(`wd-${id}`);
-                  void withdrawMyFinanceApplication(token, id)
-                    .then(() => {
-                      toast.success("Withdrawn.");
-                      return load();
-                    })
-                    .catch((errorObject) =>
-                      toast.error(
-                        errorObject instanceof Error
-                          ? errorObject.message
-                          : "Could not withdraw.",
-                      ),
-                    )
-                    .finally(() => setBusyId(""));
-                }}
-              >
-                Withdraw
-              </button>
+                <button
+                  type="button"
+                  className={actionButtonClass}
+                  disabled={busyId === `wd-${id}`}
+                  onClick={() => {
+                    const token = readStoredToken();
+                    if (!token || !id) return;
+                    setBusyId(`wd-${id}`);
+                    void withdrawMyFinanceApplication(token, id)
+                      .then(() => {
+                        toast.success("Withdrawn.");
+                        return load();
+                      })
+                      .catch((errorObject) =>
+                        toast.error(
+                          errorObject instanceof Error
+                            ? errorObject.message
+                            : "Could not withdraw.",
+                        ),
+                      )
+                      .finally(() => setBusyId(""));
+                  }}
+                >
+                  Withdraw
+                </button>
               )}
               {status === "RETURNED_FOR_CORRECTION" &&
               readString(row, ["decisionComments", "decision_comments"], "") ? (
                 <span className="w-full text-xs text-amber-700">
-                  Returned: {readString(row, ["decisionComments", "decision_comments"])}
+                  Returned:{" "}
+                  {readString(row, ["decisionComments", "decision_comments"])}
                 </span>
               ) : null}
               {status === "REJECTED" &&
               readString(row, ["decisionComments", "decision_comments"], "") ? (
                 <span className="w-full text-xs text-rose-700">
-                  Declined: {readString(row, ["decisionComments", "decision_comments"])}
+                  Declined:{" "}
+                  {readString(row, ["decisionComments", "decision_comments"])}
                 </span>
               ) : null}
             </div>
@@ -700,7 +1109,9 @@ export function FinanceSelfView() {
       await load();
     } catch (errorObject) {
       toast.error(
-        errorObject instanceof Error ? errorObject.message : "Could not resubmit.",
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not resubmit.",
       );
     } finally {
       setBusyId("");
@@ -735,7 +1146,9 @@ export function FinanceSelfView() {
       setDeferTarget({ account, installment: next });
     } catch (errorObject) {
       toast.error(
-        errorObject instanceof Error ? errorObject.message : "Could not load the loan.",
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load the loan.",
       );
     }
   }
@@ -753,7 +1166,9 @@ export function FinanceSelfView() {
       setDeferTarget(null);
     } catch (errorObject) {
       toast.error(
-        errorObject instanceof Error ? errorObject.message : "Could not send the request.",
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not send the request.",
       );
     } finally {
       setBusyId("");
@@ -873,74 +1288,133 @@ export function FinanceSelfView() {
   return (
     <section className="space-y-4">
       <TalentDoodleSprites />
-      <HeroBand
-        eyebrow="My finance"
-        title="Loans and advances"
-        description="Apply, submit, accept an offer, or withdraw — only your own applications."
-        actions={
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/30 bg-white/10 px-3 text-sm font-medium text-white transition hover:bg-white/20 hover:text-white disabled:opacity-60"
-            onClick={() => void load()}
-            disabled={mounted ? loading : undefined}
-          >
-            {mounted && loading ? (
-              <FluentLoadingIndicator className="size-4 animate-spin" />
-            ) : (
-              <RefreshCwIcon className="size-4" />
-            )}
-            Refresh
-          </button>
-        }
-      />
-      <CompactStatStrip
-        items={[
-          { label: "Applications", value: String(applications.length) },
-          { label: "Products", value: String(products.length) },
-          {
-            label: "Open",
-            value: String(
-              applications.filter(
+      <div
+        className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
+      >
+        <div className="relative overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-7 text-primary-foreground sm:px-8 sm:py-8">
+          <div className="finance-hero-drift pointer-events-none absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+          <div className="finance-hero-orbit pointer-events-none absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+          <div className="finance-hero-band pointer-events-none absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary-foreground/20" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+              <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" />
+              <div
+                className="h-12 w-px shrink-0 bg-primary-foreground/25"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">
+                  My finance
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+                  Loans and advances
+                </h1>
+                <p className="mt-1 text-sm text-primary-foreground/75">
+                  Apply and track your own finance requests.
+                </p>
+              </div>
+            </div>
+            <Button
+              appearance="transparent"
+              icon={
+                mounted && loading ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <ArrowClockwise20Regular />
+                )
+              }
+              aria-label="Refresh my finance"
+              title="Refresh"
+              className="!min-w-0 !self-end !text-primary-foreground hover:!bg-primary-foreground/10 sm:!self-auto"
+              onClick={() => void load()}
+              disabled={mounted ? loading : undefined}
+            />
+          </div>
+        </div>
+        <div className="grid bg-background sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Applications",
+              value: applications.length,
+              icon: DocumentBulletList24Regular,
+            },
+            {
+              label: "Available products",
+              value: products.length,
+              icon: AppsList24Regular,
+            },
+            {
+              label: "Open",
+              value: applications.filter(
                 (row) =>
                   !["WITHDRAWN", "REJECTED", "CLOSED"].includes(
                     readString(row, ["status"]).toUpperCase(),
                   ),
               ).length,
-            ),
-          },
-          {
-            label: "Guarantee requests",
-            value: String(guarantorRequests.length),
-          },
-        ]}
-      />
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className={primaryButtonClass}
-          onClick={() => {
-            if (checkpointRef.current) {
+              icon: CheckmarkCircle20Regular,
+            },
+            {
+              label: "Guarantee requests",
+              value: guarantorRequests.length,
+              icon: Wallet24Regular,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center gap-3 border-b border-border px-5 py-4 last:border-b-0 sm:border-r sm:even:border-r-0 xl:border-b-0 xl:even:border-r xl:last:border-r-0"
+            >
+              <item.icon className="shrink-0 text-primary" />
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </p>
+                <p className="text-lg font-semibold text-foreground">
+                  {item.value}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3 border-t border-border bg-muted/20 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <p className="text-sm text-muted-foreground">
+            Choose a product and submit a new application.
+          </p>
+          <Button
+            appearance="primary"
+            icon={<Add20Regular />}
+            className="self-end sm:self-auto"
+            onClick={() => {
+              if (checkpointRef.current) {
+                setCreateOpen(true);
+                return;
+              }
+              setForm({});
+              setDocumentFiles({});
+              setWizardStep(0);
+              setEligibility(null);
+              setFormError(null);
               setCreateOpen(true);
-              return;
-            }
-            setForm({});
-            setDocumentFiles({});
-            setWizardStep(0);
-            setEligibility(null);
-            setFormError(null);
-            setCreateOpen(true);
-          }}
-        >
-          <PlusIcon className="size-4" />{" "}
-          {checkpoint ? "Resume application" : "New application"}
-        </button>
+            }}
+          >
+            {checkpoint ? "Resume application" : "New application"}
+          </Button>
+        </div>
       </div>
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {error}
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
+      >
+        <div className="border-b border-border px-5 py-3 sm:px-8">
+          <h2 className="font-semibold text-foreground">My applications</h2>
+          <p className="text-sm text-muted-foreground">
+            Drafts and submitted requests appear here.
+          </p>
+        </div>
         <ResizableTable
           title="My applications"
           data={applications}
@@ -948,10 +1422,21 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={20}
           showExport={false}
+          showToolbar={false}
+          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
+          emptyContent="No applications yet. Select New application to get started."
           storageKey="me-finance-applications"
         />
       </div>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
+      >
+        <div className="border-b border-border px-5 py-3 sm:px-8">
+          <h2 className="font-semibold text-foreground">Guarantee requests</h2>
+          <p className="text-sm text-muted-foreground">
+            Requests from colleagues who selected you as guarantor.
+          </p>
+        </div>
         <ResizableTable
           title="My guarantor requests"
           data={guarantorRequests}
@@ -959,10 +1444,21 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={10}
           showExport={false}
+          showToolbar={false}
+          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
+          emptyContent="No guarantee requests are waiting for you."
           storageKey="me-finance-guarantor-requests"
         />
       </div>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
+      >
+        <div className="border-b border-border px-5 py-3 sm:px-8">
+          <h2 className="font-semibold text-foreground">My loans</h2>
+          <p className="text-sm text-muted-foreground">
+            Active accounts, balances, and statements.
+          </p>
+        </div>
         <ResizableTable
           title="My loans"
           data={accounts}
@@ -973,10 +1469,16 @@ export function FinanceSelfView() {
               render: (row) => (
                 <div className="space-y-0.5">
                   <p className="font-medium">
-                    {readString(row, ["accountNo", "account_no"], `Loan #${rowId(row)}`)}
+                    {readString(
+                      row,
+                      ["accountNo", "account_no"],
+                      `Loan #${rowId(row)}`,
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {prettify(readString(row, ["productType", "product_type"], ""))}
+                    {prettify(
+                      readString(row, ["productType", "product_type"], ""),
+                    )}
                   </p>
                 </div>
               ),
@@ -985,7 +1487,11 @@ export function FinanceSelfView() {
               key: "outstanding",
               label: "Outstanding",
               render: (row) =>
-                readString(row, ["outstandingTotal", "outstanding_total"], "0.00"),
+                readString(
+                  row,
+                  ["outstandingTotal", "outstanding_total"],
+                  "0.00",
+                ),
             },
             {
               key: "installment",
@@ -993,7 +1499,10 @@ export function FinanceSelfView() {
               render: (row) =>
                 readString(
                   row,
-                  ["scheduledMonthlyInstallment", "scheduled_monthly_installment"],
+                  [
+                    "scheduledMonthlyInstallment",
+                    "scheduled_monthly_installment",
+                  ],
                   "—",
                 ),
             },
@@ -1053,6 +1562,9 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={10}
           showExport={false}
+          showToolbar={false}
+          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
+          emptyContent="You do not have any finance accounts yet."
           storageKey="me-finance-accounts"
         />
       </div>
@@ -1065,9 +1577,16 @@ export function FinanceSelfView() {
           <DialogHeader>
             <DialogTitle>Correct and resubmit</DialogTitle>
           </DialogHeader>
-          {readString(correctTarget, ["decisionComments", "decision_comments"], "") ? (
+          {readString(
+            correctTarget,
+            ["decisionComments", "decision_comments"],
+            "",
+          ) ? (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              {readString(correctTarget, ["decisionComments", "decision_comments"])}
+              {readString(correctTarget, [
+                "decisionComments",
+                "decision_comments",
+              ])}
             </p>
           ) : null}
           <div className="grid gap-3">
@@ -1077,7 +1596,10 @@ export function FinanceSelfView() {
                 className={inputClass}
                 value={correctForm.requested_amount ?? ""}
                 onChange={(event) =>
-                  setCorrectForm((current) => ({ ...current, requested_amount: event.target.value }))
+                  setCorrectForm((current) => ({
+                    ...current,
+                    requested_amount: event.target.value,
+                  }))
                 }
               />
             </label>
@@ -1087,7 +1609,10 @@ export function FinanceSelfView() {
                 className={inputClass}
                 value={correctForm.requested_term_months ?? ""}
                 onChange={(event) =>
-                  setCorrectForm((current) => ({ ...current, requested_term_months: event.target.value }))
+                  setCorrectForm((current) => ({
+                    ...current,
+                    requested_term_months: event.target.value,
+                  }))
                 }
               />
             </label>
@@ -1097,13 +1622,20 @@ export function FinanceSelfView() {
                 className={textareaClass}
                 value={correctForm.purpose ?? ""}
                 onChange={(event) =>
-                  setCorrectForm((current) => ({ ...current, purpose: event.target.value }))
+                  setCorrectForm((current) => ({
+                    ...current,
+                    purpose: event.target.value,
+                  }))
                 }
               />
             </label>
           </div>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setCorrectTarget(null)}>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setCorrectTarget(null)}
+            >
               Cancel
             </button>
             <button
@@ -1128,9 +1660,18 @@ export function FinanceSelfView() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             The instalment of{" "}
-            {readString(deferTarget?.installment ?? null, ["totalDue", "total_due"], "")} due{" "}
-            {readString(deferTarget?.installment ?? null, ["dueDate", "due_date"], "")} would move to after your last
-            instalment. Finance must approve it.
+            {readString(
+              deferTarget?.installment ?? null,
+              ["totalDue", "total_due"],
+              "",
+            )}{" "}
+            due{" "}
+            {readString(
+              deferTarget?.installment ?? null,
+              ["dueDate", "due_date"],
+              "",
+            )}{" "}
+            would move to after your last instalment. Finance must approve it.
           </p>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Reason</span>
@@ -1141,7 +1682,11 @@ export function FinanceSelfView() {
             />
           </label>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setDeferTarget(null)}>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => setDeferTarget(null)}
+            >
               Cancel
             </button>
             <button
@@ -1168,7 +1713,7 @@ export function FinanceSelfView() {
               {checkpoint ? "Resume application" : "New application"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-5">
             {checkpoint ? (
               <p role="status" className="text-sm text-muted-foreground">
                 Your draft and completed steps are saved. Retry continues the
@@ -1177,48 +1722,48 @@ export function FinanceSelfView() {
               </p>
             ) : null}
             <fieldset disabled={saving} className="contents">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-1 rounded-lg bg-muted/40 p-1 sm:gap-2">
                 {wizardSteps.map((step, index) => (
-                  <button
+                  <Button
                     key={step}
                     type="button"
-                    className={`rounded-md border px-2 py-2 text-xs font-medium transition ${
-                      wizardStep === index
-                        ? "border-primary bg-primary text-white"
-                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted"
-                    }`}
-                    onClick={() => setWizardStep(index)}
+                    appearance={wizardStep === index ? "primary" : "subtle"}
+                    size="small"
+                    className="!min-w-0 !px-1 text-xs sm:!px-3"
+                    aria-current={wizardStep === index ? "step" : undefined}
+                    disabled={
+                      saving || (index > wizardStep && currentWizardStepBlocked)
+                    }
+                    onClick={() => moveToWizardStep(index)}
                   >
                     {index + 1}. {step}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </fieldset>
             {wizardStep === 0 ? (
               <div className="grid gap-3">
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Product</span>
-                  <FluentSelect
-                    disabled={saving || Boolean(checkpoint)}
-                    ariaLabel="Product"
-                    className="w-full"
-                    value={form.product_id ?? ""}
-                    onChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        product_id: value,
-                      }))
-                    }
-                    placeholder="Select product"
-                    options={[
-                      { value: "", label: "Select product" },
-                      ...products.map((product) => ({
-                        value: rowId(product),
-                        label: optionLabel(product),
-                      })),
-                    ]}
-                  />
-                </label>
+                <FluentSelect
+                  label="Product"
+                  disabled={saving || Boolean(checkpoint)}
+                  ariaLabel="Product"
+                  className="w-full"
+                  value={form.product_id ?? ""}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      product_id: value,
+                    }))
+                  }
+                  placeholder="Select product"
+                  options={[
+                    { value: "", label: "Select product" },
+                    ...products.map((product) => ({
+                      value: rowId(product),
+                      label: optionLabel(product),
+                    })),
+                  ]}
+                />
                 {currentProduct ? (
                   <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm sm:grid-cols-3">
                     <div>
@@ -1276,105 +1821,135 @@ export function FinanceSelfView() {
             {wizardStep === 1 ? (
               <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
                 <div className="grid gap-3">
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Amount</span>
-                    <input
-                      className={inputClass}
+                  <Field
+                    label="Amount"
+                    validationState={
+                      form.requested_amount &&
+                      !financeAmountPattern.test(form.requested_amount)
+                        ? "error"
+                        : "none"
+                    }
+                    validationMessage={
+                      form.requested_amount &&
+                      !financeAmountPattern.test(form.requested_amount)
+                        ? "Enter a valid amount with up to two decimal places."
+                        : undefined
+                    }
+                  >
+                    <Input
+                      appearance="outline"
                       inputMode="decimal"
                       disabled={saving || Boolean(checkpoint)}
                       value={form.requested_amount ?? ""}
-                      onChange={(event) =>
+                      onChange={(_event, data) =>
                         setForm((current) => ({
                           ...current,
-                          requested_amount: event.target.value,
+                          requested_amount: data.value,
                         }))
                       }
                     />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Term (months)</span>
-                    <input
-                      className={inputClass}
+                  </Field>
+                  <Field label="Term (months)">
+                    <Input
+                      appearance="outline"
                       inputMode="numeric"
                       disabled={saving || Boolean(checkpoint)}
                       value={form.requested_term_months ?? ""}
-                      onChange={(event) =>
+                      onChange={(_event, data) =>
                         setForm((current) => ({
                           ...current,
-                          requested_term_months: event.target.value,
+                          requested_term_months: data.value,
                         }))
                       }
                     />
-                  </label>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">Purpose</span>
-                    <Textarea
-                      className={textareaClass}
-                      disabled={saving || Boolean(checkpoint)}
+                  </Field>
+                  <Field label="Purpose">
+                    <PurposeRichTextEditor
                       value={form.purpose ?? ""}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          purpose: event.target.value,
-                        }))
+                      disabled={saving || Boolean(checkpoint)}
+                      onChange={(purpose) =>
+                        setForm((current) => ({ ...current, purpose }))
                       }
                     />
-                  </label>
+                  </Field>
                 </div>
-                <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="font-medium">Eligibility</p>
-                    {eligibilityLoading ? (
-                      <FluentLoadingIndicator className="size-4 animate-spin text-muted-foreground" />
-                    ) : eligibility ? (
-                      eligible ? (
-                        <CheckCircle2Icon className="size-4 text-emerald-600" />
+                <div className="overflow-hidden rounded-lg border border-border bg-background text-sm shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Wallet24Regular className="text-primary" />
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          Eligibility estimate
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Based on your current terms
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={`inline-flex items-center gap-2 text-xs font-semibold ${
+                        eligibilityLoading
+                          ? "text-primary"
+                          : eligibility
+                            ? eligible
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-rose-600 dark:text-rose-400"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {eligibilityLoading ? (
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
                       ) : (
-                        <XCircleIcon className="size-4 text-rose-600" />
-                      )
-                    ) : null}
+                        <span
+                          className="size-2 rounded-full bg-current"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {eligibilityLoading
+                        ? "Checking"
+                        : eligibility
+                          ? eligible
+                            ? "Eligible"
+                            : "Needs attention"
+                          : "Enter terms"}
+                    </div>
                   </div>
-                  <div className="grid gap-2">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Installment</span>
-                      <span className="font-medium">
-                        {moneyValue(eligibility, [
-                          "estimatedInstallment",
-                          "estimated_installment",
-                        ])}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Capacity</span>
-                      <span className="font-medium">
-                        {moneyValue(eligibility, [
-                          "availableInstallment",
-                          "available_installment",
-                        ])}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">
-                        After deduction
-                      </span>
-                      <span className="font-medium">
-                        {moneyValue(eligibility, [
+                  <div className="grid grid-cols-2">
+                    {[
+                      [
+                        "Installment",
+                        ["estimatedInstallment", "estimated_installment"],
+                      ],
+                      [
+                        "Capacity",
+                        ["availableInstallment", "available_installment"],
+                      ],
+                      [
+                        "After deduction",
+                        [
                           "estimatedNetPayAfterDeduction",
                           "estimated_net_pay_after_deduction",
-                        ])}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">
-                        Max eligible
-                      </span>
-                      <span className="font-medium">
-                        {moneyValue(eligibility, [
-                          "maximumEligibleAmount",
-                          "maximum_eligible_amount",
-                        ])}
-                      </span>
-                    </div>
+                        ],
+                      ],
+                      [
+                        "Max eligible",
+                        ["maximumEligibleAmount", "maximum_eligible_amount"],
+                      ],
+                    ].map(([label, keys], index) => (
+                      <div
+                        key={label as string}
+                        className={`px-4 py-3 ${index < 2 ? "border-b border-border" : ""} ${index % 2 === 0 ? "border-r border-border" : ""}`}
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          {label as string}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">
+                          {eligibility
+                            ? moneyValue(eligibility, keys as string[])
+                            : "—"}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1386,58 +1961,209 @@ export function FinanceSelfView() {
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <FileTextIcon className="size-4" /> Required documents
                   </div>
-                  {requiredDocuments.length ? (
-                    requiredDocuments.map((type) => (
-                      <label key={type} className="grid gap-1.5 text-sm">
-                        <span className="font-medium">{prettify(type)}</span>
+                  {ordinaryRequiredDocuments.length ? (
+                    ordinaryRequiredDocuments.map((type) => (
+                      <Field key={type} label={prettify(type)}>
                         <input
-                          className={inputClass}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
                           type="file"
                           accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.xls,.xlsx"
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            const selectedFile =
+                              event.currentTarget.files?.[0] ?? null;
                             setDocumentFiles((current) => ({
                               ...current,
-                              [type]: event.target.files?.[0] ?? null,
-                            }))
-                          }
+                              [type]: selectedFile,
+                            }));
+                          }}
                         />
                         {documentFiles[type] ? (
                           <span className="text-xs text-muted-foreground">
                             {documentFiles[type]?.name}
                           </span>
                         ) : null}
-                      </label>
+                      </Field>
                     ))
-                  ) : (
+                  ) : !requiresGuarantorForms ? (
                     <p className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
                       No document is required for this product.
                     </p>
-                  )}
+                  ) : null}
                 </div>
                 <div className="grid gap-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <ShieldCheckIcon className="size-4" /> Guarantors
                   </div>
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">
-                      Employee IDs{" "}
-                      {requiredGuarantors
-                        ? `(minimum ${requiredGuarantors})`
-                        : ""}
-                    </span>
-                    <input
-                      className={inputClass}
-                      placeholder="Example: 12, 25"
+                  <Field
+                    label={
+                      <>
+                        Choose coworkers{" "}
+                        {requiredGuarantors
+                          ? `(minimum ${requiredGuarantors})`
+                          : ""}
+                      </>
+                    }
+                    hint="Search by name or employee number. The selected coworkers will receive a guarantee request."
+                  >
+                    <TagPicker
                       disabled={saving || Boolean(checkpoint)}
-                      value={form.guarantor_employee_ids ?? ""}
-                      onChange={(event) =>
+                      selectedOptions={guarantorIds.map(String)}
+                      onOptionSelect={(_event, data) => {
+                        if (data.value === "__status") return;
                         setForm((current) => ({
                           ...current,
-                          guarantor_employee_ids: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
+                          guarantor_employee_ids:
+                            data.selectedOptions.join(","),
+                        }));
+                        setGuarantorSearch("");
+                      }}
+                    >
+                      <TagPickerControl className="w-full">
+                        <TagPickerGroup aria-label="Selected guarantors">
+                          {guarantorIds.map((employeeId) => {
+                            const candidate = guarantorCandidateById.get(
+                              String(employeeId),
+                            );
+                            const label = candidate
+                              ? guarantorCandidateLabel(candidate)
+                              : "Selected coworker";
+                            return (
+                              <Tag
+                                key={employeeId}
+                                value={String(employeeId)}
+                                media={
+                                  <Avatar
+                                    name={label}
+                                    icon={<Person20Regular />}
+                                    size={20}
+                                  />
+                                }
+                              >
+                                {label}
+                              </Tag>
+                            );
+                          })}
+                        </TagPickerGroup>
+                        <TagPickerInput
+                          aria-label="Search coworkers"
+                          placeholder={
+                            guarantorIds.length
+                              ? "Add another coworker"
+                              : "Type a coworker's name"
+                          }
+                          value={guarantorSearch}
+                          onChange={(event) =>
+                            setGuarantorSearch(event.currentTarget.value)
+                          }
+                        />
+                      </TagPickerControl>
+                      <TagPickerList>
+                        {guarantorSearch.trim().length < 2 ? (
+                          <TagPickerOption value="__status">
+                            Type at least two characters to search
+                          </TagPickerOption>
+                        ) : guarantorSearchLoading ? (
+                          <TagPickerOption value="__status">
+                            Searching coworkers…
+                          </TagPickerOption>
+                        ) : guarantorCandidates.filter(
+                            (candidate) =>
+                              !guarantorIds.includes(
+                                Number(rowId(candidate)),
+                              ) &&
+                              guarantorCandidateLabel(candidate)
+                                .toLowerCase()
+                                .includes(guarantorSearch.trim().toLowerCase()),
+                          ).length ? (
+                          guarantorCandidates
+                            .filter(
+                              (candidate) =>
+                                !guarantorIds.includes(
+                                  Number(rowId(candidate)),
+                                ) &&
+                                guarantorCandidateLabel(candidate)
+                                  .toLowerCase()
+                                  .includes(
+                                    guarantorSearch.trim().toLowerCase(),
+                                  ),
+                            )
+                            .map((candidate) => {
+                              const id = rowId(candidate);
+                              const label = guarantorCandidateLabel(candidate);
+                              return (
+                                <TagPickerOption
+                                  key={id}
+                                  value={id}
+                                  text={label}
+                                  media={
+                                    <Avatar
+                                      name={label}
+                                      icon={<Person20Regular />}
+                                      size={24}
+                                    />
+                                  }
+                                >
+                                  {label}
+                                </TagPickerOption>
+                              );
+                            })
+                        ) : (
+                          <TagPickerOption value="__status">
+                            No matching active coworkers found
+                          </TagPickerOption>
+                        )}
+                      </TagPickerList>
+                    </TagPicker>
+                  </Field>
+                  {requiresGuarantorForms && guarantorIds.length ? (
+                    <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          Signed guarantor forms
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Upload a separate signed form for every selected
+                          guarantor.
+                        </p>
+                      </div>
+                      {guarantorIds.map((employeeId) => {
+                        const candidate = guarantorCandidateById.get(
+                          String(employeeId),
+                        );
+                        const label = candidate
+                          ? guarantorCandidateLabel(candidate)
+                          : "Selected coworker";
+                        const key = guarantorFormKey(employeeId);
+                        return (
+                          <Field key={key} label={`Form for ${label}`}>
+                            <input
+                              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-medium"
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg,.webp"
+                              disabled={saving || Boolean(checkpoint)}
+                              onChange={(event) => {
+                                const selectedFile =
+                                  event.currentTarget.files?.[0] ?? null;
+                                setDocumentFiles((current) => ({
+                                  ...current,
+                                  [key]: selectedFile,
+                                }));
+                              }}
+                            />
+                            {documentFiles[key] ? (
+                              <span className="text-xs text-muted-foreground">
+                                {documentFiles[key]?.name}
+                              </span>
+                            ) : null}
+                          </Field>
+                        );
+                      })}
+                    </div>
+                  ) : requiresGuarantorForms ? (
+                    <p className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                      Select guarantors to add their individual form uploads.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1465,8 +2191,8 @@ export function FinanceSelfView() {
                   <div>
                     <p className="text-xs text-muted-foreground">Documents</p>
                     <p className="font-medium">
-                      {requiredDocuments.length
-                        ? `${requiredDocuments.length} required`
+                      {requiredDocumentKeys.length
+                        ? `${requiredDocumentKeys.length} required`
                         : "None required"}
                     </p>
                   </div>
@@ -1512,61 +2238,53 @@ export function FinanceSelfView() {
                     </p>
                   )}
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    disabled={saving || Boolean(checkpoint)}
-                    checked={form.auto_submit === "true"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        auto_submit: event.target.checked ? "true" : "false",
-                      }))
-                    }
-                  />
-                  Submit immediately after creating the draft
-                </label>
+                <Checkbox
+                  label="Submit immediately after creating the draft"
+                  disabled={saving || Boolean(checkpoint)}
+                  checked={form.auto_submit === "true"}
+                  onChange={(_event, data) =>
+                    setForm((current) => ({
+                      ...current,
+                      auto_submit: data.checked ? "true" : "false",
+                    }))
+                  }
+                />
               </div>
             ) : null}
             {formError ? (
               <p className="text-sm text-rose-600">{formError}</p>
             ) : null}
           </div>
-          <DialogFooter>
-            <button
-              type="button"
-              className={secondaryButtonClass}
+          <DialogFooter className="!flex-row !flex-wrap !justify-end">
+            <Button
+              appearance="secondary"
               disabled={saving}
               onClick={() => setCreateOpen(false)}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className={secondaryButtonClass}
+            </Button>
+            <Button
+              appearance="subtle"
+              icon={<ArrowLeft20Regular />}
               onClick={() => setWizardStep((step) => Math.max(0, step - 1))}
               disabled={wizardStep === 0 || saving}
             >
               Back
-            </button>
+            </Button>
             {wizardStep < wizardSteps.length - 1 ? (
-              <button
-                type="button"
-                className={primaryButtonClass}
-                onClick={() =>
-                  setWizardStep((step) =>
-                    Math.min(wizardSteps.length - 1, step + 1),
-                  )
-                }
-                disabled={saving}
+              <Button
+                appearance="primary"
+                iconPosition="after"
+                icon={<ArrowRight20Regular />}
+                onClick={() => moveToWizardStep(wizardStep + 1)}
+                disabled={saving || currentWizardStepBlocked}
               >
                 Next
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                className={primaryButtonClass}
-                onClick={() => void onCreate()}
+              <Button
+                appearance="primary"
+                onClick={() => void handleCreateApplication(Date.now())}
                 disabled={saving || !canCreate}
               >
                 {saving ? (
@@ -1576,7 +2294,7 @@ export function FinanceSelfView() {
                 ) : (
                   "Create"
                 )}
-              </button>
+              </Button>
             )}
           </DialogFooter>
         </DialogPopup>

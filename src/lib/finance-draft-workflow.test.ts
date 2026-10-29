@@ -124,6 +124,42 @@ describe("recoverable finance workflow", () => {
     expect(service.create).not.toHaveBeenCalled();
     expect(service.submit).toHaveBeenCalledTimes(1);
   });
+  it("tracks a separate guarantor form for each selected employee", async () => {
+    const service = api();
+    const saved = {
+      ...checkpoint(),
+      draftId: "99",
+      requiredDocuments: ["GUARANTOR_FORM::2", "GUARANTOR_FORM::3"],
+      guarantorIds: [2, 3],
+    };
+    vi.mocked(service.documents).mockResolvedValue([
+      {
+        documentType: "GUARANTOR_FORM",
+        status: "UPLOADED",
+        metadata: { guarantor_employee_id: 2 },
+      },
+    ]);
+    vi.mocked(service.guarantors).mockResolvedValue([
+      { guarantorEmployeeId: 2 },
+      { guarantorEmployeeId: 3 },
+    ]);
+    const secondForm = new File(["signed"], "guarantor-3.pdf");
+
+    await resumeFinanceDraft(
+      saved,
+      { "GUARANTOR_FORM::3": secondForm },
+      service,
+      () => undefined,
+      () => true,
+    );
+
+    expect(service.upload).toHaveBeenCalledTimes(1);
+    expect(service.upload).toHaveBeenCalledWith(
+      "99",
+      "GUARANTOR_FORM::3",
+      secondForm,
+    );
+  });
   it("recovers an uncertain create using exact decimal equivalence without posting a duplicate", async () => {
     const service = api();
     const saved = {
