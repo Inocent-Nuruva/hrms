@@ -41,8 +41,6 @@ import {
   PeopleCommunity24Color,
   PeopleTeam24Regular,
   PeopleTeam24Color,
-  Receipt24Regular,
-  Receipt24Color,
   ShieldCheckmark24Regular,
   ShieldCheckmark24Color,
   Trophy24Regular,
@@ -156,8 +154,6 @@ const MovementsIcon = ArrowMove24Regular
 const ActiveMovementsIcon = ArrowSquare24Color
 const PositionsIcon = Briefcase24Regular
 const ActivePositionsIcon = Briefcase24Color
-const PayrollIcon = Receipt24Regular
-const ActivePayrollIcon = Receipt24Color
 const ReportsIcon = DataTrending24Regular
 const ActiveReportsIcon = DataTrending24Color
 const NotificationsIcon = Alert24Regular
@@ -364,6 +360,7 @@ const adminData: SidebarData = {
         "/dashboard/finance/reports",
         "/dashboard/finance/settings",
         "/dashboard/finance/integrations",
+        "/dashboard/operations/payroll",
         "/dashboard/me/finance",
         "/dashboard/me/finance/applications",
         "/dashboard/me/finance/payroll",
@@ -371,7 +368,10 @@ const adminData: SidebarData = {
       ],
       icon: FinanceIcon,
       activeIcon: ActiveFinanceIcon,
-      items: sidebarWorkspacesFromSections(financeSectionTabGroups),
+      items: [
+        { title: "Payroll", url: "/dashboard/operations/payroll" },
+        ...sidebarWorkspacesFromSections(financeSectionTabGroups),
+      ],
     },
     {
       title: "Movements",
@@ -405,12 +405,6 @@ const adminData: SidebarData = {
       icon: DepartmentsIcon,
       activeIcon: ActiveDepartmentsIcon,
       items: sidebarWorkspacesFromSections(structureSectionTabGroups),
-    },
-    {
-      title: "Payroll",
-      url: "/dashboard/operations/payroll",
-      icon: PayrollIcon,
-      activeIcon: ActivePayrollIcon,
     },
     {
       title: "Reports & Analytics",
@@ -585,7 +579,7 @@ const adminSearchIndex = [
   { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
   { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
-  { title: "Payroll", url: "/dashboard/operations/payroll", section: "Operations", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
+  { title: "Finance / Payroll", url: "/dashboard/operations/payroll", section: "Finance", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
   { title: "Reports & Analytics", url: "/dashboard/operations/reports", section: "Operations", keywords: ["reports", "analytics", "attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
