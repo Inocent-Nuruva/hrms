@@ -3,7 +3,7 @@ import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
 
 async function prepareWorkspace(page: Page, canActivate = true, extraPermissions: string[] = []) {
   await page.context().addCookies([{ name: DASHBOARD_AUTH_COOKIE, value: "1", url: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000" }])
-  const permissions = ["view_company_dashboard", "view_company_data", "data_scope:company", "employees:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
+  const permissions = ["view_company_dashboard", "view_company_data", "data_scope:company", "employees:read", "employment_contracts:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
   const user = { id: 90, fullName: "Test HR", first_name: "Test", last_name: "HR", email: "phase4@example.test", roles: ["HR"], permissions, scope: "company", companyId: 10, company_id: 10, dashboardType: "admin", accessContextResolved: true }
   const token = `${Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify({ sub: 90, email: user.email, scope: "company", userType: "COMPANY_USER", companyId: 10, companyMembershipId: 90, roles: user.roles, permissions, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`
   await page.addInitScript(({ token, user, permissions }) => {
