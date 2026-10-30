@@ -11,6 +11,7 @@ import { AppTextScale } from "@/components/app-text-scale";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
+import { FluentDialogService } from "@/components/ui/fluent-dialog-service";
 
 const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
@@ -57,7 +58,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("h-full", "antialiased", comfortaa.variable, comfortaa.className)}
+      className={cn(
+        "h-full",
+        "antialiased",
+        comfortaa.variable,
+        comfortaa.className,
+      )}
     >
       <body className="flex min-h-full flex-col">
         <Script src="/hrms-accent-bootstrap.js" strategy="beforeInteractive" />
@@ -68,6 +74,7 @@ export default function RootLayout({
             <SessionExpiryGuard />
             <TooltipProvider>
               {children}
+              <FluentDialogService />
               <Toaster />
             </TooltipProvider>
           </AppFluentThemeProvider>

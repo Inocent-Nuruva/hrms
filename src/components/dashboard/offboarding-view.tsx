@@ -1,12 +1,16 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useSearchParams } from "next/navigation"
-import { ResizableTable } from "@/components/ui/resizable-table"
-import { Textarea } from "@/components/ui/textarea"
-import { Plus, RefreshCw } from "lucide-react"
+import * as React from "react";
+import { useSearchParams } from "next/navigation";
+import { ResizableTable } from "@/components/ui/resizable-table";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, RefreshCw } from "lucide-react";
+import {
+  fluentConfirm,
+  fluentPrompt,
+} from "@/components/ui/fluent-dialog-service";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 import {
   addOffboardingDocument,
@@ -69,13 +73,17 @@ import {
   updateOffboardingExitInterview,
   updateOffboardingSettlement,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { asRecord, isLikelyRefreshToken, readString as readTokenString } from "@/utils/token-utils"
-import { showErrorAlert } from "@/lib/error-alert"
-import { showSuccessAlert } from "@/lib/success-alert"
+} from "@/lib/admin-api";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
+import { canPerformPermission } from "@/lib/dashboard-permissions";
+import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import {
+  asRecord,
+  isLikelyRefreshToken,
+  readString as readTokenString,
+} from "@/utils/token-utils";
+import { showErrorAlert } from "@/lib/error-alert";
+import { showSuccessAlert } from "@/lib/success-alert";
 import {
   Dialog,
   DialogDescription,
@@ -83,7 +91,7 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
+} from "@/components/animate-ui/components/base/dialog";
 import {
   Sheet,
   SheetContent,
@@ -91,84 +99,99 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { DateTimeInput } from "@/components/ui/date-time-input"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
-import { pageBleedClass } from "@/components/dashboard/talent-visuals"
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { DatePickerPresets } from "@/components/ui/date-picker-presets";
+import { DateTimeInput } from "@/components/ui/date-time-input";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications";
+import { pageBleedClass } from "@/components/dashboard/talent-visuals";
 
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 
 function readStoredToken() {
-  if (typeof window === "undefined") return ""
-  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
-  const legacy = window.sessionStorage.getItem("ess_auth_token")?.trim() ?? ""
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
-  let parsedAccess = ""
-  let parsedRefresh = ""
-  if (!authTokensRaw) return direct || legacy
+  if (typeof window === "undefined") return "";
+  const direct = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
+  const legacy = window.sessionStorage.getItem("ess_auth_token")?.trim() ?? "";
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens);
+  let parsedAccess = "";
+  let parsedRefresh = "";
+  if (!authTokensRaw) return direct || legacy;
   try {
-    const parsed = JSON.parse(authTokensRaw) as unknown
+    const parsed = JSON.parse(authTokensRaw) as unknown;
     if (typeof parsed === "string") {
-      parsedAccess = parsed.trim()
+      parsedAccess = parsed.trim();
     }
-    const root = asRecord(parsed)
-    const rootTokens = asRecord(root?.tokens)
-    const rootData = asRecord(root?.data)
-    const rootDataTokens = asRecord(rootData?.tokens)
+    const root = asRecord(parsed);
+    const rootTokens = asRecord(root?.tokens);
+    const rootData = asRecord(root?.data);
+    const rootDataTokens = asRecord(rootData?.tokens);
     for (const candidate of [root, rootTokens, rootData, rootDataTokens]) {
-      const access = readTokenString(candidate, ["accessToken", "access_token", "token"])
-      const refresh = readTokenString(candidate, ["refreshToken", "refresh_token"])
-      if (refresh && !parsedRefresh) parsedRefresh = refresh
+      const access = readTokenString(candidate, [
+        "accessToken",
+        "access_token",
+        "token",
+      ]);
+      const refresh = readTokenString(candidate, [
+        "refreshToken",
+        "refresh_token",
+      ]);
+      if (refresh && !parsedRefresh) parsedRefresh = refresh;
       if (access && !isLikelyRefreshToken(access, refresh ?? parsedRefresh)) {
-        parsedAccess = access
-        break
+        parsedAccess = access;
+        break;
       }
     }
   } catch {
-    parsedAccess = authTokensRaw.trim()
+    parsedAccess = authTokensRaw.trim();
   }
   return (
     parsedAccess ||
     (direct && !isLikelyRefreshToken(direct, parsedRefresh) ? direct : "") ||
     (legacy && !isLikelyRefreshToken(legacy, parsedRefresh) ? legacy : "")
-  )
+  );
 }
 
 function readString(row: AdminRecord, keys: string[]) {
   for (const key of keys) {
-    const value = row[key]
-    if (typeof value === "string" && value.trim()) return value
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value;
   }
-  return "-"
+  return "-";
 }
 
 function readNumber(row: AdminRecord, keys: string[]) {
   for (const key of keys) {
-    const value = row[key]
-    if (typeof value === "number" && Number.isFinite(value)) return value
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value)
-      if (Number.isFinite(parsed)) return parsed
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
     }
   }
-  return null
+  return null;
 }
 
 function StatusDot({ status }: { status: string }) {
-  const normalized = status.trim().toLowerCase()
+  const normalized = status.trim().toLowerCase();
   const label =
-    status.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim() || "—"
-  const tone =
-    ["active", "approved", "completed", "cleared", "submitted"].includes(normalized)
-      ? "good"
-      : ["inactive", "rejected", "cancelled", "canceled"].includes(normalized)
-        ? "bad"
-        : ["pending", "draft", "in_progress", "in_review"].includes(normalized)
-          ? "warn"
-          : "neutral"
+    status
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim() || "—";
+  const tone = [
+    "active",
+    "approved",
+    "completed",
+    "cleared",
+    "submitted",
+  ].includes(normalized)
+    ? "good"
+    : ["inactive", "rejected", "cancelled", "canceled"].includes(normalized)
+      ? "bad"
+      : ["pending", "draft", "in_progress", "in_review"].includes(normalized)
+        ? "warn"
+        : "neutral";
   return (
     <span
       className={cn(
@@ -176,7 +199,7 @@ function StatusDot({ status }: { status: string }) {
         tone === "good" && "text-emerald-600",
         tone === "bad" && "text-rose-600",
         tone === "warn" && "text-amber-600",
-        tone === "neutral" && "text-muted-foreground"
+        tone === "neutral" && "text-muted-foreground",
       )}
     >
       <span
@@ -185,31 +208,35 @@ function StatusDot({ status }: { status: string }) {
           tone === "good" && "bg-emerald-500",
           tone === "bad" && "bg-rose-500",
           tone === "warn" && "bg-amber-500",
-          tone === "neutral" && "bg-muted-foreground/50"
+          tone === "neutral" && "bg-muted-foreground/50",
         )}
       />
       {label}
     </span>
-  )
+  );
 }
 
 function EmptyState({
   title,
   description,
 }: {
-  title: string
-  description: string
+  title: string;
+  description: string;
 }) {
   return (
     <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-dashed border-border px-6 py-10 text-center">
       <p className="text-sm font-medium text-foreground">{title}</p>
-      <p className="mt-1 max-w-md text-xs text-muted-foreground">{description}</p>
+      <p className="mt-1 max-w-md text-xs text-muted-foreground">
+        {description}
+      </p>
     </div>
-  )
+  );
 }
 
-type Tab = "requests" | "workflows" | "my-tasks" | "my-approvals" | "my-clearances"
-type OffboardingLookupKey = "employees" | "branches" | "departments" | "workflows"
+type Tab =
+  "requests" | "workflows" | "my-tasks" | "my-approvals" | "my-clearances";
+type OffboardingLookupKey =
+  "employees" | "branches" | "departments" | "workflows";
 
 const OFFBOARDING_TASK_TYPE_OPTIONS = [
   "hr",
@@ -219,9 +246,14 @@ const OFFBOARDING_TASK_TYPE_OPTIONS = [
   "security",
   "admin",
   "general",
-] as const
+] as const;
 
-const OFFBOARDING_PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"] as const
+const OFFBOARDING_PRIORITY_OPTIONS = [
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
 const OFFBOARDING_CLEARANCE_TYPE_OPTIONS = [
   "laptop",
   "id_card",
@@ -231,7 +263,7 @@ const OFFBOARDING_CLEARANCE_TYPE_OPTIONS = [
   "documents",
   "finance",
   "other",
-] as const
+] as const;
 const OFFBOARDING_ACTION_TYPE_OPTIONS = [
   "email_disable",
   "sso_revoke",
@@ -241,14 +273,14 @@ const OFFBOARDING_ACTION_TYPE_OPTIONS = [
   "badge_deactivation",
   "payroll_stop",
   "other",
-] as const
+] as const;
 const OFFBOARDING_ACTION_STATUS_OPTIONS = [
   "pending",
   "in_progress",
   "completed",
   "failed",
   "cancelled",
-] as const
+] as const;
 const OFFBOARDING_ASSET_TYPE_OPTIONS = [
   "laptop",
   "id_card",
@@ -258,13 +290,13 @@ const OFFBOARDING_ASSET_TYPE_OPTIONS = [
   "access_card",
   "phone",
   "other",
-] as const
+] as const;
 const OFFBOARDING_ASSET_STATUS_OPTIONS = [
   "pending",
   "returned",
   "missing",
   "waived",
-] as const
+] as const;
 const OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS = [
   "final_salary",
   "leave_encashment",
@@ -274,111 +306,133 @@ const OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS = [
   "severance",
   "tax_clearance",
   "other",
-] as const
+] as const;
 const OFFBOARDING_SETTLEMENT_STATUS_OPTIONS = [
   "pending",
   "in_progress",
   "completed",
   "blocked",
   "waived",
-] as const
-const OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS = ["draft", "completed"] as const
+] as const;
+const OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS = [
+  "draft",
+  "completed",
+] as const;
 const OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS = [
   "not_started",
   "in_progress",
   "completed",
   "not_required",
-] as const
+] as const;
 
 function statusIsDraft(status: string) {
-  const s = status.trim().toLowerCase()
-  return s === "draft" || s === "pending_submit" || s === "new" || s === ""
+  const s = status.trim().toLowerCase();
+  return s === "draft" || s === "pending_submit" || s === "new" || s === "";
 }
 
 function statusIsCancellable(status: string) {
-  const s = status.trim().toLowerCase()
-  return ["draft", "pending", "submitted", "in_review", "in_progress", "pending_approval"].includes(s)
+  const s = status.trim().toLowerCase();
+  return [
+    "draft",
+    "pending",
+    "submitted",
+    "in_review",
+    "in_progress",
+    "pending_approval",
+  ].includes(s);
 }
 
 function toTitleCaseWords(value: string) {
-  const normalized = value.trim().replace(/[_-]+/g, " ")
-  if (!normalized) return "—"
-  return normalized.replace(/\b\w/g, (character) => character.toUpperCase())
+  const normalized = value.trim().replace(/[_-]+/g, " ");
+  if (!normalized) return "—";
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function formatDateTimeValue(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
-    return "—"
+    return "—";
   }
-  const parsed = new Date(value)
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return value
+    return value;
   }
-  return parsed.toLocaleString()
+  return parsed.toLocaleString();
 }
 
 function readCompanyUserId(row: AdminRecord) {
-  const direct = readNumber(row, ["company_user_id", "companyUserId", "assigned_to_company_user_id", "owner_company_user_id"])
+  const direct = readNumber(row, [
+    "company_user_id",
+    "companyUserId",
+    "assigned_to_company_user_id",
+    "owner_company_user_id",
+  ]);
   if (direct !== null) {
-    return direct
+    return direct;
   }
-  const nestedCompanyUser = asRecord(row.company_user) ?? asRecord(row.companyUser)
-  const nestedUser = asRecord(row.user)
+  const nestedCompanyUser =
+    asRecord(row.company_user) ?? asRecord(row.companyUser);
+  const nestedUser = asRecord(row.user);
   return (
-    readNumber(nestedCompanyUser ?? {}, ["id", "company_user_id", "companyUserId"]) ??
+    readNumber(nestedCompanyUser ?? {}, [
+      "id",
+      "company_user_id",
+      "companyUserId",
+    ]) ??
     readNumber(nestedUser ?? {}, ["company_user_id", "companyUserId", "id"]) ??
     null
-  )
+  );
 }
 
 function readBooleanLike(row: AdminRecord, keys: string[]) {
   for (const key of keys) {
-    const value = row[key]
+    const value = row[key];
     if (typeof value === "boolean") {
-      return value
+      return value;
     }
     if (value === 1 || value === "1") {
-      return true
+      return true;
     }
     if (value === 0 || value === "0") {
-      return false
+      return false;
     }
     if (typeof value === "string") {
-      const normalized = value.trim().toLowerCase()
+      const normalized = value.trim().toLowerCase();
       if (normalized === "true" || normalized === "yes") {
-        return true
+        return true;
       }
       if (normalized === "false" || normalized === "no") {
-        return false
+        return false;
       }
     }
   }
-  return null
+  return null;
 }
 
 function isRequestFinalized(row: AdminRecord | null) {
   if (!row) {
-    return false
+    return false;
   }
   if (readBooleanLike(row, ["is_finalized", "isFinalized"]) === true) {
-    return true
+    return true;
   }
-  return readString(row, ["finalized_at", "finalizedAt"]) !== "-"
+  return readString(row, ["finalized_at", "finalizedAt"]) !== "-";
 }
 
 export function OffboardingView() {
-  const searchParams = useSearchParams()
+  const searchParams = useSearchParams();
   const highlightedRequestId = React.useMemo(
     () =>
       searchParams?.get("highlight") ??
       searchParams?.get("requestId") ??
       searchParams?.get("request_id") ??
       "",
-    [searchParams]
-  )
-  const actor = useDashboardActor()
-  const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
-  const canManage = actor.ready && actor.isAdmin
+    [searchParams],
+  );
+  const actor = useDashboardActor();
+  const isEmployeeMode = actor.ready
+    ? actor.accessMode === "employee" || !actor.isAdmin
+    : false;
+  const canManage = actor.ready && actor.isAdmin;
   const canViewWorkflows =
     actor.ready &&
     canPerformPermission(actor.permissionLabels, {
@@ -389,79 +443,109 @@ export function OffboardingView() {
         "offboarding_workflows:delete",
       ],
       mode: "any",
-    })
+    });
   const canSelfCreate =
     actor.ready &&
-    (isEmployeeMode || canPerformPermission(actor.permissionLabels, "offboarding_requests:create"))
-  const canCreateRequest = canManage || canSelfCreate
+    (isEmployeeMode ||
+      canPerformPermission(
+        actor.permissionLabels,
+        "offboarding_requests:create",
+      ));
+  const canCreateRequest = canManage || canSelfCreate;
 
-  const [tab, setTab] = React.useState<Tab>("requests")
-  const [loading, setLoading] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const [tab, setTab] = React.useState<Tab>("requests");
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [, setBranches] = React.useState<AdminRecord[]>([])
-  const [, setDepartments] = React.useState<AdminRecord[]>([])
-  const [selfEmployee, setSelfEmployee] = React.useState<AdminRecord | null>(null)
-  const [selfEmployeeId, setSelfEmployeeId] = React.useState<number | null>(null)
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([]);
+  const [, setBranches] = React.useState<AdminRecord[]>([]);
+  const [, setDepartments] = React.useState<AdminRecord[]>([]);
+  const [selfEmployee, setSelfEmployee] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [selfEmployeeId, setSelfEmployeeId] = React.useState<number | null>(
+    null,
+  );
 
-  const [requests, setRequests] = React.useState<AdminRecord[]>([])
-  const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
-  const [myTasks, setMyTasks] = React.useState<AdminRecord[]>([])
-  const [myApprovals, setMyApprovals] = React.useState<AdminRecord[]>([])
-  const [myClearances, setMyClearances] = React.useState<AdminRecord[]>([])
-  const [loadedTabs, setLoadedTabs] = React.useState<Partial<Record<Tab, boolean>>>({
+  const [requests, setRequests] = React.useState<AdminRecord[]>([]);
+  const [workflows, setWorkflows] = React.useState<AdminRecord[]>([]);
+  const [myTasks, setMyTasks] = React.useState<AdminRecord[]>([]);
+  const [myApprovals, setMyApprovals] = React.useState<AdminRecord[]>([]);
+  const [myClearances, setMyClearances] = React.useState<AdminRecord[]>([]);
+  const [loadedTabs, setLoadedTabs] = React.useState<
+    Partial<Record<Tab, boolean>>
+  >({
     requests: false,
     workflows: false,
     "my-tasks": false,
     "my-approvals": false,
     "my-clearances": false,
-  })
-  const [loadedLookups, setLoadedLookups] = React.useState<Record<OffboardingLookupKey, boolean>>({
+  });
+  const [loadedLookups, setLoadedLookups] = React.useState<
+    Record<OffboardingLookupKey, boolean>
+  >({
     employees: false,
     branches: false,
     departments: false,
     workflows: false,
-  })
+  });
 
-  const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
-  const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
-  const [stepAssignees, setStepAssignees] = React.useState<Record<string, AdminRecord[]>>({ role: [], position: [], company_user: [] })
-  const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
-  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("")
+  const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false);
+  const [stepDialogOpen, setStepDialogOpen] = React.useState(false);
+  const [stepAssignees, setStepAssignees] = React.useState<
+    Record<string, AdminRecord[]>
+  >({ role: [], position: [], company_user: [] });
+  const [requestSheetOpen, setRequestSheetOpen] = React.useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState("");
 
-  const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
-  const [selectedRequest, setSelectedRequest] = React.useState<AdminRecord | null>(null)
-  const [requestApprovals, setRequestApprovals] = React.useState<AdminRecord[]>([])
-  const [requestAuditLogs, setRequestAuditLogs] = React.useState<AdminRecord[]>([])
-  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false)
-  const [showTaskComposer, setShowTaskComposer] = React.useState(false)
-  const [showClearanceComposer, setShowClearanceComposer] = React.useState(false)
-  const [showActionComposer, setShowActionComposer] = React.useState(false)
-  const [showAssetComposer, setShowAssetComposer] = React.useState(false)
-  const [showSettlementComposer, setShowSettlementComposer] = React.useState(false)
+  const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false);
+  const [selectedRequest, setSelectedRequest] =
+    React.useState<AdminRecord | null>(null);
+  const [requestApprovals, setRequestApprovals] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [requestAuditLogs, setRequestAuditLogs] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false);
+  const [showTaskComposer, setShowTaskComposer] = React.useState(false);
+  const [showClearanceComposer, setShowClearanceComposer] =
+    React.useState(false);
+  const [showActionComposer, setShowActionComposer] = React.useState(false);
+  const [showAssetComposer, setShowAssetComposer] = React.useState(false);
+  const [showSettlementComposer, setShowSettlementComposer] =
+    React.useState(false);
 
   function autoResizeTextarea(event: React.FormEvent<HTMLTextAreaElement>) {
-    const element = event.currentTarget
-    element.style.height = "auto"
-    element.style.height = `${element.scrollHeight}px`
+    const element = event.currentTarget;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
   }
-  const [requestDocuments, setRequestDocuments] = React.useState<AdminRecord[]>([])
-  const [requestProgress, setRequestProgress] = React.useState<AdminRecord | null>(null)
-  const [requestActions, setRequestActions] = React.useState<AdminRecord[]>([])
-  const [requestAssets, setRequestAssets] = React.useState<AdminRecord[]>([])
-  const [requestLetters, setRequestLetters] = React.useState<AdminRecord[]>([])
-  const [requestAccessOperations, setRequestAccessOperations] = React.useState<AdminRecord[]>([])
-  const [requestSettlements, setRequestSettlements] = React.useState<AdminRecord[]>([])
-  const [requestExitInterview, setRequestExitInterview] = React.useState<AdminRecord | null>(null)
-  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
+  const [requestDocuments, setRequestDocuments] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [requestProgress, setRequestProgress] =
+    React.useState<AdminRecord | null>(null);
+  const [requestActions, setRequestActions] = React.useState<AdminRecord[]>([]);
+  const [requestAssets, setRequestAssets] = React.useState<AdminRecord[]>([]);
+  const [requestLetters, setRequestLetters] = React.useState<AdminRecord[]>([]);
+  const [requestAccessOperations, setRequestAccessOperations] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [requestSettlements, setRequestSettlements] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [requestExitInterview, setRequestExitInterview] =
+    React.useState<AdminRecord | null>(null);
+  const [documentUploadFile, setDocumentUploadFile] =
+    React.useState<File | null>(null);
   const [documentForm, setDocumentForm] = React.useState({
     title: "",
     description: "",
     document_type: "",
     expiry_date: "",
-  })
+  });
   const [taskForm, setTaskForm] = React.useState({
     title: "",
     description: "",
@@ -469,14 +553,14 @@ export function OffboardingView() {
     priority: "medium",
     assigned_to_company_user_id: "",
     due_date: "",
-  })
+  });
   const [clearanceForm, setClearanceForm] = React.useState({
     clearance_type: "documents",
     status: "pending",
     remarks: "",
     owner_company_user_id: "",
     due_date: "",
-  })
+  });
   const [actionForm, setActionForm] = React.useState({
     action_type: "email_disable",
     system_name: "",
@@ -484,7 +568,7 @@ export function OffboardingView() {
     status: "pending",
     due_date: "",
     notes: "",
-  })
+  });
   const [assetForm, setAssetForm] = React.useState({
     asset_type: "laptop",
     asset_label: "",
@@ -493,7 +577,7 @@ export function OffboardingView() {
     status: "pending",
     due_date: "",
     remarks: "",
-  })
+  });
   const [settlementForm, setSettlementForm] = React.useState({
     item_type: "final_salary",
     title: "",
@@ -503,7 +587,7 @@ export function OffboardingView() {
     currency: "TZS",
     due_date: "",
     remarks: "",
-  })
+  });
   const [exitInterviewForm, setExitInterviewForm] = React.useState({
     status: "draft",
     exit_reason_category: "",
@@ -513,7 +597,7 @@ export function OffboardingView() {
     knowledge_transfer_status: "not_started",
     handover_notes: "",
     final_notes: "",
-  })
+  });
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -529,14 +613,14 @@ export function OffboardingView() {
     notice_period_waived: "false",
     notice_period_waiver_reason: "",
     submit: "false",
-  })
+  });
 
   const [workflowForm, setWorkflowForm] = React.useState({
     name: "",
     description: "",
     is_default: "false",
     status: "active",
-  })
+  });
 
   const [stepForm, setStepForm] = React.useState({
     approval_level: "1",
@@ -553,328 +637,417 @@ export function OffboardingView() {
     action_type: "recommend",
     is_required: "true",
     expected_duration_days: "1",
-  })
+  });
 
   const employeeCompanyUserOptions = React.useMemo(
     () =>
       employees
         .map((row) => {
-          const companyUserId = readCompanyUserId(row)
+          const companyUserId = readCompanyUserId(row);
           if (companyUserId === null) {
-            return null
+            return null;
           }
           return {
             companyUserId,
             label: employeeLabel(row),
-          }
+          };
         })
         .filter(
           (
-            option
+            option,
           ): option is {
-            companyUserId: number
-            label: string
-          } => option !== null
+            companyUserId: number;
+            label: string;
+          } => option !== null,
         ),
-    [employees]
-  )
+    [employees],
+  );
 
   const selectedRequestTasks = React.useMemo(() => {
-    const detailTasks = extractOffboardingItemsFromRecord(selectedRequest, ["tasks"]).tasks
-    const progressTasks = extractOffboardingItemsFromRecord(requestProgress, ["tasks"]).tasks
-    const seen = new Set<string>()
+    const detailTasks = extractOffboardingItemsFromRecord(selectedRequest, [
+      "tasks",
+    ]).tasks;
+    const progressTasks = extractOffboardingItemsFromRecord(requestProgress, [
+      "tasks",
+    ]).tasks;
+    const seen = new Set<string>();
     return [...detailTasks, ...progressTasks].filter((row, index) => {
-      const key = String(readNumber(row, ["id", "task_id"]) ?? `task-${index}`)
+      const key = String(readNumber(row, ["id", "task_id"]) ?? `task-${index}`);
       if (seen.has(key)) {
-        return false
+        return false;
       }
-      seen.add(key)
-      return true
-    })
-  }, [requestProgress, selectedRequest])
+      seen.add(key);
+      return true;
+    });
+  }, [requestProgress, selectedRequest]);
 
   const selectedRequestClearances = React.useMemo(() => {
-    const detailClearances = extractOffboardingItemsFromRecord(selectedRequest, ["clearances"]).clearances
-    const progressClearances = extractOffboardingItemsFromRecord(requestProgress, ["clearances"]).clearances
-    const seen = new Set<string>()
+    const detailClearances = extractOffboardingItemsFromRecord(
+      selectedRequest,
+      ["clearances"],
+    ).clearances;
+    const progressClearances = extractOffboardingItemsFromRecord(
+      requestProgress,
+      ["clearances"],
+    ).clearances;
+    const seen = new Set<string>();
     return [...detailClearances, ...progressClearances].filter((row, index) => {
-      const key = String(readNumber(row, ["id", "clearance_id"]) ?? `clearance-${index}`)
+      const key = String(
+        readNumber(row, ["id", "clearance_id"]) ?? `clearance-${index}`,
+      );
       if (seen.has(key)) {
-        return false
+        return false;
       }
-      seen.add(key)
-      return true
-    })
-  }, [requestProgress, selectedRequest])
+      seen.add(key);
+      return true;
+    });
+  }, [requestProgress, selectedRequest]);
 
   const employeeLabel = (employee: AdminRecord) => {
-    const fullName = readString(employee, ["full_name", "name"])
-    if (fullName !== "-") return fullName
-    const first = readString(employee, ["first_name"])
-    const last = readString(employee, ["last_name"])
-    return [first, last].filter((v) => v !== "-").join(" ") || "Unnamed"
-  }
+    const fullName = readString(employee, ["full_name", "name"]);
+    if (fullName !== "-") return fullName;
+    const first = readString(employee, ["first_name"]);
+    const last = readString(employee, ["last_name"]);
+    return [first, last].filter((v) => v !== "-").join(" ") || "Unnamed";
+  };
 
   const requestLabel = (row: AdminRecord) => {
-    const explicitTitle = readString(row, ["title", "name", "request_name", "request_title"])
-    if (explicitTitle !== "-") return explicitTitle
-    const requestNo = readString(row, ["request_no", "offboarding_no", "code"])
-    if (requestNo !== "-") return requestNo
-    const id = readNumber(row, ["id"])
-    return id === null ? "Unnamed request" : `Request #${id}`
-  }
+    const explicitTitle = readString(row, [
+      "title",
+      "name",
+      "request_name",
+      "request_title",
+    ]);
+    if (explicitTitle !== "-") return explicitTitle;
+    const requestNo = readString(row, ["request_no", "offboarding_no", "code"]);
+    if (requestNo !== "-") return requestNo;
+    const id = readNumber(row, ["id"]);
+    return id === null ? "Unnamed request" : `Request #${id}`;
+  };
 
-  const loadLookups = React.useCallback(async (token: string, lookupKeys: OffboardingLookupKey[], force = false) => {
-    const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
-    if (missingKeys.length === 0) {
-      return
-    }
-
-    const results = await Promise.all(
-      missingKeys.map(async (key) => {
-        switch (key) {
-          case "employees":
-            return { key, result: await listEmployees(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "branches":
-            return { key, result: await listBranches(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "departments":
-            return { key, result: await listDepartments(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-          case "workflows":
-            return { key, result: await listOffboardingWorkflows(token, { page: 1, limit: 100, sortBy: "created_at", sortOrder: "DESC" }) }
-        }
-      })
-    )
-
-    results.forEach((entry) => {
-      if (!entry) return
-      switch (entry.key) {
-        case "employees":
-          setEmployees(entry.result.rows)
-          break
-        case "branches":
-          setBranches(entry.result.rows)
-          break
-        case "departments":
-          setDepartments(entry.result.rows)
-          break
-        case "workflows":
-          setWorkflows(entry.result.rows)
-          break
+  const loadLookups = React.useCallback(
+    async (
+      token: string,
+      lookupKeys: OffboardingLookupKey[],
+      force = false,
+    ) => {
+      const missingKeys = force
+        ? lookupKeys
+        : lookupKeys.filter((key) => !loadedLookups[key]);
+      if (missingKeys.length === 0) {
+        return;
       }
-    })
 
-    setLoadedLookups((current) => {
-      const next = { ...current }
-      missingKeys.forEach((key) => {
-        next[key] = true
-      })
-      return next
-    })
-  }, [loadedLookups])
+      const results = await Promise.all(
+        missingKeys.map(async (key) => {
+          switch (key) {
+            case "employees":
+              return {
+                key,
+                result: await listEmployees(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              };
+            case "branches":
+              return {
+                key,
+                result: await listBranches(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              };
+            case "departments":
+              return {
+                key,
+                result: await listDepartments(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              };
+            case "workflows":
+              return {
+                key,
+                result: await listOffboardingWorkflows(token, {
+                  page: 1,
+                  limit: 100,
+                  sortBy: "created_at",
+                  sortOrder: "DESC",
+                }),
+              };
+          }
+        }),
+      );
 
-  const ensureLookups = React.useCallback(async (lookupKeys: OffboardingLookupKey[], force = false) => {
-    const token = readStoredToken()
-    if (!token) {
-      const msg = "Authentication required. Please log in again."
-      setError(msg)
-      showErrorAlert(msg)
-      return false
-    }
+      results.forEach((entry) => {
+        if (!entry) return;
+        switch (entry.key) {
+          case "employees":
+            setEmployees(entry.result.rows);
+            break;
+          case "branches":
+            setBranches(entry.result.rows);
+            break;
+          case "departments":
+            setDepartments(entry.result.rows);
+            break;
+          case "workflows":
+            setWorkflows(entry.result.rows);
+            break;
+        }
+      });
 
-    setLoading(true)
-    setError(null)
-    try {
-      await loadLookups(token, lookupKeys, force)
-      return true
-    } catch (errorObject) {
-      const msg = errorObject instanceof Error ? errorObject.message : "Failed to load offboarding form data."
-      setError(msg)
-      showErrorAlert(msg)
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [loadLookups])
+      setLoadedLookups((current) => {
+        const next = { ...current };
+        missingKeys.forEach((key) => {
+          next[key] = true;
+        });
+        return next;
+      });
+    },
+    [loadedLookups],
+  );
+
+  const ensureLookups = React.useCallback(
+    async (lookupKeys: OffboardingLookupKey[], force = false) => {
+      const token = readStoredToken();
+      if (!token) {
+        const msg = "Authentication required. Please log in again.";
+        setError(msg);
+        showErrorAlert(msg);
+        return false;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        await loadLookups(token, lookupKeys, force);
+        return true;
+      } catch (errorObject) {
+        const msg =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load offboarding form data.";
+        setError(msg);
+        showErrorAlert(msg);
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadLookups],
+  );
 
   const loadSelfEmployee = React.useCallback(async (token: string) => {
     try {
-      const me = await getCurrentEmployee(token)
-      if (!me) return null
-      setSelfEmployee(me)
-      const id = readNumber(me, ["id", "employee_id", "employeeId"])
-      if (id !== null) setSelfEmployeeId(id)
-      return me
+      const me = await getCurrentEmployee(token);
+      if (!me) return null;
+      setSelfEmployee(me);
+      const id = readNumber(me, ["id", "employee_id", "employeeId"]);
+      if (id !== null) setSelfEmployeeId(id);
+      return me;
     } catch {
-      return null
+      return null;
     }
-  }, [])
+  }, []);
 
-  const reloadAll = React.useCallback(async (targetTab: Tab = tab, force = false) => {
-    void force
-    const token = readStoredToken()
-    if (!token) {
-      const msg = "Authentication required. Please log in again."
-      setError(msg)
-      showErrorAlert(msg)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      if (targetTab === "requests") {
-        let employeeFilter = selfEmployeeId ?? undefined
-        if (isEmployeeMode) {
-          let mine: AdminRecord[] = []
-          try {
-            mine = await listMyOffboardingRequests(token)
-          } catch {
-            mine = []
-          }
-          if (mine.length > 0) {
-            setRequests(mine)
-          } else {
-            if (employeeFilter == null) {
-              const me = await loadSelfEmployee(token)
-              employeeFilter = me
-                ? readNumber(me, ["id", "employee_id", "employeeId"]) ?? undefined
-                : undefined
+  const reloadAll = React.useCallback(
+    async (targetTab: Tab = tab, force = false) => {
+      void force;
+      const token = readStoredToken();
+      if (!token) {
+        const msg = "Authentication required. Please log in again.";
+        setError(msg);
+        showErrorAlert(msg);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        if (targetTab === "requests") {
+          let employeeFilter = selfEmployeeId ?? undefined;
+          if (isEmployeeMode) {
+            let mine: AdminRecord[] = [];
+            try {
+              mine = await listMyOffboardingRequests(token);
+            } catch {
+              mine = [];
             }
+            if (mine.length > 0) {
+              setRequests(mine);
+            } else {
+              if (employeeFilter == null) {
+                const me = await loadSelfEmployee(token);
+                employeeFilter = me
+                  ? (readNumber(me, ["id", "employee_id", "employeeId"]) ??
+                    undefined)
+                  : undefined;
+              }
+              const requestsResult = await listOffboardingRequests(token, {
+                page: 1,
+                limit: 100,
+                sortBy: "created_at",
+                sortOrder: "DESC",
+                employee_id: employeeFilter,
+              });
+              setRequests(requestsResult.rows);
+            }
+          } else {
             const requestsResult = await listOffboardingRequests(token, {
               page: 1,
               limit: 100,
               sortBy: "created_at",
               sortOrder: "DESC",
-              employee_id: employeeFilter,
-            })
-            setRequests(requestsResult.rows)
+            });
+            setRequests(requestsResult.rows);
           }
-        } else {
-          const requestsResult = await listOffboardingRequests(token, {
+          if (canManage) {
+            try {
+              await getOffboardingDashboard(token);
+            } catch {
+              // optional
+            }
+          }
+        } else if (targetTab === "workflows") {
+          const workflowsResult = await listOffboardingWorkflows(token, {
             page: 1,
             limit: 100,
             sortBy: "created_at",
             sortOrder: "DESC",
-          })
-          setRequests(requestsResult.rows)
-        }
-        if (canManage) {
-          try {
-            await getOffboardingDashboard(token)
-          } catch {
-            // optional
+          });
+          setWorkflows(workflowsResult.rows);
+          setLoadedLookups((current) => ({ ...current, workflows: true }));
+          if (!selectedWorkflowId && workflowsResult.rows.length > 0) {
+            const firstId = readNumber(workflowsResult.rows[0], [
+              "id",
+              "workflow_id",
+            ]);
+            if (firstId !== null) setSelectedWorkflowId(String(firstId));
           }
-        }
-      } else if (targetTab === "workflows") {
-        const workflowsResult = await listOffboardingWorkflows(token, {
-          page: 1,
-          limit: 100,
-          sortBy: "created_at",
-          sortOrder: "DESC",
-        })
-        setWorkflows(workflowsResult.rows)
-        setLoadedLookups((current) => ({ ...current, workflows: true }))
-        if (!selectedWorkflowId && workflowsResult.rows.length > 0) {
-          const firstId = readNumber(workflowsResult.rows[0], ["id", "workflow_id"])
-          if (firstId !== null) setSelectedWorkflowId(String(firstId))
-        }
-      } else if (targetTab === "my-tasks") {
-        let tasks = await listMyOffboardingTasks(token)
-        if (tasks.length === 0) {
-          let employeeFilter = selfEmployeeId
-          if (isEmployeeMode && employeeFilter == null) {
-            const me = await loadSelfEmployee(token)
-            employeeFilter = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
+        } else if (targetTab === "my-tasks") {
+          let tasks = await listMyOffboardingTasks(token);
+          if (tasks.length === 0) {
+            let employeeFilter = selfEmployeeId;
+            if (isEmployeeMode && employeeFilter == null) {
+              const me = await loadSelfEmployee(token);
+              employeeFilter = me
+                ? readNumber(me, ["id", "employee_id", "employeeId"])
+                : null;
+            }
+            try {
+              const fallback = await listOffboardingItemsFromOwnRequests(
+                token,
+                "tasks",
+                isEmployeeMode ? employeeFilter : null,
+              );
+              if (fallback.length > 0) tasks = fallback;
+            } catch {
+              // keep empty
+            }
           }
-          try {
-            const fallback = await listOffboardingItemsFromOwnRequests(
-              token,
-              "tasks",
-              isEmployeeMode ? employeeFilter : null
-            )
-            if (fallback.length > 0) tasks = fallback
-          } catch {
-            // keep empty
+          setMyTasks(tasks);
+        } else if (targetTab === "my-approvals") {
+          setMyApprovals(await listMyOffboardingApprovals(token));
+        } else if (targetTab === "my-clearances") {
+          let clearances = await listMyOffboardingClearances(token);
+          if (clearances.length === 0) {
+            let employeeFilter = selfEmployeeId;
+            if (isEmployeeMode && employeeFilter == null) {
+              const me = await loadSelfEmployee(token);
+              employeeFilter = me
+                ? readNumber(me, ["id", "employee_id", "employeeId"])
+                : null;
+            }
+            try {
+              const fallback = await listOffboardingItemsFromOwnRequests(
+                token,
+                "clearances",
+                isEmployeeMode ? employeeFilter : null,
+              );
+              if (fallback.length > 0) clearances = fallback;
+            } catch {
+              // keep empty
+            }
           }
+          setMyClearances(clearances);
         }
-        setMyTasks(tasks)
-      } else if (targetTab === "my-approvals") {
-        setMyApprovals(await listMyOffboardingApprovals(token))
-      } else if (targetTab === "my-clearances") {
-        let clearances = await listMyOffboardingClearances(token)
-        if (clearances.length === 0) {
-          let employeeFilter = selfEmployeeId
-          if (isEmployeeMode && employeeFilter == null) {
-            const me = await loadSelfEmployee(token)
-            employeeFilter = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
-          }
-          try {
-            const fallback = await listOffboardingItemsFromOwnRequests(
-              token,
-              "clearances",
-              isEmployeeMode ? employeeFilter : null
-            )
-            if (fallback.length > 0) clearances = fallback
-          } catch {
-            // keep empty
-          }
+        setLoadedTabs((current) => ({ ...current, [targetTab]: true }));
+      } catch (errorObject) {
+        const msg =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load offboarding data.";
+        if (/forbidden/i.test(msg)) {
+          if (targetTab === "my-tasks") setMyTasks([]);
+          if (targetTab === "my-clearances") setMyClearances([]);
+          if (targetTab === "my-approvals") setMyApprovals([]);
+          setLoadedTabs((current) => ({ ...current, [targetTab]: true }));
+          setError(null);
+        } else {
+          setError(msg);
+          showErrorAlert(msg);
         }
-        setMyClearances(clearances)
+      } finally {
+        setLoading(false);
       }
-      setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
-    } catch (errorObject) {
-      const msg = errorObject instanceof Error ? errorObject.message : "Failed to load offboarding data."
-      if (/forbidden/i.test(msg)) {
-        if (targetTab === "my-tasks") setMyTasks([])
-        if (targetTab === "my-clearances") setMyClearances([])
-        if (targetTab === "my-approvals") setMyApprovals([])
-        setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
-        setError(null)
-      } else {
-        setError(msg)
-        showErrorAlert(msg)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [canManage, isEmployeeMode, loadSelfEmployee, selectedWorkflowId, selfEmployeeId, tab])
+    },
+    [
+      canManage,
+      isEmployeeMode,
+      loadSelfEmployee,
+      selectedWorkflowId,
+      selfEmployeeId,
+      tab,
+    ],
+  );
 
   React.useEffect(() => {
     if (actor.ready && tab === "workflows" && !canViewWorkflows) {
-      setTab("requests")
+      setTab("requests");
     }
-  }, [actor.ready, canViewWorkflows, tab])
+  }, [actor.ready, canViewWorkflows, tab]);
 
   React.useEffect(() => {
-    if (loadedTabs[tab]) return
-    void reloadAll(tab)
-  }, [loadedTabs, reloadAll, tab])
+    if (loadedTabs[tab]) return;
+    void reloadAll(tab);
+  }, [loadedTabs, reloadAll, tab]);
 
   function pickDefaultWorkflowId(rows: AdminRecord[]): string {
-    if (!rows.length) return ""
+    if (!rows.length) return "";
     const active = rows.filter((row) => {
-      const status = readString(row, ["status"]).toLowerCase()
-      return status === "-" || status === "" || status === "active"
-    })
-    const pool = active.length > 0 ? active : rows
+      const status = readString(row, ["status"]).toLowerCase();
+      return status === "-" || status === "" || status === "active";
+    });
+    const pool = active.length > 0 ? active : rows;
     const defaultRow =
       pool.find(
         (row) =>
           row.is_default === true ||
           String(row.is_default ?? "").toLowerCase() === "true" ||
-          row.isDefault === true
-      ) ?? pool[0]
-    const id = readNumber(defaultRow, ["id", "workflow_id"])
-    return id === null ? "" : String(id)
+          row.isDefault === true,
+      ) ?? pool[0];
+    const id = readNumber(defaultRow, ["id", "workflow_id"]);
+    return id === null ? "" : String(id);
   }
 
-  function workflowDisplayName(workflowId: string, rows: AdminRecord[] = workflows): string {
-    if (!workflowId) return "No workflow available"
+  function workflowDisplayName(
+    workflowId: string,
+    rows: AdminRecord[] = workflows,
+  ): string {
+    if (!workflowId) return "No workflow available";
     const match = rows.find(
-      (row) => String(readNumber(row, ["id", "workflow_id"]) ?? "") === workflowId
-    )
-    if (!match) return `Workflow #${workflowId}`
-    const name = readString(match, ["name", "title"])
-    return name === "-" ? `Workflow #${workflowId}` : name
+      (row) =>
+        String(readNumber(row, ["id", "workflow_id"]) ?? "") === workflowId,
+    );
+    if (!match) return `Workflow #${workflowId}`;
+    const name = readString(match, ["name", "title"]);
+    return name === "-" ? `Workflow #${workflowId}` : name;
   }
 
   const resetDocumentForm = React.useCallback(() => {
@@ -883,9 +1056,9 @@ export function OffboardingView() {
       description: "",
       document_type: "",
       expiry_date: "",
-    })
-    setDocumentUploadFile(null)
-  }, [])
+    });
+    setDocumentUploadFile(null);
+  }, []);
 
   const resetTaskForm = React.useCallback(() => {
     setTaskForm({
@@ -895,8 +1068,8 @@ export function OffboardingView() {
       priority: "medium",
       assigned_to_company_user_id: "",
       due_date: "",
-    })
-  }, [])
+    });
+  }, []);
 
   const resetClearanceForm = React.useCallback(() => {
     setClearanceForm({
@@ -905,8 +1078,8 @@ export function OffboardingView() {
       remarks: "",
       owner_company_user_id: "",
       due_date: "",
-    })
-  }, [])
+    });
+  }, []);
 
   const resetActionForm = React.useCallback(() => {
     setActionForm({
@@ -916,8 +1089,8 @@ export function OffboardingView() {
       status: "pending",
       due_date: "",
       notes: "",
-    })
-  }, [])
+    });
+  }, []);
 
   const resetAssetForm = React.useCallback(() => {
     setAssetForm({
@@ -928,8 +1101,8 @@ export function OffboardingView() {
       status: "pending",
       due_date: "",
       remarks: "",
-    })
-  }, [])
+    });
+  }, []);
 
   const resetSettlementForm = React.useCallback(() => {
     setSettlementForm({
@@ -941,102 +1114,136 @@ export function OffboardingView() {
       currency: "TZS",
       due_date: "",
       remarks: "",
-    })
-  }, [])
+    });
+  }, []);
 
-  const syncExitInterviewForm = React.useCallback((record: AdminRecord | null) => {
-    setExitInterviewForm({
-      status: readString(record ?? {}, ["status"]) === "-" ? "draft" : readString(record ?? {}, ["status"]),
-      exit_reason_category:
-        readString(record ?? {}, ["exit_reason_category", "exitReasonCategory"]) === "-"
-          ? ""
-          : readString(record ?? {}, ["exit_reason_category", "exitReasonCategory"]),
-      employee_feedback:
-        readString(record ?? {}, ["employee_feedback", "employeeFeedback"]) === "-"
-          ? ""
-          : readString(record ?? {}, ["employee_feedback", "employeeFeedback"]),
-      manager_feedback:
-        readString(record ?? {}, ["manager_feedback", "managerFeedback"]) === "-"
-          ? ""
-          : readString(record ?? {}, ["manager_feedback", "managerFeedback"]),
-      rehire_eligible: (() => {
-        const value = readBooleanLike(record ?? {}, ["rehire_eligible", "rehireEligible"])
-        if (value === null) {
-          return "unknown"
-        }
-        return value ? "true" : "false"
-      })(),
-      knowledge_transfer_status:
-        readString(record ?? {}, ["knowledge_transfer_status", "knowledgeTransferStatus"]) === "-"
-          ? "not_started"
-          : readString(record ?? {}, ["knowledge_transfer_status", "knowledgeTransferStatus"]),
-      handover_notes:
-        readString(record ?? {}, ["handover_notes", "handoverNotes"]) === "-"
-          ? ""
-          : readString(record ?? {}, ["handover_notes", "handoverNotes"]),
-      final_notes:
-        readString(record ?? {}, ["final_notes", "finalNotes"]) === "-"
-          ? ""
-          : readString(record ?? {}, ["final_notes", "finalNotes"]),
-    })
-  }, [])
+  const syncExitInterviewForm = React.useCallback(
+    (record: AdminRecord | null) => {
+      setExitInterviewForm({
+        status:
+          readString(record ?? {}, ["status"]) === "-"
+            ? "draft"
+            : readString(record ?? {}, ["status"]),
+        exit_reason_category:
+          readString(record ?? {}, [
+            "exit_reason_category",
+            "exitReasonCategory",
+          ]) === "-"
+            ? ""
+            : readString(record ?? {}, [
+                "exit_reason_category",
+                "exitReasonCategory",
+              ]),
+        employee_feedback:
+          readString(record ?? {}, [
+            "employee_feedback",
+            "employeeFeedback",
+          ]) === "-"
+            ? ""
+            : readString(record ?? {}, [
+                "employee_feedback",
+                "employeeFeedback",
+              ]),
+        manager_feedback:
+          readString(record ?? {}, ["manager_feedback", "managerFeedback"]) ===
+          "-"
+            ? ""
+            : readString(record ?? {}, ["manager_feedback", "managerFeedback"]),
+        rehire_eligible: (() => {
+          const value = readBooleanLike(record ?? {}, [
+            "rehire_eligible",
+            "rehireEligible",
+          ]);
+          if (value === null) {
+            return "unknown";
+          }
+          return value ? "true" : "false";
+        })(),
+        knowledge_transfer_status:
+          readString(record ?? {}, [
+            "knowledge_transfer_status",
+            "knowledgeTransferStatus",
+          ]) === "-"
+            ? "not_started"
+            : readString(record ?? {}, [
+                "knowledge_transfer_status",
+                "knowledgeTransferStatus",
+              ]),
+        handover_notes:
+          readString(record ?? {}, ["handover_notes", "handoverNotes"]) === "-"
+            ? ""
+            : readString(record ?? {}, ["handover_notes", "handoverNotes"]),
+        final_notes:
+          readString(record ?? {}, ["final_notes", "finalNotes"]) === "-"
+            ? ""
+            : readString(record ?? {}, ["final_notes", "finalNotes"]),
+      });
+    },
+    [],
+  );
 
   function readCurrentRequestId() {
-    return readNumber(selectedRequest ?? {}, ["id", "request_id"])
+    return readNumber(selectedRequest ?? {}, ["id", "request_id"]);
   }
 
   function resolveEmployeeOptionLabel(companyUserId: number | null) {
     if (companyUserId === null) {
-      return "Unassigned"
+      return "Unassigned";
     }
-    const match = employeeCompanyUserOptions.find((option) => option.companyUserId === companyUserId)
+    const match = employeeCompanyUserOptions.find(
+      (option) => option.companyUserId === companyUserId,
+    );
     if (match) {
-      return match.label
+      return match.label;
     }
-    return `Company user #${companyUserId}`
+    return `Company user #${companyUserId}`;
   }
 
   async function reloadCurrentRequestActivity(requestId?: number | null) {
-    const id = requestId ?? readCurrentRequestId()
+    const id = requestId ?? readCurrentRequestId();
     if (id === null) {
-      return
+      return;
     }
-    await reloadAll("requests", true)
+    await reloadAll("requests", true);
     await openRequestDetails({
       ...(selectedRequest ?? {}),
       id,
       request_id: id,
-    })
+    });
   }
 
   async function openRequestSheet() {
-    if (!canCreateRequest) return
-    const token = readStoredToken()
+    if (!canCreateRequest) return;
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
     if (isEmployeeMode || !canManage) {
-      const me = selfEmployee ?? (await loadSelfEmployee(token))
-      const id = me ? readNumber(me, ["id", "employee_id", "employeeId"]) : null
+      const me = selfEmployee ?? (await loadSelfEmployee(token));
+      const id = me
+        ? readNumber(me, ["id", "employee_id", "employeeId"])
+        : null;
       if (id === null) {
-        showErrorAlert("Could not load your employee profile. Please try again.")
-        return
+        showErrorAlert(
+          "Could not load your employee profile. Please try again.",
+        );
+        return;
       }
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
         const workflowsResult = await listOffboardingWorkflows(token, {
           page: 1,
           limit: 100,
           sortBy: "created_at",
           sortOrder: "DESC",
-        })
-        const rows = workflowsResult.rows
-        setWorkflows(rows)
-        setLoadedLookups((current) => ({ ...current, workflows: true }))
-        const defaultWorkflowId = pickDefaultWorkflowId(rows)
+        });
+        const rows = workflowsResult.rows;
+        setWorkflows(rows);
+        setLoadedLookups((current) => ({ ...current, workflows: true }));
+        const defaultWorkflowId = pickDefaultWorkflowId(rows);
         setRequestForm((prev) => ({
           ...prev,
           employee_id: String(id),
@@ -1044,218 +1251,279 @@ export function OffboardingView() {
           offboarding_type: "resignation",
           title: prev.title || "My resignation",
           submit: "true",
-        }))
-        setRequestSheetOpen(true)
+        }));
+        setRequestSheetOpen(true);
       } catch (errorObject) {
         const msg =
-          errorObject instanceof Error ? errorObject.message : "Failed to load exit workflows."
-        setError(msg)
-        showErrorAlert(msg)
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load exit workflows.";
+        setError(msg);
+        showErrorAlert(msg);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-      return
+      return;
     }
 
-    const loaded = await ensureLookups(["employees", "branches", "departments", "workflows"])
-    if (!loaded) return
-    setRequestSheetOpen(true)
+    const loaded = await ensureLookups([
+      "employees",
+      "branches",
+      "departments",
+      "workflows",
+    ]);
+    if (!loaded) return;
+    setRequestSheetOpen(true);
   }
 
   async function openWorkflowSheet() {
-    if (!canManage) return
-    const loaded = await ensureLookups(["workflows"])
-    if (!loaded) return
-    setWorkflowSheetOpen(true)
+    if (!canManage) return;
+    const loaded = await ensureLookups(["workflows"]);
+    if (!loaded) return;
+    setWorkflowSheetOpen(true);
   }
 
   async function submitRequestForm() {
-    const token = readStoredToken()
-    if (!token) return false
-    if (!requestForm.employee_id || !requestForm.title.trim() || !requestForm.reason.trim()) {
-      showErrorAlert("Employee, title and reason are required.")
-      return false
+    const token = readStoredToken();
+    if (!token) return false;
+    if (
+      !requestForm.employee_id ||
+      !requestForm.title.trim() ||
+      !requestForm.reason.trim()
+    ) {
+      showErrorAlert("Employee, title and reason are required.");
+      return false;
     }
-    if (isEmployeeMode && selfEmployeeId != null && Number(requestForm.employee_id) !== selfEmployeeId) {
-      showErrorAlert("You can only create an offboarding request for yourself.")
-      return false
+    if (
+      isEmployeeMode &&
+      selfEmployeeId != null &&
+      Number(requestForm.employee_id) !== selfEmployeeId
+    ) {
+      showErrorAlert(
+        "You can only create an offboarding request for yourself.",
+      );
+      return false;
     }
-    if (canManage && requestForm.notice_period_waived === "true" && !requestForm.notice_period_waiver_reason.trim()) {
-      showErrorAlert("Add a reason when waiving the notice period.")
-      return false
+    if (
+      canManage &&
+      requestForm.notice_period_waived === "true" &&
+      !requestForm.notice_period_waiver_reason.trim()
+    ) {
+      showErrorAlert("Add a reason when waiving the notice period.");
+      return false;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       const createdRequest = await createOffboardingRequest(token, {
         employee_id: Number(requestForm.employee_id),
-        branch_id: requestForm.branch_id ? Number(requestForm.branch_id) : undefined,
-        department_id: requestForm.department_id ? Number(requestForm.department_id) : undefined,
-        workflow_id: requestForm.workflow_id ? Number(requestForm.workflow_id) : undefined,
+        branch_id: requestForm.branch_id
+          ? Number(requestForm.branch_id)
+          : undefined,
+        department_id: requestForm.department_id
+          ? Number(requestForm.department_id)
+          : undefined,
+        workflow_id: requestForm.workflow_id
+          ? Number(requestForm.workflow_id)
+          : undefined,
         title: requestForm.title.trim(),
         description: requestForm.description.trim() || undefined,
         offboarding_type: requestForm.offboarding_type,
         reason: requestForm.reason.trim(),
         notice_date: requestForm.notice_date || undefined,
         last_working_date: requestForm.last_working_date || undefined,
-        notice_period_waived: canManage && requestForm.notice_period_waived === "true",
+        notice_period_waived:
+          canManage && requestForm.notice_period_waived === "true",
         notice_period_waiver_reason:
           canManage && requestForm.notice_period_waived === "true"
             ? requestForm.notice_period_waiver_reason.trim()
             : undefined,
         submit: requestForm.submit === "true",
         metadata: {},
-      })
+      });
       if (requestForm.submit === "true") {
-        const createdRecord = asRecord(createdRequest)
-        const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
+        const createdRecord = asRecord(createdRequest);
+        const createdRequestId = readNumber(createdRecord ?? {}, [
+          "id",
+          "request_id",
+        ]);
         const selectedEmployee =
           employees.find(
-            (row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
-          ) ?? selfEmployee
+            (row) =>
+              readNumber(row, ["id", "employee_id", "user_id"]) ===
+              Number(requestForm.employee_id),
+          ) ?? selfEmployee;
         void notifySubmittedRequestApprovers({
           kind: "offboarding_request",
           token,
           request: createdRequest,
-          requesterName: selectedEmployee ? employeeLabel(selectedEmployee) : undefined,
+          requesterName: selectedEmployee
+            ? employeeLabel(selectedEmployee)
+            : undefined,
           loadRequest:
             createdRequestId === null
               ? undefined
               : () => getOffboardingRequest(token, createdRequestId),
-        })
+        });
       }
-      showSuccessAlert("Offboarding request created.")
-      await reloadAll(tab, true)
-      return true
+      showSuccessAlert("Offboarding request created.");
+      await reloadAll(tab, true);
+      return true;
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create offboarding request.")
-      return false
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create offboarding request.",
+      );
+      return false;
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  const openRequestDetails = React.useCallback(async (row: AdminRecord) => {
-    const token = readStoredToken()
-    const id = readNumber(row, ["id"])
-    if (!token || id === null) return
-    setSelectedRequest(row)
-    setRequestDetailsOpen(true)
-    setShowDocumentComposer(false)
-    setShowTaskComposer(false)
-    setShowClearanceComposer(false)
-    setShowActionComposer(false)
-    setShowAssetComposer(false)
-    setShowSettlementComposer(false)
-    resetDocumentForm()
-    resetTaskForm()
-    resetClearanceForm()
-    resetActionForm()
-    resetAssetForm()
-    resetSettlementForm()
-    void ensureLookups(["employees"])
-    try {
-      const [detail, approvals, audit, docs, progress, actions, assets, letters, accessOperations, settlements, exitInterview] = await Promise.all([
-        getOffboardingRequest(token, id),
-        getOffboardingApprovals(token, id),
-        getOffboardingAuditLogs(token, id),
-        listOffboardingDocuments(token, id),
-        getOffboardingProgress(token, id),
-        listOffboardingActions(token, id).catch(() => []),
-        listOffboardingAssets(token, id).catch(() => []),
-        listOffboardingLetters(token, id).catch(() => []),
-        listOffboardingAccessOperations(token, id).catch(() => []),
-        listOffboardingSettlements(token, id).catch(() => []),
-        getOffboardingExitInterview(token, id).catch(() => null),
-      ])
-      if (detail) {
-        setSelectedRequest({ ...row, ...detail })
+  const openRequestDetails = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken();
+      const id = readNumber(row, ["id"]);
+      if (!token || id === null) return;
+      setSelectedRequest(row);
+      setRequestDetailsOpen(true);
+      setShowDocumentComposer(false);
+      setShowTaskComposer(false);
+      setShowClearanceComposer(false);
+      setShowActionComposer(false);
+      setShowAssetComposer(false);
+      setShowSettlementComposer(false);
+      resetDocumentForm();
+      resetTaskForm();
+      resetClearanceForm();
+      resetActionForm();
+      resetAssetForm();
+      resetSettlementForm();
+      void ensureLookups(["employees"]);
+      try {
+        const [
+          detail,
+          approvals,
+          audit,
+          docs,
+          progress,
+          actions,
+          assets,
+          letters,
+          accessOperations,
+          settlements,
+          exitInterview,
+        ] = await Promise.all([
+          getOffboardingRequest(token, id),
+          getOffboardingApprovals(token, id),
+          getOffboardingAuditLogs(token, id),
+          listOffboardingDocuments(token, id),
+          getOffboardingProgress(token, id),
+          listOffboardingActions(token, id).catch(() => []),
+          listOffboardingAssets(token, id).catch(() => []),
+          listOffboardingLetters(token, id).catch(() => []),
+          listOffboardingAccessOperations(token, id).catch(() => []),
+          listOffboardingSettlements(token, id).catch(() => []),
+          getOffboardingExitInterview(token, id).catch(() => null),
+        ]);
+        if (detail) {
+          setSelectedRequest({ ...row, ...detail });
+        }
+        setRequestApprovals(approvals);
+        setRequestAuditLogs(audit);
+        setRequestDocuments(docs);
+        setRequestProgress(progress);
+        setRequestActions(actions);
+        setRequestAssets(assets);
+        setRequestLetters(letters);
+        setRequestAccessOperations(accessOperations);
+        setRequestSettlements(settlements);
+        setRequestExitInterview(exitInterview);
+        syncExitInterviewForm(exitInterview);
+      } catch {
+        setRequestApprovals([]);
+        setRequestAuditLogs([]);
+        setRequestDocuments([]);
+        setRequestProgress(null);
+        setRequestActions([]);
+        setRequestAssets([]);
+        setRequestLetters([]);
+        setRequestAccessOperations([]);
+        setRequestSettlements([]);
+        setRequestExitInterview(null);
+        syncExitInterviewForm(null);
       }
-      setRequestApprovals(approvals)
-      setRequestAuditLogs(audit)
-      setRequestDocuments(docs)
-      setRequestProgress(progress)
-      setRequestActions(actions)
-      setRequestAssets(assets)
-      setRequestLetters(letters)
-      setRequestAccessOperations(accessOperations)
-      setRequestSettlements(settlements)
-      setRequestExitInterview(exitInterview)
-      syncExitInterviewForm(exitInterview)
-    } catch {
-      setRequestApprovals([])
-      setRequestAuditLogs([])
-      setRequestDocuments([])
-      setRequestProgress(null)
-      setRequestActions([])
-      setRequestAssets([])
-      setRequestLetters([])
-      setRequestAccessOperations([])
-      setRequestSettlements([])
-      setRequestExitInterview(null)
-      syncExitInterviewForm(null)
-    }
-  }, [
-    ensureLookups,
-    resetActionForm,
-    resetAssetForm,
-    resetClearanceForm,
-    resetDocumentForm,
-    resetSettlementForm,
-    resetTaskForm,
-    syncExitInterviewForm,
-  ])
+    },
+    [
+      ensureLookups,
+      resetActionForm,
+      resetAssetForm,
+      resetClearanceForm,
+      resetDocumentForm,
+      resetSettlementForm,
+      resetTaskForm,
+      syncExitInterviewForm,
+    ],
+  );
 
-  const openedHighlightedRequestRef = React.useRef("")
+  const openedHighlightedRequestRef = React.useRef("");
   React.useEffect(() => {
     if (tab !== "requests" || !highlightedRequestId) {
-      return
+      return;
     }
     if (openedHighlightedRequestRef.current === highlightedRequestId) {
-      return
+      return;
     }
 
-    const highlightedRow =
-      requests.find((row) =>
-        String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
-      ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
+    const highlightedRow = requests.find(
+      (row) =>
+        String(readNumber(row, ["id", "request_id"]) ?? "") ===
+        highlightedRequestId,
+    ) ?? { id: highlightedRequestId, request_id: highlightedRequestId };
 
-    openedHighlightedRequestRef.current = highlightedRequestId
-    void openRequestDetails(highlightedRow)
-  }, [highlightedRequestId, openRequestDetails, requests, tab])
+    openedHighlightedRequestRef.current = highlightedRequestId;
+    void openRequestDetails(highlightedRow);
+  }, [highlightedRequestId, openRequestDetails, requests, tab]);
 
   async function runRequestAction(
     row: AdminRecord,
-    action: "submit" | "approve" | "reject" | "cancel" | "complete" | "finalize"
+    action:
+      "submit" | "approve" | "reject" | "cancel" | "complete" | "finalize",
   ) {
-    const token = readStoredToken()
-    const id = readNumber(row, ["id"])
-    if (!token || id === null) return
-    setSaving(true)
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    setSaving(true);
     try {
       if (action === "submit") {
         const submittedRequest = await submitOffboardingRequest(token, id, {
           workflow_id: readNumber(row, ["workflow_id"]) ?? undefined,
-        })
+        });
         void notifySubmittedRequestApprovers({
           kind: "offboarding_request",
           token,
           request: submittedRequest ?? row,
           loadRequest: () => getOffboardingRequest(token, id),
-        })
+        });
       }
       if (action === "approve") {
-        await approveOffboardingRequest(token, id, { approve: true, comments: "Approved" })
+        await approveOffboardingRequest(token, id, {
+          approve: true,
+          comments: "Approved",
+        });
       }
       if (action === "reject") {
-        await rejectOffboardingRequest(token, id, { comments: "Rejected" })
+        await rejectOffboardingRequest(token, id, { comments: "Rejected" });
       }
       if (action === "cancel") {
         await cancelOffboardingRequest(token, id, {
-          reason: isEmployeeMode ? "Cancelled by employee" : "Cancelled by admin",
-        })
+          reason: isEmployeeMode
+            ? "Cancelled by employee"
+            : "Cancelled by admin",
+        });
       }
-      if (action === "complete") await completeOffboardingRequest(token, id)
-      if (action === "finalize") await finalizeOffboardingRequest(token, id)
+      if (action === "complete") await completeOffboardingRequest(token, id);
+      if (action === "finalize") await finalizeOffboardingRequest(token, id);
       const pastTense =
         action === "submit"
           ? "submitted"
@@ -1267,154 +1535,187 @@ export function OffboardingView() {
                 ? "cancelled"
                 : action === "complete"
                   ? "completed"
-                  : "finalized"
-      showSuccessAlert(`Request ${pastTense} successfully.`)
-      await reloadAll("requests", true)
+                  : "finalized";
+      showSuccessAlert(`Request ${pastTense} successfully.`);
+      await reloadAll("requests", true);
       if (requestDetailsOpen) {
-        await openRequestDetails({ ...row, id })
+        await openRequestDetails({ ...row, id });
       }
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Action failed.")
+      showErrorAlert(
+        errorObject instanceof Error ? errorObject.message : "Action failed.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestDocument() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
     if (!documentForm.title.trim()) {
-      showErrorAlert("Document title is required.")
-      return
+      showErrorAlert("Document title is required.");
+      return;
     }
     if (!documentUploadFile) {
-      showErrorAlert("Choose a document file before uploading.")
-      return
+      showErrorAlert("Choose a document file before uploading.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      const file = await fileToBase64UploadDto(documentUploadFile)
+      const file = await fileToBase64UploadDto(documentUploadFile);
       await addOffboardingDocument(token, requestId, {
         title: documentForm.title.trim(),
         description: documentForm.description.trim() || undefined,
         document_type: documentForm.document_type.trim() || undefined,
         expiry_date: documentForm.expiry_date || undefined,
         file,
-      })
-      showSuccessAlert("Offboarding document uploaded.")
-      resetDocumentForm()
-      setShowDocumentComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Offboarding document uploaded.");
+      resetDocumentForm();
+      setShowDocumentComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to upload document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to upload document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function downloadRequestDocument(documentRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
     if (!token || requestId === null || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      const result = await downloadOffboardingDocument(token, requestId, documentId)
-      const url = window.URL.createObjectURL(result.blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = result.filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-      showSuccessAlert("Document download started.")
+      const result = await downloadOffboardingDocument(
+        token,
+        requestId,
+        documentId,
+      );
+      const url = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showSuccessAlert("Document download started.");
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to download document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to download document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function saveRequestDocument(documentRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
     if (!token || requestId === null || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
-    const currentTitle = readString(documentRow, ["title", "name", "file_name"])
-    const nextTitle = window.prompt("Document title", currentTitle === "-" ? "" : currentTitle)
-    if (nextTitle == null) return
-    const currentDescription = readString(documentRow, ["description", "notes", "remarks"])
-    const nextDescription = window.prompt(
+    const currentTitle = readString(documentRow, [
+      "title",
+      "name",
+      "file_name",
+    ]);
+    const nextTitle = await fluentPrompt(
+      "Document title",
+      currentTitle === "-" ? "" : currentTitle,
+    );
+    if (nextTitle == null) return;
+    const currentDescription = readString(documentRow, [
+      "description",
+      "notes",
+      "remarks",
+    ]);
+    const nextDescription = await fluentPrompt(
       "Description",
-      currentDescription === "-" ? "" : currentDescription
-    )
-    if (nextDescription == null) return
+      currentDescription === "-" ? "" : currentDescription,
+    );
+    if (nextDescription == null) return;
 
-    setSaving(true)
+    setSaving(true);
     try {
       await updateOffboardingDocument(token, requestId, documentId, {
         title: nextTitle.trim() || currentTitle,
         description: nextDescription.trim() || undefined,
-      })
-      showSuccessAlert("Document updated.")
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Document updated.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function removeRequestDocument(documentRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
     if (!token || requestId === null || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
-    if (typeof window !== "undefined" && !window.confirm("Delete this offboarding document?")) {
-      return
+    if (!(await fluentConfirm("Delete this offboarding document?"))) {
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await deleteOffboardingDocument(token, requestId, documentId)
-      showSuccessAlert("Document deleted.")
-      await reloadCurrentRequestActivity(requestId)
+      await deleteOffboardingDocument(token, requestId, documentId);
+      showSuccessAlert("Document deleted.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to delete document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to delete document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestTask() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
     if (!taskForm.title.trim()) {
-      showErrorAlert("Task title is required.")
-      return
+      showErrorAlert("Task title is required.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingTask(token, requestId, {
         title: taskForm.title.trim(),
@@ -1422,277 +1723,345 @@ export function OffboardingView() {
         task_type: taskForm.task_type,
         priority: taskForm.priority,
         assigned_to_company_user_id:
-          taskForm.assigned_to_company_user_id && Number(taskForm.assigned_to_company_user_id) > 0
+          taskForm.assigned_to_company_user_id &&
+          Number(taskForm.assigned_to_company_user_id) > 0
             ? Number(taskForm.assigned_to_company_user_id)
             : undefined,
         due_date: taskForm.due_date || undefined,
-      })
-      showSuccessAlert("Offboarding task created.")
-      resetTaskForm()
-      setShowTaskComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Offboarding task created.");
+      resetTaskForm();
+      setShowTaskComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function completeRequestTask(taskRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const taskId = readNumber(taskRow, ["id", "task_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const taskId = readNumber(taskRow, ["id", "task_id"]);
     if (!token || requestId === null || taskId === null) {
-      showErrorAlert("Missing task identifiers.")
-      return
+      showErrorAlert("Missing task identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await completeOffboardingTask(token, requestId, taskId, { remarks: "Completed" })
-      showSuccessAlert("Task marked complete.")
-      await reloadCurrentRequestActivity(requestId)
-      await reloadAll("my-tasks", true)
+      await completeOffboardingTask(token, requestId, taskId, {
+        remarks: "Completed",
+      });
+      showSuccessAlert("Task marked complete.");
+      await reloadCurrentRequestActivity(requestId);
+      await reloadAll("my-tasks", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to complete task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function reopenRequestTask(taskRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const taskId = readNumber(taskRow, ["id", "task_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const taskId = readNumber(taskRow, ["id", "task_id"]);
     if (!token || requestId === null || taskId === null) {
-      showErrorAlert("Missing task identifiers.")
-      return
+      showErrorAlert("Missing task identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await reopenOffboardingTask(token, requestId, taskId, { remarks: "Reopened from request detail." })
-      showSuccessAlert("Task reopened.")
-      await reloadCurrentRequestActivity(requestId)
-      await reloadAll("my-tasks", true)
+      await reopenOffboardingTask(token, requestId, taskId, {
+        remarks: "Reopened from request detail.",
+      });
+      showSuccessAlert("Task reopened.");
+      await reloadCurrentRequestActivity(requestId);
+      await reloadAll("my-tasks", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to reopen task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to reopen task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestClearance() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingClearance(token, requestId, {
         clearance_type: clearanceForm.clearance_type,
         status: clearanceForm.status,
         remarks: clearanceForm.remarks.trim() || undefined,
         owner_company_user_id:
-          clearanceForm.owner_company_user_id && Number(clearanceForm.owner_company_user_id) > 0
+          clearanceForm.owner_company_user_id &&
+          Number(clearanceForm.owner_company_user_id) > 0
             ? Number(clearanceForm.owner_company_user_id)
             : undefined,
         due_date: clearanceForm.due_date || undefined,
-      })
-      showSuccessAlert("Clearance item created.")
-      resetClearanceForm()
-      setShowClearanceComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Clearance item created.");
+      resetClearanceForm();
+      setShowClearanceComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create clearance.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create clearance.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function completeRequestClearance(clearanceRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"]);
     if (!token || requestId === null || clearanceId === null) {
-      showErrorAlert("Missing clearance identifiers.")
-      return
+      showErrorAlert("Missing clearance identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await completeOffboardingClearance(token, requestId, clearanceId, {
         status: "cleared",
         remarks: "Cleared",
-      })
-      showSuccessAlert("Clearance marked cleared.")
-      await reloadCurrentRequestActivity(requestId)
-      await reloadAll("my-clearances", true)
+      });
+      showSuccessAlert("Clearance marked cleared.");
+      await reloadCurrentRequestActivity(requestId);
+      await reloadAll("my-clearances", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete clearance.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to complete clearance.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  async function assignRequestClearance(clearanceRow: AdminRecord, ownerCompanyUserId: string) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
-    const ownerId = Number(ownerCompanyUserId)
-    if (!token || requestId === null || clearanceId === null || !Number.isFinite(ownerId) || ownerId < 1) {
-      showErrorAlert("Choose a clearance owner.")
-      return
+  async function assignRequestClearance(
+    clearanceRow: AdminRecord,
+    ownerCompanyUserId: string,
+  ) {
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"]);
+    const ownerId = Number(ownerCompanyUserId);
+    if (
+      !token ||
+      requestId === null ||
+      clearanceId === null ||
+      !Number.isFinite(ownerId) ||
+      ownerId < 1
+    ) {
+      showErrorAlert("Choose a clearance owner.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await assignOffboardingClearance(token, requestId, clearanceId, {
         owner_company_user_id: ownerId,
-      })
-      showSuccessAlert("Clearance owner assigned.")
-      await reloadCurrentRequestActivity(requestId)
-      await reloadAll("my-clearances", true)
+      });
+      showSuccessAlert("Clearance owner assigned.");
+      await reloadCurrentRequestActivity(requestId);
+      await reloadAll("my-clearances", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to assign clearance.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to assign clearance.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestActionItem() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingAction(token, requestId, {
         action_type: actionForm.action_type,
         system_name: actionForm.system_name.trim() || undefined,
         owner_company_user_id:
-          actionForm.owner_company_user_id && Number(actionForm.owner_company_user_id) > 0
+          actionForm.owner_company_user_id &&
+          Number(actionForm.owner_company_user_id) > 0
             ? Number(actionForm.owner_company_user_id)
             : undefined,
         status: actionForm.status,
         due_date: actionForm.due_date || undefined,
         notes: actionForm.notes.trim() || undefined,
-      })
-      showSuccessAlert("Offboarding action created.")
-      resetActionForm()
-      setShowActionComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Offboarding action created.");
+      resetActionForm();
+      setShowActionComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create action.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create action.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  async function saveRequestActionStatus(actionRow: AdminRecord, status: string) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const actionId = readNumber(actionRow, ["id", "action_id"])
+  async function saveRequestActionStatus(
+    actionRow: AdminRecord,
+    status: string,
+  ) {
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const actionId = readNumber(actionRow, ["id", "action_id"]);
     if (!token || requestId === null || actionId === null || !status.trim()) {
-      showErrorAlert("Missing action identifiers.")
-      return
+      showErrorAlert("Missing action identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await updateOffboardingAction(token, requestId, actionId, { status })
-      showSuccessAlert("Access action updated.")
-      await reloadCurrentRequestActivity(requestId)
+      await updateOffboardingAction(token, requestId, actionId, { status });
+      showSuccessAlert("Access action updated.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update action.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update action.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestAsset() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
     if (!assetForm.asset_label.trim()) {
-      showErrorAlert("Asset label is required.")
-      return
+      showErrorAlert("Asset label is required.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingAsset(token, requestId, {
         asset_type: assetForm.asset_type,
         asset_label: assetForm.asset_label.trim(),
         asset_identifier: assetForm.asset_identifier.trim() || undefined,
         owner_company_user_id:
-          assetForm.owner_company_user_id && Number(assetForm.owner_company_user_id) > 0
+          assetForm.owner_company_user_id &&
+          Number(assetForm.owner_company_user_id) > 0
             ? Number(assetForm.owner_company_user_id)
             : undefined,
         status: assetForm.status,
         due_date: assetForm.due_date || undefined,
         remarks: assetForm.remarks.trim() || undefined,
-      })
-      showSuccessAlert("Asset return item created.")
-      resetAssetForm()
-      setShowAssetComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Asset return item created.");
+      resetAssetForm();
+      setShowAssetComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create asset return item.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create asset return item.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function saveRequestAssetStatus(assetRow: AdminRecord, status: string) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const assetReturnId = readNumber(assetRow, ["id", "asset_return_id"])
-    if (!token || requestId === null || assetReturnId === null || !status.trim()) {
-      showErrorAlert("Missing asset identifiers.")
-      return
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const assetReturnId = readNumber(assetRow, ["id", "asset_return_id"]);
+    if (
+      !token ||
+      requestId === null ||
+      assetReturnId === null ||
+      !status.trim()
+    ) {
+      showErrorAlert("Missing asset identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await updateOffboardingAssetReturn(token, requestId, assetReturnId, { status })
-      showSuccessAlert("Asset return updated.")
-      await reloadCurrentRequestActivity(requestId)
+      await updateOffboardingAssetReturn(token, requestId, assetReturnId, {
+        status,
+      });
+      showSuccessAlert("Asset return updated.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update asset return.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update asset return.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestSettlement() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
     if (!settlementForm.title.trim()) {
-      showErrorAlert("Settlement title is required.")
-      return
+      showErrorAlert("Settlement title is required.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingSettlement(token, requestId, {
         item_type: settlementForm.item_type,
         title: settlementForm.title.trim(),
         owner_company_user_id:
-          settlementForm.owner_company_user_id && Number(settlementForm.owner_company_user_id) > 0
+          settlementForm.owner_company_user_id &&
+          Number(settlementForm.owner_company_user_id) > 0
             ? Number(settlementForm.owner_company_user_id)
             : undefined,
         status: settlementForm.status,
@@ -1700,33 +2069,40 @@ export function OffboardingView() {
         currency: settlementForm.currency.trim() || undefined,
         due_date: settlementForm.due_date || undefined,
         remarks: settlementForm.remarks.trim() || undefined,
-      })
-      showSuccessAlert("Settlement item created.")
-      resetSettlementForm()
-      setShowSettlementComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert("Settlement item created.");
+      resetSettlementForm();
+      setShowSettlementComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create settlement item.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create settlement item.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function saveExitInterview() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       const updated = await updateOffboardingExitInterview(token, requestId, {
         status: exitInterviewForm.status,
-        exit_reason_category: exitInterviewForm.exit_reason_category.trim() || undefined,
-        employee_feedback: exitInterviewForm.employee_feedback.trim() || undefined,
-        manager_feedback: exitInterviewForm.manager_feedback.trim() || undefined,
+        exit_reason_category:
+          exitInterviewForm.exit_reason_category.trim() || undefined,
+        employee_feedback:
+          exitInterviewForm.employee_feedback.trim() || undefined,
+        manager_feedback:
+          exitInterviewForm.manager_feedback.trim() || undefined,
         rehire_eligible:
           exitInterviewForm.rehire_eligible === "unknown"
             ? undefined
@@ -1734,76 +2110,104 @@ export function OffboardingView() {
         knowledge_transfer_status: exitInterviewForm.knowledge_transfer_status,
         handover_notes: exitInterviewForm.handover_notes.trim() || undefined,
         final_notes: exitInterviewForm.final_notes.trim() || undefined,
-      })
-      const nextRecord = asRecord(updated) ?? requestExitInterview ?? {}
-      setRequestExitInterview(nextRecord)
-      syncExitInterviewForm(nextRecord)
-      showSuccessAlert("Exit interview saved.")
-      await reloadCurrentRequestActivity(requestId)
+      });
+      const nextRecord = asRecord(updated) ?? requestExitInterview ?? {};
+      setRequestExitInterview(nextRecord);
+      syncExitInterviewForm(nextRecord);
+      showSuccessAlert("Exit interview saved.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to save exit interview.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to save exit interview.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function completeMyTask(row: AdminRecord) {
-    const token = readStoredToken()
+    const token = readStoredToken();
     const requestId =
-      readNumber(row, ["offboarding_request_id", "request_id", "offboardingRequestId"]) ??
-      readNumber(asRecord(row.request) ?? {}, ["id"])
-    const taskId = readNumber(row, ["id", "task_id"])
+      readNumber(row, [
+        "offboarding_request_id",
+        "request_id",
+        "offboardingRequestId",
+      ]) ?? readNumber(asRecord(row.request) ?? {}, ["id"]);
+    const taskId = readNumber(row, ["id", "task_id"]);
     if (!token || requestId === null || taskId === null) {
-      showErrorAlert("Missing task identifiers.")
-      return
+      showErrorAlert("Missing task identifiers.");
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
-      await completeOffboardingTask(token, requestId, taskId, { remarks: "Completed" })
-      showSuccessAlert("Task marked complete.")
-      await reloadAll("my-tasks", true)
+      await completeOffboardingTask(token, requestId, taskId, {
+        remarks: "Completed",
+      });
+      showSuccessAlert("Task marked complete.");
+      await reloadAll("my-tasks", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to complete task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function approveFromMyQueue(row: AdminRecord, approve: boolean) {
     if (row.is_actionable !== true) {
-      showErrorAlert("This approval is not at the current workflow level. Refresh after the preceding approvals are completed.")
-      return
+      showErrorAlert(
+        "This approval is not at the current workflow level. Refresh after the preceding approvals are completed.",
+      );
+      return;
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     const requestId =
-      readNumber(row, ["offboarding_request_id", "request_id", "offboardingRequestId"]) ??
+      readNumber(row, [
+        "offboarding_request_id",
+        "request_id",
+        "offboardingRequestId",
+      ]) ??
       readNumber(asRecord(row.request) ?? {}, ["id"]) ??
-      readNumber(row, ["id"])
+      readNumber(row, ["id"]);
     if (!token || requestId === null) {
-      showErrorAlert("Missing request id.")
-      return
+      showErrorAlert("Missing request id.");
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       if (approve) {
-        await approveOffboardingRequest(token, requestId, { approve: true, comments: "Approved" })
+        await approveOffboardingRequest(token, requestId, {
+          approve: true,
+          comments: "Approved",
+        });
       } else {
-        await rejectOffboardingRequest(token, requestId, { comments: "Rejected" })
+        await rejectOffboardingRequest(token, requestId, {
+          comments: "Rejected",
+        });
       }
-      showSuccessAlert(approve ? "Request approved." : "Request rejected.")
-      await reloadAll("my-approvals", true)
-      await reloadAll("requests", true)
+      showSuccessAlert(approve ? "Request approved." : "Request rejected.");
+      await reloadAll("my-approvals", true);
+      await reloadAll("requests", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Approval action failed.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Approval action failed.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitWorkflowForm() {
-    const token = readStoredToken()
-    if (!token || !workflowForm.name.trim()) return
-    setSaving(true)
+    const token = readStoredToken();
+    if (!token || !workflowForm.name.trim()) return;
+    setSaving(true);
     try {
       await createOffboardingWorkflow(token, {
         name: workflowForm.name.trim(),
@@ -1811,62 +2215,76 @@ export function OffboardingView() {
         is_default: workflowForm.is_default === "true",
         status: workflowForm.status,
         steps: [],
-      })
-      setWorkflowSheetOpen(false)
-      showSuccessAlert("Workflow created.")
-      await reloadAll(tab, true)
+      });
+      setWorkflowSheetOpen(false);
+      showSuccessAlert("Workflow created.");
+      await reloadAll(tab, true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create workflow.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create workflow.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   const selectedWorkflow = React.useMemo(() => {
-    if (!selectedWorkflowId) return null
+    if (!selectedWorkflowId) return null;
     return (
       workflows.find(
-        (row) => String(readNumber(row, ["id", "workflow_id"]) ?? "") === selectedWorkflowId
+        (row) =>
+          String(readNumber(row, ["id", "workflow_id"]) ?? "") ===
+          selectedWorkflowId,
       ) ?? null
-    )
-  }, [selectedWorkflowId, workflows])
+    );
+  }, [selectedWorkflowId, workflows]);
 
   const selectedWorkflowSteps = React.useMemo(() => {
-    if (!selectedWorkflow) return [] as AdminRecord[]
+    if (!selectedWorkflow) return [] as AdminRecord[];
     const steps = Array.isArray(selectedWorkflow.steps)
       ? (selectedWorkflow.steps as AdminRecord[])
-      : []
+      : [];
     return [...steps].sort(
       (a, b) =>
         (readNumber(a, ["approval_level", "step_order", "order"]) ?? 0) -
-        (readNumber(b, ["approval_level", "step_order", "order"]) ?? 0)
-    )
-  }, [selectedWorkflow])
+        (readNumber(b, ["approval_level", "step_order", "order"]) ?? 0),
+    );
+  }, [selectedWorkflow]);
 
   async function openAddStepDialog() {
     if (!canManage || !selectedWorkflowId) {
-      showErrorAlert("Select a workflow first.")
-      return
+      showErrorAlert("Select a workflow first.");
+      return;
     }
-    const token = readStoredToken()
-    if (!token) return
+    const token = readStoredToken();
+    if (!token) return;
     try {
       const [roles, positions, users] = await Promise.all([
         listResource("roles", token),
         listPositions(token, { limit: 200 }),
         listAllCurrentCompanyUsers(token),
-      ])
-      setStepAssignees({ role: roles, position: positions.rows, company_user: users })
+      ]);
+      setStepAssignees({
+        role: roles,
+        position: positions.rows,
+        company_user: users,
+      });
     } catch (failure) {
-      showErrorAlert(failure instanceof Error ? failure.message : "Could not load assignment options.")
-      return
+      showErrorAlert(
+        failure instanceof Error
+          ? failure.message
+          : "Could not load assignment options.",
+      );
+      return;
     }
     const nextLevel = String(
       (selectedWorkflowSteps.reduce(
         (max, step) => Math.max(max, readNumber(step, ["approval_level"]) ?? 0),
-        0
-      ) || 0) + 1
-    )
+        0,
+      ) || 0) + 1,
+    );
     setStepForm((prev) => ({
       ...prev,
       approval_level: nextLevel,
@@ -1881,23 +2299,30 @@ export function OffboardingView() {
       role_id: "",
       position_id: "",
       company_user_id: "",
-    }))
-    setStepDialogOpen(true)
+    }));
+    setStepDialogOpen(true);
   }
 
   async function submitWorkflowStepForm() {
-    const token = readStoredToken()
-    if (!token || !selectedWorkflowId) return
+    const token = readStoredToken();
+    if (!token || !selectedWorkflowId) return;
     if (!stepForm.step_name.trim() || !stepForm.task_title.trim()) {
-      showErrorAlert("Step name and task title are required.")
-      return
+      showErrorAlert("Step name and task title are required.");
+      return;
     }
-    const target = stepForm.approver_type === "role" ? stepForm.role_id : stepForm.approver_type === "position" ? stepForm.position_id : stepForm.company_user_id
+    const target =
+      stepForm.approver_type === "role"
+        ? stepForm.role_id
+        : stepForm.approver_type === "position"
+          ? stepForm.position_id
+          : stepForm.company_user_id;
     if (!target || !Number.isInteger(Number(target)) || Number(target) <= 0) {
-      showErrorAlert("Select a person, role, or position to assign this step to.")
-      return
+      showErrorAlert(
+        "Select a person, role, or position to assign this step to.",
+      );
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       await createOffboardingWorkflowStep(token, selectedWorkflowId, {
         approval_level: Number(stepForm.approval_level) || 1,
@@ -1907,8 +2332,12 @@ export function OffboardingView() {
         task_type: stepForm.task_type,
         approver_type: stepForm.approver_type,
         role_id: stepForm.role_id ? Number(stepForm.role_id) : undefined,
-        position_id: stepForm.position_id ? Number(stepForm.position_id) : undefined,
-        company_user_id: stepForm.company_user_id ? Number(stepForm.company_user_id) : undefined,
+        position_id: stepForm.position_id
+          ? Number(stepForm.position_id)
+          : undefined,
+        company_user_id: stepForm.company_user_id
+          ? Number(stepForm.company_user_id)
+          : undefined,
         assigned_branch_id: stepForm.assigned_branch_id
           ? Number(stepForm.assigned_branch_id)
           : undefined,
@@ -1918,14 +2347,18 @@ export function OffboardingView() {
         action_type: stepForm.action_type,
         is_required: stepForm.is_required === "true",
         expected_duration_days: Number(stepForm.expected_duration_days) || 1,
-      })
-      setStepDialogOpen(false)
-      showSuccessAlert("Workflow step added.")
-      await reloadAll("workflows", true)
+      });
+      setStepDialogOpen(false);
+      showSuccessAlert("Workflow step added.");
+      await reloadAll("workflows", true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to add workflow step.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to add workflow step.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -1935,8 +2368,10 @@ export function OffboardingView() {
       (isEmployeeMode &&
         selfEmployeeId != null &&
         (readNumber(selectedRequest, ["employee_id"]) === selfEmployeeId ||
-          readNumber(asRecord(selectedRequest.employee) ?? {}, ["id", "employee_id"]) ===
-            selfEmployeeId)))
+          readNumber(asRecord(selectedRequest.employee) ?? {}, [
+            "id",
+            "employee_id",
+          ]) === selfEmployeeId)));
 
   return (
     <section
@@ -1969,7 +2404,7 @@ export function OffboardingView() {
             "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "requests"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           {isEmployeeMode ? "My requests" : "Requests"}
@@ -1981,7 +2416,7 @@ export function OffboardingView() {
             "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-approvals"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           My approvals
@@ -1993,7 +2428,7 @@ export function OffboardingView() {
             "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-tasks"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           My tasks
@@ -2005,7 +2440,7 @@ export function OffboardingView() {
             "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
             tab === "my-clearances"
               ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
           )}
         >
           My clearances
@@ -2018,7 +2453,7 @@ export function OffboardingView() {
               "border-b-2 px-1.5 py-1.5 text-xs font-medium transition-colors",
               tab === "workflows"
                 ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             Workflows
@@ -2036,11 +2471,17 @@ export function OffboardingView() {
         <div className="flex flex-col gap-3 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground">
-              {isEmployeeMode ? "Your offboarding requests" : "Offboarding requests"}
+              {isEmployeeMode
+                ? "Your offboarding requests"
+                : "Offboarding requests"}
             </p>
             <div className="flex items-center gap-1.5">
               {canCreateRequest ? (
-                <Button type="button" size="sm" onClick={() => void openRequestSheet()}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void openRequestSheet()}
+                >
                   <Plus data-icon="inline-start" />
                   {isEmployeeMode ? "Start exit request" : "Create request"}
                 </Button>
@@ -2053,13 +2494,18 @@ export function OffboardingView() {
                 aria-label="Refresh"
                 title="Refresh"
               >
-                <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`}
+                />
               </button>
             </div>
           </div>
 
           {loading && requests.length === 0 ? (
-            <EmptyState title="Loading…" description="Checking for offboarding requests." />
+            <EmptyState
+              title="Loading…"
+              description="Checking for offboarding requests."
+            />
           ) : requests.length === 0 ? (
             <EmptyState
               title="No offboarding requests"
@@ -2083,7 +2529,7 @@ export function OffboardingView() {
                 compact
                 frameClassName="rounded-none border border-border shadow-none"
                 onRowSelect={(_, row) => {
-                  if (row) void openRequestDetails(row)
+                  if (row) void openRequestDetails(row);
                 }}
                 columns={[
                   {
@@ -2106,9 +2552,13 @@ export function OffboardingView() {
                     label: "Employee",
                     defaultWidth: 140,
                     render: (row) => {
-                      const nested = asRecord(row.employee)
-                      if (nested) return employeeLabel(nested)
-                      return readString(row, ["employee_name", "employeeName", "full_name"])
+                      const nested = asRecord(row.employee);
+                      if (nested) return employeeLabel(nested);
+                      return readString(row, [
+                        "employee_name",
+                        "employeeName",
+                        "full_name",
+                      ]);
                     },
                   },
                   {
@@ -2116,7 +2566,11 @@ export function OffboardingView() {
                     label: "Last day",
                     defaultWidth: 100,
                     render: (row) =>
-                      readString(row, ["last_working_date", "lastWorkingDate", "exit_date"]),
+                      readString(row, [
+                        "last_working_date",
+                        "lastWorkingDate",
+                        "exit_date",
+                      ]),
                   },
                   {
                     key: "status",
@@ -2131,7 +2585,12 @@ export function OffboardingView() {
                     label: "Updated",
                     defaultWidth: 120,
                     render: (row) =>
-                      readString(row, ["updated_at", "updatedAt", "created_at", "createdAt"]),
+                      readString(row, [
+                        "updated_at",
+                        "updatedAt",
+                        "created_at",
+                        "createdAt",
+                      ]),
                   },
                 ]}
               />
@@ -2148,7 +2607,9 @@ export function OffboardingView() {
           >
             <SheetHeader className="space-y-1 border-b border-border/60 px-4 py-3 text-left">
               <SheetTitle className="text-base">
-                {isEmployeeMode ? "Start your exit request" : "Create offboarding request"}
+                {isEmployeeMode
+                  ? "Start your exit request"
+                  : "Create offboarding request"}
               </SheetTitle>
               <SheetDescription className="text-xs">
                 {isEmployeeMode
@@ -2158,37 +2619,52 @@ export function OffboardingView() {
             </SheetHeader>
             <div className="grid gap-2 px-4 py-3">
               {canManage && !isEmployeeMode ? (
-              <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">Employee</span>
-                <FluentSelect
-                  ariaLabel="Employee"
-                  value={requestForm.employee_id}
-                  placeholder="Select employee"
-                  onChange={(value) =>
-                    setRequestForm((prev) => ({ ...prev, employee_id: value }))
-                  }
-                  options={[
-                    { value: "", label: "Select employee" },
-                    ...employees.flatMap((employee) => {
-                      const id = readNumber(employee, ["id", "employee_id", "user_id"])
-                      if (id === null) return []
-                      return [{ value: String(id), label: employeeLabel(employee) }]
-                    }),
-                  ]}
-                />
-              </label>
+                <label className="grid gap-0.5 text-[11px]">
+                  <span className="font-medium text-muted-foreground">
+                    Employee
+                  </span>
+                  <FluentSelect
+                    ariaLabel="Employee"
+                    value={requestForm.employee_id}
+                    placeholder="Select employee"
+                    onChange={(value) =>
+                      setRequestForm((prev) => ({
+                        ...prev,
+                        employee_id: value,
+                      }))
+                    }
+                    options={[
+                      { value: "", label: "Select employee" },
+                      ...employees.flatMap((employee) => {
+                        const id = readNumber(employee, [
+                          "id",
+                          "employee_id",
+                          "user_id",
+                        ]);
+                        if (id === null) return [];
+                        return [
+                          { value: String(id), label: employeeLabel(employee) },
+                        ];
+                      }),
+                    ]}
+                  />
+                </label>
               ) : (
                 <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 text-[11px]">
                   <p className="font-medium text-muted-foreground">Employee</p>
                   <p className="mt-0.5 text-xs font-medium text-foreground">
-                    {selfEmployee ? employeeLabel(selfEmployee) : "You (signed-in employee)"}
+                    {selfEmployee
+                      ? employeeLabel(selfEmployee)
+                      : "You (signed-in employee)"}
                   </p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Type</span>
+                  <span className="font-medium text-muted-foreground">
+                    Type
+                  </span>
                   <FluentSelect
                     ariaLabel="Type"
                     value={requestForm.offboarding_type}
@@ -2211,7 +2687,9 @@ export function OffboardingView() {
                   />
                 </label>
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Save mode</span>
+                  <span className="font-medium text-muted-foreground">
+                    Save mode
+                  </span>
                   <FluentSelect
                     ariaLabel="Save mode"
                     value={requestForm.submit}
@@ -2233,41 +2711,58 @@ export function OffboardingView() {
                   placeholder="e.g. Resignation - IT Officer"
                   value={requestForm.title}
                   onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, title: event.target.value }))
+                    setRequestForm((prev) => ({
+                      ...prev,
+                      title: event.target.value,
+                    }))
                   }
                 />
               </label>
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Notice date</span>
+                  <span className="font-medium text-muted-foreground">
+                    Notice date
+                  </span>
                   <DatePickerPresets
                     value={requestForm.notice_date}
                     onChange={(value) =>
-                      setRequestForm((prev) => ({ ...prev, notice_date: value }))
+                      setRequestForm((prev) => ({
+                        ...prev,
+                        notice_date: value,
+                      }))
                     }
                     placeholder="Notice date"
                     className="h-8 text-xs"
                   />
                 </label>
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Last working date (optional)</span>
+                  <span className="font-medium text-muted-foreground">
+                    Last working date (optional)
+                  </span>
                   <DatePickerPresets
                     value={requestForm.last_working_date}
                     onChange={(value) =>
-                      setRequestForm((prev) => ({ ...prev, last_working_date: value }))
+                      setRequestForm((prev) => ({
+                        ...prev,
+                        last_working_date: value,
+                      }))
                     }
                     placeholder="Use notice policy"
                     className="h-8 text-xs"
                   />
                 </label>
               </div>
-              <p className="text-[11px] text-muted-foreground">Leave blank to calculate it from the effective notice policy.</p>
+              <p className="text-[11px] text-muted-foreground">
+                Leave blank to calculate it from the effective notice policy.
+              </p>
 
               {canManage ? (
                 <>
                   <label className="grid gap-0.5 text-[11px]">
-                    <span className="font-medium text-muted-foreground">Notice period</span>
+                    <span className="font-medium text-muted-foreground">
+                      Notice period
+                    </span>
                     <FluentSelect
                       ariaLabel="Notice period"
                       value={requestForm.notice_period_waived}
@@ -2275,7 +2770,10 @@ export function OffboardingView() {
                         setRequestForm((prev) => ({
                           ...prev,
                           notice_period_waived: value,
-                          notice_period_waiver_reason: value === "true" ? prev.notice_period_waiver_reason : "",
+                          notice_period_waiver_reason:
+                            value === "true"
+                              ? prev.notice_period_waiver_reason
+                              : "",
                         }))
                       }
                       options={[
@@ -2286,12 +2784,17 @@ export function OffboardingView() {
                   </label>
                   {requestForm.notice_period_waived === "true" ? (
                     <label className="grid gap-0.5 text-[11px]">
-                      <span className="font-medium text-muted-foreground">Waiver reason (required)</span>
+                      <span className="font-medium text-muted-foreground">
+                        Waiver reason (required)
+                      </span>
                       <Textarea
                         className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
                         value={requestForm.notice_period_waiver_reason}
                         onChange={(event) =>
-                          setRequestForm((prev) => ({ ...prev, notice_period_waiver_reason: event.target.value }))
+                          setRequestForm((prev) => ({
+                            ...prev,
+                            notice_period_waiver_reason: event.target.value,
+                          }))
                         }
                       />
                     </label>
@@ -2311,20 +2814,30 @@ export function OffboardingView() {
                 </div>
               ) : (
                 <label className="grid gap-0.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground">Workflow</span>
+                  <span className="font-medium text-muted-foreground">
+                    Workflow
+                  </span>
                   <FluentSelect
                     ariaLabel="Workflow"
                     value={requestForm.workflow_id}
                     placeholder="Optional"
                     onChange={(value) =>
-                      setRequestForm((prev) => ({ ...prev, workflow_id: value }))
+                      setRequestForm((prev) => ({
+                        ...prev,
+                        workflow_id: value,
+                      }))
                     }
                     options={[
                       { value: "", label: "Optional" },
                       ...workflows.flatMap((row) => {
-                        const id = readNumber(row, ["id", "workflow_id"])
-                        if (id === null) return []
-                        return [{ value: String(id), label: readString(row, ["name", "title"]) }]
+                        const id = readNumber(row, ["id", "workflow_id"]);
+                        if (id === null) return [];
+                        return [
+                          {
+                            value: String(id),
+                            label: readString(row, ["name", "title"]),
+                          },
+                        ];
                       }),
                     ]}
                   />
@@ -2332,26 +2845,36 @@ export function OffboardingView() {
               )}
 
               <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">Reason</span>
+                <span className="font-medium text-muted-foreground">
+                  Reason
+                </span>
                 <Textarea
                   className="min-h-14 rounded-md border border-input px-2 py-1.5 text-xs"
                   placeholder="Reason for leaving"
                   value={requestForm.reason}
                   onInput={autoResizeTextarea}
                   onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, reason: event.target.value }))
+                    setRequestForm((prev) => ({
+                      ...prev,
+                      reason: event.target.value,
+                    }))
                   }
                 />
               </label>
 
               <label className="grid gap-0.5 text-[11px]">
-                <span className="font-medium text-muted-foreground">Description</span>
+                <span className="font-medium text-muted-foreground">
+                  Description
+                </span>
                 <Textarea
                   className="min-h-12 rounded-md border border-input px-2 py-1.5 text-xs"
                   placeholder="Optional notes"
                   value={requestForm.description}
                   onChange={(event) =>
-                    setRequestForm((prev) => ({ ...prev, description: event.target.value }))
+                    setRequestForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
                   }
                 />
               </label>
@@ -2372,8 +2895,8 @@ export function OffboardingView() {
                 className="h-8"
                 disabled={saving}
                 onClick={async () => {
-                  const created = await submitRequestForm()
-                  if (created) setRequestSheetOpen(false)
+                  const created = await submitRequestForm();
+                  if (created) setRequestSheetOpen(false);
                 }}
               >
                 {saving
@@ -2390,7 +2913,9 @@ export function OffboardingView() {
       {tab === "my-approvals" ? (
         <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Approvals waiting on you</p>
+            <p className="text-sm font-medium text-foreground">
+              Approvals waiting on you
+            </p>
             <button
               type="button"
               className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
@@ -2398,11 +2923,16 @@ export function OffboardingView() {
               disabled={loading}
               aria-label="Refresh"
             >
-              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
           {loading && myApprovals.length === 0 ? (
-            <EmptyState title="Loading…" description="Loading your approval queue." />
+            <EmptyState
+              title="Loading…"
+              description="Loading your approval queue."
+            />
           ) : myApprovals.length === 0 ? (
             <EmptyState
               title="No pending approvals"
@@ -2425,8 +2955,16 @@ export function OffboardingView() {
                     label: "Request",
                     defaultWidth: 180,
                     render: (row) =>
-                      readString(row, ["title", "request_title", "request_no"]) !== "-"
-                        ? readString(row, ["title", "request_title", "request_no"])
+                      readString(row, [
+                        "title",
+                        "request_title",
+                        "request_no",
+                      ]) !== "-"
+                        ? readString(row, [
+                            "title",
+                            "request_title",
+                            "request_no",
+                          ])
                         : `Request #${readNumber(row, ["offboarding_request_id", "request_id", "id"]) ?? "—"}`,
                   },
                   {
@@ -2434,7 +2972,9 @@ export function OffboardingView() {
                     label: "Status",
                     defaultWidth: 100,
                     render: (row) => (
-                      <StatusDot status={readString(row, ["status", "approval_status"])} />
+                      <StatusDot
+                        status={readString(row, ["status", "approval_status"])}
+                      />
                     ),
                   },
                   {
@@ -2449,10 +2989,14 @@ export function OffboardingView() {
                           variant="outline"
                           className="h-7 px-2 text-xs"
                           disabled={saving || row.is_actionable !== true}
-                          title={row.is_actionable === true ? undefined : "Waiting for the current approval level, or already decided"}
+                          title={
+                            row.is_actionable === true
+                              ? undefined
+                              : "Waiting for the current approval level, or already decided"
+                          }
                           onClick={(e) => {
-                            e.stopPropagation()
-                            void approveFromMyQueue(row, true)
+                            e.stopPropagation();
+                            void approveFromMyQueue(row, true);
                           }}
                         >
                           Approve
@@ -2463,10 +3007,14 @@ export function OffboardingView() {
                           variant="outline"
                           className="h-7 px-2 text-xs"
                           disabled={saving || row.is_actionable !== true}
-                          title={row.is_actionable === true ? undefined : "Waiting for the current approval level, or already decided"}
+                          title={
+                            row.is_actionable === true
+                              ? undefined
+                              : "Waiting for the current approval level, or already decided"
+                          }
                           onClick={(e) => {
-                            e.stopPropagation()
-                            void approveFromMyQueue(row, false)
+                            e.stopPropagation();
+                            void approveFromMyQueue(row, false);
                           }}
                         >
                           Reject
@@ -2484,7 +3032,9 @@ export function OffboardingView() {
       {tab === "my-tasks" ? (
         <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Tasks assigned to you</p>
+            <p className="text-sm font-medium text-foreground">
+              Tasks assigned to you
+            </p>
             <button
               type="button"
               className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
@@ -2492,11 +3042,16 @@ export function OffboardingView() {
               disabled={loading}
               aria-label="Refresh"
             >
-              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
           {loading && myTasks.length === 0 ? (
-            <EmptyState title="Loading…" description="Loading your offboarding tasks." />
+            <EmptyState
+              title="Loading…"
+              description="Loading your offboarding tasks."
+            />
           ) : myTasks.length === 0 ? (
             <EmptyState
               title="No tasks assigned"
@@ -2518,21 +3073,30 @@ export function OffboardingView() {
                     key: "task",
                     label: "Task",
                     defaultWidth: 180,
-                    render: (row) => readString(row, ["title", "task_title", "name", "step_name"]),
+                    render: (row) =>
+                      readString(row, [
+                        "title",
+                        "task_title",
+                        "name",
+                        "step_name",
+                      ]),
                   },
                   {
                     key: "status",
                     label: "Status",
                     defaultWidth: 100,
-                    render: (row) => <StatusDot status={readString(row, ["status"])} />,
+                    render: (row) => (
+                      <StatusDot status={readString(row, ["status"])} />
+                    ),
                   },
                   {
                     key: "actions",
                     label: "Actions",
                     defaultWidth: 120,
                     render: (row) => {
-                      const status = readString(row, ["status"]).toLowerCase()
-                      if (status === "completed" || status === "done") return "—"
+                      const status = readString(row, ["status"]).toLowerCase();
+                      if (status === "completed" || status === "done")
+                        return "—";
                       return (
                         <Button
                           type="button"
@@ -2541,13 +3105,13 @@ export function OffboardingView() {
                           className="h-7 px-2 text-xs"
                           disabled={saving}
                           onClick={(e) => {
-                            e.stopPropagation()
-                            void completeMyTask(row)
+                            e.stopPropagation();
+                            void completeMyTask(row);
                           }}
                         >
                           Complete
                         </Button>
-                      )
+                      );
                     },
                   },
                 ]}
@@ -2560,7 +3124,9 @@ export function OffboardingView() {
       {tab === "my-clearances" ? (
         <div className="flex flex-col gap-3 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Clearances assigned to you</p>
+            <p className="text-sm font-medium text-foreground">
+              Clearances assigned to you
+            </p>
             <button
               type="button"
               className="inline-flex size-8 items-center justify-center rounded-md border border-border text-sm"
@@ -2568,11 +3134,16 @@ export function OffboardingView() {
               disabled={loading}
               aria-label="Refresh"
             >
-              <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
           {loading && myClearances.length === 0 ? (
-            <EmptyState title="Loading…" description="Loading your clearances." />
+            <EmptyState
+              title="Loading…"
+              description="Loading your clearances."
+            />
           ) : myClearances.length === 0 ? (
             <EmptyState
               title="No clearances assigned"
@@ -2595,13 +3166,20 @@ export function OffboardingView() {
                     label: "Clearance",
                     defaultWidth: 180,
                     render: (row) =>
-                      readString(row, ["title", "name", "clearance_name", "department_name"]),
+                      readString(row, [
+                        "title",
+                        "name",
+                        "clearance_name",
+                        "department_name",
+                      ]),
                   },
                   {
                     key: "status",
                     label: "Status",
                     defaultWidth: 100,
-                    render: (row) => <StatusDot status={readString(row, ["status"])} />,
+                    render: (row) => (
+                      <StatusDot status={readString(row, ["status"])} />
+                    ),
                   },
                   {
                     key: "due",
@@ -2620,14 +3198,21 @@ export function OffboardingView() {
         <div className="flex flex-col gap-4 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Exit workflows</p>
+              <p className="text-sm font-medium text-foreground">
+                Exit workflows
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Each workflow is a ordered checklist for leaving the company (HR → IT → Finance → Manager).
+                Each workflow is a ordered checklist for leaving the company (HR
+                → IT → Finance → Manager).
               </p>
             </div>
             <div className="flex items-center gap-1.5">
               {canManage ? (
-                <Button type="button" size="sm" onClick={() => void openWorkflowSheet()}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void openWorkflowSheet()}
+                >
                   <Plus data-icon="inline-start" />
                   New workflow
                 </Button>
@@ -2640,13 +3225,18 @@ export function OffboardingView() {
                 aria-label="Refresh"
                 title="Refresh"
               >
-                <RefreshCw className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`size-3.5 text-primary ${loading ? "animate-spin" : ""}`}
+                />
               </button>
             </div>
           </div>
 
           {loading && workflows.length === 0 ? (
-            <EmptyState title="Loading…" description="Loading exit workflows." />
+            <EmptyState
+              title="Loading…"
+              description="Loading exit workflows."
+            />
           ) : workflows.length === 0 ? (
             <EmptyState
               title="No exit workflows"
@@ -2665,13 +3255,15 @@ export function OffboardingView() {
                 </p>
                 <ul className="flex flex-col gap-1.5">
                   {workflows.map((row, index) => {
-                    const id = readNumber(row, ["id", "workflow_id"])
-                    if (id === null) return null
-                    const active = selectedWorkflowId === String(id)
-                    const stepCount = Array.isArray(row.steps) ? row.steps.length : 0
+                    const id = readNumber(row, ["id", "workflow_id"]);
+                    if (id === null) return null;
+                    const active = selectedWorkflowId === String(id);
+                    const stepCount = Array.isArray(row.steps)
+                      ? row.steps.length
+                      : 0;
                     const isDefault =
                       row.is_default === true ||
-                      String(row.is_default ?? "").toLowerCase() === "true"
+                      String(row.is_default ?? "").toLowerCase() === "true";
                     return (
                       <li key={`wf-pick-${id}-${index}`}>
                         <button
@@ -2681,7 +3273,7 @@ export function OffboardingView() {
                             "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
                             active
                               ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
-                              : "border-border/70 hover:bg-muted/40"
+                              : "border-border/70 hover:bg-muted/40",
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -2696,7 +3288,7 @@ export function OffboardingView() {
                           </p>
                         </button>
                       </li>
-                    )
+                    );
                   })}
                 </ul>
               </div>
@@ -2712,13 +3304,16 @@ export function OffboardingView() {
                             {readString(selectedWorkflow, ["name", "title"])}
                           </h2>
                           {(selectedWorkflow.is_default === true ||
-                            String(selectedWorkflow.is_default ?? "").toLowerCase() ===
-                              "true") && (
+                            String(
+                              selectedWorkflow.is_default ?? "",
+                            ).toLowerCase() === "true") && (
                             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                               Default
                             </span>
                           )}
-                          <StatusDot status={readString(selectedWorkflow, ["status"])} />
+                          <StatusDot
+                            status={readString(selectedWorkflow, ["status"])}
+                          />
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {readString(selectedWorkflow, ["description"]) === "-"
@@ -2757,29 +3352,50 @@ export function OffboardingView() {
                         <ol className="relative flex flex-col border-l border-border pl-5">
                           {selectedWorkflowSteps.map((step, index) => {
                             const level =
-                              readNumber(step, ["approval_level", "step_order"]) ?? index + 1
-                            const stepName = readString(step, ["step_name", "name", "title"])
-                            const taskTitle = readString(step, ["task_title", "taskTitle"])
+                              readNumber(step, [
+                                "approval_level",
+                                "step_order",
+                              ]) ?? index + 1;
+                            const stepName = readString(step, [
+                              "step_name",
+                              "name",
+                              "title",
+                            ]);
+                            const taskTitle = readString(step, [
+                              "task_title",
+                              "taskTitle",
+                            ]);
                             const taskDescription = readString(step, [
                               "task_description",
                               "taskDescription",
                               "description",
-                            ])
-                            const taskType = readString(step, ["task_type", "taskType"])
-                            const actionType = readString(step, ["action_type", "actionType"])
+                            ]);
+                            const taskType = readString(step, [
+                              "task_type",
+                              "taskType",
+                            ]);
+                            const actionType = readString(step, [
+                              "action_type",
+                              "actionType",
+                            ]);
                             const days = readNumber(step, [
                               "expected_duration_days",
                               "expectedDurationDays",
-                            ])
+                            ]);
                             const required =
                               step.is_required === true ||
-                              String(step.is_required ?? "").toLowerCase() === "true"
-                            const isLast = index === selectedWorkflowSteps.length - 1
+                              String(step.is_required ?? "").toLowerCase() ===
+                                "true";
+                            const isLast =
+                              index === selectedWorkflowSteps.length - 1;
 
                             return (
                               <li
                                 key={`wf-step-${readNumber(step, ["id"]) ?? index}`}
-                                className={cn("relative pb-5", isLast && "pb-0")}
+                                className={cn(
+                                  "relative pb-5",
+                                  isLast && "pb-0",
+                                )}
                               >
                                 <span className="absolute top-1 -left-[1.55rem] flex size-6 items-center justify-center rounded-full border border-border bg-background text-[11px] font-semibold text-foreground shadow-sm">
                                   {level}
@@ -2788,7 +3404,9 @@ export function OffboardingView() {
                                   <div className="flex flex-wrap items-start justify-between gap-2">
                                     <div className="min-w-0">
                                       <p className="text-sm font-semibold text-foreground">
-                                        {stepName === "-" ? `Step ${level}` : stepName}
+                                        {stepName === "-"
+                                          ? `Step ${level}`
+                                          : stepName}
                                       </p>
                                       {taskTitle !== "-" ? (
                                         <p className="mt-0.5 text-xs text-foreground/90">
@@ -2825,12 +3443,17 @@ export function OffboardingView() {
                                   ) : null}
                                   <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                                     {days !== null ? (
-                                      <span>~{days} day{days === 1 ? "" : "s"}</span>
+                                      <span>
+                                        ~{days} day{days === 1 ? "" : "s"}
+                                      </span>
                                     ) : null}
-                                    {readString(step, ["approver_type"]) !== "-" ? (
+                                    {readString(step, ["approver_type"]) !==
+                                    "-" ? (
                                       <span>
                                         Assigned by{" "}
-                                        {readString(step, ["approver_type"]).replace(/[_-]+/g, " ")}
+                                        {readString(step, [
+                                          "approver_type",
+                                        ]).replace(/[_-]+/g, " ")}
                                         {readNumber(step, ["role_id"])
                                           ? ` · role #${readNumber(step, ["role_id"])}`
                                           : ""}
@@ -2848,7 +3471,7 @@ export function OffboardingView() {
                                   </p>
                                 )}
                               </li>
-                            )
+                            );
                           })}
                         </ol>
                       </div>
@@ -2875,7 +3498,8 @@ export function OffboardingView() {
             <SheetHeader>
               <SheetTitle>New exit workflow</SheetTitle>
               <SheetDescription>
-                Create the workflow shell first, then add ordered clearance steps.
+                Create the workflow shell first, then add ordered clearance
+                steps.
               </SheetDescription>
             </SheetHeader>
             <div className="mt-4 grid gap-3 px-4 pb-4">
@@ -2886,24 +3510,34 @@ export function OffboardingView() {
                   placeholder="e.g. Standard employee exit"
                   value={workflowForm.name}
                   onChange={(event) =>
-                    setWorkflowForm((prev) => ({ ...prev, name: event.target.value }))
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                    }))
                   }
                 />
               </label>
               <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Description</span>
+                <span className="font-medium text-muted-foreground">
+                  Description
+                </span>
                 <Textarea
                   className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
                   placeholder="What this exit path covers"
                   value={workflowForm.description}
                   onChange={(event) =>
-                    setWorkflowForm((prev) => ({ ...prev, description: event.target.value }))
+                    setWorkflowForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
                   }
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Status</span>
+                  <span className="font-medium text-muted-foreground">
+                    Status
+                  </span>
                   <FluentSelect
                     ariaLabel="Status"
                     value={workflowForm.status}
@@ -2917,12 +3551,17 @@ export function OffboardingView() {
                   />
                 </label>
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Default</span>
+                  <span className="font-medium text-muted-foreground">
+                    Default
+                  </span>
                   <FluentSelect
                     ariaLabel="Default"
                     value={workflowForm.is_default}
                     onChange={(value) =>
-                      setWorkflowForm((prev) => ({ ...prev, is_default: value }))
+                      setWorkflowForm((prev) => ({
+                        ...prev,
+                        is_default: value,
+                      }))
                     }
                     options={[
                       { value: "false", label: "No" },
@@ -2933,10 +3572,18 @@ export function OffboardingView() {
               </div>
             </div>
             <SheetFooter>
-              <Button type="button" variant="outline" onClick={() => setWorkflowSheetOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWorkflowSheetOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="button" disabled={saving} onClick={() => void submitWorkflowForm()}>
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={() => void submitWorkflowForm()}
+              >
                 {saving ? "Saving…" : "Create workflow"}
               </Button>
             </SheetFooter>
@@ -2956,19 +3603,26 @@ export function OffboardingView() {
             <div className="grid gap-3 py-2">
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Level</span>
+                  <span className="font-medium text-muted-foreground">
+                    Level
+                  </span>
                   <input
                     type="number"
                     min={1}
                     className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                     value={stepForm.approval_level}
                     onChange={(event) =>
-                      setStepForm((prev) => ({ ...prev, approval_level: event.target.value }))
+                      setStepForm((prev) => ({
+                        ...prev,
+                        approval_level: event.target.value,
+                      }))
                     }
                   />
                 </label>
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Duration (days)</span>
+                  <span className="font-medium text-muted-foreground">
+                    Duration (days)
+                  </span>
                   <input
                     type="number"
                     min={1}
@@ -2984,41 +3638,58 @@ export function OffboardingView() {
                 </label>
               </div>
               <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Step name</span>
+                <span className="font-medium text-muted-foreground">
+                  Step name
+                </span>
                 <input
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                   placeholder="e.g. IT access revocation"
                   value={stepForm.step_name}
                   onChange={(event) =>
-                    setStepForm((prev) => ({ ...prev, step_name: event.target.value }))
+                    setStepForm((prev) => ({
+                      ...prev,
+                      step_name: event.target.value,
+                    }))
                   }
                 />
               </label>
               <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Task title</span>
+                <span className="font-medium text-muted-foreground">
+                  Task title
+                </span>
                 <input
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                   placeholder="What the assignee must do"
                   value={stepForm.task_title}
                   onChange={(event) =>
-                    setStepForm((prev) => ({ ...prev, task_title: event.target.value }))
+                    setStepForm((prev) => ({
+                      ...prev,
+                      task_title: event.target.value,
+                    }))
                   }
                 />
               </label>
               <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Task description</span>
+                <span className="font-medium text-muted-foreground">
+                  Task description
+                </span>
                 <Textarea
                   className="min-h-20 rounded-md border border-input px-3 py-2 text-sm"
                   placeholder="Optional details"
                   value={stepForm.task_description}
                   onChange={(event) =>
-                    setStepForm((prev) => ({ ...prev, task_description: event.target.value }))
+                    setStepForm((prev) => ({
+                      ...prev,
+                      task_description: event.target.value,
+                    }))
                   }
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Team / type</span>
+                  <span className="font-medium text-muted-foreground">
+                    Team / type
+                  </span>
                   <FluentSelect
                     ariaLabel="Team / type"
                     value={stepForm.task_type}
@@ -3035,7 +3706,9 @@ export function OffboardingView() {
                   />
                 </label>
                 <label className="grid gap-1 text-xs">
-                  <span className="font-medium text-muted-foreground">Action</span>
+                  <span className="font-medium text-muted-foreground">
+                    Action
+                  </span>
                   <FluentSelect
                     ariaLabel="Action"
                     value={stepForm.action_type}
@@ -3051,17 +3724,58 @@ export function OffboardingView() {
                   />
                 </label>
               </div>
-              <FluentSelect label="Assign step to" value={stepForm.approver_type} onChange={(value) => setStepForm((prev) => ({ ...prev, approver_type: value, role_id: "", position_id: "", company_user_id: "" }))} options={[
-                { value: "company_user", label: "Person" }, { value: "role", label: "Role" }, { value: "position", label: "Position" },
-              ]} />
-              <FluentSelect label="Assignee" value={stepForm.approver_type === "role" ? stepForm.role_id : stepForm.approver_type === "position" ? stepForm.position_id : stepForm.company_user_id} onChange={(value) => setStepForm((prev) => ({
-                ...prev, [prev.approver_type === "role" ? "role_id" : prev.approver_type === "position" ? "position_id" : "company_user_id"]: value,
-              }))} options={(stepAssignees[stepForm.approver_type] ?? []).map((row) => ({
-                value: String(readNumber(row, ["company_user_id", "id"])),
-                label: readString(row, ["full_name", "name", "email"]) !== "-" ? readString(row, ["full_name", "name", "email"]) : (readTokenString(asRecord(row.user), ["email"]) ?? "Company member"),
-              }))} />
+              <FluentSelect
+                label="Assign step to"
+                value={stepForm.approver_type}
+                onChange={(value) =>
+                  setStepForm((prev) => ({
+                    ...prev,
+                    approver_type: value,
+                    role_id: "",
+                    position_id: "",
+                    company_user_id: "",
+                  }))
+                }
+                options={[
+                  { value: "company_user", label: "Person" },
+                  { value: "role", label: "Role" },
+                  { value: "position", label: "Position" },
+                ]}
+              />
+              <FluentSelect
+                label="Assignee"
+                value={
+                  stepForm.approver_type === "role"
+                    ? stepForm.role_id
+                    : stepForm.approver_type === "position"
+                      ? stepForm.position_id
+                      : stepForm.company_user_id
+                }
+                onChange={(value) =>
+                  setStepForm((prev) => ({
+                    ...prev,
+                    [prev.approver_type === "role"
+                      ? "role_id"
+                      : prev.approver_type === "position"
+                        ? "position_id"
+                        : "company_user_id"]: value,
+                  }))
+                }
+                options={(stepAssignees[stepForm.approver_type] ?? []).map(
+                  (row) => ({
+                    value: String(readNumber(row, ["company_user_id", "id"])),
+                    label:
+                      readString(row, ["full_name", "name", "email"]) !== "-"
+                        ? readString(row, ["full_name", "name", "email"])
+                        : (readTokenString(asRecord(row.user), ["email"]) ??
+                          "Company member"),
+                  }),
+                )}
+              />
               <label className="grid gap-1 text-xs">
-                <span className="font-medium text-muted-foreground">Required?</span>
+                <span className="font-medium text-muted-foreground">
+                  Required?
+                </span>
                 <FluentSelect
                   ariaLabel="Required?"
                   value={stepForm.is_required}
@@ -3076,7 +3790,11 @@ export function OffboardingView() {
               </label>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setStepDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setStepDialogOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
@@ -3095,7 +3813,9 @@ export function OffboardingView() {
         <DialogPopup from="bottom" className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
-              {selectedRequest ? requestLabel(selectedRequest) : "Request details"}
+              {selectedRequest
+                ? requestLabel(selectedRequest)
+                : "Request details"}
             </DialogTitle>
             <DialogDescription>
               Summary of this offboarding request.
@@ -3105,37 +3825,58 @@ export function OffboardingView() {
             <div className="max-h-[72vh] space-y-4 overflow-y-auto py-2 pr-1">
               <div className="grid gap-2 text-xs md:grid-cols-4">
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Status
+                  </p>
                   <div className="mt-1">
-                    <StatusDot status={readString(selectedRequest, ["status"])} />
+                    <StatusDot
+                      status={readString(selectedRequest, ["status"])}
+                    />
                   </div>
                 </div>
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
-                  <p className="mt-1 font-medium text-foreground">
-                    {toTitleCaseWords(readString(selectedRequest, ["offboarding_type", "type"]))}
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Type
                   </p>
-                </div>
-                <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Last working day</p>
                   <p className="mt-1 font-medium text-foreground">
-                    {formatDateTimeValue(
-                      readString(selectedRequest, ["last_working_date", "lastWorkingDate"])
+                    {toTitleCaseWords(
+                      readString(selectedRequest, ["offboarding_type", "type"]),
                     )}
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Progress</p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Last working day
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">
+                    {formatDateTimeValue(
+                      readString(selectedRequest, [
+                        "last_working_date",
+                        "lastWorkingDate",
+                      ]),
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/70 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Progress
+                  </p>
                   <p className="mt-1 font-medium text-foreground">
                     {requestProgress
-                      ? String(requestProgress.progress_percentage ?? requestProgress.progress ?? "—")
+                      ? String(
+                          requestProgress.progress_percentage ??
+                            requestProgress.progress ??
+                            "—",
+                        )
                       : "—"}
                   </p>
                 </div>
               </div>
 
               <div className="rounded-md border border-border/70 px-3 py-2 text-xs">
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Reason</p>
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Reason
+                </p>
                 <p className="mt-1 text-foreground">
                   {readString(selectedRequest, ["reason", "description"])}
                 </p>
@@ -3145,7 +3886,9 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Documents</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Documents
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Exit letters, handover files, and supporting documents.
                       </p>
@@ -3156,8 +3899,8 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          resetDocumentForm()
-                          setShowDocumentComposer((current) => !current)
+                          resetDocumentForm();
+                          setShowDocumentComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
@@ -3169,53 +3912,79 @@ export function OffboardingView() {
                   {showDocumentComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Title</span>
+                        <span className="font-medium text-muted-foreground">
+                          Title
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={documentForm.title}
                           onChange={(event) =>
-                            setDocumentForm((prev) => ({ ...prev, title: event.target.value }))
+                            setDocumentForm((prev) => ({
+                              ...prev,
+                              title: event.target.value,
+                            }))
                           }
                           placeholder="Document title"
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Document type</span>
+                        <span className="font-medium text-muted-foreground">
+                          Document type
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={documentForm.document_type}
                           onChange={(event) =>
-                            setDocumentForm((prev) => ({ ...prev, document_type: event.target.value }))
+                            setDocumentForm((prev) => ({
+                              ...prev,
+                              document_type: event.target.value,
+                            }))
                           }
                           placeholder="e.g. clearance_form"
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Expiry date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Expiry date
+                        </span>
                         <DatePickerPresets
                           value={documentForm.expiry_date}
                           onChange={(value) =>
-                            setDocumentForm((prev) => ({ ...prev, expiry_date: value }))
+                            setDocumentForm((prev) => ({
+                              ...prev,
+                              expiry_date: value,
+                            }))
                           }
                           placeholder="Expiry date"
                           className="h-8 text-xs"
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">File</span>
+                        <span className="font-medium text-muted-foreground">
+                          File
+                        </span>
                         <input
                           type="file"
                           className="block h-8 rounded-md border border-input bg-background px-2 py-1 text-xs file:mr-2 file:border-0 file:bg-transparent file:text-xs"
-                          onChange={(event) => setDocumentUploadFile(event.target.files?.[0] ?? null)}
+                          onChange={(event) =>
+                            setDocumentUploadFile(
+                              event.target.files?.[0] ?? null,
+                            )
+                          }
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Description</span>
+                        <span className="font-medium text-muted-foreground">
+                          Description
+                        </span>
                         <Textarea
                           className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={documentForm.description}
                           onChange={(event) =>
-                            setDocumentForm((prev) => ({ ...prev, description: event.target.value }))
+                            setDocumentForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
                           }
                           placeholder="Optional document notes"
                         />
@@ -3226,8 +3995,8 @@ export function OffboardingView() {
                           variant="outline"
                           className="h-8 px-3 text-xs"
                           onClick={() => {
-                            resetDocumentForm()
-                            setShowDocumentComposer(false)
+                            resetDocumentForm();
+                            setShowDocumentComposer(false);
                           }}
                         >
                           Cancel
@@ -3245,11 +4014,16 @@ export function OffboardingView() {
                   ) : null}
 
                   {requestDocuments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No offboarding documents attached yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No offboarding documents attached yet.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestDocuments.map((documentRow, index) => {
-                        const documentId = readNumber(documentRow, ["id", "document_id"])
+                        const documentId = readNumber(documentRow, [
+                          "id",
+                          "document_id",
+                        ]);
                         return (
                           <div
                             key={`offboarding-document-${documentId ?? index}`}
@@ -3258,10 +4032,19 @@ export function OffboardingView() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <p className="text-sm font-medium text-foreground">
-                                  {readString(documentRow, ["title", "name", "file_name"])}
+                                  {readString(documentRow, [
+                                    "title",
+                                    "name",
+                                    "file_name",
+                                  ])}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {toTitleCaseWords(readString(documentRow, ["document_type", "type"]))}
+                                  {toTitleCaseWords(
+                                    readString(documentRow, [
+                                      "document_type",
+                                      "type",
+                                    ]),
+                                  )}
                                 </p>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -3269,7 +4052,9 @@ export function OffboardingView() {
                                   type="button"
                                   variant="outline"
                                   className="h-7 px-2 text-[11px]"
-                                  onClick={() => void downloadRequestDocument(documentRow)}
+                                  onClick={() =>
+                                    void downloadRequestDocument(documentRow)
+                                  }
                                   disabled={saving}
                                 >
                                   Download
@@ -3280,7 +4065,9 @@ export function OffboardingView() {
                                       type="button"
                                       variant="outline"
                                       className="h-7 px-2 text-[11px]"
-                                      onClick={() => void saveRequestDocument(documentRow)}
+                                      onClick={() =>
+                                        void saveRequestDocument(documentRow)
+                                      }
                                       disabled={saving}
                                     >
                                       Edit
@@ -3289,7 +4076,9 @@ export function OffboardingView() {
                                       type="button"
                                       variant="outline"
                                       className="h-7 px-2 text-[11px] text-rose-600"
-                                      onClick={() => void removeRequestDocument(documentRow)}
+                                      onClick={() =>
+                                        void removeRequestDocument(documentRow)
+                                      }
                                       disabled={saving}
                                     >
                                       Delete
@@ -3300,20 +4089,31 @@ export function OffboardingView() {
                             </div>
                             <div className="mt-2 grid gap-2 text-xs">
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Uploaded</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Uploaded
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {formatDateTimeValue(documentRow.created_at ?? documentRow.uploaded_at)}
+                                  {formatDateTimeValue(
+                                    documentRow.created_at ??
+                                      documentRow.uploaded_at,
+                                  )}
                                 </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Description
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {readString(documentRow, ["description", "notes", "remarks"])}
+                                  {readString(documentRow, [
+                                    "description",
+                                    "notes",
+                                    "remarks",
+                                  ])}
                                 </p>
                               </div>
                             </div>
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   )}
@@ -3322,7 +4122,9 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Tasks</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Tasks
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Work items assigned during the exit process.
                       </p>
@@ -3333,9 +4135,9 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          void ensureLookups(["employees"])
-                          resetTaskForm()
-                          setShowTaskComposer((current) => !current)
+                          void ensureLookups(["employees"]);
+                          resetTaskForm();
+                          setShowTaskComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
@@ -3347,48 +4149,69 @@ export function OffboardingView() {
                   {showTaskComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Title</span>
+                        <span className="font-medium text-muted-foreground">
+                          Title
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={taskForm.title}
                           onChange={(event) =>
-                            setTaskForm((prev) => ({ ...prev, title: event.target.value }))
+                            setTaskForm((prev) => ({
+                              ...prev,
+                              title: event.target.value,
+                            }))
                           }
                           placeholder="Task title"
                         />
                       </label>
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">Task type</span>
+                          <span className="font-medium text-muted-foreground">
+                            Task type
+                          </span>
                           <FluentSelect
                             ariaLabel="Task type"
                             value={taskForm.task_type}
                             onChange={(value) =>
-                              setTaskForm((prev) => ({ ...prev, task_type: value }))
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                task_type: value,
+                              }))
                             }
-                            options={OFFBOARDING_TASK_TYPE_OPTIONS.map((type) => ({
-                              value: type,
-                              label: toTitleCaseWords(type),
-                            }))}
+                            options={OFFBOARDING_TASK_TYPE_OPTIONS.map(
+                              (type) => ({
+                                value: type,
+                                label: toTitleCaseWords(type),
+                              }),
+                            )}
                           />
                         </label>
                         <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">Priority</span>
+                          <span className="font-medium text-muted-foreground">
+                            Priority
+                          </span>
                           <FluentSelect
                             ariaLabel="Priority"
                             value={taskForm.priority}
                             onChange={(value) =>
-                              setTaskForm((prev) => ({ ...prev, priority: value }))
+                              setTaskForm((prev) => ({
+                                ...prev,
+                                priority: value,
+                              }))
                             }
-                            options={OFFBOARDING_PRIORITY_OPTIONS.map((priority) => ({
-                              value: priority,
-                              label: toTitleCaseWords(priority),
-                            }))}
+                            options={OFFBOARDING_PRIORITY_OPTIONS.map(
+                              (priority) => ({
+                                value: priority,
+                                label: toTitleCaseWords(priority),
+                              }),
+                            )}
                           />
                         </label>
                       </div>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Assigned user</span>
+                        <span className="font-medium text-muted-foreground">
+                          Assigned user
+                        </span>
                         <FluentSelect
                           ariaLabel="Assigned user"
                           value={taskForm.assigned_to_company_user_id}
@@ -3409,22 +4232,32 @@ export function OffboardingView() {
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Due date
+                        </span>
                         <DateTimeInput
                           aria-label="Task due date"
                           value={taskForm.due_date}
                           onChange={(event) =>
-                            setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))
+                            setTaskForm((prev) => ({
+                              ...prev,
+                              due_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Description</span>
+                        <span className="font-medium text-muted-foreground">
+                          Description
+                        </span>
                         <Textarea
                           className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={taskForm.description}
                           onChange={(event) =>
-                            setTaskForm((prev) => ({ ...prev, description: event.target.value }))
+                            setTaskForm((prev) => ({
+                              ...prev,
+                              description: event.target.value,
+                            }))
                           }
                           placeholder="Optional instructions"
                         />
@@ -3435,8 +4268,8 @@ export function OffboardingView() {
                           variant="outline"
                           className="h-8 px-3 text-xs"
                           onClick={() => {
-                            resetTaskForm()
-                            setShowTaskComposer(false)
+                            resetTaskForm();
+                            setShowTaskComposer(false);
                           }}
                         >
                           Cancel
@@ -3454,14 +4287,22 @@ export function OffboardingView() {
                   ) : null}
 
                   {selectedRequestTasks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No offboarding tasks have been created for this request.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No offboarding tasks have been created for this request.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {selectedRequestTasks.map((taskRow, index) => {
-                        const taskId = readNumber(taskRow, ["id", "task_id"])
-                        const taskStatus = readString(taskRow, ["status", "task_status"])
-                        const normalizedStatus = taskStatus.trim().toLowerCase()
-                        const assignedCompanyUserId = readCompanyUserId(taskRow)
+                        const taskId = readNumber(taskRow, ["id", "task_id"]);
+                        const taskStatus = readString(taskRow, [
+                          "status",
+                          "task_status",
+                        ]);
+                        const normalizedStatus = taskStatus
+                          .trim()
+                          .toLowerCase();
+                        const assignedCompanyUserId =
+                          readCompanyUserId(taskRow);
                         return (
                           <div
                             key={`offboarding-task-${taskId ?? index}`}
@@ -3470,44 +4311,81 @@ export function OffboardingView() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <p className="text-sm font-medium text-foreground">
-                                  {readString(taskRow, ["title", "task_title", "name", "step_name"])}
+                                  {readString(taskRow, [
+                                    "title",
+                                    "task_title",
+                                    "name",
+                                    "step_name",
+                                  ])}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {toTitleCaseWords(readString(taskRow, ["task_type", "type"]))} •{" "}
-                                  {toTitleCaseWords(taskStatus)}
+                                  {toTitleCaseWords(
+                                    readString(taskRow, ["task_type", "type"]),
+                                  )}{" "}
+                                  • {toTitleCaseWords(taskStatus)}
                                 </p>
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
-                                {normalizedStatus !== "completed" && normalizedStatus !== "done" ? (
+                                {normalizedStatus !== "completed" &&
+                                normalizedStatus !== "done" ? (
                                   <>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-7 px-2 text-[11px]"
-                                    disabled={saving}
-                                    onClick={() => void completeRequestTask(taskRow)}
-                                  >
-                                    Complete
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-7 px-2 text-[11px]"
-                                    disabled={saving}
-                                    onClick={() => {
-                                      const token = readStoredToken()
-                                      const requestId = readNumber(selectedRequest, ["id"])
-                                      const target = window.prompt("Reassign to company user id")
-                                      if (!token || requestId === null || taskId === null || !target) return
-                                      void reassignOffboardingTask(token, requestId, taskId, {
-                                        assigned_to_company_user_id: Number(target),
-                                      })
-                                        .then(() => showSuccessAlert("Task reassigned."))
-                                        .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Reassign failed."))
-                                    }}
-                                  >
-                                    Reassign
-                                  </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[11px]"
+                                      disabled={saving}
+                                      onClick={() =>
+                                        void completeRequestTask(taskRow)
+                                      }
+                                    >
+                                      Complete
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[11px]"
+                                      disabled={saving}
+                                      onClick={async () => {
+                                        const token = readStoredToken();
+                                        const requestId = readNumber(
+                                          selectedRequest,
+                                          ["id"],
+                                        );
+                                        const target = await fluentPrompt(
+                                          "Reassign to company user id",
+                                        );
+                                        if (
+                                          !token ||
+                                          requestId === null ||
+                                          taskId === null ||
+                                          !target
+                                        )
+                                          return;
+                                        void reassignOffboardingTask(
+                                          token,
+                                          requestId,
+                                          taskId,
+                                          {
+                                            assigned_to_company_user_id:
+                                              Number(target),
+                                          },
+                                        )
+                                          .then(() =>
+                                            showSuccessAlert(
+                                              "Task reassigned.",
+                                            ),
+                                          )
+                                          .catch((errorObject) =>
+                                            showErrorAlert(
+                                              errorObject instanceof Error
+                                                ? errorObject.message
+                                                : "Reassign failed.",
+                                            ),
+                                          );
+                                      }}
+                                    >
+                                      Reassign
+                                    </Button>
                                   </>
                                 ) : canManage ? (
                                   <Button
@@ -3515,7 +4393,9 @@ export function OffboardingView() {
                                     variant="outline"
                                     className="h-7 px-2 text-[11px]"
                                     disabled={saving}
-                                    onClick={() => void reopenRequestTask(taskRow)}
+                                    onClick={() =>
+                                      void reopenRequestTask(taskRow)
+                                    }
                                   >
                                     Reopen
                                   </Button>
@@ -3524,24 +4404,38 @@ export function OffboardingView() {
                             </div>
                             <div className="mt-2 grid gap-2 text-xs">
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Owner
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {resolveEmployeeOptionLabel(assignedCompanyUserId)}
+                                  {resolveEmployeeOptionLabel(
+                                    assignedCompanyUserId,
+                                  )}
                                 </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
-                                <p className="mt-0.5 text-foreground">{formatDateTimeValue(taskRow.due_date)}</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Due
+                                </p>
+                                <p className="mt-0.5 text-foreground">
+                                  {formatDateTimeValue(taskRow.due_date)}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Description
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {readString(taskRow, ["description", "task_description", "remarks"])}
+                                  {readString(taskRow, [
+                                    "description",
+                                    "task_description",
+                                    "remarks",
+                                  ])}
                                 </p>
                               </div>
                             </div>
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   )}
@@ -3550,7 +4444,9 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Clearances</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Clearances
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Department sign-off items required before exit closes.
                       </p>
@@ -3561,13 +4457,15 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          void ensureLookups(["employees"])
-                          resetClearanceForm()
-                          setShowClearanceComposer((current) => !current)
+                          void ensureLookups(["employees"]);
+                          resetClearanceForm();
+                          setShowClearanceComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
-                        {showClearanceComposer ? "Hide form" : "Create clearance"}
+                        {showClearanceComposer
+                          ? "Hide form"
+                          : "Create clearance"}
                       </Button>
                     ) : null}
                   </div>
@@ -3575,7 +4473,9 @@ export function OffboardingView() {
                   {showClearanceComposer ? (
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3">
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Clearance type</span>
+                        <span className="font-medium text-muted-foreground">
+                          Clearance type
+                        </span>
                         <FluentSelect
                           ariaLabel="Clearance type"
                           value={clearanceForm.clearance_type}
@@ -3585,20 +4485,27 @@ export function OffboardingView() {
                               clearance_type: value,
                             }))
                           }
-                          options={OFFBOARDING_CLEARANCE_TYPE_OPTIONS.map((type) => ({
-                            value: type,
-                            label: toTitleCaseWords(type),
-                          }))}
+                          options={OFFBOARDING_CLEARANCE_TYPE_OPTIONS.map(
+                            (type) => ({
+                              value: type,
+                              label: toTitleCaseWords(type),
+                            }),
+                          )}
                         />
                       </label>
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">Initial status</span>
+                          <span className="font-medium text-muted-foreground">
+                            Initial status
+                          </span>
                           <FluentSelect
                             ariaLabel="Initial status"
                             value={clearanceForm.status}
                             onChange={(value) =>
-                              setClearanceForm((prev) => ({ ...prev, status: value }))
+                              setClearanceForm((prev) => ({
+                                ...prev,
+                                status: value,
+                              }))
                             }
                             options={[
                               { value: "pending", label: "Pending" },
@@ -3608,7 +4515,9 @@ export function OffboardingView() {
                           />
                         </label>
                         <label className="grid gap-1 text-xs">
-                          <span className="font-medium text-muted-foreground">Owner</span>
+                          <span className="font-medium text-muted-foreground">
+                            Owner
+                          </span>
                           <FluentSelect
                             ariaLabel="Owner"
                             value={clearanceForm.owner_company_user_id}
@@ -3630,22 +4539,32 @@ export function OffboardingView() {
                         </label>
                       </div>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Due date
+                        </span>
                         <DateTimeInput
                           aria-label="Clearance due date"
                           value={clearanceForm.due_date}
                           onChange={(event) =>
-                            setClearanceForm((prev) => ({ ...prev, due_date: event.target.value }))
+                            setClearanceForm((prev) => ({
+                              ...prev,
+                              due_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <label className="grid gap-1 text-xs">
-                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <span className="font-medium text-muted-foreground">
+                          Remarks
+                        </span>
                         <Textarea
                           className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={clearanceForm.remarks}
                           onChange={(event) =>
-                            setClearanceForm((prev) => ({ ...prev, remarks: event.target.value }))
+                            setClearanceForm((prev) => ({
+                              ...prev,
+                              remarks: event.target.value,
+                            }))
                           }
                           placeholder="Optional instructions"
                         />
@@ -3656,8 +4575,8 @@ export function OffboardingView() {
                           variant="outline"
                           className="h-8 px-3 text-xs"
                           onClick={() => {
-                            resetClearanceForm()
-                            setShowClearanceComposer(false)
+                            resetClearanceForm();
+                            setShowClearanceComposer(false);
                           }}
                         >
                           Cancel
@@ -3675,16 +4594,25 @@ export function OffboardingView() {
                   ) : null}
 
                   {selectedRequestClearances.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No clearances have been added for this request yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No clearances have been added for this request yet.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {selectedRequestClearances.map((clearanceRow, index) => {
-                        const clearanceId = readNumber(clearanceRow, ["id", "clearance_id"])
-                        const clearanceStatus = readString(clearanceRow, ["status"])
-                        const normalizedStatus = clearanceStatus.trim().toLowerCase()
+                        const clearanceId = readNumber(clearanceRow, [
+                          "id",
+                          "clearance_id",
+                        ]);
+                        const clearanceStatus = readString(clearanceRow, [
+                          "status",
+                        ]);
+                        const normalizedStatus = clearanceStatus
+                          .trim()
+                          .toLowerCase();
                         const ownerCompanyUserId =
                           readNumber(clearanceRow, ["owner_company_user_id"]) ??
-                          readCompanyUserId(clearanceRow)
+                          readCompanyUserId(clearanceRow);
                         return (
                           <div
                             key={`offboarding-clearance-${clearanceId ?? index}`}
@@ -3699,7 +4627,7 @@ export function OffboardingView() {
                                       "title",
                                       "name",
                                       "department_name",
-                                    ])
+                                    ]),
                                   )}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
@@ -3712,20 +4640,29 @@ export function OffboardingView() {
                                     ariaLabel="Assign clearance owner"
                                     className="max-w-[10rem]"
                                     size="small"
-                                    value={ownerCompanyUserId == null ? "" : String(ownerCompanyUserId)}
+                                    value={
+                                      ownerCompanyUserId == null
+                                        ? ""
+                                        : String(ownerCompanyUserId)
+                                    }
                                     disabled={saving}
                                     placeholder="Assign owner"
                                     onChange={(value) => {
                                       if (value) {
-                                        void assignRequestClearance(clearanceRow, value)
+                                        void assignRequestClearance(
+                                          clearanceRow,
+                                          value,
+                                        );
                                       }
                                     }}
                                     options={[
                                       { value: "", label: "Assign owner" },
-                                      ...employeeCompanyUserOptions.map((option) => ({
-                                        value: String(option.companyUserId),
-                                        label: option.label,
-                                      })),
+                                      ...employeeCompanyUserOptions.map(
+                                        (option) => ({
+                                          value: String(option.companyUserId),
+                                          label: option.label,
+                                        }),
+                                      ),
                                     ]}
                                   />
                                   <Button
@@ -3733,7 +4670,11 @@ export function OffboardingView() {
                                     variant="outline"
                                     className="h-7 px-2 text-[11px]"
                                     disabled={saving}
-                                    onClick={() => void completeRequestClearance(clearanceRow)}
+                                    onClick={() =>
+                                      void completeRequestClearance(
+                                        clearanceRow,
+                                      )
+                                    }
                                   >
                                     Mark cleared
                                   </Button>
@@ -3742,24 +4683,38 @@ export function OffboardingView() {
                             </div>
                             <div className="mt-2 grid gap-2 text-xs">
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Owner
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {resolveEmployeeOptionLabel(ownerCompanyUserId)}
+                                  {resolveEmployeeOptionLabel(
+                                    ownerCompanyUserId,
+                                  )}
                                 </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Due</p>
-                                <p className="mt-0.5 text-foreground">{formatDateTimeValue(clearanceRow.due_date)}</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Due
+                                </p>
+                                <p className="mt-0.5 text-foreground">
+                                  {formatDateTimeValue(clearanceRow.due_date)}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remarks</p>
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Remarks
+                                </p>
                                 <p className="mt-0.5 text-foreground">
-                                  {readString(clearanceRow, ["remarks", "notes", "description"])}
+                                  {readString(clearanceRow, [
+                                    "remarks",
+                                    "notes",
+                                    "description",
+                                  ])}
                                 </p>
                               </div>
                             </div>
                           </div>
-                        )
+                        );
                       })}
                     </div>
                   )}
@@ -3768,25 +4723,37 @@ export function OffboardingView() {
 
               <div className="grid gap-2 text-xs md:grid-cols-2">
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approvals</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{requestApprovals.length}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Approvals
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {requestApprovals.length}
+                  </p>
                 </div>
                 <div className="rounded-md border border-border/70 px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Audit log entries</p>
-                  <p className="mt-1 text-sm font-semibold text-foreground">{requestAuditLogs.length}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Audit log entries
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">
+                    {requestAuditLogs.length}
+                  </p>
                 </div>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Approvals</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      Approvals
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Current approval trail for this offboarding request.
                     </p>
                   </div>
                   {requestApprovals.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No approval records returned for this request.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No approval records returned for this request.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestApprovals.map((approvalRow, index) => (
@@ -3796,39 +4763,90 @@ export function OffboardingView() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
-                              {readString(approvalRow, ["title", "step_name", "approval_name", "name"])}
+                              {readString(approvalRow, [
+                                "title",
+                                "step_name",
+                                "approval_name",
+                                "name",
+                              ])}
                             </p>
-                            <StatusDot status={readString(approvalRow, ["status", "approval_status"])} />
+                            <StatusDot
+                              status={readString(approvalRow, [
+                                "status",
+                                "approval_status",
+                              ])}
+                            />
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approver</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Approver
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(approvalRow, ["approver_name", "company_user_name", "assigned_to_name", "name"])}
+                                {readString(approvalRow, [
+                                  "approver_name",
+                                  "company_user_name",
+                                  "assigned_to_name",
+                                  "name",
+                                ])}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Comments</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Comments
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(approvalRow, ["comments", "remark", "remarks", "notes"])}
+                                {readString(approvalRow, [
+                                  "comments",
+                                  "remark",
+                                  "remarks",
+                                  "notes",
+                                ])}
                               </p>
                             </div>
                             <button
                               type="button"
                               className="justify-self-start text-xs font-medium text-primary"
-                              onClick={() => {
-                                const token = readStoredToken()
-                                const requestId = readNumber(selectedRequest, ["id"])
-                                const approvalId = readNumber(approvalRow, ["id", "approval_id"])
-                                const target = window.prompt("Delegate to company user id")
-                                const reason = window.prompt("Reason")
-                                if (!token || requestId === null || approvalId === null || !target || !reason) return
-                                void delegateOffboardingApproval(token, requestId, approvalId, {
-                                  target_company_user_id: Number(target),
-                                  reason,
-                                })
-                                  .then(() => showSuccessAlert("Approval delegated."))
-                                  .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Delegate failed."))
+                              onClick={async () => {
+                                const token = readStoredToken();
+                                const requestId = readNumber(selectedRequest, [
+                                  "id",
+                                ]);
+                                const approvalId = readNumber(approvalRow, [
+                                  "id",
+                                  "approval_id",
+                                ]);
+                                const target = await fluentPrompt(
+                                  "Delegate to company user id",
+                                );
+                                const reason = await fluentPrompt("Reason");
+                                if (
+                                  !token ||
+                                  requestId === null ||
+                                  approvalId === null ||
+                                  !target ||
+                                  !reason
+                                )
+                                  return;
+                                void delegateOffboardingApproval(
+                                  token,
+                                  requestId,
+                                  approvalId,
+                                  {
+                                    target_company_user_id: Number(target),
+                                    reason,
+                                  },
+                                )
+                                  .then(() =>
+                                    showSuccessAlert("Approval delegated."),
+                                  )
+                                  .catch((errorObject) =>
+                                    showErrorAlert(
+                                      errorObject instanceof Error
+                                        ? errorObject.message
+                                        : "Delegate failed.",
+                                    ),
+                                  );
                               }}
                             >
                               Delegate
@@ -3842,13 +4860,17 @@ export function OffboardingView() {
 
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Audit log</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      Audit log
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Timeline of request activity returned by the backend.
                     </p>
                   </div>
                   {requestAuditLogs.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No audit log records returned for this request.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No audit log records returned for this request.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestAuditLogs.map((auditRow, index) => (
@@ -3859,26 +4881,47 @@ export function OffboardingView() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
                               {toTitleCaseWords(
-                                readString(auditRow, ["action", "event", "event_name", "title"])
+                                readString(auditRow, [
+                                  "action",
+                                  "event",
+                                  "event_name",
+                                  "title",
+                                ]),
                               )}
                             </p>
                             <span className="text-[11px] text-muted-foreground">
                               {formatDateTimeValue(
-                                auditRow.created_at ?? auditRow.createdAt ?? auditRow.timestamp
+                                auditRow.created_at ??
+                                  auditRow.createdAt ??
+                                  auditRow.timestamp,
                               )}
                             </span>
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Actor</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Actor
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(auditRow, ["actor_name", "performed_by_name", "user_name", "company_user_name"])}
+                                {readString(auditRow, [
+                                  "actor_name",
+                                  "performed_by_name",
+                                  "user_name",
+                                  "company_user_name",
+                                ])}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Notes
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(auditRow, ["description", "notes", "remark", "remarks"])}
+                                {readString(auditRow, [
+                                  "description",
+                                  "notes",
+                                  "remark",
+                                  "remarks",
+                                ])}
                               </p>
                             </div>
                           </div>
@@ -3893,9 +4936,12 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Exit interview</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Exit interview
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Capture employee feedback, handover notes, and rehire recommendation.
+                        Capture employee feedback, handover notes, and rehire
+                        recommendation.
                       </p>
                     </div>
                     {(canManage || canActOnSelected) && requestDetailsOpen ? (
@@ -3914,22 +4960,31 @@ export function OffboardingView() {
                   <div className="grid gap-2 text-xs">
                     <div className="grid gap-2 md:grid-cols-2">
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Status</span>
+                        <span className="font-medium text-muted-foreground">
+                          Status
+                        </span>
                         <FluentSelect
                           ariaLabel="Status"
                           value={exitInterviewForm.status}
                           disabled={!canManage && !canActOnSelected}
                           onChange={(value) =>
-                            setExitInterviewForm((prev) => ({ ...prev, status: value }))
+                            setExitInterviewForm((prev) => ({
+                              ...prev,
+                              status: value,
+                            }))
                           }
-                          options={OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS.map((status) => ({
-                            value: status,
-                            label: toTitleCaseWords(status),
-                          }))}
+                          options={OFFBOARDING_EXIT_INTERVIEW_STATUS_OPTIONS.map(
+                            (status) => ({
+                              value: status,
+                              label: toTitleCaseWords(status),
+                            }),
+                          )}
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Knowledge transfer</span>
+                        <span className="font-medium text-muted-foreground">
+                          Knowledge transfer
+                        </span>
                         <FluentSelect
                           ariaLabel="Knowledge transfer"
                           value={exitInterviewForm.knowledge_transfer_status}
@@ -3940,15 +4995,19 @@ export function OffboardingView() {
                               knowledge_transfer_status: value,
                             }))
                           }
-                          options={OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS.map((status) => ({
-                            value: status,
-                            label: toTitleCaseWords(status),
-                          }))}
+                          options={OFFBOARDING_KNOWLEDGE_TRANSFER_OPTIONS.map(
+                            (status) => ({
+                              value: status,
+                              label: toTitleCaseWords(status),
+                            }),
+                          )}
                         />
                       </label>
                     </div>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Exit reason category</span>
+                      <span className="font-medium text-muted-foreground">
+                        Exit reason category
+                      </span>
                       <input
                         className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                         value={exitInterviewForm.exit_reason_category}
@@ -3963,7 +5022,9 @@ export function OffboardingView() {
                       />
                     </label>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Rehire eligible</span>
+                      <span className="font-medium text-muted-foreground">
+                        Rehire eligible
+                      </span>
                       <FluentSelect
                         ariaLabel="Rehire eligible"
                         value={exitInterviewForm.rehire_eligible}
@@ -3982,7 +5043,9 @@ export function OffboardingView() {
                       />
                     </label>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Employee feedback</span>
+                      <span className="font-medium text-muted-foreground">
+                        Employee feedback
+                      </span>
                       <Textarea
                         className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                         value={exitInterviewForm.employee_feedback}
@@ -3996,7 +5059,9 @@ export function OffboardingView() {
                       />
                     </label>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Manager feedback</span>
+                      <span className="font-medium text-muted-foreground">
+                        Manager feedback
+                      </span>
                       <Textarea
                         className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                         value={exitInterviewForm.manager_feedback}
@@ -4010,7 +5075,9 @@ export function OffboardingView() {
                       />
                     </label>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Handover notes</span>
+                      <span className="font-medium text-muted-foreground">
+                        Handover notes
+                      </span>
                       <Textarea
                         className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                         value={exitInterviewForm.handover_notes}
@@ -4024,7 +5091,9 @@ export function OffboardingView() {
                       />
                     </label>
                     <label className="grid gap-1">
-                      <span className="font-medium text-muted-foreground">Final notes</span>
+                      <span className="font-medium text-muted-foreground">
+                        Final notes
+                      </span>
                       <Textarea
                         className="min-h-20 rounded-md border border-input px-2 py-1.5 text-xs"
                         value={exitInterviewForm.final_notes}
@@ -4043,7 +5112,9 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Access actions</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Access actions
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Track system disablement and access revocation steps.
                       </p>
@@ -4054,8 +5125,8 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          resetActionForm()
-                          setShowActionComposer((current) => !current)
+                          resetActionForm();
+                          setShowActionComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
@@ -4068,47 +5139,68 @@ export function OffboardingView() {
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Action type</span>
+                          <span className="font-medium text-muted-foreground">
+                            Action type
+                          </span>
                           <FluentSelect
                             ariaLabel="Action type"
                             value={actionForm.action_type}
                             onChange={(value) =>
-                              setActionForm((prev) => ({ ...prev, action_type: value }))
+                              setActionForm((prev) => ({
+                                ...prev,
+                                action_type: value,
+                              }))
                             }
-                            options={OFFBOARDING_ACTION_TYPE_OPTIONS.map((type) => ({
-                              value: type,
-                              label: toTitleCaseWords(type),
-                            }))}
+                            options={OFFBOARDING_ACTION_TYPE_OPTIONS.map(
+                              (type) => ({
+                                value: type,
+                                label: toTitleCaseWords(type),
+                              }),
+                            )}
                           />
                         </label>
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Status</span>
+                          <span className="font-medium text-muted-foreground">
+                            Status
+                          </span>
                           <FluentSelect
                             ariaLabel="Status"
                             value={actionForm.status}
                             onChange={(value) =>
-                              setActionForm((prev) => ({ ...prev, status: value }))
+                              setActionForm((prev) => ({
+                                ...prev,
+                                status: value,
+                              }))
                             }
-                            options={OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => ({
-                              value: status,
-                              label: toTitleCaseWords(status),
-                            }))}
+                            options={OFFBOARDING_ACTION_STATUS_OPTIONS.map(
+                              (status) => ({
+                                value: status,
+                                label: toTitleCaseWords(status),
+                              }),
+                            )}
                           />
                         </label>
                       </div>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">System name</span>
+                        <span className="font-medium text-muted-foreground">
+                          System name
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={actionForm.system_name}
                           onChange={(event) =>
-                            setActionForm((prev) => ({ ...prev, system_name: event.target.value }))
+                            setActionForm((prev) => ({
+                              ...prev,
+                              system_name: event.target.value,
+                            }))
                           }
                           placeholder="e.g. Microsoft 365"
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <span className="font-medium text-muted-foreground">
+                          Owner
+                        </span>
                         <FluentSelect
                           ariaLabel="Owner"
                           value={actionForm.owner_company_user_id}
@@ -4129,33 +5221,53 @@ export function OffboardingView() {
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Due date
+                        </span>
                         <DateTimeInput
                           aria-label="Action due date"
                           value={actionForm.due_date}
                           onChange={(event) =>
-                            setActionForm((prev) => ({ ...prev, due_date: event.target.value }))
+                            setActionForm((prev) => ({
+                              ...prev,
+                              due_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Notes</span>
+                        <span className="font-medium text-muted-foreground">
+                          Notes
+                        </span>
                         <Textarea
                           className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={actionForm.notes}
                           onChange={(event) =>
-                            setActionForm((prev) => ({ ...prev, notes: event.target.value }))
+                            setActionForm((prev) => ({
+                              ...prev,
+                              notes: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <div className="flex justify-end gap-2">
-                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
-                          resetActionForm()
-                          setShowActionComposer(false)
-                        }}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetActionForm();
+                            setShowActionComposer(false);
+                          }}
+                        >
                           Cancel
                         </Button>
-                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestActionItem()}>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestActionItem()}
+                        >
                           {saving ? "Creating..." : "Create action"}
                         </Button>
                       </div>
@@ -4163,7 +5275,9 @@ export function OffboardingView() {
                   ) : null}
 
                   {requestActions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No access actions have been added yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No access actions have been added yet.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestActions.map((actionRow, index) => (
@@ -4173,7 +5287,13 @@ export function OffboardingView() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
-                              {toTitleCaseWords(readString(actionRow, ["action_type", "title", "name"]))}
+                              {toTitleCaseWords(
+                                readString(actionRow, [
+                                  "action_type",
+                                  "title",
+                                  "name",
+                                ]),
+                              )}
                             </p>
                             {canManage ? (
                               <FluentSelect
@@ -4181,25 +5301,44 @@ export function OffboardingView() {
                                 size="small"
                                 value={readString(actionRow, ["status"])}
                                 disabled={saving}
-                                onChange={(value) => void saveRequestActionStatus(actionRow, value)}
-                                options={OFFBOARDING_ACTION_STATUS_OPTIONS.map((status) => ({
-                                  value: status,
-                                  label: toTitleCaseWords(status),
-                                }))}
+                                onChange={(value) =>
+                                  void saveRequestActionStatus(actionRow, value)
+                                }
+                                options={OFFBOARDING_ACTION_STATUS_OPTIONS.map(
+                                  (status) => ({
+                                    value: status,
+                                    label: toTitleCaseWords(status),
+                                  }),
+                                )}
                               />
                             ) : (
-                              <StatusDot status={readString(actionRow, ["status"])} />
+                              <StatusDot
+                                status={readString(actionRow, ["status"])}
+                              />
                             )}
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">System</p>
-                              <p className="mt-0.5 text-foreground">{readString(actionRow, ["system_name", "systemName"])}</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                System
+                              </p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(actionRow, [
+                                  "system_name",
+                                  "systemName",
+                                ])}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Owner
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {resolveEmployeeOptionLabel(readNumber(actionRow, ["owner_company_user_id"]))}
+                                {resolveEmployeeOptionLabel(
+                                  readNumber(actionRow, [
+                                    "owner_company_user_id",
+                                  ]),
+                                )}
                               </p>
                             </div>
                           </div>
@@ -4214,9 +5353,12 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Asset returns</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Asset returns
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Track laptops, cards, phones, keys, and other company property.
+                        Track laptops, cards, phones, keys, and other company
+                        property.
                       </p>
                     </div>
                     {canManage ? (
@@ -4225,8 +5367,8 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          resetAssetForm()
-                          setShowAssetComposer((current) => !current)
+                          resetAssetForm();
+                          setShowAssetComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
@@ -4239,58 +5381,84 @@ export function OffboardingView() {
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Asset type</span>
+                          <span className="font-medium text-muted-foreground">
+                            Asset type
+                          </span>
                           <FluentSelect
                             ariaLabel="Asset type"
                             value={assetForm.asset_type}
                             onChange={(value) =>
-                              setAssetForm((prev) => ({ ...prev, asset_type: value }))
+                              setAssetForm((prev) => ({
+                                ...prev,
+                                asset_type: value,
+                              }))
                             }
-                            options={OFFBOARDING_ASSET_TYPE_OPTIONS.map((type) => ({
-                              value: type,
-                              label: toTitleCaseWords(type),
-                            }))}
+                            options={OFFBOARDING_ASSET_TYPE_OPTIONS.map(
+                              (type) => ({
+                                value: type,
+                                label: toTitleCaseWords(type),
+                              }),
+                            )}
                           />
                         </label>
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Status</span>
+                          <span className="font-medium text-muted-foreground">
+                            Status
+                          </span>
                           <FluentSelect
                             ariaLabel="Status"
                             value={assetForm.status}
                             onChange={(value) =>
-                              setAssetForm((prev) => ({ ...prev, status: value }))
+                              setAssetForm((prev) => ({
+                                ...prev,
+                                status: value,
+                              }))
                             }
-                            options={OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => ({
-                              value: status,
-                              label: toTitleCaseWords(status),
-                            }))}
+                            options={OFFBOARDING_ASSET_STATUS_OPTIONS.map(
+                              (status) => ({
+                                value: status,
+                                label: toTitleCaseWords(status),
+                              }),
+                            )}
                           />
                         </label>
                       </div>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Asset label</span>
+                        <span className="font-medium text-muted-foreground">
+                          Asset label
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={assetForm.asset_label}
                           onChange={(event) =>
-                            setAssetForm((prev) => ({ ...prev, asset_label: event.target.value }))
+                            setAssetForm((prev) => ({
+                              ...prev,
+                              asset_label: event.target.value,
+                            }))
                           }
                           placeholder="e.g. Dell Latitude 5440"
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Asset identifier</span>
+                        <span className="font-medium text-muted-foreground">
+                          Asset identifier
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={assetForm.asset_identifier}
                           onChange={(event) =>
-                            setAssetForm((prev) => ({ ...prev, asset_identifier: event.target.value }))
+                            setAssetForm((prev) => ({
+                              ...prev,
+                              asset_identifier: event.target.value,
+                            }))
                           }
                           placeholder="Serial / tag"
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <span className="font-medium text-muted-foreground">
+                          Owner
+                        </span>
                         <FluentSelect
                           ariaLabel="Owner"
                           value={assetForm.owner_company_user_id}
@@ -4311,33 +5479,53 @@ export function OffboardingView() {
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Due date
+                        </span>
                         <DateTimeInput
                           aria-label="Asset due date"
                           value={assetForm.due_date}
                           onChange={(event) =>
-                            setAssetForm((prev) => ({ ...prev, due_date: event.target.value }))
+                            setAssetForm((prev) => ({
+                              ...prev,
+                              due_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <span className="font-medium text-muted-foreground">
+                          Remarks
+                        </span>
                         <Textarea
                           className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={assetForm.remarks}
                           onChange={(event) =>
-                            setAssetForm((prev) => ({ ...prev, remarks: event.target.value }))
+                            setAssetForm((prev) => ({
+                              ...prev,
+                              remarks: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <div className="flex justify-end gap-2">
-                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
-                          resetAssetForm()
-                          setShowAssetComposer(false)
-                        }}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetAssetForm();
+                            setShowAssetComposer(false);
+                          }}
+                        >
                           Cancel
                         </Button>
-                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestAsset()}>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestAsset()}
+                        >
                           {saving ? "Creating..." : "Add asset"}
                         </Button>
                       </div>
@@ -4345,7 +5533,9 @@ export function OffboardingView() {
                   ) : null}
 
                   {requestAssets.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No asset return items have been added yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No asset return items have been added yet.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestAssets.map((assetRow, index) => (
@@ -4355,7 +5545,11 @@ export function OffboardingView() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
-                              {readString(assetRow, ["asset_label", "title", "name"])}
+                              {readString(assetRow, [
+                                "asset_label",
+                                "title",
+                                "name",
+                              ])}
                             </p>
                             {canManage ? (
                               <FluentSelect
@@ -4363,26 +5557,43 @@ export function OffboardingView() {
                                 size="small"
                                 value={readString(assetRow, ["status"])}
                                 disabled={saving}
-                                onChange={(value) => void saveRequestAssetStatus(assetRow, value)}
-                                options={OFFBOARDING_ASSET_STATUS_OPTIONS.map((status) => ({
-                                  value: status,
-                                  label: toTitleCaseWords(status),
-                                }))}
+                                onChange={(value) =>
+                                  void saveRequestAssetStatus(assetRow, value)
+                                }
+                                options={OFFBOARDING_ASSET_STATUS_OPTIONS.map(
+                                  (status) => ({
+                                    value: status,
+                                    label: toTitleCaseWords(status),
+                                  }),
+                                )}
                               />
                             ) : (
-                              <StatusDot status={readString(assetRow, ["status"])} />
+                              <StatusDot
+                                status={readString(assetRow, ["status"])}
+                              />
                             )}
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Type
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {toTitleCaseWords(readString(assetRow, ["asset_type", "type"]))}
+                                {toTitleCaseWords(
+                                  readString(assetRow, ["asset_type", "type"]),
+                                )}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Identifier</p>
-                              <p className="mt-0.5 text-foreground">{readString(assetRow, ["asset_identifier", "identifier"])}</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Identifier
+                              </p>
+                              <p className="mt-0.5 text-foreground">
+                                {readString(assetRow, [
+                                  "asset_identifier",
+                                  "identifier",
+                                ])}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -4394,9 +5605,12 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Settlements</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Settlements
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Final salary, recoveries, gratuity, and other financial closeout items.
+                        Final salary, recoveries, gratuity, and other financial
+                        closeout items.
                       </p>
                     </div>
                     {canManage ? (
@@ -4405,12 +5619,14 @@ export function OffboardingView() {
                         variant="outline"
                         className="h-8 px-3 text-xs"
                         onClick={() => {
-                          resetSettlementForm()
-                          setShowSettlementComposer((current) => !current)
+                          resetSettlementForm();
+                          setShowSettlementComposer((current) => !current);
                         }}
                         disabled={saving}
                       >
-                        {showSettlementComposer ? "Hide form" : "Add settlement"}
+                        {showSettlementComposer
+                          ? "Hide form"
+                          : "Add settlement"}
                       </Button>
                     ) : null}
                   </div>
@@ -4419,70 +5635,101 @@ export function OffboardingView() {
                     <div className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs">
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Item type</span>
+                          <span className="font-medium text-muted-foreground">
+                            Item type
+                          </span>
                           <FluentSelect
                             ariaLabel="Item type"
                             value={settlementForm.item_type}
                             onChange={(value) =>
-                              setSettlementForm((prev) => ({ ...prev, item_type: value }))
+                              setSettlementForm((prev) => ({
+                                ...prev,
+                                item_type: value,
+                              }))
                             }
-                            options={OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS.map((type) => ({
-                              value: type,
-                              label: toTitleCaseWords(type),
-                            }))}
+                            options={OFFBOARDING_SETTLEMENT_ITEM_TYPE_OPTIONS.map(
+                              (type) => ({
+                                value: type,
+                                label: toTitleCaseWords(type),
+                              }),
+                            )}
                           />
                         </label>
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Status</span>
+                          <span className="font-medium text-muted-foreground">
+                            Status
+                          </span>
                           <FluentSelect
                             ariaLabel="Status"
                             value={settlementForm.status}
                             onChange={(value) =>
-                              setSettlementForm((prev) => ({ ...prev, status: value }))
+                              setSettlementForm((prev) => ({
+                                ...prev,
+                                status: value,
+                              }))
                             }
-                            options={OFFBOARDING_SETTLEMENT_STATUS_OPTIONS.map((status) => ({
-                              value: status,
-                              label: toTitleCaseWords(status),
-                            }))}
+                            options={OFFBOARDING_SETTLEMENT_STATUS_OPTIONS.map(
+                              (status) => ({
+                                value: status,
+                                label: toTitleCaseWords(status),
+                              }),
+                            )}
                           />
                         </label>
                       </div>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Title</span>
+                        <span className="font-medium text-muted-foreground">
+                          Title
+                        </span>
                         <input
                           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           value={settlementForm.title}
                           onChange={(event) =>
-                            setSettlementForm((prev) => ({ ...prev, title: event.target.value }))
+                            setSettlementForm((prev) => ({
+                              ...prev,
+                              title: event.target.value,
+                            }))
                           }
                           placeholder="e.g. Leave encashment"
                         />
                       </label>
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Amount</span>
+                          <span className="font-medium text-muted-foreground">
+                            Amount
+                          </span>
                           <input
                             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                             value={settlementForm.amount}
                             onChange={(event) =>
-                              setSettlementForm((prev) => ({ ...prev, amount: event.target.value }))
+                              setSettlementForm((prev) => ({
+                                ...prev,
+                                amount: event.target.value,
+                              }))
                             }
                             placeholder="Optional"
                           />
                         </label>
                         <label className="grid gap-1">
-                          <span className="font-medium text-muted-foreground">Currency</span>
+                          <span className="font-medium text-muted-foreground">
+                            Currency
+                          </span>
                           <input
                             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                             value={settlementForm.currency}
                             onChange={(event) =>
-                              setSettlementForm((prev) => ({ ...prev, currency: event.target.value }))
+                              setSettlementForm((prev) => ({
+                                ...prev,
+                                currency: event.target.value,
+                              }))
                             }
                           />
                         </label>
                       </div>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Owner</span>
+                        <span className="font-medium text-muted-foreground">
+                          Owner
+                        </span>
                         <FluentSelect
                           ariaLabel="Owner"
                           value={settlementForm.owner_company_user_id}
@@ -4503,33 +5750,53 @@ export function OffboardingView() {
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Due date</span>
+                        <span className="font-medium text-muted-foreground">
+                          Due date
+                        </span>
                         <DateTimeInput
                           aria-label="Settlement due date"
                           value={settlementForm.due_date}
                           onChange={(event) =>
-                            setSettlementForm((prev) => ({ ...prev, due_date: event.target.value }))
+                            setSettlementForm((prev) => ({
+                              ...prev,
+                              due_date: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <label className="grid gap-1">
-                        <span className="font-medium text-muted-foreground">Remarks</span>
+                        <span className="font-medium text-muted-foreground">
+                          Remarks
+                        </span>
                         <Textarea
                           className="min-h-16 rounded-md border border-input px-2 py-1.5 text-xs"
                           value={settlementForm.remarks}
                           onChange={(event) =>
-                            setSettlementForm((prev) => ({ ...prev, remarks: event.target.value }))
+                            setSettlementForm((prev) => ({
+                              ...prev,
+                              remarks: event.target.value,
+                            }))
                           }
                         />
                       </label>
                       <div className="flex justify-end gap-2">
-                        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
-                          resetSettlementForm()
-                          setShowSettlementComposer(false)
-                        }}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            resetSettlementForm();
+                            setShowSettlementComposer(false);
+                          }}
+                        >
                           Cancel
                         </Button>
-                        <Button type="button" className="h-8 px-3 text-xs" disabled={saving} onClick={() => void submitRequestSettlement()}>
+                        <Button
+                          type="button"
+                          className="h-8 px-3 text-xs"
+                          disabled={saving}
+                          onClick={() => void submitRequestSettlement()}
+                        >
                           {saving ? "Creating..." : "Add settlement"}
                         </Button>
                       </div>
@@ -4537,7 +5804,9 @@ export function OffboardingView() {
                   ) : null}
 
                   {requestSettlements.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No settlement items have been added yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No settlement items have been added yet.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestSettlements.map((settlementRow, index) => (
@@ -4550,19 +5819,50 @@ export function OffboardingView() {
                               {readString(settlementRow, ["title", "name"])}
                             </p>
                             <div className="flex items-center gap-2">
-                              <StatusDot status={readString(settlementRow, ["status"])} />
+                              <StatusDot
+                                status={readString(settlementRow, ["status"])}
+                              />
                               <button
                                 type="button"
                                 className="text-xs font-medium text-primary"
-                                onClick={() => {
-                                  const token = readStoredToken()
-                                  const requestId = readNumber(selectedRequest, ["id"])
-                                  const itemId = readNumber(settlementRow, ["id", "item_id"])
-                                  const status = window.prompt("New settlement status", readString(settlementRow, ["status"]) || "PENDING")
-                                  if (!token || requestId === null || itemId === null || !status) return
-                                  void updateOffboardingSettlement(token, requestId, itemId, { status })
-                                    .then(() => showSuccessAlert("Settlement updated."))
-                                    .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Update failed."))
+                                onClick={async () => {
+                                  const token = readStoredToken();
+                                  const requestId = readNumber(
+                                    selectedRequest,
+                                    ["id"],
+                                  );
+                                  const itemId = readNumber(settlementRow, [
+                                    "id",
+                                    "item_id",
+                                  ]);
+                                  const status = await fluentPrompt(
+                                    "New settlement status",
+                                    readString(settlementRow, ["status"]) ||
+                                      "PENDING",
+                                  );
+                                  if (
+                                    !token ||
+                                    requestId === null ||
+                                    itemId === null ||
+                                    !status
+                                  )
+                                    return;
+                                  void updateOffboardingSettlement(
+                                    token,
+                                    requestId,
+                                    itemId,
+                                    { status },
+                                  )
+                                    .then(() =>
+                                      showSuccessAlert("Settlement updated."),
+                                    )
+                                    .catch((errorObject) =>
+                                      showErrorAlert(
+                                        errorObject instanceof Error
+                                          ? errorObject.message
+                                          : "Update failed.",
+                                      ),
+                                    );
                                 }}
                               >
                                 Update
@@ -4571,15 +5871,25 @@ export function OffboardingView() {
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Type
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {toTitleCaseWords(readString(settlementRow, ["item_type", "type"]))}
+                                {toTitleCaseWords(
+                                  readString(settlementRow, [
+                                    "item_type",
+                                    "type",
+                                  ]),
+                                )}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Amount</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Amount
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(settlementRow, ["amount"])} {readString(settlementRow, ["currency"])}
+                                {readString(settlementRow, ["amount"])}{" "}
+                                {readString(settlementRow, ["currency"])}
                               </p>
                             </div>
                           </div>
@@ -4593,13 +5903,18 @@ export function OffboardingView() {
               <div className="grid gap-3 lg:grid-cols-2">
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Generated letters</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      Generated letters
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      Relieving and service letter records returned by the backend.
+                      Relieving and service letter records returned by the
+                      backend.
                     </p>
                   </div>
                   {requestLetters.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No generated letters were returned for this request.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No generated letters were returned for this request.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestLetters.map((letterRow, index) => (
@@ -4609,21 +5924,45 @@ export function OffboardingView() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
-                              {readString(letterRow, ["title", "name", "document_name", "file_name"])}
+                              {readString(letterRow, [
+                                "title",
+                                "name",
+                                "document_name",
+                                "file_name",
+                              ])}
                             </p>
-                            <StatusDot status={readString(letterRow, ["status", "document_status"])} />
+                            <StatusDot
+                              status={readString(letterRow, [
+                                "status",
+                                "document_status",
+                              ])}
+                            />
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Type
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {toTitleCaseWords(readString(letterRow, ["type", "document_type", "category"]))}
+                                {toTitleCaseWords(
+                                  readString(letterRow, [
+                                    "type",
+                                    "document_type",
+                                    "category",
+                                  ]),
+                                )}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Created</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Created
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {formatDateTimeValue(letterRow.created_at ?? letterRow.createdAt ?? letterRow.generated_at)}
+                                {formatDateTimeValue(
+                                  letterRow.created_at ??
+                                    letterRow.createdAt ??
+                                    letterRow.generated_at,
+                                )}
                               </p>
                             </div>
                           </div>
@@ -4636,23 +5975,42 @@ export function OffboardingView() {
                 <div className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Access operations</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        Access operations
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Technical access-termination operations tracked for this exit.
+                        Technical access-termination operations tracked for this
+                        exit.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"
                         className="text-xs font-medium text-primary"
-                        onClick={() => {
-                          const token = readStoredToken()
-                          const requestId = readNumber(selectedRequest, ["id"])
-                          const reason = window.prompt("Emergency termination reason")
-                          if (!token || requestId === null || !reason) return
-                          void emergencyOffboardingAccessTermination(token, requestId, { reason })
-                            .then(() => showSuccessAlert("Emergency access termination started."))
-                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Emergency termination failed."))
+                        onClick={async () => {
+                          const token = readStoredToken();
+                          const requestId = readNumber(selectedRequest, ["id"]);
+                          const reason = await fluentPrompt(
+                            "Emergency termination reason",
+                          );
+                          if (!token || requestId === null || !reason) return;
+                          void emergencyOffboardingAccessTermination(
+                            token,
+                            requestId,
+                            { reason },
+                          )
+                            .then(() =>
+                              showSuccessAlert(
+                                "Emergency access termination started.",
+                              ),
+                            )
+                            .catch((errorObject) =>
+                              showErrorAlert(
+                                errorObject instanceof Error
+                                  ? errorObject.message
+                                  : "Emergency termination failed.",
+                              ),
+                            );
                         }}
                       >
                         Emergency terminate
@@ -4661,12 +6019,23 @@ export function OffboardingView() {
                         type="button"
                         className="text-xs font-medium text-primary"
                         onClick={() => {
-                          const token = readStoredToken()
-                          const requestId = readNumber(selectedRequest, ["id"])
-                          if (!token || requestId === null) return
-                          void retryOffboardingAccessTermination(token, requestId)
-                            .then(() => showSuccessAlert("Access termination retried."))
-                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Retry failed."))
+                          const token = readStoredToken();
+                          const requestId = readNumber(selectedRequest, ["id"]);
+                          if (!token || requestId === null) return;
+                          void retryOffboardingAccessTermination(
+                            token,
+                            requestId,
+                          )
+                            .then(() =>
+                              showSuccessAlert("Access termination retried."),
+                            )
+                            .catch((errorObject) =>
+                              showErrorAlert(
+                                errorObject instanceof Error
+                                  ? errorObject.message
+                                  : "Retry failed.",
+                              ),
+                            );
                         }}
                       >
                         Retry
@@ -4675,12 +6044,23 @@ export function OffboardingView() {
                         type="button"
                         className="text-xs font-medium text-primary"
                         onClick={() => {
-                          const token = readStoredToken()
-                          const requestId = readNumber(selectedRequest, ["id"])
-                          if (!token || requestId === null) return
-                          void createEmployeeFinanceOffboardingRecoveries(token, requestId)
-                            .then(() => showSuccessAlert("Finance recoveries created."))
-                            .catch((errorObject) => showErrorAlert(errorObject instanceof Error ? errorObject.message : "Recoveries failed."))
+                          const token = readStoredToken();
+                          const requestId = readNumber(selectedRequest, ["id"]);
+                          if (!token || requestId === null) return;
+                          void createEmployeeFinanceOffboardingRecoveries(
+                            token,
+                            requestId,
+                          )
+                            .then(() =>
+                              showSuccessAlert("Finance recoveries created."),
+                            )
+                            .catch((errorObject) =>
+                              showErrorAlert(
+                                errorObject instanceof Error
+                                  ? errorObject.message
+                                  : "Recoveries failed.",
+                              ),
+                            );
                         }}
                       >
                         Finance recoveries
@@ -4688,7 +6068,9 @@ export function OffboardingView() {
                     </div>
                   </div>
                   {requestAccessOperations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No access operations were returned for this request.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No access operations were returned for this request.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {requestAccessOperations.map((operationRow, index) => (
@@ -4698,27 +6080,55 @@ export function OffboardingView() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-medium text-foreground">
-                              {toTitleCaseWords(readString(operationRow, ["operation_type", "action_type", "name", "title"]))}
+                              {toTitleCaseWords(
+                                readString(operationRow, [
+                                  "operation_type",
+                                  "action_type",
+                                  "name",
+                                  "title",
+                                ]),
+                              )}
                             </p>
-                            <StatusDot status={readString(operationRow, ["status"])} />
+                            <StatusDot
+                              status={readString(operationRow, ["status"])}
+                            />
                           </div>
                           <div className="mt-2 grid gap-2 text-xs">
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">System</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                System
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(operationRow, ["system_name", "systemName", "provider"])}
+                                {readString(operationRow, [
+                                  "system_name",
+                                  "systemName",
+                                  "provider",
+                                ])}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Updated</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Updated
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {formatDateTimeValue(operationRow.updated_at ?? operationRow.updatedAt ?? operationRow.created_at)}
+                                {formatDateTimeValue(
+                                  operationRow.updated_at ??
+                                    operationRow.updatedAt ??
+                                    operationRow.created_at,
+                                )}
                               </p>
                             </div>
                             <div>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Notes</p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Notes
+                              </p>
                               <p className="mt-0.5 text-foreground">
-                                {readString(operationRow, ["notes", "remark", "remarks", "error_message"])}
+                                {readString(operationRow, [
+                                  "notes",
+                                  "remark",
+                                  "remarks",
+                                  "error_message",
+                                ])}
                               </p>
                             </div>
                           </div>
@@ -4739,21 +6149,30 @@ export function OffboardingView() {
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => void runRequestAction(selectedRequest, "submit")}
+                    onClick={() =>
+                      void runRequestAction(selectedRequest, "submit")
+                    }
                   >
                     Submit
                   </Button>
                 ) : null}
                 {canManage &&
-                ["submitted", "pending", "pending_approval", "in_review"].includes(
-                  readString(selectedRequest, ["status"]).toLowerCase()
+                [
+                  "submitted",
+                  "pending",
+                  "pending_approval",
+                  "in_review",
+                ].includes(
+                  readString(selectedRequest, ["status"]).toLowerCase(),
                 ) ? (
                   <>
                     <Button
                       type="button"
                       variant="outline"
                       disabled={saving}
-                      onClick={() => void runRequestAction(selectedRequest, "approve")}
+                      onClick={() =>
+                        void runRequestAction(selectedRequest, "approve")
+                      }
                     >
                       Approve
                     </Button>
@@ -4761,7 +6180,9 @@ export function OffboardingView() {
                       type="button"
                       variant="outline"
                       disabled={saving}
-                      onClick={() => void runRequestAction(selectedRequest, "reject")}
+                      onClick={() =>
+                        void runRequestAction(selectedRequest, "reject")
+                      }
                     >
                       Reject
                     </Button>
@@ -4769,25 +6190,31 @@ export function OffboardingView() {
                 ) : null}
                 {canManage &&
                 ["approved", "in_progress"].includes(
-                  readString(selectedRequest, ["status"]).toLowerCase()
+                  readString(selectedRequest, ["status"]).toLowerCase(),
                 ) ? (
                   <Button
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => void runRequestAction(selectedRequest, "complete")}
+                    onClick={() =>
+                      void runRequestAction(selectedRequest, "complete")
+                    }
                   >
                     Complete
                   </Button>
                 ) : null}
                 {canManage &&
                 !isRequestFinalized(selectedRequest) &&
-                ["completed"].includes(readString(selectedRequest, ["status"]).toLowerCase()) ? (
+                ["completed"].includes(
+                  readString(selectedRequest, ["status"]).toLowerCase(),
+                ) ? (
                   <Button
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => void runRequestAction(selectedRequest, "finalize")}
+                    onClick={() =>
+                      void runRequestAction(selectedRequest, "finalize")
+                    }
                   >
                     Finalize
                   </Button>
@@ -4798,19 +6225,25 @@ export function OffboardingView() {
                     type="button"
                     variant="outline"
                     disabled={saving}
-                    onClick={() => void runRequestAction(selectedRequest, "cancel")}
+                    onClick={() =>
+                      void runRequestAction(selectedRequest, "cancel")
+                    }
                   >
                     Cancel request
                   </Button>
                 ) : null}
               </>
             ) : null}
-            <Button type="button" variant="outline" onClick={() => setRequestDetailsOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRequestDetailsOpen(false)}
+            >
               Close
             </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
     </section>
-  )
+  );
 }

@@ -3,6 +3,7 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import * as React from "react";
 import {
   Add20Regular,
@@ -14,13 +15,26 @@ import {
   Delete20Regular,
   DocumentBulletList20Regular,
   DocumentSearch20Regular,
+  Eye20Regular,
   PersonMoney20Regular,
 } from "@fluentui/react-icons";
+import {
+  Avatar as FluentAvatar,
+  Badge as FluentBadge,
+  Button as FluentButton,
+  Card as FluentCard,
+  CardHeader as FluentCardHeader,
+  Input as FluentInput,
+  MessageBar,
+  MessageBarBody,
+  Tab,
+  TabList,
+  Text,
+} from "@fluentui/react-components";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/fluent-toast-store";
 
 import { SearchToggleField } from "@/components/common/search-toggle-field";
-import { StatStrip } from "@/components/dashboard/talent-visuals";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   canAccessDashboardRoute,
@@ -72,6 +86,8 @@ import {
   calculatePayrollFinalSettlement,
   payrollFinalSettlementAction,
   downloadPayrollFinalSettlementStatement,
+  extractDefaultAvatarImageUrl,
+  extractProfilePhotoUrl,
   getPayrollDashboard,
   getPayrollIntegrationCatalog,
   getPayrollInternalLedger,
@@ -541,7 +557,10 @@ function groupReportIssues(result: AdminRecord | null) {
   };
 }
 
-type EmployeeNameLookup = Map<number, { name: string; number: string }>;
+type EmployeeNameLookup = Map<
+  number,
+  { name: string; number: string; avatarUrl: string | null }
+>;
 
 function nameFromEmployeeRow(row: AdminRecord) {
   const first = readString(row, ["first_name", "firstName"]);
@@ -568,6 +587,17 @@ function employeeNumberFromRow(row: AdminRecord) {
     "staff_no",
     "staffNo",
   ]);
+}
+
+function employeeAvatarFromRow(row: AdminRecord) {
+  const direct = extractProfilePhotoUrl(row);
+  if (direct) return direct;
+  const defaultAvatar =
+    asRecord(row.selected_default_avatar) ??
+    asRecord(row.selectedDefaultAvatar) ??
+    asRecord(asRecord(row.user)?.selected_default_avatar) ??
+    asRecord(asRecord(row.user)?.selectedDefaultAvatar);
+  return extractDefaultAvatarImageUrl(defaultAvatar);
 }
 
 function issueSubject(issue: AdminRecord, names?: EmployeeNameLookup) {
@@ -686,8 +716,12 @@ function readPeriodLabel(row: AdminRecord | null | undefined) {
   );
 }
 
-function readEmployeeLabel(row: AdminRecord | null | undefined) {
+function readEmployeeLabel(
+  row: AdminRecord | null | undefined,
+  names?: EmployeeNameLookup,
+) {
   if (!row) return "—";
+  const employeeId = readNumber(row, ["employee_id", "employeeId"]);
   const nestedEmployee =
     (typeof row.employee === "object" &&
     row.employee &&
@@ -702,9 +736,8 @@ function readEmployeeLabel(row: AdminRecord | null | undefined) {
       "fullName",
     ]) ||
     readString(nestedEmployee, ["full_name", "fullName", "name"]) ||
-    (readNumber(row, ["employee_id", "employeeId"]) !== null
-      ? `Employee #${readNumber(row, ["employee_id", "employeeId"])}`
-      : "—")
+    (employeeId !== null ? names?.get(employeeId)?.name : "") ||
+    (employeeId !== null ? `Employee #${employeeId}` : "—")
   );
 }
 
@@ -1894,6 +1927,9 @@ export function PayrollOperationsView() {
     React.useState<PayrollConfigTab>("components");
   const [rows, setRows] = React.useState<AdminRecord[]>([]);
   const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null);
+  const [profileSummaryRows, setProfileSummaryRows] = React.useState<
+    AdminRecord[] | null
+  >(null);
   const [periods, setPeriods] = React.useState<AdminRecord[]>([]);
   const [components, setComponents] = React.useState<AdminRecord[]>([]);
   const [calendars, setCalendars] = React.useState<AdminRecord[]>([]);
@@ -1940,6 +1976,8 @@ export function PayrollOperationsView() {
   const [employeeNames, setEmployeeNames] = React.useState<EmployeeNameLookup>(
     new Map(),
   );
+  const [employeeDirectoryLoaded, setEmployeeDirectoryLoaded] =
+    React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
@@ -2051,6 +2089,7 @@ export function PayrollOperationsView() {
   const requestIdRef = React.useRef(0);
   const lookupsCacheRef = React.useRef<{
     dashboard: AdminRecord | null;
+    profiles: AdminRecord[] | null;
     periods: AdminRecord[];
     components: AdminRecord[];
     calendars: AdminRecord[];
@@ -2069,6 +2108,7 @@ export function PayrollOperationsView() {
   const applyLookups = React.useCallback(
     (next: NonNullable<typeof lookupsCacheRef.current>) => {
       setDashboard(next.dashboard);
+      setProfileSummaryRows(next.profiles);
       setPeriods(next.periods);
       setComponents(next.components);
       setCalendars(next.calendars);
@@ -2094,6 +2134,7 @@ export function PayrollOperationsView() {
 
       const [
         dashboardResult,
+        profilesResult,
         periodsResult,
         componentsResult,
         calendarsResult,
@@ -2109,6 +2150,7 @@ export function PayrollOperationsView() {
         recentRunsResult,
       ] = await Promise.allSettled([
         getPayrollDashboard(token),
+        listEmployeePayrollProfiles(token, { page: 1, limit: 100 }),
         listPayrollPeriods(token),
         listPayrollComponents(token),
         listPayrollCalendars(token),
@@ -2128,6 +2170,10 @@ export function PayrollOperationsView() {
         dashboard:
           dashboardResult.status === "fulfilled" && dashboardResult.value
             ? dashboardResult.value
+            : null,
+        profiles:
+          profilesResult.status === "fulfilled"
+            ? profilesResult.value.rows
             : null,
         periods:
           periodsResult.status === "fulfilled" ? periodsResult.value : [],
@@ -2509,11 +2555,11 @@ export function PayrollOperationsView() {
     const label = `${readString(row, ["code"])} v${readString(row, ["versionNumber", "version_number"], "1")}`;
     if (
       action !== "activate" &&
-      !window.confirm(
+      !(await fluentConfirm(
         action === "delete"
           ? `Delete draft structure ${label}? This cannot be undone.`
           : `Retire structure ${label}? It stops applying after today.`,
-      )
+      ))
     ) {
       return;
     }
@@ -2590,11 +2636,6 @@ export function PayrollOperationsView() {
                     ? "Payroll reports"
                     : `Payroll ${CONFIG_TABS.find((entry) => entry.id === configTab)?.label.toLowerCase()}`;
 
-  const sectionDescription =
-    tab === "reports"
-      ? "Check payroll readiness, compare runs, review final settlements, and prepare reports or accounting records."
-      : "Runs, inputs, employee profiles, periods, and setup.";
-
   const canMutatePayroll = canPerformPermission(actor.permissionLabels, {
     permissions: [
       "payroll:create",
@@ -2629,6 +2670,10 @@ export function PayrollOperationsView() {
     ],
     mode: "any",
   });
+  const canStartSalaryRevision = canPerformPermission(actor.permissionLabels, {
+    permissions: ["employee_movements:create", "manage_employee_movements"],
+    mode: "any",
+  });
   const canApproveStatutoryRule = canPerformPermission(actor.permissionLabels, {
     permissions: ["payroll:statutory:approve"],
   });
@@ -2650,6 +2695,37 @@ export function PayrollOperationsView() {
         "bonus",
         "leaveRules",
       ].includes(configTab));
+
+  const primaryCreateMode: CreateDialogMode =
+    tab === "runs"
+      ? "run"
+      : tab === "inputs"
+        ? "input"
+        : tab === "sources"
+          ? "source"
+          : tab === "profiles"
+            ? "profile"
+            : tab === "periods"
+              ? "period"
+              : configTab === "components"
+                ? "component"
+                : configTab === "calendars"
+                  ? "calendar"
+                  : configTab === "structures"
+                    ? "structure"
+                    : configTab === "schemes"
+                      ? "scheme"
+                      : configTab === "mappings"
+                        ? "mapping"
+                        : configTab === "groups"
+                          ? "group"
+                          : configTab === "assignments"
+                            ? "assignment"
+                            : configTab === "overtime"
+                              ? "overtime"
+                              : configTab === "bonus"
+                                ? "bonus"
+                                : "leaveRule";
 
   const createButtonLabel =
     createMode === "run"
@@ -3350,53 +3426,96 @@ export function PayrollOperationsView() {
         {
           key: "employee",
           label: "Employee",
-          render: (row) => (
-            <div className="space-y-0.5">
-              <p className="font-medium">{readEmployeeLabel(row)}</p>
-              <p className="text-xs text-muted-foreground">
-                {readString(
-                  row,
-                  ["payroll_number", "payrollNumber"],
-                  "Payroll number pending",
-                )}
-              </p>
-            </div>
-          ),
+          defaultWidth: 230,
+          render: (row) => {
+            const employeeId = readNumber(row, ["employee_id", "employeeId"]);
+            const employee =
+              employeeId !== null ? employeeNames.get(employeeId) : undefined;
+            const name = readEmployeeLabel(row, employeeNames);
+            const initials = name
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase())
+              .join("");
+            return (
+              <div className="flex min-w-0 items-center gap-3 py-1">
+                <FluentAvatar
+                  color="brand"
+                  image={
+                    employee?.avatarUrl
+                      ? { src: employee.avatarUrl }
+                      : undefined
+                  }
+                  initials={initials || "—"}
+                  name={name}
+                  size={32}
+                />
+                <span className="min-w-0">
+                  <Text weight="semibold" className="!block truncate">
+                    {name}
+                  </Text>
+                  <Text
+                    size={200}
+                    className="!block truncate text-muted-foreground"
+                  >
+                    {[
+                      employee?.number,
+                      readString(row, ["payroll_number", "payrollNumber"]),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "Payroll number pending"}
+                  </Text>
+                </span>
+              </div>
+            );
+          },
         },
         {
           key: "status",
           label: "Payroll status",
-          render: (row) => (
-            <div className="space-y-0.5 text-xs">
-              <p>
-                {readBoolean(row, ["payroll_enabled", "payrollEnabled"])
-                  ? "Enabled"
-                  : "Disabled"}
-              </p>
-              <p className="text-muted-foreground">
-                {readBoolean(row, ["payroll_hold", "payrollHold"])
-                  ? "On hold"
-                  : "Normal processing"}
-              </p>
-            </div>
-          ),
+          defaultWidth: 165,
+          render: (row) => {
+            const enabled = readBoolean(row, [
+              "payroll_enabled",
+              "payrollEnabled",
+            ]);
+            const onHold = readBoolean(row, ["payroll_hold", "payrollHold"]);
+            return (
+              <div className="flex flex-col items-start gap-1">
+                <FluentBadge
+                  appearance="tint"
+                  color={enabled ? "success" : "subtle"}
+                >
+                  {enabled ? "Enabled" : "Disabled"}
+                </FluentBadge>
+                <Text size={200} className="text-muted-foreground">
+                  {onHold ? "On hold" : "Normal processing"}
+                </Text>
+              </div>
+            );
+          },
         },
         {
           key: "payment_method",
-          label: "Payment",
-          render: (row) =>
-            prettify(readString(row, ["payment_method", "paymentMethod"], "—")),
-        },
-        {
-          key: "pay_frequency",
-          label: "Frequency",
-          render: (row) =>
-            prettify(readString(row, ["pay_frequency", "payFrequency"], "—")),
-        },
-        {
-          key: "currency",
-          label: "Currency",
-          render: (row) => readString(row, ["currency"], "—"),
+          label: "Payment details",
+          defaultWidth: 190,
+          render: (row) => (
+            <div className="space-y-0.5">
+              <Text weight="medium" className="!block">
+                {prettify(
+                  readString(row, ["payment_method", "paymentMethod"], "—"),
+                )}
+              </Text>
+              <Text size={200} className="!block text-muted-foreground">
+                {prettify(
+                  readString(row, ["pay_frequency", "payFrequency"], "—"),
+                )}
+                {" · "}
+                {readString(row, ["currency"], "—")}
+              </Text>
+            </div>
+          ),
         },
         {
           key: "effective",
@@ -3413,34 +3532,37 @@ export function PayrollOperationsView() {
         {
           key: "actions",
           label: "Actions",
+          defaultWidth: 200,
           render: (row) => {
             const employeeId = readString(row, ["employeeId", "employee_id"]);
             return (
-              <div className="flex flex-wrap gap-1">
-                <button
-                  type="button"
-                  className={actionButtonClass}
+              <div className="flex items-center justify-end gap-2">
+                <FluentButton
+                  appearance="subtle"
+                  size="small"
+                  icon={<Eye20Regular />}
                   onClick={(event) => {
                     event.stopPropagation();
                     void openDetail(row);
                   }}
                 >
                   View
-                </button>
+                </FluentButton>
                 {employeeId ? (
-                  <button
-                    type="button"
-                    className={actionButtonClass}
+                  <FluentButton
+                    appearance="secondary"
+                    size="small"
+                    icon={<PersonMoney20Regular />}
                     onClick={(event) => {
                       event.stopPropagation();
                       setSalaryTarget({
                         employeeId,
-                        label: readEmployeeLabel(row),
+                        label: readEmployeeLabel(row, employeeNames),
                       });
                     }}
                   >
                     Salary
-                  </button>
+                  </FluentButton>
                 ) : null}
               </div>
             );
@@ -8665,17 +8787,22 @@ export function PayrollOperationsView() {
         "open_inputs",
         "openInputs",
       ]) ?? 0;
+    const dashboardEnabledProfiles = readNumber(dashboard, [
+      "enabled_profiles",
+      "enabledProfiles",
+      "payroll_profiles",
+      "profileCount",
+    ]);
     const enabledProfiles =
-      readNumber(dashboard, [
-        "enabled_profiles",
-        "enabledProfiles",
-        "payroll_profiles",
-        "profileCount",
-      ]) ?? 0;
+      profileSummaryRows !== null
+        ? profileSummaryRows.filter((profile) =>
+            readBoolean(profile, ["payroll_enabled", "payrollEnabled"]),
+          ).length
+        : (dashboardEnabledProfiles ?? 0);
     const totalPeriods =
       readNumber(dashboard, ["total_periods", "periodCount"]) ?? periods.length;
     return { activeRuns, openInputs, enabledProfiles, totalPeriods };
-  }, [dashboard, periods.length, recentRuns]);
+  }, [dashboard, periods.length, profileSummaryRows, recentRuns]);
 
   const openIssueGroup = React.useMemo(() => {
     if (!issueDialogCode || !reportResult) return null;
@@ -8723,17 +8850,48 @@ export function PayrollOperationsView() {
           next.set(id, {
             name: nameFromEmployeeRow(row),
             number: employeeNumberFromRow(row),
+            avatarUrl: employeeAvatarFromRow(row),
           });
         }
         setEmployeeNames(next);
+        setEmployeeDirectoryLoaded(true);
       })
       .catch(() => {
-        if (!cancelled) setEmployeeNames(new Map());
+        if (!cancelled) setEmployeeDirectoryLoaded(true);
       });
     return () => {
       cancelled = true;
     };
   }, [reportResult]);
+
+  React.useEffect(() => {
+    if (tab !== "profiles" || employeeDirectoryLoaded) return;
+    const token = readStoredToken();
+    if (!token) return;
+    let cancelled = false;
+    void listAllEmployees(token, {}, { pageSize: 100, maxPages: 20 })
+      .then((employees) => {
+        if (cancelled) return;
+        const next: EmployeeNameLookup = new Map();
+        for (const employee of employees) {
+          const id = readNumber(employee, ["id", "employee_id", "employeeId"]);
+          if (id === null) continue;
+          next.set(id, {
+            name: nameFromEmployeeRow(employee),
+            number: employeeNumberFromRow(employee),
+            avatarUrl: employeeAvatarFromRow(employee),
+          });
+        }
+        setEmployeeNames(next);
+        setEmployeeDirectoryLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) setEmployeeDirectoryLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeDirectoryLoaded, tab]);
 
   if (!actor.ready) {
     return (
@@ -8749,152 +8907,226 @@ export function PayrollOperationsView() {
   }
 
   return (
-    <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-base font-semibold text-foreground">Payroll</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {sectionDescription}
-          </p>
-        </div>
-      </div>
+    <div className="w-full space-y-5 pb-6">
+      <section>
+        <header className="flex min-h-14 items-center gap-3 border-b border-border/70 px-1 pb-3">
+          <PersonMoney20Regular
+            className="size-6 shrink-0 text-primary"
+            aria-hidden="true"
+          />
+          <Text as="h1" size={500} weight="semibold">
+            Payroll
+          </Text>
+        </header>
 
-      <div className="tab-rail-scroll">
-        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
-          {TABS.map((entry) => {
-            const active = tab === entry.id;
-            return (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setTab(entry.id)}
-                className={cn(
-                  "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-                  active
-                    ? "border-[var(--primary)] text-[var(--primary)]"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {entry.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {tab === "configuration" ? (
         <div className="tab-rail-scroll">
-          <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
-            {CONFIG_TABS.map((entry) => {
-              const active = configTab === entry.id;
+          <TabList
+            aria-label="Payroll sections"
+            size="small"
+            selectedValue={tab}
+            onTabSelect={(_, data) => setTab(data.value as PayrollTab)}
+          >
+            {TABS.map((entry) => {
               return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => setConfigTab(entry.id)}
-                  className={cn(
-                    "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
-                    active
-                      ? "border-[var(--primary)] text-[var(--primary)]"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                >
+                <Tab key={entry.id} value={entry.id} className="shrink-0">
                   {entry.label}
-                </button>
+                </Tab>
               );
             })}
-          </div>
+          </TabList>
         </div>
+      </section>
+
+      {tab === "configuration" ? (
+        <FluentCard className="overflow-hidden p-0">
+          <div className="border-b border-border/70 px-4 py-3">
+            <Text weight="semibold">Payroll configuration</Text>
+            <Text
+              as="p"
+              size={200}
+              className="mt-0.5 !block text-muted-foreground"
+            >
+              Configure the building blocks used to calculate and process
+              payroll.
+            </Text>
+          </div>
+          <div className="tab-rail-scroll px-2">
+            <TabList
+              aria-label="Payroll configuration sections"
+              size="small"
+              selectedValue={configTab}
+              onTabSelect={(_, data) =>
+                setConfigTab(data.value as PayrollConfigTab)
+              }
+            >
+              {CONFIG_TABS.map((entry) => {
+                return (
+                  <Tab key={entry.id} value={entry.id} className="shrink-0">
+                    {entry.label}
+                  </Tab>
+                );
+              })}
+            </TabList>
+          </div>
+        </FluentCard>
       ) : null}
 
       {error ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </div>
+        <MessageBar intent="error">
+          <MessageBarBody>{error}</MessageBarBody>
+        </MessageBar>
       ) : null}
 
       {tab === "overview" ? (
-        <div className="space-y-4">
-          <StatStrip
-            items={[
+        <div className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
               {
                 label: "Active runs",
                 value: overviewStats.activeRuns,
                 hint: "Processing or waiting for approval",
+                icon: <ArrowClockwise20Regular aria-hidden="true" />,
               },
               {
                 label: "Open inputs",
                 value: overviewStats.openInputs,
                 hint: "Not yet approved",
+                icon: <DocumentBulletList20Regular aria-hidden="true" />,
               },
               {
                 label: "Enabled profiles",
                 value: overviewStats.enabledProfiles,
                 hint: "Employees included in payroll",
+                icon: <PersonMoney20Regular aria-hidden="true" />,
               },
               {
                 label: "Periods",
                 value: overviewStats.totalPeriods,
                 hint: "Generated pay periods",
+                icon: <CheckmarkCircle20Regular aria-hidden="true" />,
               },
-            ]}
-          />
+            ].map((item) => (
+              <FluentCard key={item.label} className="min-h-32 p-4 shadow-sm">
+                <FluentCardHeader
+                  image={
+                    <span className="flex size-7 items-center justify-center text-primary">
+                      {item.icon}
+                    </span>
+                  }
+                  header={
+                    <Text
+                      size={200}
+                      weight="semibold"
+                      className="uppercase tracking-wide text-muted-foreground"
+                    >
+                      {item.label}
+                    </Text>
+                  }
+                />
+                <Text
+                  size={700}
+                  weight="semibold"
+                  className="mt-2 tabular-nums"
+                >
+                  {item.value}
+                </Text>
+                <Text size={200} className="text-muted-foreground">
+                  {item.hint}
+                </Text>
+              </FluentCard>
+            ))}
+          </div>
 
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="grid grid-cols-2 xl:grid-cols-5">
+          <FluentCard className="overflow-hidden p-0 shadow-sm">
+            <div className="flex items-start gap-3 border-b border-border/70 px-5 py-4">
+              <BuildingBank20Regular
+                className="mt-0.5 size-6 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <Text size={400} weight="semibold">
+                  Payroll setup
+                </Text>
+                <Text
+                  as="p"
+                  size={200}
+                  className="mt-1 !block text-muted-foreground"
+                >
+                  Review the building blocks used to calculate and post payroll.
+                </Text>
+              </div>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
               {[
                 {
                   id: "components" as const,
                   label: "Components",
                   value: components.length,
+                  detail: "Earnings and deductions",
+                  icon: <DocumentBulletList20Regular aria-hidden="true" />,
                 },
                 {
                   id: "calendars" as const,
                   label: "Calendars",
                   value: calendars.length,
+                  detail: "Payroll schedules",
+                  icon: <CheckmarkCircle20Regular aria-hidden="true" />,
                 },
                 {
                   id: "structures" as const,
                   label: "Structures",
                   value: structures.length,
+                  detail: "Salary arrangements",
+                  icon: <PersonMoney20Regular aria-hidden="true" />,
                 },
                 {
                   id: "schemes" as const,
                   label: "Schemes",
                   value: schemes.length,
+                  detail: "Statutory programmes",
+                  icon: <BuildingBank20Regular aria-hidden="true" />,
                 },
                 {
                   id: "mappings" as const,
                   label: "Mappings",
                   value: mappings.length,
+                  detail: "Accounting destinations",
+                  icon: <ArrowSwap20Regular aria-hidden="true" />,
                 },
-              ].map((item, index) => (
-                <button
+              ].map((item) => (
+                <FluentButton
                   key={item.id}
-                  type="button"
+                  appearance="subtle"
                   onClick={() => {
                     setConfigTab(item.id);
                     setTab("configuration");
                   }}
-                  className={cn(
-                    "border-border px-4 py-3.5 text-left transition hover:bg-muted/40",
-                    index > 0 && "border-t",
-                    "xl:border-t-0",
-                    index % 2 === 1 && "border-l",
-                    index > 0 && "xl:border-l",
-                  )}
+                  className="!h-auto !min-h-24 !justify-start !rounded-xl !border !border-border/70 !bg-background !px-4 !py-3 !text-left hover:!border-primary/40 hover:!bg-primary/[0.035]"
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">
-                    {item.value}
-                  </p>
-                </button>
+                  <span className="flex w-full items-center gap-3">
+                    <span className="shrink-0 text-primary">{item.icon}</span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <Text weight="semibold" className="!block">
+                        {item.label}
+                      </Text>
+                      <Text
+                        size={200}
+                        className="!block truncate text-muted-foreground"
+                      >
+                        {item.detail}
+                      </Text>
+                    </span>
+                    <FluentBadge appearance="tint" color="brand" size="large">
+                      {item.value}
+                    </FluentBadge>
+                  </span>
+                </FluentButton>
               ))}
             </div>
+          </FluentCard>
 
-            <div className="border-t border-border p-4">
+          <FluentCard className="p-4 shadow-sm">
+            <div>
               <div className="flex items-end justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">
@@ -8904,13 +9136,12 @@ export function PayrollOperationsView() {
                     Latest payroll cycles.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:bg-background dark:text-foreground"
+                <FluentButton
+                  appearance="secondary"
                   onClick={() => setTab("runs")}
                 >
                   View all
-                </button>
+                </FluentButton>
               </div>
               <div className="mt-4 space-y-2">
                 {recentRuns.length === 0 ? (
@@ -8921,10 +9152,10 @@ export function PayrollOperationsView() {
                   recentRuns.map((row, index) => {
                     const status = readStatus(row);
                     return (
-                      <button
+                      <FluentButton
                         key={`recent-run-${rowId(row) || index}`}
-                        type="button"
-                        className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-2 text-left transition hover:bg-muted/30"
+                        appearance="subtle"
+                        className="!flex !h-auto !w-full !items-center !justify-between !gap-3 !rounded-lg !px-3 !py-2 !text-left"
                         onClick={() => {
                           setTab("runs");
                           void openDetail(row);
@@ -8949,16 +9180,19 @@ export function PayrollOperationsView() {
                             )}
                           </p>
                         </div>
-                        <Badge variant="outline" className={statusTone(status)}>
+                        <FluentBadge
+                          appearance="outline"
+                          className={statusTone(status)}
+                        >
                           {prettify(status)}
-                        </Badge>
-                      </button>
+                        </FluentBadge>
+                      </FluentButton>
                     );
                   })
                 )}
               </div>
             </div>
-          </div>
+          </FluentCard>
         </div>
       ) : tab === "reports" ? (
         <div className="space-y-4">
@@ -10801,6 +11035,10 @@ export function PayrollOperationsView() {
             loading={loading}
             itemsPerPage={20}
             showExport={false}
+            fluent
+            sortIconOnly
+            toolbarClassName="!rounded-t-xl !border-border/70 !bg-card !px-4 !py-3"
+            frameClassName="!rounded-b-xl !border-border/70 !shadow-sm"
             storageKey={`operations-payroll-${tab}-${configTab}`}
             toolbarStart={
               <div className="min-w-0">
@@ -10817,7 +11055,7 @@ export function PayrollOperationsView() {
                   value={search}
                   onChange={setSearch}
                 />
-                {["runs", "inputs", "sources", "profiles"].includes(tab) ? (
+                {["runs", "inputs", "sources"].includes(tab) ? (
                   <FluentSelect
                     ariaLabel="Payroll period"
                     value={periodFilter}
@@ -10835,59 +11073,25 @@ export function PayrollOperationsView() {
                     ]}
                   />
                 ) : null}
-                {["runs", "inputs", "sources", "profiles", "periods"].includes(
-                  tab,
-                ) ? (
-                  <input
-                    className="h-10 w-28 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-border dark:bg-background"
+                {["runs", "inputs", "sources", "periods"].includes(tab) ? (
+                  <FluentInput
+                    size="medium"
+                    className="w-32"
                     value={statusFilter}
                     onChange={(event) => setStatusFilter(event.target.value)}
                     placeholder="Status"
                   />
                 ) : null}
                 {canCreate ? (
-                  <button
-                    type="button"
-                    className={primaryButtonClass}
-                    onClick={() =>
-                      openCreate(
-                        tab === "runs"
-                          ? "run"
-                          : tab === "inputs"
-                            ? "input"
-                            : tab === "sources"
-                              ? "source"
-                              : tab === "profiles"
-                                ? "profile"
-                                : tab === "periods"
-                                  ? "period"
-                                  : configTab === "components"
-                                    ? "component"
-                                    : configTab === "calendars"
-                                      ? "calendar"
-                                      : configTab === "structures"
-                                        ? "structure"
-                                        : configTab === "schemes"
-                                          ? "scheme"
-                                          : configTab === "mappings"
-                                            ? "mapping"
-                                            : configTab === "groups"
-                                              ? "group"
-                                              : configTab === "assignments"
-                                                ? "assignment"
-                                                : configTab === "overtime"
-                                                  ? "overtime"
-                                                  : configTab === "bonus"
-                                                    ? "bonus"
-                                                    : "leaveRule",
-                      )
-                    }
+                  <FluentButton
+                    appearance="primary"
+                    icon={<Add20Regular />}
+                    onClick={() => openCreate(primaryCreateMode)}
                   >
-                    <Add20Regular className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">
                       {tab === "periods" ? "Generate period" : "Create"}
                     </span>
-                  </button>
+                  </FluentButton>
                 ) : null}
                 {tab === "configuration" && configTab === "schemes" ? (
                   <button
@@ -10929,22 +11133,53 @@ export function PayrollOperationsView() {
                     </button>
                   </>
                 ) : null}
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-primary transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background"
+                <FluentButton
+                  appearance="subtle"
+                  size="small"
+                  icon={
+                    <ArrowClockwise20Regular
+                      className={cn(loading && "animate-spin")}
+                    />
+                  }
                   disabled={loading}
                   onClick={() => void loadRows({ refreshLookups: true })}
                   aria-label="Refresh"
                   title="Refresh"
-                >
-                  <ArrowClockwise20Regular
-                    className={cn(
-                      "h-3.5 w-3.5 text-primary",
-                      loading && "animate-spin",
-                    )}
-                  />
-                </button>
+                />
               </>
+            }
+            emptyContent={
+              <div className="flex min-h-44 flex-col items-center justify-center px-6 py-8 text-center">
+                <DocumentSearch20Regular
+                  className="size-10 text-primary/75"
+                  aria-hidden="true"
+                />
+                <Text
+                  size={400}
+                  weight="semibold"
+                  className="mt-3 !block text-foreground"
+                >
+                  No {sectionTitle.toLowerCase()} yet
+                </Text>
+                <Text
+                  size={200}
+                  className="mt-1 !block max-w-md text-muted-foreground"
+                >
+                  {search || statusFilter || periodFilter
+                    ? "No records match the current search or filters. Try changing them."
+                    : `Create the first ${sectionTitle.toLowerCase().replace(/s$/, "")} to begin working here.`}
+                </Text>
+                {canCreate && !search && !statusFilter && !periodFilter ? (
+                  <FluentButton
+                    appearance="primary"
+                    icon={<Add20Regular />}
+                    className="mt-4"
+                    onClick={() => openCreate(primaryCreateMode)}
+                  >
+                    {tab === "periods" ? "Generate period" : "Create"}
+                  </FluentButton>
+                ) : null}
+              </div>
             }
             onRowSelect={(_, row) => {
               if (!row) return;
@@ -11166,6 +11401,7 @@ export function PayrollOperationsView() {
         employeeLabel={salaryTarget?.label ?? ""}
         structures={structures}
         canEdit={canMutatePayroll}
+        canStartRevision={canStartSalaryRevision}
         onChanged={() => void loadRows({ refreshLookups: true })}
       />
 

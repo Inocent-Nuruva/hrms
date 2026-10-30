@@ -6,6 +6,10 @@ import { KpiCategoriesFlyout } from "./kpi-categories-flyout";
 import { KpiCategorySelect } from "./kpi-category-select";
 import { KpiImportPanel } from "./kpi-import-panel";
 import {
+  fluentConfirm,
+  fluentPrompt,
+} from "@/components/ui/fluent-dialog-service";
+import {
   cleanKpiCategory,
   collectKpiCategories,
   resolveKpiCategory,
@@ -2225,9 +2229,9 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `goal-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          const raw = window.prompt(
+                          const raw = await fluentPrompt(
                             "Progress percentage (0–100)",
                             String(
                               readNumber(goal, [
@@ -2266,7 +2270,7 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `complete-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
                           void runAction(
                             `complete-${id}`,
@@ -2287,9 +2291,9 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `carry-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          const title = window.prompt(
+                          const title = await fluentPrompt(
                             "Title for the new development plan",
                             `${readString(row, ["title"], "Development plan")} — follow-up`,
                           );
@@ -2737,7 +2741,7 @@ export function PerformanceManagementView({
                 appearance="primary"
                 size="small"
                 icon={<Edit20Regular />}
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation();
                   openCreate("kpi-edit", seedKpiDefinitionForm(row));
                 }}
@@ -2763,12 +2767,12 @@ export function PerformanceManagementView({
                 data-action="lock"
                 type="button"
                 appearance="secondary"
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation();
                   const id = rowId(row);
                   if (
                     !id ||
-                    !window.confirm(`Archive KPI ${optionLabel(row)}?`)
+                    !(await fluentConfirm(`Archive KPI ${optionLabel(row)}?`))
                   )
                     return;
                   void runAction(
@@ -3069,7 +3073,7 @@ export function PerformanceManagementView({
                     size="small"
                     type="button"
                     appearance="secondary"
-                    onClick={(event) => {
+                    onClick={async (event) => {
                       event.stopPropagation();
                       const value = (
                         camel: string,
@@ -3183,11 +3187,13 @@ export function PerformanceManagementView({
                     size="small"
                     appearance="secondary"
                     disabled={busyId === `reopen-period-${id}`}
-                    onClick={(event) => {
+                    onClick={async (event) => {
                       event.stopPropagation();
-                      const reason = window
-                        .prompt("Reason for reopening this KPI cycle")
-                        ?.trim();
+                      const reason = (
+                        await fluentPrompt(
+                          "Reason for reopening this KPI cycle",
+                        )
+                      )?.trim();
                       if (!reason) return;
                       void runAction(
                         `reopen-period-${id}`,
@@ -4284,10 +4290,10 @@ export function PerformanceManagementView({
               <FluentButton
                 type="button"
                 appearance="secondary"
-                onClick={() => {
-                  const reviewId = window
-                    .prompt("Review ID to inspect")
-                    ?.trim();
+                onClick={async () => {
+                  const reviewId = (
+                    await fluentPrompt("Review ID to inspect")
+                  )?.trim();
                   if (!reviewId) return;
                   void runAction(
                     `workflow-${reviewId}`,

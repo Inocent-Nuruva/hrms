@@ -1,21 +1,31 @@
 "use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
 import * as React from "react";
-import { OverlayDrawer, DrawerHeader, DrawerHeaderTitle, DrawerBody, Button as FluentButton } from "@fluentui/react-components";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  DrawerBody,
+  DrawerHeader,
+  DrawerHeaderTitle,
+  Field,
+  Input,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  OverlayDrawer,
+} from "@fluentui/react-components";
 
 import { toast } from "@/components/ui/fluent-toast-store";
 
-import {
-  Dialog,
-  DialogDescription,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-} from "@/components/animate-ui/components/base/dialog";
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared";
-import { Badge } from "@/components/ui/badge";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import {
   assignEmployeePayrollSalary,
@@ -26,14 +36,7 @@ import {
   type AdminRecord,
 } from "@/lib/admin-api";
 import { readStoredSessionTokens } from "@/lib/session-client";
-import { cn } from "@/lib/utils";
-
-const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:border-border dark:bg-background";
-const primaryButtonClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold !text-white transition hover:brightness-95 disabled:opacity-60";
-const secondaryButtonClass =
-  "inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted";
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 
 const WARNING_LABELS: Record<string, string> = {
   NO_COMPENSATION:
@@ -113,6 +116,7 @@ export function PayrollEmployeeSalaryDialog({
   employeeLabel,
   structures,
   canEdit,
+  canStartRevision = false,
   canApprove = canEdit,
   onChanged,
   drawer = false,
@@ -123,6 +127,7 @@ export function PayrollEmployeeSalaryDialog({
   employeeLabel: string;
   structures: AdminRecord[];
   canEdit: boolean;
+  canStartRevision?: boolean;
   canApprove?: boolean;
   onChanged?: () => void;
   drawer?: boolean;
@@ -143,13 +148,25 @@ export function PayrollEmployeeSalaryDialog({
   const [approvers, setApprovers] = React.useState<AdminRecord[]>([]);
   const [assignedApproverId, setAssignedApproverId] = React.useState("");
 
-  const closeSalary = (nextOpen: boolean) => {
-    if (!nextOpen && (saving || (dirty && !window.confirm("Discard unsaved salary changes?")))) return;
+  const closeSalary = async (nextOpen: boolean) => {
+    if (!nextOpen && saving) return;
+    if (
+      !nextOpen &&
+      dirty &&
+      !(await fluentConfirm("Discard unsaved salary changes?", {
+        title: "Discard salary changes?",
+        confirmLabel: "Discard changes",
+      }))
+    )
+      return;
     onOpenChange(nextOpen);
   };
   React.useEffect(() => {
     if (!open || !dirty) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [open, dirty]);
@@ -236,10 +253,21 @@ export function PayrollEmployeeSalaryDialog({
   }
 
   async function onAssign() {
+    if (!canEdit) {
+      setError("Assign starting salary permission is required.");
+      return;
+    }
     const token = readStoredSessionTokens().accessToken.trim();
     if (!token) return;
-    if (!structureCode || !baseSalary.trim() || !effectiveFrom || !assignedApproverId) {
-      setError("Structure, base salary, effective date and salary approver are required.");
+    if (
+      !structureCode ||
+      !baseSalary.trim() ||
+      !effectiveFrom ||
+      !assignedApproverId
+    ) {
+      setError(
+        "Structure, base salary, effective date and salary approver are required.",
+      );
       return;
     }
     const componentOverrides = Object.entries(overrides)
@@ -307,7 +335,11 @@ export function PayrollEmployeeSalaryDialog({
       setDirty(false);
       onChanged?.();
     } catch (errorObject) {
-      setError(errorObject instanceof Error ? errorObject.message : "Failed to approve salary.");
+      setError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to approve salary.",
+      );
     } finally {
       setSaving(false);
     }
@@ -329,9 +361,22 @@ export function PayrollEmployeeSalaryDialog({
   const approvedBy = rec(approval?.approved_by);
 
   return (
-    <SalarySurface open={open} onOpenChange={closeSalary} drawer={drawer} employeeLabel={employeeLabel}>
-        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        <div onChangeCapture={() => setDirty(true)} className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+    <SalarySurface
+      open={open}
+      onOpenChange={(nextOpen) => void closeSalary(nextOpen)}
+      drawer={drawer}
+      employeeLabel={employeeLabel}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        {error ? (
+          <MessageBar intent="error">
+            <MessageBarBody>{error}</MessageBarBody>
+          </MessageBar>
+        ) : null}
+        <div
+          onChangeCapture={() => setDirty(true)}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+        >
           {loading && !salary ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <FluentLoadingIndicator className="size-4 animate-spin" />
@@ -340,11 +385,13 @@ export function PayrollEmployeeSalaryDialog({
           ) : null}
 
           {warnings.length > 0 ? (
-            <div className="space-y-1 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-              {warnings.map((code) => (
-                <p key={code}>{WARNING_LABELS[code] ?? prettify(code)}</p>
-              ))}
-            </div>
+            <MessageBar intent="warning">
+              <MessageBarBody className="space-y-1">
+                {warnings.map((code) => (
+                  <p key={code}>{WARNING_LABELS[code] ?? prettify(code)}</p>
+                ))}
+              </MessageBarBody>
+            </MessageBar>
           ) : null}
 
           {compensation ? (
@@ -373,18 +420,31 @@ export function PayrollEmployeeSalaryDialog({
           ) : null}
 
           {compensation ? (
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h3 className="text-sm font-semibold text-foreground">Approval trail</h3>
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold text-foreground">
+                Approval trail
+              </h3>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <SummaryField label="Submitted by" value={str(submittedBy, "name") || "Not recorded"} />
-                <SummaryField label="Assigned approver" value={str(assignedTo, "name") || "Any eligible salary approver"} />
-                <SummaryField label="Approved by" value={str(approvedBy, "name") || "Awaiting approval"} />
+                <SummaryField
+                  label="Submitted by"
+                  value={str(submittedBy, "name") || "Not recorded"}
+                />
+                <SummaryField
+                  label="Assigned approver"
+                  value={
+                    str(assignedTo, "name") || "Any eligible salary approver"
+                  }
+                />
+                <SummaryField
+                  label="Approved by"
+                  value={str(approvedBy, "name") || "Awaiting approval"}
+                />
               </div>
-            </div>
+            </Card>
           ) : null}
 
           {breakdown ? (
-            <div className="rounded-xl border border-border bg-card p-4">
+            <Card className="p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
                   Monthly breakdown
@@ -408,7 +468,7 @@ export function PayrollEmployeeSalaryDialog({
                         <p className="truncate font-medium text-foreground">
                           {str(line, "componentName") || code}
                           {overrideMap[code] ? (
-                            <Badge variant="outline" className="ml-2">
+                            <Badge appearance="outline" className="ml-2">
                               Override
                             </Badge>
                           ) : null}
@@ -430,7 +490,10 @@ export function PayrollEmployeeSalaryDialog({
               {recs(breakdown.skipped).length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {recs(breakdown.skipped).map((item) => (
-                    <Badge key={str(item, "component_code")} variant="outline">
+                    <Badge
+                      key={str(item, "component_code")}
+                      appearance="outline"
+                    >
                       {str(item, "component_code")}:{" "}
                       {SKIP_LABELS[str(item, "reason")] ??
                         prettify(str(item, "reason"))}
@@ -456,27 +519,48 @@ export function PayrollEmployeeSalaryDialog({
                   value={money(breakdown.employer_cost, currency)}
                 />
               </div>
-            </div>
+            </Card>
           ) : null}
 
           {compensation && canEdit ? (
-            <p className="text-xs text-muted-foreground">
-              To change base salary, structure or overrides, raise a salary
-              revision movement for this employee. Changes then follow the
-              movement approval workflow.
-            </p>
+            <MessageBar intent="info">
+              <MessageBarBody>
+                <span className="font-semibold">
+                  Need to change this salary?
+                </span>{" "}
+                Start a salary revision to update the base salary, structure, or
+                employee overrides. The revision will follow the movement
+                approval workflow before payroll uses it.
+              </MessageBarBody>
+              {canStartRevision ? (
+                <MessageBarActions>
+                  <Button
+                    appearance="primary"
+                    onClick={() => {
+                      window.location.assign(
+                        `/dashboard/movements/cases?create=salary-revision&employee_id=${encodeURIComponent(employeeId)}`,
+                      );
+                    }}
+                  >
+                    Start salary revision
+                  </Button>
+                </MessageBarActions>
+              ) : (
+                <p className="mt-2 text-xs font-medium text-muted-foreground">
+                  The Employee movements: create permission is required to start
+                  a revision.
+                </p>
+              )}
+            </MessageBar>
           ) : null}
 
           {salary && !compensation && canEdit ? (
-            <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+            <Card className="space-y-4 p-4">
               <h3 className="text-sm font-semibold text-foreground">
                 Assign salary structure
               </h3>
-              <div className="grid gap-3 md:grid-cols-3">
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Structure
-                  </span>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="Structure">
                   <FluentSelect
                     ariaLabel="Structure"
                     className="w-full"
@@ -491,34 +575,26 @@ export function PayrollEmployeeSalaryDialog({
                       })),
                     ]}
                   />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Base salary
-                  </span>
-                  <input
-                    className={inputClass}
+                </Field>
+                <Field label="Base salary">
+                  <Input
                     inputMode="decimal"
                     value={baseSalary}
-                    onChange={(event) => setBaseSalary(event.target.value)}
+                    onChange={(_, data) => setBaseSalary(data.value)}
                   />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Effective from
-                  </span>
+                </Field>
+                <Field label="Effective from">
                   <DateInput
-
-                    className={inputClass}
+                    className="max-w-none"
                     value={effectiveFrom}
-                    onChange={(event) => setEffectiveFrom(event.target.value)}
+                    onValueChange={setEffectiveFrom}
                   />
-                </label>
+                </Field>
               </div>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Salary approver
-                </span>
+              <Field
+                label="Salary approver"
+                hint="Only users granted “Approve starting salaries” can be selected. They are notified immediately."
+              >
                 <FluentSelect
                   ariaLabel="Salary approver"
                   className="w-full"
@@ -533,21 +609,14 @@ export function PayrollEmployeeSalaryDialog({
                     })),
                   ]}
                 />
-                <span className="text-xs text-muted-foreground">
-                  Only users granted “Approve starting salaries” can be selected. They are notified immediately.
-                </span>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Justification
-                </span>
-                <input
-                  className={inputClass}
+              </Field>
+              <Field label="Justification">
+                <Input
                   value={justification}
                   placeholder="Initial salary structure assignment"
-                  onChange={(event) => setJustification(event.target.value)}
+                  onChange={(_, data) => setJustification(data.value)}
                 />
-              </label>
+              </Field>
 
               {structureLines.length > 0 ? (
                 <div className="space-y-2">
@@ -602,13 +671,7 @@ export function PayrollEmployeeSalaryDialog({
                               { value: "exclude", label: "Exclude" },
                             ]}
                           />
-                          <input
-                            className={cn(
-                              inputClass,
-                              (draft.mode === "default" ||
-                                draft.mode === "exclude") &&
-                                "opacity-50",
-                            )}
+                          <Input
                             inputMode="decimal"
                             disabled={
                               draft.mode === "default" ||
@@ -618,10 +681,10 @@ export function PayrollEmployeeSalaryDialog({
                             placeholder={
                               draft.mode === "rate" ? "Rate %" : "Amount"
                             }
-                            onChange={(event) =>
+                            onChange={(_, data) =>
                               setOverrides((current) => ({
                                 ...current,
-                                [code]: { ...draft, value: event.target.value },
+                                [code]: { ...draft, value: data.value },
                               }))
                             }
                           />
@@ -630,17 +693,24 @@ export function PayrollEmployeeSalaryDialog({
                     })}
                 </div>
               ) : null}
-            </div>
+            </Card>
           ) : null}
-          {str(compensation, "status").toUpperCase() === "PENDING_APPROVAL" && canApprove ? (
-            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onApprove()}>
-              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
+          {str(compensation, "status").toUpperCase() === "PENDING_APPROVAL" &&
+          canApprove ? (
+            <Button
+              appearance="primary"
+              disabled={saving}
+              onClick={() => void onApprove()}
+            >
+              {saving ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : null}
               Approve starting salary
-            </button>
+            </Button>
           ) : null}
 
           {history.length > 0 ? (
-            <div className="rounded-xl border border-border bg-card p-4">
+            <Card className="p-4">
               <h3 className="text-sm font-semibold text-foreground">
                 Compensation history
               </h3>
@@ -667,45 +737,91 @@ export function PayrollEmployeeSalaryDialog({
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           ) : null}
         </div>
-        <div className="flex justify-end gap-3 border-t border-border pt-3">
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={() => closeSalary(false)}
-          >
-            Close
-          </button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
+          <Button onClick={() => void closeSalary(false)}>Close</Button>
           {salary && !compensation && canEdit ? (
-            <button
-              type="button"
-              className={primaryButtonClass}
+            <Button
+              appearance="primary"
               disabled={saving}
               onClick={() => void onAssign()}
             >
-              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
+              {saving ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : null}
               Assign salary
-            </button>
+            </Button>
           ) : null}
         </div>
+      </div>
     </SalarySurface>
   );
 }
 
-function SalarySurface({ open, onOpenChange, drawer, employeeLabel, children }: { open: boolean; onOpenChange: (open: boolean) => void; drawer: boolean; employeeLabel: string; children: React.ReactNode }) {
-  if (drawer) return <OverlayDrawer open={open} onOpenChange={(_, data) => onOpenChange(data.open)} position="end" size="large"><DrawerHeader><DrawerHeaderTitle action={<FluentButton onClick={() => onOpenChange(false)}>Close</FluentButton>}>Joining salary & payroll</DrawerHeaderTitle><p>{employeeLabel}</p></DrawerHeader><DrawerBody className="flex flex-col gap-4">{children}</DrawerBody></OverlayDrawer>;
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogPopup className="flex max-h-[90vh] w-[min(980px,96vw)] flex-col overflow-hidden sm:max-w-4xl"><DialogHeader><DialogTitle>Salary &amp; structure</DialogTitle><DialogDescription>{employeeLabel}</DialogDescription></DialogHeader>{children}</DialogPopup></Dialog>;
+function SalarySurface({
+  open,
+  onOpenChange,
+  drawer,
+  employeeLabel,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  drawer: boolean;
+  employeeLabel: string;
+  children: React.ReactNode;
+}) {
+  if (drawer)
+    return (
+      <OverlayDrawer
+        open={open}
+        onOpenChange={(_, data) => onOpenChange(data.open)}
+        position="end"
+        size="large"
+      >
+        <DrawerHeader>
+          <DrawerHeaderTitle
+            action={
+              <Button appearance="subtle" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            }
+          >
+            Joining salary & payroll
+          </DrawerHeaderTitle>
+          <p>{employeeLabel}</p>
+        </DrawerHeader>
+        <DrawerBody className="flex min-h-0 flex-col gap-4">
+          {children}
+        </DrawerBody>
+      </OverlayDrawer>
+    );
+  return (
+    <Dialog open={open} onOpenChange={(_, data) => onOpenChange(data.open)}>
+      <DialogSurface className="!w-[min(94vw,64rem)] !max-w-5xl">
+        <DialogBody className="!max-h-[90vh] !min-h-0">
+          <DialogTitle>Salary &amp; structure</DialogTitle>
+          <DialogContent className="!flex !min-h-0 !flex-col !overflow-hidden">
+            <p className="mb-4 text-sm text-muted-foreground">
+              {employeeLabel}
+            </p>
+            {children}
+          </DialogContent>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
 }
 
 function SummaryField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-background px-3 py-3">
+    <Card className="px-3 py-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
-    </div>
+    </Card>
   );
 }

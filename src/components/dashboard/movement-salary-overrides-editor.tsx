@@ -1,8 +1,9 @@
 "use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import * as React from "react";
-
+import { Badge, Card, Field, Input } from "@fluentui/react-components";
+import { Money20Regular } from "@fluentui/react-icons";
 
 import {
   getEmployeePayrollSalary,
@@ -11,10 +12,6 @@ import {
 } from "@/lib/admin-api";
 import { readStoredSessionTokens } from "@/lib/session-client";
 import { FluentSelect } from "@/components/ui/fluent-select";
-import { cn } from "@/lib/utils";
-
-const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50 dark:border-border dark:bg-background";
 
 /** Non-negative decimal accepted by the server's @IsNumberString. */
 const NUMBER_PATTERN = /^\+?(\d+(\.\d+)?|\.\d+)$/;
@@ -343,119 +340,146 @@ export function MovementSalaryOverridesEditor({
   if (!employeeId) return null;
 
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-muted/10 p-3 text-sm md:col-span-2">
-      <div>
-        <p className="font-medium">Structure overrides</p>
-        <p className="text-xs text-muted-foreground">
-          Employee-specific amounts for {resolvedCode || "the structure"}.
-          Components not overridden use the structure defaults.
-        </p>
+    <Card
+      appearance="outline"
+      className="overflow-hidden !border-[color:rgb(var(--primary-rgb)/0.22)] !bg-[color:rgb(var(--primary-rgb)/0.035)] !p-0 text-sm shadow-sm md:col-span-2"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[color:rgb(var(--primary-rgb)/0.16)] bg-[color:rgb(var(--primary-rgb)/0.065)] px-4 py-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <Money20Regular className="mt-0.5 size-5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <h3 className="font-semibold text-foreground">
+              Salary component adjustments
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Customize allowances and deductions for{" "}
+              {resolvedCode || "the selected salary structure"}. Components left
+              unchanged continue using their structure defaults.
+            </p>
+          </div>
+        </div>
+        {editable ? (
+          <Badge appearance="tint" color="informative">
+            {lines.length} adjustable{" "}
+            {lines.length === 1 ? "component" : "components"}
+          </Badge>
+        ) : null}
       </div>
 
-      {salaryState === "loading" || linesState === "loading" ? (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FluentLoadingIndicator className="size-3.5 animate-spin" />
-          Loading structure lines…
-        </p>
-      ) : null}
+      <div className="bg-background/55 px-4 py-2">
+        {salaryState === "loading" || linesState === "loading" ? (
+          <div
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+            role="status"
+          >
+            <FluentLoadingIndicator className="size-3.5 animate-spin" />
+            Loading structure lines…
+          </div>
+        ) : null}
 
-      {salaryState === "unavailable" ? (
-        <p className="text-xs text-muted-foreground">
-          You don&apos;t have access to payroll salary details, so overrides
-          can&apos;t be edited here. Overrides already saved on this movement
-          are kept; otherwise the employee&apos;s current overrides carry over
-          for components the new structure shares.
-        </p>
-      ) : null}
+        {salaryState === "unavailable" ? (
+          <p className="text-xs text-muted-foreground">
+            You don&apos;t have access to payroll salary details, so overrides
+            can&apos;t be edited here. Overrides already saved on this movement
+            are kept; otherwise the employee&apos;s current overrides carry over
+            for components the new structure shares.
+          </p>
+        ) : null}
 
-      {salaryState === "ready" && !resolvedCode ? (
-        <p className="text-xs text-muted-foreground">
-          This employee has no salary structure. Choose one above to set
-          overrides.
-        </p>
-      ) : null}
+        {salaryState === "ready" && !resolvedCode ? (
+          <p className="text-xs text-muted-foreground">
+            This employee has no salary structure. Choose one above to set
+            overrides.
+          </p>
+        ) : null}
 
-      {noVersion ? (
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          {resolvedCode} has no {keepsCurrentCode ? "" : "active "}version
-          effective on {effectiveDate || "the effective date"}.
-        </p>
-      ) : null}
+        {noVersion ? (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            {resolvedCode} has no {keepsCurrentCode ? "" : "active "}version
+            effective on {effectiveDate || "the effective date"}.
+          </p>
+        ) : null}
 
-      {linesState === "error" ? (
-        <p className="text-xs text-rose-600">
-          Couldn&apos;t load the lines of {resolvedCode}.
-        </p>
-      ) : null}
+        {linesState === "error" ? (
+          <p className="text-xs text-rose-600">
+            Couldn&apos;t load the lines of {resolvedCode}.
+          </p>
+        ) : null}
 
-      {dropped.length > 0 ? (
-        <p className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-          Not in {resolvedCode}, so these overrides will be dropped:{" "}
-          {dropped.join(", ")}.
-        </p>
-      ) : null}
+        {dropped.length > 0 ? (
+          <p className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            Not in {resolvedCode}, so these overrides will be dropped:{" "}
+            {dropped.join(", ")}.
+          </p>
+        ) : null}
 
-      {editable && lines.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {resolvedCode} has no lines besides BASIC.
-        </p>
-      ) : null}
+        {editable && lines.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {resolvedCode} has no lines besides BASIC.
+          </p>
+        ) : null}
 
-      {editable
-        ? lines.map((line) => {
-            const draft = drafts[line.code] ?? DEFAULT_DRAFT;
-            const needsValue = draft.mode === "amount" || draft.mode === "rate";
-            const invalid = needsValue && draftError(draft) !== null;
-            return (
-              <div
-                key={line.code}
-                className="grid items-center gap-2 rounded-md bg-background px-3 py-2 md:grid-cols-[minmax(0,1fr)_150px_150px]"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{line.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Default{" "}
-                    {line.defaultRate
-                      ? `${line.defaultRate}% of base`
-                      : formatAmount(line.defaultAmount || "0")}
-                  </p>
+        {editable
+          ? lines.map((line) => {
+              const draft = drafts[line.code] ?? DEFAULT_DRAFT;
+              const needsValue =
+                draft.mode === "amount" || draft.mode === "rate";
+              const invalid = needsValue && draftError(draft) !== null;
+              return (
+                <div
+                  key={line.code}
+                  className="grid items-start gap-3 border-t border-border/70 py-3 first:border-t-0 md:grid-cols-[minmax(0,1fr)_170px_180px]"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{line.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Default{" "}
+                      {line.defaultRate
+                        ? `${line.defaultRate}% of base`
+                        : formatAmount(line.defaultAmount || "0")}
+                    </p>
+                  </div>
+                  <FluentSelect
+                    ariaLabel={`${line.name} override`}
+                    className="w-full"
+                    value={draft.mode}
+                    onChange={(value) =>
+                      updateDraft(line.code, {
+                        mode: value as DraftMode,
+                        value: "",
+                      })
+                    }
+                    options={[
+                      { value: "default", label: "Use default" },
+                      { value: "amount", label: "Fixed amount" },
+                      { value: "rate", label: "% of base" },
+                      { value: "exclude", label: "Exclude" },
+                    ]}
+                  />
+                  <Field
+                    validationState={invalid ? "error" : "none"}
+                    validationMessage={invalid ? draftError(draft) : undefined}
+                  >
+                    <Input
+                      className="w-full"
+                      aria-label={`${line.name} override value`}
+                      inputMode="decimal"
+                      disabled={!needsValue}
+                      placeholder={draft.mode === "rate" ? "Rate %" : "Amount"}
+                      value={draft.value}
+                      onChange={(_event, data) =>
+                        updateDraft(line.code, {
+                          ...draft,
+                          value: data.value,
+                        })
+                      }
+                    />
+                  </Field>
                 </div>
-                <FluentSelect
-                  ariaLabel={`${line.name} override`}
-                  className="w-full"
-                  value={draft.mode}
-                  onChange={(value) =>
-                    updateDraft(line.code, {
-                      mode: value as DraftMode,
-                      value: "",
-                    })
-                  }
-                  options={[
-                    { value: "default", label: "Use default" },
-                    { value: "amount", label: "Fixed amount" },
-                    { value: "rate", label: "% of base" },
-                    { value: "exclude", label: "Exclude" },
-                  ]}
-                />
-                <input
-                  className={cn(inputClass, invalid && "border-rose-400")}
-                  aria-label={`${line.name} override value`}
-                  aria-invalid={invalid || undefined}
-                  inputMode="decimal"
-                  disabled={!needsValue}
-                  placeholder={draft.mode === "rate" ? "Rate %" : "Amount"}
-                  value={draft.value}
-                  onChange={(event) =>
-                    updateDraft(line.code, {
-                      ...draft,
-                      value: event.target.value,
-                    })
-                  }
-                />
-              </div>
-            );
-          })
-        : null}
-    </div>
+              );
+            })
+          : null}
+      </div>
+    </Card>
   );
 }

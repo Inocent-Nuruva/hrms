@@ -20,12 +20,13 @@ function requirementActionLabel(requirement: OnboardingReadinessRequirement) {
   return "Open requirement"
 }
 
-export function OnboardingReadinessOverview({ token, requestId, employeeName, canActivate, canViewPayroll = false, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
+export function OnboardingReadinessOverview({ token, requestId, employeeName, canActivate, canViewPayroll = false, canViewContracts = false, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
   token: string
   requestId: number
   employeeName: string
   canActivate: boolean
   canViewPayroll?: boolean
+  canViewContracts?: boolean
   saving: boolean
   onActivate: () => void
   onNavigate: (action: OnboardingReadinessRequirement["action"], requirementId: string) => void
@@ -71,7 +72,11 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
     }
   }, [token, requestId, revision, refreshKey, saving])
   const complete = (item: OnboardingReadinessRequirement) => ["complete", "skipped"].includes(item.status)
-  const visibleRequirements = readiness?.requirements.filter((item) => canViewPayroll || item.action !== "payroll") ?? []
+  const visibleRequirements = readiness?.requirements.filter((item) => {
+    if (item.action === "payroll") return canViewPayroll
+    if (item.action === "contracts") return canViewContracts
+    return true
+  }) ?? []
   const outstanding = visibleRequirements.filter((item) => item.required && !complete(item))
   const optional = visibleRequirements.filter((item) => !item.required && !complete(item))
   const completed = visibleRequirements.filter(complete)
@@ -86,7 +91,7 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
     { label: "Registration & review", actions: ["details"] },
     { label: "Checklist & approvals", actions: ["tasks", "approvals"] },
     ...(canViewPayroll ? [{ label: "Payroll & salary", actions: ["payroll"] }] : []),
-    { label: "Employment contract", actions: ["contracts"] },
+    ...(canViewContracts ? [{ label: "Employment contract", actions: ["contracts"] }] : []),
   ]
   const title = readiness?.closed
     ? readiness.request_status === "completed" ? "Onboarding finalized" : "Onboarding closed"

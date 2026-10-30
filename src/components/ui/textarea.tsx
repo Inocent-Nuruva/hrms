@@ -21,6 +21,7 @@ type TextareaProps = Omit<FluentTextareaProps, "size"> & {
   size?: "xSmall" | "small" | "mediumSmall" | "large";
   containerClassName?: string;
   formatting?: boolean;
+  formattingHint?: boolean | string;
 };
 
 const sizeClasses: Record<NonNullable<TextareaProps["size"]>, string> = {
@@ -113,6 +114,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       disabled,
       error,
       formatting,
+      formattingHint,
       size = "small",
       value,
       defaultValue,
@@ -137,10 +139,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       if (editor.innerHTML !== html) editor.innerHTML = html;
     }, [currentValue, richText]);
 
-    const notifyChange = (
-      textarea: HTMLTextAreaElement,
-      nextValue: string,
-    ) => {
+    const notifyChange = (textarea: HTMLTextAreaElement, nextValue: string) => {
       const event = {
         target: textarea,
         currentTarget: textarea,
@@ -232,16 +231,17 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
               emitChange(next);
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === "Enter" || event.key === "Backspace") {
                 const selection = window.getSelection();
                 const anchor = selection?.anchorNode;
                 const element =
                   anchor instanceof HTMLElement
                     ? anchor
                     : anchor?.parentElement;
-                if (element?.closest("li")?.textContent?.trim()) {
+                const listItem = element?.closest("li");
+                if (listItem && !listItem.textContent?.trim()) {
                   event.preventDefault();
-                  document.execCommand("insertParagraph");
+                  document.execCommand("outdent");
                   window.requestAnimationFrame(() => {
                     if (editorRef.current)
                       emitChange(editorToMarkdown(editorRef.current));
@@ -274,10 +274,20 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
           />
         </div>
       );
-      return error ? (
+      const hint = formattingHint
+        ? typeof formattingHint === "string"
+          ? formattingHint
+          : "Press Enter or Backspace on an empty list item to exit the list."
+        : "";
+      return error || hint ? (
         <div className="flex w-full flex-col gap-2">
           {richEditor}
-          <Error size={size === "large" ? "large" : "small"}>{error}</Error>
+          {hint ? (
+            <p className="text-xs text-muted-foreground">{hint}</p>
+          ) : null}
+          {error ? (
+            <Error size={size === "large" ? "large" : "small"}>{error}</Error>
+          ) : null}
         </div>
       ) : (
         richEditor

@@ -122,6 +122,13 @@ export const PAYROLL_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+export const EMPLOYMENT_CONTRACT_READ_PERMISSION: PermissionRequirement = {
+  permissions: ["employment_contracts:read", "employment_contracts:manage"],
+  mode: "any",
+}
+
+export const EMPLOYMENT_CONTRACT_MANAGE_PERMISSION = "employment_contracts:manage"
+
 /**
  * HR Performance (`/dashboard/performance/*`).
  * Company dashboard actors can see the HR performance overview/setup shell; deeper
@@ -1047,7 +1054,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/inactive": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
   "/dashboard/employees/invite": "employees:create",
-  "/dashboard/employees/contracts": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  "/dashboard/employees/contracts": EMPLOYMENT_CONTRACT_READ_PERMISSION,
   "/dashboard/employees/salary-approvals": {
     permissions: ["payroll:salary:approve", "payroll:profiles:read"],
     mode: "any",

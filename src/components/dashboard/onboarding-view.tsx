@@ -1,13 +1,17 @@
-"use client"
+"use client";
 
-import { DateInput } from "@/components/ui/date-input"
-import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment"
-import { onboardingStepProgress } from "@/lib/onboarding-step-progress"
-import { Textarea } from "@/components/ui/textarea"
-import { DateTimeInput } from "@/components/ui/date-time-input"
-import * as React from "react"
-import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { DateInput } from "@/components/ui/date-input";
+import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment";
+import { onboardingStepProgress } from "@/lib/onboarding-step-progress";
+import { Textarea } from "@/components/ui/textarea";
+import { DateTimeInput } from "@/components/ui/date-time-input";
+import {
+  fluentConfirm,
+  fluentPrompt,
+} from "@/components/ui/fluent-dialog-service";
+import * as React from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Button as FluentButton,
   Avatar as FluentAvatar,
@@ -17,13 +21,13 @@ import {
   OverlayDrawer,
   DrawerHeaderTitle,
   Field,
-} from "@fluentui/react-components"
-import { FluentSearchBox } from "@/components/common/fluent-search-box"
+} from "@fluentui/react-components";
+import { FluentSearchBox } from "@/components/common/fluent-search-box";
 import {
   Add16Regular,
   Delete16Regular,
   Edit16Regular,
-} from "@fluentui/react-icons"
+} from "@fluentui/react-icons";
 import {
   Ban,
   CalendarDays,
@@ -39,17 +43,29 @@ import {
   ShieldAlert,
   Trash2,
   X,
-} from "lucide-react"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canPerformPermission } from "@/lib/dashboard-permissions"
-import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
-import { OnboardingHandoffDrawer, OnboardingWorkspaceUpdates, onboardingActivityLabel } from "./onboarding-workspace-collaboration"
-import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer"
-import { pageBleedClass } from "@/components/dashboard/talent-visuals"
+} from "lucide-react";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
+import {
+  canPerformPermission,
+  EMPLOYMENT_CONTRACT_MANAGE_PERMISSION,
+  EMPLOYMENT_CONTRACT_READ_PERMISSION,
+} from "@/lib/dashboard-permissions";
+import { onboardingActionMessage } from "@/lib/onboarding-action-feedback";
+import {
+  OnboardingHandoffDrawer,
+  OnboardingWorkspaceUpdates,
+  onboardingActivityLabel,
+} from "./onboarding-workspace-collaboration";
+import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer";
+import { pageBleedClass } from "@/components/dashboard/talent-visuals";
 
-import { cn } from "@/lib/utils"
-import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import {
   approveOnboardingRequest,
@@ -113,28 +129,39 @@ import {
   type AdminRecord,
   type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
-} from "@/lib/admin-api"
-import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog"
-import { OnboardingReadinessOverview } from "@/components/dashboard/onboarding-readiness-overview"
-import { OnboardingHrOverview } from "@/components/dashboard/onboarding-hr-overview"
-import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
+} from "@/lib/admin-api";
+import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
+import { OnboardingReadinessOverview } from "@/components/dashboard/onboarding-readiness-overview";
+import { OnboardingHrOverview } from "@/components/dashboard/onboarding-hr-overview";
+import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view";
 import {
   INVITATION_STATUS_FILTERS,
   canResendInvitation,
   invitationEffectiveStatus,
-} from "@/lib/employee-invitation-status"
-import { AUTH_STORAGE_KEYS } from "@/utils/constants"
-import { showErrorAlert } from "@/lib/error-alert"
-import { showSuccessAlert } from "@/lib/success-alert"
-import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Checkbox } from "@/components/ui/checkbox"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { Calendar } from "@/components/ui/calendar"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+} from "@/lib/employee-invitation-status";
+import { AUTH_STORAGE_KEYS } from "@/utils/constants";
+import { showErrorAlert } from "@/lib/error-alert";
+import { showSuccessAlert } from "@/lib/success-alert";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogDescription,
@@ -142,17 +169,24 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
-import { BadgeCheck } from "@/components/animate-ui/icons/badge-check"
-import { CircleX } from "@/components/animate-ui/icons/circle-x"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+} from "@/components/animate-ui/components/base/dialog";
+import { BadgeCheck } from "@/components/animate-ui/icons/badge-check";
+import { CircleX } from "@/components/animate-ui/icons/circle-x";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   buildOnboardingProvisioningPayload,
   type OnboardingDeviceAssignmentDraft,
   type OnboardingProvisioningDraft,
   type OnboardingShiftAssignmentDraft,
   type OnboardingTimetableAssignmentDraft,
-} from "@/lib/onboarding-provisioning"
+} from "@/lib/onboarding-provisioning";
 import {
   filterAssigneesForStep,
   findAssigneeRecord,
@@ -165,35 +199,57 @@ import {
   resolveAuditActorLabel,
   resolveResponsiblePartyLabel,
   summarizeOnboardingApprovals,
-} from "@/lib/onboarding-activity-labels"
-import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
-import { matchesEmployeeDirectorySearch } from "@/lib/employee-directory-search"
+} from "@/lib/onboarding-activity-labels";
+import { notifySubmittedRequestApprovers } from "@/lib/request-notifications";
+import { matchesEmployeeDirectorySearch } from "@/lib/employee-directory-search";
 import {
   onboardingAssigneeHasPermission,
   requiredPermissionForOnboardingStep,
-} from "@/lib/onboarding-assignee-permissions"
+} from "@/lib/onboarding-assignee-permissions";
 
-type OnboardingTab = "invitations" | "requests" | "workflows"
+type OnboardingTab = "invitations" | "requests" | "workflows";
 
 const ONBOARDING_DOCUMENT_TYPES = [
-  { value: "identity_document", label: "Identity document", section: "identification" },
-  { value: "academic_certificate", label: "Academic certificate", section: "education" },
-  { value: "professional_certificate", label: "Professional certificate", section: "education" },
+  {
+    value: "identity_document",
+    label: "Identity document",
+    section: "identification",
+  },
+  {
+    value: "academic_certificate",
+    label: "Academic certificate",
+    section: "education",
+  },
+  {
+    value: "professional_certificate",
+    label: "Professional certificate",
+    section: "education",
+  },
   { value: "curriculum_vitae", label: "CV / résumé", section: "experience" },
-  { value: "employment_contract", label: "Employment contract", section: "assignment" },
+  {
+    value: "employment_contract",
+    label: "Employment contract",
+    section: "assignment",
+  },
   { value: "offer_letter", label: "Offer letter", section: "assignment" },
   { value: "joining_form", label: "Joining form", section: "assignment" },
   { value: "other", label: "Other onboarding document", section: "assignment" },
   { value: "bank_document", label: "Bank document", section: "banking" },
   { value: "medical_document", label: "Medical document", section: "personal" },
   { value: "other", label: "Other", section: "personal" },
-] as const
+] as const;
 const TASK_DUE_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hours = Math.floor(index / 2)
-  const minutes = index % 2 === 0 ? "00" : "30"
-  const value = `${String(hours).padStart(2, "0")}:${minutes}`
-  return { value, label: new Date(2000, 0, 1, hours, Number(minutes)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }
-})
+  const hours = Math.floor(index / 2);
+  const minutes = index % 2 === 0 ? "00" : "30";
+  const value = `${String(hours).padStart(2, "0")}:${minutes}`;
+  return {
+    value,
+    label: new Date(2000, 0, 1, hours, Number(minutes)).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+});
 type OnboardingLookupKey =
   | "employees"
   | "workflows"
@@ -209,57 +265,61 @@ type OnboardingLookupKey =
   | "accessOrganizations"
   | "attendanceDevices"
   | "attendancePolicies"
-  | "leavePolicies"
+  | "leavePolicies";
 
-const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
+const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
 function readStoredToken() {
   if (typeof window === "undefined") {
-    return ""
+    return "";
   }
 
-  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens)
+  const authTokensRaw = window.localStorage.getItem(AUTH_STORAGE_KEYS.tokens);
   if (authTokensRaw) {
     try {
       const parsed = JSON.parse(authTokensRaw) as {
-        accessToken?: string
-        access_token?: string
-      }
-      const accessToken = (parsed.accessToken ?? parsed.access_token ?? "").trim()
+        accessToken?: string;
+        access_token?: string;
+      };
+      const accessToken = (
+        parsed.accessToken ??
+        parsed.access_token ??
+        ""
+      ).trim();
       if (accessToken) {
-        return accessToken
+        return accessToken;
       }
     } catch {
       // Fall through to legacy key.
     }
   }
 
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ""
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? "";
 }
 
 function readString(row: AdminRecord, keys: string[], fallback = "-") {
   for (const key of keys) {
-    const value = row[key]
+    const value = row[key];
     if (typeof value === "string" && value.trim()) {
-      return value
+      return value;
     }
   }
-  return fallback
+  return fallback;
 }
 
 function readNumber(row: AdminRecord, keys: string[]) {
   for (const key of keys) {
-    const value = row[key]
+    const value = row[key];
     if (typeof value === "number" && Number.isFinite(value)) {
-      return value
+      return value;
     }
     if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value)
+      const parsed = Number(value);
       if (Number.isFinite(parsed)) {
-        return parsed
+        return parsed;
       }
     }
   }
-  return null
+  return null;
 }
 
 function toTitleCaseWords(value: string) {
@@ -267,18 +327,18 @@ function toTitleCaseWords(value: string) {
     .trim()
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function toRecord(value: unknown): AdminRecord | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null
+    return null;
   }
-  return value as AdminRecord
+  return value as AdminRecord;
 }
 
 function collectDepartmentIds(row: AdminRecord) {
-  const ids = new Set<number>()
+  const ids = new Set<number>();
   const sources = [
     row,
     toRecord(row.company_user),
@@ -286,7 +346,7 @@ function collectDepartmentIds(row: AdminRecord) {
     toRecord(row.user),
     toRecord(row.employee),
     toRecord(row.profile),
-  ].filter((source): source is AdminRecord => Boolean(source))
+  ].filter((source): source is AdminRecord => Boolean(source));
 
   sources.forEach((source) => {
     const directId = readNumber(source, [
@@ -294,24 +354,31 @@ function collectDepartmentIds(row: AdminRecord) {
       "departmentId",
       "primary_department_id",
       "primaryDepartmentId",
-    ])
-    if (directId !== null) ids.add(directId)
+    ]);
+    if (directId !== null) ids.add(directId);
 
-    for (const key of ["department", "departmentDetail", "primary_department", "primaryDepartment"]) {
-      const department = toRecord(source[key])
-      const departmentId = department ? readNumber(department, ["id", "department_id"]) : null
-      if (departmentId !== null) ids.add(departmentId)
+    for (const key of [
+      "department",
+      "departmentDetail",
+      "primary_department",
+      "primaryDepartment",
+    ]) {
+      const department = toRecord(source[key]);
+      const departmentId = department
+        ? readNumber(department, ["id", "department_id"])
+        : null;
+      if (departmentId !== null) ids.add(departmentId);
     }
 
     const directIds = Array.isArray(source.department_ids)
       ? source.department_ids
       : Array.isArray(source.departmentIds)
         ? source.departmentIds
-        : []
+        : [];
     directIds.forEach((value) => {
-      const departmentId = readNumber({ value }, ["value"])
-      if (departmentId !== null) ids.add(departmentId)
-    })
+      const departmentId = readNumber({ value }, ["value"]);
+      if (departmentId !== null) ids.add(departmentId);
+    });
 
     for (const collectionKey of [
       "departments",
@@ -320,132 +387,165 @@ function collectDepartmentIds(row: AdminRecord) {
       "employee_departments",
       "employeeDepartments",
     ]) {
-      const collection = source[collectionKey]
-      if (!Array.isArray(collection)) continue
+      const collection = source[collectionKey];
+      if (!Array.isArray(collection)) continue;
       collection.forEach((value) => {
-        const directDepartmentId = readNumber({ value }, ["value"])
+        const directDepartmentId = readNumber({ value }, ["value"]);
         if (directDepartmentId !== null) {
-          ids.add(directDepartmentId)
-          return
+          ids.add(directDepartmentId);
+          return;
         }
-        const assignment = toRecord(value)
+        const assignment = toRecord(value);
         const nestedDepartment = assignment
-          ? (toRecord(assignment.department) ?? toRecord(assignment.departmentDetail))
-          : null
+          ? (toRecord(assignment.department) ??
+            toRecord(assignment.departmentDetail))
+          : null;
         const departmentId = assignment
           ? readNumber(
               assignment,
-              collectionKey === "departments" ? ["department_id", "departmentId", "id"] : ["department_id", "departmentId"],
+              collectionKey === "departments"
+                ? ["department_id", "departmentId", "id"]
+                : ["department_id", "departmentId"],
             )
-          : null
-        const nestedDepartmentId = nestedDepartment ? readNumber(nestedDepartment, ["id", "department_id"]) : null
-        if (departmentId !== null) ids.add(departmentId)
-        if (nestedDepartmentId !== null) ids.add(nestedDepartmentId)
-      })
+          : null;
+        const nestedDepartmentId = nestedDepartment
+          ? readNumber(nestedDepartment, ["id", "department_id"])
+          : null;
+        if (departmentId !== null) ids.add(departmentId);
+        if (nestedDepartmentId !== null) ids.add(nestedDepartmentId);
+      });
     }
-  })
+  });
 
-  return ids
+  return ids;
 }
 
-function employeeMatchesCompanyUser(employee: AdminRecord, companyUser: AdminRecord) {
-  const employeeMembership = toRecord(employee.company_user) ?? toRecord(employee.companyUser)
-  const employeeUser = toRecord(employeeMembership?.user) ?? toRecord(employee.user)
-  const companyMembership = toRecord(companyUser.company_user) ?? toRecord(companyUser.companyUser)
-  const companyAccount = toRecord(companyUser.user) ?? toRecord(companyMembership?.user)
+function employeeMatchesCompanyUser(
+  employee: AdminRecord,
+  companyUser: AdminRecord,
+) {
+  const employeeMembership =
+    toRecord(employee.company_user) ?? toRecord(employee.companyUser);
+  const employeeUser =
+    toRecord(employeeMembership?.user) ?? toRecord(employee.user);
+  const companyMembership =
+    toRecord(companyUser.company_user) ?? toRecord(companyUser.companyUser);
+  const companyAccount =
+    toRecord(companyUser.user) ?? toRecord(companyMembership?.user);
   const ids = (record: AdminRecord | null, keys: string[]) =>
     record
-      ? keys.map((key) => readNumber(record, [key])).filter((id): id is number => id !== null)
-      : []
+      ? keys
+          .map((key) => readNumber(record, [key]))
+          .filter((id): id is number => id !== null)
+      : [];
 
   const companyMembershipIds = [
     ...ids(companyUser, ["id", "company_user_id", "companyUserId"]),
     ...ids(companyMembership, ["id", "company_user_id", "companyUserId"]),
-  ]
+  ];
   const employeeMembershipIds = [
     ...ids(employee, ["company_user_id", "companyUserId"]),
     ...ids(employeeMembership, ["id", "company_user_id", "companyUserId"]),
-  ]
+  ];
   if (
     companyMembershipIds.length > 0 &&
     employeeMembershipIds.length > 0 &&
     companyMembershipIds.some((id) => employeeMembershipIds.includes(id))
   ) {
-    return true
+    return true;
   }
 
   const companyAccountIds = [
     ...ids(companyUser, ["user_id", "userId"]),
     ...ids(companyAccount, ["id", "user_id", "userId"]),
     ...ids(companyMembership, ["user_id", "userId"]),
-  ]
+  ];
   const employeeAccountIds = [
     ...ids(employee, ["user_id", "userId"]),
     ...ids(employeeUser, ["id", "user_id", "userId"]),
     ...ids(employeeMembership, ["user_id", "userId"]),
-  ]
+  ];
   if (
     companyAccountIds.length > 0 &&
     employeeAccountIds.length > 0 &&
     companyAccountIds.some((id) => employeeAccountIds.includes(id))
   ) {
-    return true
+    return true;
   }
 
-  const companyEmail = readString(companyAccount ?? companyUser, ["email"], "").trim().toLowerCase()
-  const employeeEmail = readString(employeeUser ?? employee, ["email"], "").trim().toLowerCase()
-  return Boolean(companyEmail && employeeEmail && companyEmail === employeeEmail)
+  const companyEmail = readString(companyAccount ?? companyUser, ["email"], "")
+    .trim()
+    .toLowerCase();
+  const employeeEmail = readString(employeeUser ?? employee, ["email"], "")
+    .trim()
+    .toLowerCase();
+  return Boolean(
+    companyEmail && employeeEmail && companyEmail === employeeEmail,
+  );
 }
 
 function formatInvitationDate(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
-    return "-"
+    return "-";
   }
-  const date = new Date(value)
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value
+    return value;
   }
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date)
+  }).format(date);
 }
 
 function invitationDeliveryStatus(row: AdminRecord, channel: "email" | "sms") {
-  const delivery = toRecord(row.delivery)
-  const channelDelivery = toRecord(delivery?.[channel])
-  return channelDelivery ? readString(channelDelivery, ["status"]) : "-"
+  const delivery = toRecord(row.delivery);
+  const channelDelivery = toRecord(delivery?.[channel]);
+  return channelDelivery ? readString(channelDelivery, ["status"]) : "-";
 }
 
-function invitationDeliveryValue(row: AdminRecord, channel: "email" | "sms", keys: string[]) {
-  const delivery = toRecord(row.delivery)
-  const channelDelivery = toRecord(delivery?.[channel])
-  return channelDelivery ? readString(channelDelivery, keys) : "-"
+function invitationDeliveryValue(
+  row: AdminRecord,
+  channel: "email" | "sms",
+  keys: string[],
+) {
+  const delivery = toRecord(row.delivery);
+  const channelDelivery = toRecord(delivery?.[channel]);
+  return channelDelivery ? readString(channelDelivery, keys) : "-";
 }
 
 function formatInvitationDeliveryError(value: string) {
-  if (!value || value === "-") return value
-  const normalized = value.trim()
-  const lower = normalized.toLowerCase()
+  if (!value || value === "-") return value;
+  const normalized = value.trim();
+  const lower = normalized.toLowerCase();
 
-  if (lower.includes("sendasdenied") || lower.includes("not allowed to send as")) {
-    return "The SMTP account cannot use the configured sender address. Use the authenticated mailbox as the sender or grant Send As permission."
+  if (
+    lower.includes("sendasdenied") ||
+    lower.includes("not allowed to send as")
+  ) {
+    return "The SMTP account cannot use the configured sender address. Use the authenticated mailbox as the sender or grant Send As permission.";
   }
-  if (lower.includes("authentication unsuccessful") || lower.includes("invalid login")) {
-    return "SMTP authentication failed. Check the username, password, and mailbox SMTP AUTH setting."
+  if (
+    lower.includes("authentication unsuccessful") ||
+    lower.includes("invalid login")
+  ) {
+    return "SMTP authentication failed. Check the username, password, and mailbox SMTP AUTH setting.";
   }
 
-  const withoutDiagnostics = normalized.split("[BeginDiagnosticData]", 1)[0]?.trim() || normalized
-  return withoutDiagnostics.length > 320 ? `${withoutDiagnostics.slice(0, 317)}…` : withoutDiagnostics
+  const withoutDiagnostics =
+    normalized.split("[BeginDiagnosticData]", 1)[0]?.trim() || normalized;
+  return withoutDiagnostics.length > 320
+    ? `${withoutDiagnostics.slice(0, 317)}…`
+    : withoutDiagnostics;
 }
 
 function invitationDisplayName(row: AdminRecord | null) {
-  if (!row) return "Invitation"
+  if (!row) return "Invitation";
   const name = [row.first_name, row.last_name]
     .map((value) => String(value ?? "").trim())
     .filter(Boolean)
-    .join(" ")
-  return name || readString(row, ["email"], "Invitation")
+    .join(" ");
+  return name || readString(row, ["email"], "Invitation");
 }
 
 function getEmployeeDisplayName(row: AdminRecord) {
@@ -457,7 +557,7 @@ function getEmployeeDisplayName(row: AdminRecord) {
     toRecord(row.person),
     toRecord(row.profile),
     toRecord(row.employee),
-  ].filter((source): source is AdminRecord => Boolean(source))
+  ].filter((source): source is AdminRecord => Boolean(source));
 
   for (const source of sources) {
     const named = readString(source, [
@@ -469,9 +569,9 @@ function getEmployeeDisplayName(row: AdminRecord) {
       "displayName",
       "preferred_name",
       "preferredName",
-    ])
+    ]);
     if (named !== "-") {
-      return named
+      return named;
     }
 
     const assembled = [
@@ -481,259 +581,340 @@ function getEmployeeDisplayName(row: AdminRecord) {
     ]
       .filter((part) => part !== "-")
       .join(" ")
-      .trim()
+      .trim();
     if (assembled) {
-      return assembled
+      return assembled;
     }
   }
 
   // Avoid treating generic "name" as a primary name first — some payloads put non-person values there.
   for (const source of sources) {
-    const genericName = readString(source, ["name"])
+    const genericName = readString(source, ["name"]);
     if (genericName !== "-") {
-      const employeeNo = readString(row, ["employee_no", "employee_number", "user_no", "employeeNo"])
+      const employeeNo = readString(row, [
+        "employee_no",
+        "employee_number",
+        "user_no",
+        "employeeNo",
+      ]);
       if (employeeNo === "-" || genericName !== employeeNo) {
-        return genericName
+        return genericName;
       }
     }
   }
 
-  return ""
+  return "";
 }
 
-function formatEmployeeOptionLabel(row: AdminRecord, fallbackId?: number | null) {
-  const name = getEmployeeDisplayName(row)
-  const employeeNo = readString(row, ["employee_no", "employee_number", "user_no", "employeeNo", "employee_code"])
-  const id = fallbackId ?? readNumber(row, ["id", "employee_id", "user_id"])
+function formatEmployeeOptionLabel(
+  row: AdminRecord,
+  fallbackId?: number | null,
+) {
+  const name = getEmployeeDisplayName(row);
+  const employeeNo = readString(row, [
+    "employee_no",
+    "employee_number",
+    "user_no",
+    "employeeNo",
+    "employee_code",
+  ]);
+  const id = fallbackId ?? readNumber(row, ["id", "employee_id", "user_id"]);
 
   if (name && employeeNo !== "-") {
-    return `${name} (${employeeNo})`
+    return `${name} (${employeeNo})`;
   }
   if (name) {
-    return name
+    return name;
   }
   if (employeeNo !== "-") {
-    return employeeNo
+    return employeeNo;
   }
   if (id !== null) {
-    return `Employee #${id}`
+    return `Employee #${id}`;
   }
-  return "Unknown employee"
+  return "Unknown employee";
 }
 
-const ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES = new Set(["onboarding"])
+const ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES = new Set(["onboarding"]);
 
 function getEmployeeEmploymentStatus(row: AdminRecord) {
   const nested =
-    toRecord(row.company_user) ?? toRecord(row.companyUser) ?? toRecord(row.user) ?? toRecord(row.profile) ?? null
+    toRecord(row.company_user) ??
+    toRecord(row.companyUser) ??
+    toRecord(row.user) ??
+    toRecord(row.profile) ??
+    null;
   return String(
-    row.employment_status ?? row.employmentStatus ?? nested?.employment_status ?? nested?.employmentStatus ?? ""
+    row.employment_status ??
+      row.employmentStatus ??
+      nested?.employment_status ??
+      nested?.employmentStatus ??
+      "",
   )
     .trim()
-    .toLowerCase()
+    .toLowerCase();
 }
 
 function mergeOnboardingRequestRows(...groups: AdminRecord[][]) {
-  const byKey = new Map<string, AdminRecord>()
+  const byKey = new Map<string, AdminRecord>();
   for (const row of groups.flat()) {
-    const requestId = readNumber(row, ["id", "request_id", "onboarding_request_id"])
-    const employeeId = readNumber(row, ["employee_id", "employeeId"])
+    const requestId = readNumber(row, [
+      "id",
+      "request_id",
+      "onboarding_request_id",
+    ]);
+    const employeeId = readNumber(row, ["employee_id", "employeeId"]);
     const key =
       requestId !== null
         ? `request:${requestId}`
         : employeeId !== null
           ? `employee:${employeeId}:${String(row.status ?? "")}`
-          : JSON.stringify(row)
+          : JSON.stringify(row);
     if (!byKey.has(key)) {
-      byKey.set(key, row)
+      byKey.set(key, row);
     }
   }
-  return Array.from(byKey.values())
+  return Array.from(byKey.values());
 }
 
-const ONBOARDING_DRAFT_LIST_STATUSES = ["draft", "not_started", "pending", "new"] as const
+const ONBOARDING_DRAFT_LIST_STATUSES = [
+  "draft",
+  "not_started",
+  "pending",
+  "new",
+] as const;
 
 async function listOnboardingRequestsIncludingDrafts(
   token: string,
   requestQuery: {
-    page: number
-    limit: number
-    sortBy: "created_at"
-    sortOrder: "DESC"
-    search?: string
-    employee_id?: number
-  }
+    page: number;
+    limit: number;
+    sortBy: "created_at";
+    sortOrder: "DESC";
+    search?: string;
+    employee_id?: number;
+  },
 ) {
   const [main, ...draftLists] = await Promise.all([
     listOnboardingRequests(token, requestQuery),
     ...ONBOARDING_DRAFT_LIST_STATUSES.map((status) =>
       listOnboardingRequests(token, { ...requestQuery, status }).catch(() => ({
         rows: [] as AdminRecord[],
-      }))
+      })),
     ),
-  ])
-  return mergeOnboardingRequestRows(main.rows, ...draftLists.map((result) => result.rows))
+  ]);
+  return mergeOnboardingRequestRows(
+    main.rows,
+    ...draftLists.map((result) => result.rows),
+  );
 }
 
 function isOnboardingEligibleEmployee(row: AdminRecord) {
-  return ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES.has(getEmployeeEmploymentStatus(row))
+  return ONBOARDING_ELIGIBLE_EMPLOYEE_STATUSES.has(
+    getEmployeeEmploymentStatus(row),
+  );
 }
 
 function isPendingOnboardingRow(row: AdminRecord) {
-  return row.pending_employee_onboarding === true
+  return row.pending_employee_onboarding === true;
 }
 
 function collectRequestEmployeeIds(rows: AdminRecord[]) {
-  const ids = new Set<number>()
+  const ids = new Set<number>();
   rows.forEach((row) => {
     if (isPendingOnboardingRow(row)) {
-      const pendingId = readNumber(row, ["employee_id", "employeeId"])
+      const pendingId = readNumber(row, ["employee_id", "employeeId"]);
       if (pendingId !== null) {
-        ids.add(pendingId)
+        ids.add(pendingId);
       }
-      return
+      return;
     }
-    const nested = toRecord(row.employee) ?? toRecord(row.employee_profile)
+    const nested = toRecord(row.employee) ?? toRecord(row.employee_profile);
     const id =
-      readNumber(row, ["employee_id", "employeeId"]) ?? readNumber(nested ?? {}, ["id", "employee_id", "employeeId"])
+      readNumber(row, ["employee_id", "employeeId"]) ??
+      readNumber(nested ?? {}, ["id", "employee_id", "employeeId"]);
     if (id !== null) {
-      ids.add(id)
+      ids.add(id);
     }
-  })
-  return ids
+  });
+  return ids;
 }
 
 function defaultOnboardingWorkflowId(workflows: AdminRecord[]) {
-  const preferred = workflows.find((row) => row.is_default === true || row.isDefault === true) ?? workflows[0] ?? null
-  return preferred ? readNumber(preferred, ["id", "workflow_id"]) : null
+  const preferred =
+    workflows.find(
+      (row) => row.is_default === true || row.isDefault === true,
+    ) ??
+    workflows[0] ??
+    null;
+  return preferred ? readNumber(preferred, ["id", "workflow_id"]) : null;
 }
 
 function buildPendingOnboardingRow(employee: AdminRecord): AdminRecord {
-  const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-  const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+  const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"]);
+  const name =
+    getEmployeeDisplayName(employee) ||
+    formatEmployeeOptionLabel(employee, employeeId);
   return {
     pending_employee_onboarding: true,
     employee_id: employeeId,
     employee,
-    title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
+    title:
+      name && name !== "Unknown employee"
+        ? `Onboarding for ${name}`
+        : "Onboarding",
     status: PENDING_ONBOARDING_STATUS,
-  }
+  };
 }
 
 function mergeEmployeeRows(...groups: AdminRecord[][]) {
-  const byId = new Map<number, AdminRecord>()
+  const byId = new Map<number, AdminRecord>();
   groups.flat().forEach((row) => {
-    const id = readNumber(row, ["id", "employee_id", "user_id"])
+    const id = readNumber(row, ["id", "employee_id", "user_id"]);
     if (id === null) {
-      return
+      return;
     }
     if (!byId.has(id)) {
-      byId.set(id, row)
+      byId.set(id, row);
     }
-  })
-  return Array.from(byId.values())
+  });
+  return Array.from(byId.values());
 }
 
 function toRecordList(value: unknown): AdminRecord[] {
   if (Array.isArray(value)) {
-    return value.map((entry) => toRecord(entry)).filter((entry): entry is AdminRecord => Boolean(entry))
+    return value
+      .map((entry) => toRecord(entry))
+      .filter((entry): entry is AdminRecord => Boolean(entry));
   }
-  const record = toRecord(value)
-  return record ? [record] : []
+  const record = toRecord(value);
+  return record ? [record] : [];
 }
 
 function toTimestamp(value: unknown) {
   if (typeof value !== "string" || !value.trim()) {
-    return "-"
+    return "-";
   }
-  const parsed = new Date(value)
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    return value
+    return value;
   }
-  return parsed.toLocaleString()
+  return parsed.toLocaleString();
 }
 
-type RequestAction = "submit" | "approve" | "reject" | "cancel" | "complete" | "delete"
+type RequestAction =
+  "submit" | "approve" | "reject" | "cancel" | "complete" | "delete";
 
 type OnboardingWorkflowStepDraft = {
-  id?: number
-  is_required: boolean
-  name: string
-  description: string
-  checklist_items: WorkflowChecklistItem[]
-  metadata?: AdminRecord
-  step_type: string
-  assigned_role_id?: number
-  assigned_user_id?: number
-  assigned_department_id?: number
-  due_days: number
-}
+  id?: number;
+  is_required: boolean;
+  name: string;
+  description: string;
+  checklist_items: WorkflowChecklistItem[];
+  metadata?: AdminRecord;
+  step_type: string;
+  assigned_role_id?: number;
+  assigned_user_id?: number;
+  assigned_department_id?: number;
+  due_days: number;
+};
 
 type WorkflowChecklistItem = {
-  name: string
-  description: string
-}
+  name: string;
+  description: string;
+};
 
 function workflowStepChecklist(row: AdminRecord) {
-  const metadata = toRecord(row.metadata)
-  const value = metadata?.checklist_items ?? metadata?.checklistItems
-  if (!Array.isArray(value)) return []
+  const metadata = toRecord(row.metadata);
+  const value = metadata?.checklist_items ?? metadata?.checklistItems;
+  if (!Array.isArray(value)) return [];
   return value
     .map((item) => {
       if (typeof item === "string") {
-        const name = item.trim()
-        return name ? { name, description: "" } : null
+        const name = item.trim();
+        return name ? { name, description: "" } : null;
       }
-      const record = toRecord(item)
-      if (!record) return null
-      const name = readString(record, ["name", "title"], "").trim()
-      const description = readString(record, ["description", "instructions"], "").trim()
-      return name ? { name, description } : null
+      const record = toRecord(item);
+      if (!record) return null;
+      const name = readString(record, ["name", "title"], "").trim();
+      const description = readString(
+        record,
+        ["description", "instructions"],
+        "",
+      ).trim();
+      return name ? { name, description } : null;
     })
-    .filter((item): item is WorkflowChecklistItem => item !== null)
+    .filter((item): item is WorkflowChecklistItem => item !== null);
 }
 
 function normalizeWorkflowStep(row: AdminRecord): OnboardingWorkflowStepDraft {
-  const stepId = readNumber(row, ["id", "step_id", "workflow_step_id"])
-  const name = readString(row, ["name", "step_name", "title", "task_title"])
-  const description = readString(row, ["description", "step_description", "details"])
-  const stepType = readString(row, ["step_type", "task_type", "type"])
-  const assignedRoleId = readNumber(row, ["assigned_role_id", "role_id"])
-  const assignedUserId = readNumber(row, ["assigned_user_id", "company_user_id", "user_id"])
-  const assignedDepartmentId = readNumber(row, ["assigned_department_id", "department_id"])
-  const dueDays = readNumber(row, ["due_days", "expected_duration_days", "dueDays"])
+  const stepId = readNumber(row, ["id", "step_id", "workflow_step_id"]);
+  const name = readString(row, ["name", "step_name", "title", "task_title"]);
+  const description = readString(row, [
+    "description",
+    "step_description",
+    "details",
+  ]);
+  const stepType = readString(row, ["step_type", "task_type", "type"]);
+  const assignedRoleId = readNumber(row, ["assigned_role_id", "role_id"]);
+  const assignedUserId = readNumber(row, [
+    "assigned_user_id",
+    "company_user_id",
+    "user_id",
+  ]);
+  const assignedDepartmentId = readNumber(row, [
+    "assigned_department_id",
+    "department_id",
+  ]);
+  const dueDays = readNumber(row, [
+    "due_days",
+    "expected_duration_days",
+    "dueDays",
+  ]);
 
   return {
     ...(stepId !== null && stepId > 0 ? { id: stepId } : {}),
     is_required:
       row.is_required === true ||
       row.isRequired === true ||
-      String(row.is_required ?? row.isRequired ?? "true").toLowerCase() === "true",
+      String(row.is_required ?? row.isRequired ?? "true").toLowerCase() ===
+        "true",
     name: name === "-" ? "" : name,
     description: description === "-" ? "" : description,
     checklist_items: workflowStepChecklist(row),
-    ...(toRecord(row.metadata) ? { metadata: toRecord(row.metadata) ?? undefined } : {}),
+    ...(toRecord(row.metadata)
+      ? { metadata: toRecord(row.metadata) ?? undefined }
+      : {}),
     step_type: stepType === "-" ? "task" : stepType,
     due_days: dueDays !== null && dueDays > 0 ? dueDays : 1,
-    ...(assignedRoleId !== null && assignedRoleId > 0 ? { assigned_role_id: assignedRoleId } : {}),
-    ...(assignedUserId !== null && assignedUserId > 0 ? { assigned_user_id: assignedUserId } : {}),
+    ...(assignedRoleId !== null && assignedRoleId > 0
+      ? { assigned_role_id: assignedRoleId }
+      : {}),
+    ...(assignedUserId !== null && assignedUserId > 0
+      ? { assigned_user_id: assignedUserId }
+      : {}),
     ...(assignedDepartmentId !== null && assignedDepartmentId > 0
       ? { assigned_department_id: assignedDepartmentId }
       : {}),
-  }
+  };
 }
 
-async function loadAssigneeById(token: string, assignedId: number): Promise<AdminRecord | null> {
-  const fromCompany = await getCurrentCompanyUser(token, assignedId).catch(() => null)
+async function loadAssigneeById(
+  token: string,
+  assignedId: number,
+): Promise<AdminRecord | null> {
+  const fromCompany = await getCurrentCompanyUser(token, assignedId).catch(
+    () => null,
+  );
   if (fromCompany && preferredAssigneeId(fromCompany) !== null) {
-    return fromCompany
+    return fromCompany;
   }
-  return getUserById(assignedId, token).catch(() => null)
+  return getUserById(assignedId, token).catch(() => null);
 }
 
 function extractWorkflowSteps(record: AdminRecord | null): AdminRecord[] {
   if (!record) {
-    return []
+    return [];
   }
 
   const stepKeys = [
@@ -745,91 +926,126 @@ function extractWorkflowSteps(record: AdminRecord | null): AdminRecord[] {
     "onboarding_steps",
     "onboardingSteps",
     "items",
-  ] as const
+  ] as const;
 
   for (const key of stepKeys) {
-    const direct = toRecordList(record[key])
+    const direct = toRecordList(record[key]);
     if (direct.length > 0) {
-      return direct
+      return direct;
     }
   }
 
-  for (const key of ["workflow", "data", "result", "item", "details", "record"]) {
-    const nested = toRecord(record[key])
-    if (!nested) continue
+  for (const key of [
+    "workflow",
+    "data",
+    "result",
+    "item",
+    "details",
+    "record",
+  ]) {
+    const nested = toRecord(record[key]);
+    if (!nested) continue;
     for (const stepKey of stepKeys) {
-      const nestedSteps = toRecordList(nested[stepKey])
+      const nestedSteps = toRecordList(nested[stepKey]);
       if (nestedSteps.length > 0) {
-        return nestedSteps
+        return nestedSteps;
       }
     }
   }
 
-  return []
+  return [];
 }
 
-const ENVELOPE_STATUS_VALUES = new Set(["success", "ok", "error", "fail", "failed", "true", "false"])
+const ENVELOPE_STATUS_VALUES = new Set([
+  "success",
+  "ok",
+  "error",
+  "fail",
+  "failed",
+  "true",
+  "false",
+]);
 
 function isWorkflowStatusValue(value: string) {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized || normalized === "-") return false
-  if (ENVELOPE_STATUS_VALUES.has(normalized)) return false
-  return ["active", "inactive", "draft", "archived", "enabled", "disabled"].includes(normalized)
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "-") return false;
+  if (ENVELOPE_STATUS_VALUES.has(normalized)) return false;
+  return [
+    "active",
+    "inactive",
+    "draft",
+    "archived",
+    "enabled",
+    "disabled",
+  ].includes(normalized);
 }
 
 function unwrapWorkflowDetail(payload: AdminRecord | null): AdminRecord | null {
   if (!payload) {
-    return null
+    return null;
   }
 
   // Prefer a record that looks like the workflow entity itself (name / id), not an API envelope.
   const scoreWorkflowShape = (row: AdminRecord) => {
-    let score = 0
-    if (readNumber(row, ["id", "workflow_id"]) !== null) score += 2
-    if (readString(row, ["name", "title", "workflow_name", "workflowName"]) !== "-") score += 3
-    if (isWorkflowStatusValue(readString(row, ["status", "workflow_status"]))) score += 1
-    if (extractWorkflowSteps(row).length > 0) score += 2
+    let score = 0;
+    if (readNumber(row, ["id", "workflow_id"]) !== null) score += 2;
+    if (
+      readString(row, ["name", "title", "workflow_name", "workflowName"]) !==
+      "-"
+    )
+      score += 3;
+    if (isWorkflowStatusValue(readString(row, ["status", "workflow_status"])))
+      score += 1;
+    if (extractWorkflowSteps(row).length > 0) score += 2;
     // Penalize step-shaped rows and pure envelopes.
-    if (readString(row, ["step_type", "task_type"]) !== "-") score -= 5
-    if (ENVELOPE_STATUS_VALUES.has(readString(row, ["status"]).toLowerCase())) score -= 2
-    return score
-  }
+    if (readString(row, ["step_type", "task_type"]) !== "-") score -= 5;
+    if (ENVELOPE_STATUS_VALUES.has(readString(row, ["status"]).toLowerCase()))
+      score -= 2;
+    return score;
+  };
 
-  let best: AdminRecord = payload
-  let bestScore = scoreWorkflowShape(payload)
+  let best: AdminRecord = payload;
+  let bestScore = scoreWorkflowShape(payload);
 
   const visit = (row: AdminRecord, depth: number) => {
-    if (depth > 4) return
-    for (const key of ["workflow", "data", "result", "item", "details", "record"]) {
-      const nested = toRecord(row[key])
-      if (!nested) continue
-      const score = scoreWorkflowShape(nested)
+    if (depth > 4) return;
+    for (const key of [
+      "workflow",
+      "data",
+      "result",
+      "item",
+      "details",
+      "record",
+    ]) {
+      const nested = toRecord(row[key]);
+      if (!nested) continue;
+      const score = scoreWorkflowShape(nested);
       if (score > bestScore) {
-        best = nested
-        bestScore = score
+        best = nested;
+        bestScore = score;
       }
-      visit(nested, depth + 1)
+      visit(nested, depth + 1);
     }
-  }
+  };
 
-  visit(payload, 0)
+  visit(payload, 0);
 
   // If the best record has no inline steps, try pulling them from the original payload tree.
   if (extractWorkflowSteps(best).length === 0) {
-    const payloadSteps = extractWorkflowSteps(payload)
+    const payloadSteps = extractWorkflowSteps(payload);
     if (payloadSteps.length > 0) {
-      return { ...best, steps: payloadSteps }
+      return { ...best, steps: payloadSteps };
     }
   }
 
-  return best
+  return best;
 }
 
 function workflowFormFromRecord(record: AdminRecord | null): {
-  name: string
-  description: string
-  status: string | null
-  is_default: string | null
+  name: string;
+  description: string;
+  status: string | null;
+  is_default: string | null;
 } {
   if (!record) {
     return {
@@ -837,7 +1053,7 @@ function workflowFormFromRecord(record: AdminRecord | null): {
       description: "",
       status: null,
       is_default: null,
-    }
+    };
   }
 
   // Walk common nestings so list/detail wrappers still yield name/status.
@@ -848,34 +1064,52 @@ function workflowFormFromRecord(record: AdminRecord | null): {
     toRecord(record.result),
     toRecord(record.item),
     toRecord(record.details),
-  ].filter((entry): entry is AdminRecord => Boolean(entry))
+  ].filter((entry): entry is AdminRecord => Boolean(entry));
 
-  let name = ""
-  let description = ""
-  let status: string | null = null
-  let isDefault: string | null = null
+  let name = "";
+  let description = "";
+  let status: string | null = null;
+  let isDefault: string | null = null;
 
   for (const source of sources) {
     if (!name) {
-      const candidate = readString(source, ["name", "title", "workflow_name", "workflowName"])
-      if (candidate !== "-") name = candidate
+      const candidate = readString(source, [
+        "name",
+        "title",
+        "workflow_name",
+        "workflowName",
+      ]);
+      if (candidate !== "-") name = candidate;
     }
     if (!description) {
-      const candidate = readString(source, ["description", "summary", "workflow_description"])
-      if (candidate !== "-") description = candidate
+      const candidate = readString(source, [
+        "description",
+        "summary",
+        "workflow_description",
+      ]);
+      if (candidate !== "-") description = candidate;
     }
     if (status === null) {
-      const candidate = readString(source, ["status", "workflow_status", "workflowStatus"])
+      const candidate = readString(source, [
+        "status",
+        "workflow_status",
+        "workflowStatus",
+      ]);
       if (candidate !== "-" && isWorkflowStatusValue(candidate)) {
-        const lower = candidate.toLowerCase()
+        const lower = candidate.toLowerCase();
         status =
-          lower.includes("inactive") || lower.includes("disabled") || lower.includes("archived") ? "inactive" : "active"
+          lower.includes("inactive") ||
+          lower.includes("disabled") ||
+          lower.includes("archived")
+            ? "inactive"
+            : "active";
       }
     }
     if (isDefault === null) {
-      const rawDefault = source.is_default ?? source.default ?? source.isDefault
+      const rawDefault =
+        source.is_default ?? source.default ?? source.isDefault;
       if (rawDefault !== undefined && rawDefault !== null) {
-        isDefault = asTruthyBoolean(rawDefault) ? "true" : "false"
+        isDefault = asTruthyBoolean(rawDefault) ? "true" : "false";
       }
     }
   }
@@ -885,28 +1119,28 @@ function workflowFormFromRecord(record: AdminRecord | null): {
     description,
     status,
     is_default: isDefault,
-  }
+  };
 }
 
 /** API body for POST/PATCH workflow steps — never send 0 ids. */
 function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
-  const metadata: AdminRecord = { ...(step.metadata ?? {}) }
-  delete metadata.checklist_items
-  delete metadata.checklistItems
+  const metadata: AdminRecord = { ...(step.metadata ?? {}) };
+  delete metadata.checklist_items;
+  delete metadata.checklistItems;
   if (step.checklist_items.length > 0) {
-    metadata.checklist_items = step.checklist_items
+    metadata.checklist_items = step.checklist_items;
   }
 
   const payload: {
-    is_required: boolean
-    name: string
-    description: string
-    step_type: string
-    due_days: number
-    assigned_role_id: number | null
-    assigned_user_id: number | null
-    assigned_department_id: number | null
-    metadata?: AdminRecord
+    is_required: boolean;
+    name: string;
+    description: string;
+    step_type: string;
+    due_days: number;
+    assigned_role_id: number | null;
+    assigned_user_id: number | null;
+    assigned_department_id: number | null;
+    metadata?: AdminRecord;
   } = {
     is_required: Boolean(step.is_required),
     name: String(step.name ?? "").trim(),
@@ -915,8 +1149,8 @@ function toWorkflowStepApiPayload(step: OnboardingWorkflowStepDraft) {
     due_days: Number(step.due_days) > 0 ? Number(step.due_days) : 1,
     ...onboardingStepAssignmentPayload(step),
     metadata,
-  }
-  return payload
+  };
+  return payload;
 }
 
 const REQUEST_STATUS_FILTER_OPTIONS = [
@@ -932,11 +1166,11 @@ const REQUEST_STATUS_FILTER_OPTIONS = [
   "rejected",
   "cancelled",
   "completed",
-] as const
+] as const;
 
-const PENDING_ONBOARDING_STATUS = "not_started"
+const PENDING_ONBOARDING_STATUS = "not_started";
 
-const WORKFLOW_STATUS_FILTER_OPTIONS = ["all", "active", "inactive"] as const
+const WORKFLOW_STATUS_FILTER_OPTIONS = ["all", "active", "inactive"] as const;
 
 const USER_VERIFY_MODE_OPTIONS = [
   { value: "fpOrCard", label: "Fingerprint or card" },
@@ -947,7 +1181,7 @@ const USER_VERIFY_MODE_OPTIONS = [
   { value: "fpAndPw", label: "Fingerprint and password" },
   { value: "fpAndCardAndPw", label: "Fingerprint, card and password" },
   { value: "cardOrFpOrPw", label: "Card, fingerprint or password" },
-] as const
+] as const;
 
 const ONBOARDING_TASK_TYPE_OPTIONS = [
   "general",
@@ -960,9 +1194,9 @@ const ONBOARDING_TASK_TYPE_OPTIONS = [
   "induction",
   "acknowledgement",
   "system",
-] as const
+] as const;
 
-const selectPopupClassName = "z-[400]"
+const selectPopupClassName = "z-[400]";
 
 const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentDraft = {
   shiftId: "",
@@ -970,13 +1204,14 @@ const EMPTY_ONBOARDING_SHIFT_ASSIGNMENT: OnboardingShiftAssignmentDraft = {
   effectiveTo: "",
   rotationGroupId: "",
   isPrimary: true,
-}
+};
 
-const EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT: OnboardingTimetableAssignmentDraft = {
-  timetableId: "",
-  effectiveFrom: "",
-  effectiveTo: "",
-}
+const EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT: OnboardingTimetableAssignmentDraft =
+  {
+    timetableId: "",
+    effectiveFrom: "",
+    effectiveTo: "",
+  };
 
 const EMPTY_ONBOARDING_DEVICE_ASSIGNMENT: OnboardingDeviceAssignmentDraft = {
   enabled: false,
@@ -994,7 +1229,7 @@ const EMPTY_ONBOARDING_DEVICE_ASSIGNMENT: OnboardingDeviceAssignmentDraft = {
   deviceIds: [],
   syncNow: true,
   continueOnError: false,
-}
+};
 
 const EMPTY_REQUEST_PROVISIONING: OnboardingProvisioningDraft = {
   roleIds: [],
@@ -1005,57 +1240,65 @@ const EMPTY_REQUEST_PROVISIONING: OnboardingProvisioningDraft = {
   shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
   timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
   deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-}
+};
 
 function asTruthyBoolean(value: unknown) {
   if (typeof value === "boolean") {
-    return value
+    return value;
   }
   if (typeof value === "number") {
-    return value !== 0
+    return value !== 0;
   }
   if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase()
+    const normalized = value.trim().toLowerCase();
     if (["true", "1", "yes", "y"].includes(normalized)) {
-      return true
+      return true;
     }
     if (["false", "0", "no", "n", ""].includes(normalized)) {
-      return false
+      return false;
     }
   }
-  return Boolean(value)
+  return Boolean(value);
 }
 
 function hasEmployeeReviewValue(value: unknown) {
   const normalized = String(value ?? "")
     .trim()
-    .toLowerCase()
-  return !["", "-", "n/a", "not provided", "none", "null", "undefined"].includes(normalized)
+    .toLowerCase();
+  return ![
+    "",
+    "-",
+    "n/a",
+    "not provided",
+    "none",
+    "null",
+    "undefined",
+  ].includes(normalized);
 }
 
 function parseDateOnly(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (!match) return undefined
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 function toDateOnlyValue(value: Date | undefined) {
-  if (!value) return ""
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, "0")
-  const day = String(value.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
+  if (!value) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
-  const picked = new Set<RequestAction>()
+  const picked = new Set<RequestAction>();
   const normalized = (value: unknown) =>
     String(value ?? "")
       .toLowerCase()
-      .trim()
+      .trim();
 
   const tryAdd = (value: unknown) => {
-    const action = normalized(value)
+    const action = normalized(value);
     if (
       action === "submit" ||
       action === "approve" ||
@@ -1064,87 +1307,99 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
       action === "complete" ||
       action === "delete"
     ) {
-      picked.add(action)
+      picked.add(action);
     }
-  }
+  };
 
-  const direct = row.available_actions
+  const direct = row.available_actions;
   if (Array.isArray(direct)) {
     direct.forEach((item) => {
       if (item && typeof item === "object") {
-        const nested = item as AdminRecord
-        tryAdd(nested.action)
-        tryAdd(nested.name)
-        tryAdd(nested.type)
+        const nested = item as AdminRecord;
+        tryAdd(nested.action);
+        tryAdd(nested.name);
+        tryAdd(nested.type);
       } else {
-        tryAdd(item)
+        tryAdd(item);
       }
-    })
+    });
   } else if (typeof direct === "string") {
     direct
       .split(",")
       .map((part) => part.trim())
       .filter(Boolean)
-      .forEach(tryAdd)
+      .forEach(tryAdd);
   }
 
-  tryAdd(row.next_action)
-  tryAdd(row.action_type)
-  tryAdd(row.current_action)
+  tryAdd(row.next_action);
+  tryAdd(row.action_type);
+  tryAdd(row.current_action);
 
-  const nestedStep = (row.current_step ?? row.step ?? row.pending_step ?? null) as AdminRecord | null
+  const nestedStep = (row.current_step ??
+    row.step ??
+    row.pending_step ??
+    null) as AdminRecord | null;
   if (nestedStep) {
-    tryAdd(nestedStep.action_type)
-    tryAdd(nestedStep.next_action)
+    tryAdd(nestedStep.action_type);
+    tryAdd(nestedStep.next_action);
   }
 
-  const status = normalized(row.status ?? row.request_status ?? row.onboarding_status ?? row.workflow_status)
+  const status = normalized(
+    row.status ??
+      row.request_status ??
+      row.onboarding_status ??
+      row.workflow_status,
+  );
 
   // Status-based fallbacks when API does not expose available_actions.
   if (picked.size === 0) {
     if (isOnboardingDraftStatus(status)) {
-      picked.add("submit")
-      picked.add("cancel")
+      picked.add("submit");
+      picked.add("cancel");
     } else if (isOnboardingActableStatus(status)) {
-      picked.add("approve")
-      picked.add("reject")
-      picked.add("cancel")
-    } else if (["ready_for_activation", "activating", "approved", "processing"].includes(status)) {
-      picked.add("complete")
-      picked.add("cancel")
+      picked.add("approve");
+      picked.add("reject");
+      picked.add("cancel");
+    } else if (
+      ["ready_for_activation", "activating", "approved", "processing"].includes(
+        status,
+      )
+    ) {
+      picked.add("complete");
+      picked.add("cancel");
     } else if (status === "rejected") {
-      picked.add("delete")
+      picked.add("delete");
     } else if (status === "cancelled" || status === "completed") {
-      picked.add("delete")
+      picked.add("delete");
     } else if (status && status !== PENDING_ONBOARDING_STATUS) {
       // Unknown non-empty status: still allow cancel when not terminal.
       if (!["completed", "cancelled", "rejected"].includes(status)) {
-        picked.add("cancel")
+        picked.add("cancel");
       }
     }
   }
 
   // Backend: "Only active onboarding requests can be acted on".
   if (isOnboardingDraftStatus(status)) {
-    picked.delete("approve")
-    picked.delete("reject")
-    picked.delete("complete")
-    picked.add("submit")
+    picked.delete("approve");
+    picked.delete("reject");
+    picked.delete("complete");
+    picked.add("submit");
   }
 
-  return picked
+  return picked;
 }
 
 function statusBadgeClass(status: string) {
-  const value = status.trim().toLowerCase()
+  const value = status.trim().toLowerCase();
   if (value === "completed" || value === "approved") {
-    return "bg-emerald-100 text-emerald-700"
+    return "bg-emerald-100 text-emerald-700";
   }
   if (value === "cancelled" || value === "rejected") {
-    return "bg-rose-100 text-rose-700"
+    return "bg-rose-100 text-rose-700";
   }
   if (value === "active" || value === "in_progress" || value === "processing") {
-    return "bg-sky-100 text-sky-700"
+    return "bg-sky-100 text-sky-700";
   }
   if (
     value === "draft" ||
@@ -1153,40 +1408,65 @@ function statusBadgeClass(status: string) {
     value === "in_review" ||
     value === PENDING_ONBOARDING_STATUS
   ) {
-    return "bg-amber-100 text-amber-700"
+    return "bg-amber-100 text-amber-700";
   }
-  return "bg-slate-100 text-slate-700"
+  return "bg-slate-100 text-slate-700";
 }
 
-function toggleNumericId(currentValues: number[], id: number, checked: boolean) {
+function toggleNumericId(
+  currentValues: number[],
+  id: number,
+  checked: boolean,
+) {
   if (checked) {
-    return currentValues.includes(id) ? currentValues : [...currentValues, id]
+    return currentValues.includes(id) ? currentValues : [...currentValues, id];
   }
-  return currentValues.filter((value) => value !== id)
+  return currentValues.filter((value) => value !== id);
 }
 
 function readRecordId(row: AdminRecord, keys: string[]) {
-  const value = readNumber(row, keys)
-  return value !== null ? value : null
+  const value = readNumber(row, keys);
+  return value !== null ? value : null;
 }
 
-function buildAttendanceDeviceLabel(row: AdminRecord, resolveBranchLabel: (branchId: number | null) => string) {
-  const deviceName = readString(row, ["device_name", "deviceName", "name", "title"])
-  const deviceCode = readString(row, ["device_code", "deviceCode"])
-  const serial = readString(row, ["device_serial_number", "deviceSerialNumber", "serial_no"])
-  const model = readString(row, ["device_model", "deviceModel", "model"])
-  const vendor = readString(row, ["vendor_name", "vendorName"])
-  const integrationType = readString(row, ["integration_type", "integrationType"])
-  const branchLabel = resolveBranchLabel(readNumber(row, ["branch_id", "branchId"]))
+function buildAttendanceDeviceLabel(
+  row: AdminRecord,
+  resolveBranchLabel: (branchId: number | null) => string,
+) {
+  const deviceName = readString(row, [
+    "device_name",
+    "deviceName",
+    "name",
+    "title",
+  ]);
+  const deviceCode = readString(row, ["device_code", "deviceCode"]);
+  const serial = readString(row, [
+    "device_serial_number",
+    "deviceSerialNumber",
+    "serial_no",
+  ]);
+  const model = readString(row, ["device_model", "deviceModel", "model"]);
+  const vendor = readString(row, ["vendor_name", "vendorName"]);
+  const integrationType = readString(row, [
+    "integration_type",
+    "integrationType",
+  ]);
+  const branchLabel = resolveBranchLabel(
+    readNumber(row, ["branch_id", "branchId"]),
+  );
 
-  const title = [deviceName, deviceCode, serial].filter((value) => value !== "-")
-  const detail = [model, vendor, integrationType, branchLabel].filter((value) => value !== "-").join(" • ")
+  const title = [deviceName, deviceCode, serial].filter(
+    (value) => value !== "-",
+  );
+  const detail = [model, vendor, integrationType, branchLabel]
+    .filter((value) => value !== "-")
+    .join(" • ");
 
   if (title.length === 0) {
-    return detail || `Device #${readNumber(row, ["id", "device_id"]) ?? "?"}`
+    return detail || `Device #${readNumber(row, ["id", "device_id"]) ?? "?"}`;
   }
 
-  return detail ? `${title.join(" • ")} (${detail})` : title.join(" • ")
+  return detail ? `${title.join(" • ")} (${detail})` : title.join(" • ");
 }
 
 function MultiSelectChecklist({
@@ -1198,73 +1478,110 @@ function MultiSelectChecklist({
   hint,
   compact = false,
 }: {
-  label: string
-  options: Array<{ id: number; label: string; description?: string }>
-  selectedIds: number[]
-  onToggle: (id: number, checked: boolean) => void
-  emptyText: string
-  hint?: React.ReactNode
-  compact?: boolean
+  label: string;
+  options: Array<{ id: number; label: string; description?: string }>;
+  selectedIds: number[];
+  onToggle: (id: number, checked: boolean) => void;
+  emptyText: string;
+  hint?: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
     <div className={cn("grid", compact ? "gap-1" : "gap-2")}>
       <div className="flex items-center justify-between gap-2">
-        <p className={cn("font-medium text-slate-900", compact ? "text-xs" : "text-sm")}>{label}</p>
+        <p
+          className={cn(
+            "font-medium text-slate-900",
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
+          {label}
+        </p>
         {selectedIds.length > 0 ? (
-          <span className="text-[11px] text-muted-foreground">{selectedIds.length} selected</span>
+          <span className="text-[11px] text-muted-foreground">
+            {selectedIds.length} selected
+          </span>
         ) : null}
       </div>
       <div
-        className={cn("overflow-y-auto rounded-md border border-slate-200 bg-white", compact ? "max-h-28" : "max-h-44")}
+        className={cn(
+          "overflow-y-auto rounded-md border border-slate-200 bg-white",
+          compact ? "max-h-28" : "max-h-44",
+        )}
       >
         {options.length === 0 ? (
-          <div className={cn("text-muted-foreground", compact ? "px-2 py-2 text-xs" : "px-3 py-3 text-sm")}>
+          <div
+            className={cn(
+              "text-muted-foreground",
+              compact ? "px-2 py-2 text-xs" : "px-3 py-3 text-sm",
+            )}
+          >
             {emptyText}
           </div>
         ) : (
           <div className={cn("grid gap-0.5", compact ? "p-1" : "p-2")}>
             {options.map((option) => {
-              const checked = selectedIds.includes(option.id)
+              const checked = selectedIds.includes(option.id);
               return (
                 <label
                   key={option.id}
                   className={cn(
                     "flex cursor-pointer items-start gap-2 rounded-md hover:bg-slate-50",
-                    compact ? "px-1.5 py-1 text-xs" : "px-2 py-2 text-sm"
+                    compact ? "px-1.5 py-1 text-xs" : "px-2 py-2 text-sm",
                   )}
                 >
-                  <Checkbox checked={checked} onCheckedChange={(value) => onToggle(option.id, Boolean(value))} />
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(value) =>
+                      onToggle(option.id, Boolean(value))
+                    }
+                  />
                   <span className="min-w-0">
-                    <span className="block font-medium text-slate-800">{option.label}</span>
+                    <span className="block font-medium text-slate-800">
+                      {option.label}
+                    </span>
                     {option.description ? (
-                      <span className="block text-[11px] text-muted-foreground">{option.description}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {option.description}
+                      </span>
                     ) : null}
                   </span>
                 </label>
-              )
+              );
             })}
           </div>
         )}
       </div>
-      {hint ? <div className="text-[11px] text-muted-foreground">{hint}</div> : null}
+      {hint ? (
+        <div className="text-[11px] text-muted-foreground">{hint}</div>
+      ) : null}
     </div>
-  )
+  );
 }
 
 export function OnboardingView() {
-  const searchParams = useSearchParams()
+  const searchParams = useSearchParams();
   const highlightedRequestId = React.useMemo(
-    () => searchParams?.get("highlight") ?? searchParams?.get("requestId") ?? searchParams?.get("request_id") ?? "",
-    [searchParams]
-  )
-  const requestedTab = searchParams?.get("tab") ?? ""
-  const actor = useDashboardActor()
-  const actorPermissions = actor.permissionLabels
-  const isEmployeeMode = actor.ready ? actor.accessMode === "employee" || !actor.isAdmin : false
+    () =>
+      searchParams?.get("highlight") ??
+      searchParams?.get("requestId") ??
+      searchParams?.get("request_id") ??
+      "",
+    [searchParams],
+  );
+  const requestedTab = searchParams?.get("tab") ?? "";
+  const actor = useDashboardActor();
+  const actorPermissions = actor.permissionLabels;
+  const isEmployeeMode = actor.ready
+    ? actor.accessMode === "employee" || !actor.isAdmin
+    : false;
   const canViewOnboardingRequests = React.useMemo(
-    () => actor.ready && (isEmployeeMode || canPerformPermission(actorPermissions, "onboarding_requests:read")),
-    [actor.ready, actorPermissions, isEmployeeMode]
-  )
+    () =>
+      actor.ready &&
+      (isEmployeeMode ||
+        canPerformPermission(actorPermissions, "onboarding_requests:read")),
+    [actor.ready, actorPermissions, isEmployeeMode],
+  );
   const canViewOnboardingWorkflows = React.useMemo(
     () =>
       actor.ready &&
@@ -1277,134 +1594,177 @@ export function OnboardingView() {
         ],
         mode: "any",
       }),
-    [actor.ready, actorPermissions]
-  )
+    [actor.ready, actorPermissions],
+  );
   const canReadEmployeeDirectory = React.useMemo(
     () => canPerformPermission(actorPermissions, "employees:read"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canReadOnboardingDocuments = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_documents:read"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canReadOnboardingTasks = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_tasks:read"),
-    [actorPermissions]
-  )
-  const canReadRoles = React.useMemo(() => canPerformPermission(actorPermissions, "roles:read"), [actorPermissions])
+    [actorPermissions],
+  );
+  const canReadRoles = React.useMemo(
+    () => canPerformPermission(actorPermissions, "roles:read"),
+    [actorPermissions],
+  );
   const canReadCompanyUsers = React.useMemo(
     () =>
       canPerformPermission(actorPermissions, {
         permissions: ["company_users:read", "users:read"],
         mode: "any",
       }),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canViewPendingInvitations = React.useMemo(
     () =>
       actor.ready &&
       canPerformPermission(actorPermissions, {
-        permissions: ["employees:create", "onboarding_requests:read", "onboarding_workflows:read"],
+        permissions: [
+          "employees:create",
+          "onboarding_requests:read",
+          "onboarding_workflows:read",
+        ],
         mode: "any",
       }),
-    [actor.ready, actorPermissions]
-  )
+    [actor.ready, actorPermissions],
+  );
   const canResendPendingInvitations = React.useMemo(
     () => canPerformPermission(actorPermissions, "employees:create"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canCreateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:create"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canUpdateOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:update"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canApproveOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:approve"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canCancelOnboardingRequests = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_requests:cancel"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canCompleteOnboardingRequests = React.useMemo(
-    () => canPerformPermission(actorPermissions, "onboarding_requests:complete"),
-    [actorPermissions]
-  )
+    () =>
+      canPerformPermission(actorPermissions, "onboarding_requests:complete"),
+    [actorPermissions],
+  );
   const canReadPayrollProfile = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:profiles:read"),
-    [actorPermissions]
-  )
-  const canReadJoiningSalary = canReadPayrollProfile
+    [actorPermissions],
+  );
+  const canReadJoiningSalary = canReadPayrollProfile;
+  const canReadEmploymentContracts = React.useMemo(
+    () =>
+      canPerformPermission(
+        actorPermissions,
+        EMPLOYMENT_CONTRACT_READ_PERMISSION,
+      ),
+    [actorPermissions],
+  );
+  const canManageEmploymentContracts = React.useMemo(
+    () =>
+      canPerformPermission(
+        actorPermissions,
+        EMPLOYMENT_CONTRACT_MANAGE_PERMISSION,
+      ),
+    [actorPermissions],
+  );
   const canManageJoiningSalary = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:profiles"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canApproveJoiningSalary = React.useMemo(
     () => canPerformPermission(actorPermissions, "payroll:salary:approve"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canCreateOnboardingWorkflows = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_workflows:create"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canUpdateOnboardingWorkflows = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_workflows:update"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const canDeleteOnboardingWorkflows = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_workflows:delete"),
-    [actorPermissions]
-  )
+    [actorPermissions],
+  );
   const [activeTab, setActiveTab] = React.useState<OnboardingTab>(
-    requestedTab === "invitations" ? "invitations" : "requests"
-  )
-  const [loading, setLoading] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+    requestedTab === "invitations" ? "invitations" : "requests",
+  );
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [users, setUsers] = React.useState<AdminRecord[]>([])
-  const [workflowDepartmentEmployees, setWorkflowDepartmentEmployees] = React.useState<AdminRecord[]>([])
-  const [roles, setRoles] = React.useState<AdminRecord[]>([])
-  const [workflowPositions, setWorkflowPositions] = React.useState<AdminRecord[]>([])
-  const [workflowAssignmentKind, setWorkflowAssignmentKind] = React.useState<"user" | "role" | "position">("user")
-  const [workflowAssignmentTarget, setWorkflowAssignmentTarget] = React.useState("")
-  const [branches, setBranches] = React.useState<AdminRecord[]>([])
-  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([])
-  const [rotationGroupRecords, setRotationGroupRecords] = React.useState<AdminRecord[]>([])
-  const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>([])
-  const [accessGroups, setAccessGroups] = React.useState<AdminRecord[]>([])
-  const [accessOrganizations, setAccessOrganizations] = React.useState<AdminRecord[]>([])
-  const [attendanceDevices, setAttendanceDevices] = React.useState<AdminRecord[]>([])
-  const [attendancePolicies, setAttendancePolicies] = React.useState<AdminRecord[]>([])
-  const [leavePolicies, setLeavePolicies] = React.useState<AdminRecord[]>([])
-  const [requests, setRequests] = React.useState<AdminRecord[]>([])
-  const [invitations, setInvitations] = React.useState<AdminRecord[]>([])
-  const [invitationSearch, setInvitationSearch] = React.useState("")
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([]);
+  const [users, setUsers] = React.useState<AdminRecord[]>([]);
+  const [workflowDepartmentEmployees, setWorkflowDepartmentEmployees] =
+    React.useState<AdminRecord[]>([]);
+  const [roles, setRoles] = React.useState<AdminRecord[]>([]);
+  const [workflowPositions, setWorkflowPositions] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [workflowAssignmentKind, setWorkflowAssignmentKind] = React.useState<
+    "user" | "role" | "position"
+  >("user");
+  const [workflowAssignmentTarget, setWorkflowAssignmentTarget] =
+    React.useState("");
+  const [branches, setBranches] = React.useState<AdminRecord[]>([]);
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([]);
+  const [shiftRecords, setShiftRecords] = React.useState<AdminRecord[]>([]);
+  const [rotationGroupRecords, setRotationGroupRecords] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [timetableRecords, setTimetableRecords] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [accessGroups, setAccessGroups] = React.useState<AdminRecord[]>([]);
+  const [accessOrganizations, setAccessOrganizations] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [attendanceDevices, setAttendanceDevices] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [attendancePolicies, setAttendancePolicies] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [leavePolicies, setLeavePolicies] = React.useState<AdminRecord[]>([]);
+  const [requests, setRequests] = React.useState<AdminRecord[]>([]);
+  const [invitations, setInvitations] = React.useState<AdminRecord[]>([]);
+  const [invitationSearch, setInvitationSearch] = React.useState("");
   const [invitationStatusFilter, setInvitationStatusFilter] =
-    React.useState<EmployeeInvitationHistoryStatus>("all")
-  const [requestSearch, setRequestSearch] = React.useState("")
-  const [requestStatusFilter, setRequestStatusFilter] = React.useState("all")
-  const [requestPresentation, setRequestPresentation] = React.useState("overview")
-  const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("")
-  const [workflowSearch, setWorkflowSearch] = React.useState("")
-  const [workflowStatusFilter, setWorkflowStatusFilter] = React.useState("all")
-  const [workflows, setWorkflows] = React.useState<AdminRecord[]>([])
-  const debouncedRequestSearch = useDebouncedValue(requestSearch, 350)
-  const debouncedWorkflowSearch = useDebouncedValue(workflowSearch, 350)
+    React.useState<EmployeeInvitationHistoryStatus>("all");
+  const [requestSearch, setRequestSearch] = React.useState("");
+  const [requestStatusFilter, setRequestStatusFilter] = React.useState("all");
+  const [requestPresentation, setRequestPresentation] =
+    React.useState("overview");
+  const [requestEmployeeFilter, setRequestEmployeeFilter] = React.useState("");
+  const [workflowSearch, setWorkflowSearch] = React.useState("");
+  const [workflowStatusFilter, setWorkflowStatusFilter] = React.useState("all");
+  const [workflows, setWorkflows] = React.useState<AdminRecord[]>([]);
+  const debouncedRequestSearch = useDebouncedValue(requestSearch, 350);
+  const debouncedWorkflowSearch = useDebouncedValue(workflowSearch, 350);
   const [, setLoadedTabs] = React.useState<Record<OnboardingTab, boolean>>({
     invitations: false,
     requests: false,
     workflows: false,
-  })
-  const invitationsFetchKeyRef = React.useRef<string | null>(null)
-  const requestsFetchKeyRef = React.useRef<string | null>(null)
-  const workflowsFetchKeyRef = React.useRef<string | null>(null)
-  const [loadedLookups, setLoadedLookups] = React.useState<Record<OnboardingLookupKey, boolean>>({
+  });
+  const invitationsFetchKeyRef = React.useRef<string | null>(null);
+  const requestsFetchKeyRef = React.useRef<string | null>(null);
+  const workflowsFetchKeyRef = React.useRef<string | null>(null);
+  const [loadedLookups, setLoadedLookups] = React.useState<
+    Record<OnboardingLookupKey, boolean>
+  >({
     employees: false,
     workflows: false,
     users: false,
@@ -1420,45 +1780,70 @@ export function OnboardingView() {
     attendanceDevices: false,
     attendancePolicies: false,
     leavePolicies: false,
-  })
-  const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false)
-  const [workspaceTab, setWorkspaceTab] = React.useState("overview")
-  const [readinessRevision, setReadinessRevision] = React.useState(0)
-  const [workflowMapVisible, setWorkflowMapVisible] = React.useState(false)
-  const [handoffRequirement, setHandoffRequirement] = React.useState<{ id: string; label: string } | null>(null)
-  const workspaceRequestRef = React.useRef<number | null>(null)
-  const workspaceLoadSequence = React.useRef(0)
-  const reviewDraftVersions = React.useRef<Record<string, number>>({})
-  const dirtyReviewKeys = React.useRef(new Set<string>())
-  const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false)
-  const [payrollDrawerOpen, setPayrollDrawerOpen] = React.useState(false)
-  const [bankVerificationOpen, setBankVerificationOpen] = React.useState(false)
-  const [bankVerificationLoading, setBankVerificationLoading] = React.useState(false)
-  const [bankAccounts, setBankAccounts] = React.useState<AdminRecord[]>([])
-  const [workspaceEmployeePhoto, setWorkspaceEmployeePhoto] = React.useState("")
-  const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>([])
-  const [joiningSalary, setJoiningSalary] = React.useState<AdminRecord | null>(null)
-  const [resendingInvitationId, setResendingInvitationId] = React.useState<number | null>(null)
-  const [requestDetailsLoading, setRequestDetailsLoading] = React.useState(false)
-  const [selectedRequestRow, setSelectedRequestRow] = React.useState<AdminRecord | null>(null)
-  const [selectedRequestDetails, setSelectedRequestDetails] = React.useState<AdminRecord | null>(null)
-  const [selectedRequestProgress, setSelectedRequestProgress] = React.useState<AdminRecord | null>(null)
-  const [selectedRequestAuditLogs, setSelectedRequestAuditLogs] = React.useState<AdminRecord[]>([])
-  const [selectedRequestDocuments, setSelectedRequestDocuments] = React.useState<AdminRecord[]>([])
-  const [selectedRequestTasks, setSelectedRequestTasks] = React.useState<AdminRecord[]>([])
-  const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<AdminRecord[]>([])
-  const [employeeReviewStep, setEmployeeReviewStep] = React.useState(0)
-  const [employeeReviewComments, setEmployeeReviewComments] = React.useState<Record<string, string>>({})
-  const [allowIncompleteWorkflowStart, setAllowIncompleteWorkflowStart] = React.useState(false)
-  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false)
-  const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
+  });
+  const [requestDetailsOpen, setRequestDetailsOpen] = React.useState(false);
+  const [workspaceTab, setWorkspaceTab] = React.useState("overview");
+  const [readinessRevision, setReadinessRevision] = React.useState(0);
+  const [workflowMapVisible, setWorkflowMapVisible] = React.useState(false);
+  const [handoffRequirement, setHandoffRequirement] = React.useState<{
+    id: string;
+    label: string;
+  } | null>(null);
+  const workspaceRequestRef = React.useRef<number | null>(null);
+  const workspaceLoadSequence = React.useRef(0);
+  const reviewDraftVersions = React.useRef<Record<string, number>>({});
+  const dirtyReviewKeys = React.useRef(new Set<string>());
+  const [salaryDialogOpen, setSalaryDialogOpen] = React.useState(false);
+  const [payrollDrawerOpen, setPayrollDrawerOpen] = React.useState(false);
+  const [bankVerificationOpen, setBankVerificationOpen] = React.useState(false);
+  const [bankVerificationLoading, setBankVerificationLoading] =
+    React.useState(false);
+  const [bankAccounts, setBankAccounts] = React.useState<AdminRecord[]>([]);
+  const [workspaceEmployeePhoto, setWorkspaceEmployeePhoto] =
+    React.useState("");
+  const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [joiningSalary, setJoiningSalary] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [resendingInvitationId, setResendingInvitationId] = React.useState<
+    number | null
+  >(null);
+  const [requestDetailsLoading, setRequestDetailsLoading] =
+    React.useState(false);
+  const [selectedRequestRow, setSelectedRequestRow] =
+    React.useState<AdminRecord | null>(null);
+  const [selectedRequestDetails, setSelectedRequestDetails] =
+    React.useState<AdminRecord | null>(null);
+  const [selectedRequestProgress, setSelectedRequestProgress] =
+    React.useState<AdminRecord | null>(null);
+  const [selectedRequestAuditLogs, setSelectedRequestAuditLogs] =
+    React.useState<AdminRecord[]>([]);
+  const [selectedRequestDocuments, setSelectedRequestDocuments] =
+    React.useState<AdminRecord[]>([]);
+  const [selectedRequestTasks, setSelectedRequestTasks] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [employeeReviewStep, setEmployeeReviewStep] = React.useState(0);
+  const [employeeReviewComments, setEmployeeReviewComments] = React.useState<
+    Record<string, string>
+  >({});
+  const [allowIncompleteWorkflowStart, setAllowIncompleteWorkflowStart] =
+    React.useState(false);
+  const [showDocumentComposer, setShowDocumentComposer] = React.useState(false);
+  const [documentUploadFile, setDocumentUploadFile] =
+    React.useState<File | null>(null);
   const [documentForm, setDocumentForm] = React.useState({
     title: "",
     description: "",
     document_type: "",
     expiry_date: "",
-  })
-  const [showTaskComposer, setShowTaskComposer] = React.useState(false)
+  });
+  const [showTaskComposer, setShowTaskComposer] = React.useState(false);
   const [taskForm, setTaskForm] = React.useState({
     title: "",
     asset_items: [""],
@@ -1467,7 +1852,7 @@ export function OnboardingView() {
     assigned_company_user_id: "",
     assigned_department_id: "",
     due_date: "",
-  })
+  });
 
   const [requestForm, setRequestForm] = React.useState({
     employee_id: "",
@@ -1477,16 +1862,18 @@ export function OnboardingView() {
     planned_start_date: "",
     planned_completion_date: "",
     submit: "true",
-  })
-  const [requestProvisioningEnabled, setRequestProvisioningEnabled] = React.useState(false)
-  const [requestProvisioning, setRequestProvisioning] = React.useState<OnboardingProvisioningDraft>({
-    ...EMPTY_REQUEST_PROVISIONING,
-    shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
-    timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-    deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-  })
+  });
+  const [requestProvisioningEnabled, setRequestProvisioningEnabled] =
+    React.useState(false);
+  const [requestProvisioning, setRequestProvisioning] =
+    React.useState<OnboardingProvisioningDraft>({
+      ...EMPTY_REQUEST_PROVISIONING,
+      shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+      deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
+    });
 
-  const [workflowBranchId, setWorkflowBranchId] = React.useState("")
+  const [workflowBranchId, setWorkflowBranchId] = React.useState("");
   const [workflowForm, setWorkflowForm] = React.useState({
     name: "",
     description: "",
@@ -1500,149 +1887,197 @@ export function OnboardingView() {
     is_required: "true",
     assigned_user_id: "",
     assigned_department_id: "",
-  })
+  });
 
   React.useEffect(() => {
-    const departmentId = Number(workflowForm.assigned_department_id)
+    const departmentId = Number(workflowForm.assigned_department_id);
     if (!Number.isFinite(departmentId) || departmentId <= 0) {
-      setWorkflowDepartmentEmployees([])
-      return
+      setWorkflowDepartmentEmployees([]);
+      return;
     }
 
-    const accessToken = readStoredToken()
+    const accessToken = readStoredToken();
     if (!accessToken) {
-      setWorkflowDepartmentEmployees([])
-      return
+      setWorkflowDepartmentEmployees([]);
+      return;
     }
 
-    let cancelled = false
+    let cancelled = false;
     void listAllEmployees(
       accessToken,
       { department_id: departmentId, employment_status: "active" },
       { pageSize: 100, maxPages: 50 },
     )
       .then((rows) => {
-        if (!cancelled) setWorkflowDepartmentEmployees(rows)
+        if (!cancelled) setWorkflowDepartmentEmployees(rows);
       })
       .catch(() => {
-        if (!cancelled) setWorkflowDepartmentEmployees([])
-      })
+        if (!cancelled) setWorkflowDepartmentEmployees([]);
+      });
 
     return () => {
-      cancelled = true
-    }
-  }, [workflowForm.assigned_department_id])
-  const [workflowSteps, setWorkflowSteps] = React.useState<OnboardingWorkflowStepDraft[]>([])
-  const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] = React.useState<number[]>([])
-  const [stepDialogOpen, setStepDialogOpen] = React.useState(false)
-  const stepTitleInputRef = React.useRef<HTMLInputElement>(null)
-  const [checklistItemDialogOpen, setChecklistItemDialogOpen] = React.useState(false)
-  const [editingChecklistItemIndex, setEditingChecklistItemIndex] = React.useState<number | null>(null)
+      cancelled = true;
+    };
+  }, [workflowForm.assigned_department_id]);
+  const [workflowSteps, setWorkflowSteps] = React.useState<
+    OnboardingWorkflowStepDraft[]
+  >([]);
+  const [persistedWorkflowStepIds, setPersistedWorkflowStepIds] =
+    React.useState<number[]>([]);
+  const [stepDialogOpen, setStepDialogOpen] = React.useState(false);
+  const stepTitleInputRef = React.useRef<HTMLInputElement>(null);
+  const [checklistItemDialogOpen, setChecklistItemDialogOpen] =
+    React.useState(false);
+  const [editingChecklistItemIndex, setEditingChecklistItemIndex] =
+    React.useState<number | null>(null);
   const [checklistItemForm, setChecklistItemForm] = React.useState({
     name: "",
     description: "",
-  })
-  const [editingStepIndex, setEditingStepIndex] = React.useState<number | null>(null)
-  const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false)
-  const [editingWorkflowId, setEditingWorkflowId] = React.useState<number | null>(null)
-  const [requestSheetOpen, setRequestSheetOpen] = React.useState(false)
-  const [selectedInvitation, setSelectedInvitation] = React.useState<AdminRecord | null>(null)
-  const [changeWorkflowDialogOpen, setChangeWorkflowDialogOpen] = React.useState(false)
-  const [changeWorkflowRequest, setChangeWorkflowRequest] = React.useState<AdminRecord | null>(null)
-  const [replacementWorkflowId, setReplacementWorkflowId] = React.useState("")
-  const [approvalAssignmentDialogOpen, setApprovalAssignmentDialogOpen] = React.useState(false)
-  const [approvalToReassign, setApprovalToReassign] = React.useState<AdminRecord | null>(null)
-  const [replacementApproverId, setReplacementApproverId] = React.useState("")
-  const [approvalReassignmentReason, setApprovalReassignmentReason] = React.useState("")
+  });
+  const [editingStepIndex, setEditingStepIndex] = React.useState<number | null>(
+    null,
+  );
+  const [workflowSheetOpen, setWorkflowSheetOpen] = React.useState(false);
+  const [editingWorkflowId, setEditingWorkflowId] = React.useState<
+    number | null
+  >(null);
+  const [requestSheetOpen, setRequestSheetOpen] = React.useState(false);
+  const [selectedInvitation, setSelectedInvitation] =
+    React.useState<AdminRecord | null>(null);
+  const [changeWorkflowDialogOpen, setChangeWorkflowDialogOpen] =
+    React.useState(false);
+  const [changeWorkflowRequest, setChangeWorkflowRequest] =
+    React.useState<AdminRecord | null>(null);
+  const [replacementWorkflowId, setReplacementWorkflowId] = React.useState("");
+  const [approvalAssignmentDialogOpen, setApprovalAssignmentDialogOpen] =
+    React.useState(false);
+  const [approvalToReassign, setApprovalToReassign] =
+    React.useState<AdminRecord | null>(null);
+  const [replacementApproverId, setReplacementApproverId] = React.useState("");
+  const [approvalReassignmentReason, setApprovalReassignmentReason] =
+    React.useState("");
 
   React.useEffect(() => {
     if (!stepDialogOpen) {
-      return
+      return;
     }
 
-    const focusTitle = window.requestAnimationFrame(() => stepTitleInputRef.current?.focus())
-    return () => window.cancelAnimationFrame(focusTitle)
-  }, [stepDialogOpen])
+    const focusTitle = window.requestAnimationFrame(() =>
+      stepTitleInputRef.current?.focus(),
+    );
+    return () => window.cancelAnimationFrame(focusTitle);
+  }, [stepDialogOpen]);
 
   React.useEffect(() => {
     if (requestedTab === "invitations") {
-      setActiveTab("invitations")
+      setActiveTab("invitations");
     }
-  }, [requestedTab])
+  }, [requestedTab]);
 
   const resolveBranchLabel = React.useCallback(
-    (branchId: number | null) => resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title"]),
-    [branches]
-  )
+    (branchId: number | null) =>
+      resolveOptionLabel(
+        branches,
+        branchId,
+        ["id", "branch_id"],
+        ["name", "title"],
+      ),
+    [branches],
+  );
 
   const requestRoleOptions = React.useMemo(
     () =>
       roles
         .map((row) => {
-          const id = readRecordId(row, ["id", "role_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "role_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["display_name", "name", "title"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [roles]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [roles],
+  );
 
   const requestBranchAccessOptions = React.useMemo(
     () =>
       branches
         .map((row) => {
-          const id = readRecordId(row, ["id", "branch_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "branch_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["name", "title"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [branches]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [branches],
+  );
 
   const requestShiftOptions = React.useMemo(
     () =>
       shiftRecords
         .map((row) => {
-          const id = readRecordId(row, ["id", "shift_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "shift_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["name", "title", "code"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [shiftRecords]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [shiftRecords],
+  );
 
   const requestTimetableOptions = React.useMemo(
     () =>
       timetableRecords
         .map((row) => {
-          const id = readRecordId(row, ["id", "timetable_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "timetable_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["name", "title", "code"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [timetableRecords]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [timetableRecords],
+  );
 
   const requestRotationGroupOptions = React.useMemo(
     () =>
       rotationGroupRecords
         .map((row) => {
-          const id = readRecordId(row, ["id", "rotation_group_id", "rotationGroupId"])
-          if (id === null) return null
-          const name = readString(row, ["name", "title", "rotation_group_name", "rotationGroupName"])
-          const code = readString(row, ["code", "rotation_group_code", "rotationGroupCode"])
+          const id = readRecordId(row, [
+            "id",
+            "rotation_group_id",
+            "rotationGroupId",
+          ]);
+          if (id === null) return null;
+          const name = readString(row, [
+            "name",
+            "title",
+            "rotation_group_name",
+            "rotationGroupName",
+          ]);
+          const code = readString(row, [
+            "code",
+            "rotation_group_code",
+            "rotationGroupCode",
+          ]);
           const label =
             name !== "-" && code !== "-"
               ? `${name} (${code})`
@@ -1650,69 +2085,90 @@ export function OnboardingView() {
                 ? name
                 : code !== "-"
                   ? code
-                  : `Rotation group #${id}`
-          return { id, label }
+                  : `Rotation group #${id}`;
+          return { id, label };
         })
-        .filter((option): option is { id: number; label: string } => option !== null),
-    [rotationGroupRecords]
-  )
+        .filter(
+          (option): option is { id: number; label: string } => option !== null,
+        ),
+    [rotationGroupRecords],
+  );
 
   const requestAccessGroupOptions = React.useMemo(
     () =>
       accessGroups
         .map((row) => {
-          const id = readRecordId(row, ["id", "access_group_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "access_group_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["name", "title"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [accessGroups]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [accessGroups],
+  );
 
   const requestAccessOrganizationOptions = React.useMemo(
     () =>
       accessOrganizations
         .map((row) => {
-          const id = readRecordId(row, ["id", "organization_id"])
-          if (id === null) return null
+          const id = readRecordId(row, ["id", "organization_id"]);
+          if (id === null) return null;
           return {
             id,
             label: readString(row, ["name", "title"]),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [accessOrganizations]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [accessOrganizations],
+  );
 
   const requestAttendanceDeviceOptions = React.useMemo(
     () =>
       attendanceDevices
         .map((row) => {
-          const id = readRecordId(row, ["id", "device_id", "attendance_device_id"])
-          if (id === null) return null
+          const id = readRecordId(row, [
+            "id",
+            "device_id",
+            "attendance_device_id",
+          ]);
+          if (id === null) return null;
           return {
             id,
             label: buildAttendanceDeviceLabel(row, resolveBranchLabel),
-          }
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null && option.label !== "-"),
-    [attendanceDevices, resolveBranchLabel]
-  )
+        .filter(
+          (option): option is { id: number; label: string } =>
+            option !== null && option.label !== "-",
+        ),
+    [attendanceDevices, resolveBranchLabel],
+  );
 
   const resolveProvisioningLabel = React.useCallback(
-    (rows: AdminRecord[], id: number | null, idKeys: string[], labelKeys: string[]) =>
-      resolveOptionLabel(rows, id, idKeys, labelKeys),
-    []
-  )
+    (
+      rows: AdminRecord[],
+      id: number | null,
+      idKeys: string[],
+      labelKeys: string[],
+    ) => resolveOptionLabel(rows, id, idKeys, labelKeys),
+    [],
+  );
 
   const loadLookups = React.useCallback(
     async (token: string, lookupKeys: OnboardingLookupKey[], force = false) => {
-      const missingKeys = force ? lookupKeys : lookupKeys.filter((key) => !loadedLookups[key])
+      const missingKeys = force
+        ? lookupKeys
+        : lookupKeys.filter((key) => !loadedLookups[key]);
       if (missingKeys.length === 0) {
-        return
+        return;
       }
 
       const results = await Promise.all(
@@ -1725,15 +2181,17 @@ export function OnboardingView() {
                 sortBy: "created_at",
                 sortOrder: "DESC",
                 employment_status: "onboarding",
-              })
-              const merged = mergeEmployeeRows(onboardingEmployees.rows).filter(isOnboardingEligibleEmployee)
+              });
+              const merged = mergeEmployeeRows(onboardingEmployees.rows).filter(
+                isOnboardingEligibleEmployee,
+              );
               return {
                 key,
                 result: {
                   ...onboardingEmployees,
                   rows: merged,
                 },
-              }
+              };
             }
             case "workflows":
               return {
@@ -1744,26 +2202,41 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "users": {
               const [companyUsers, employeeDirectory] = await Promise.all([
-                listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(() => [] as AdminRecord[]),
+                listAllCurrentCompanyUsers(token, { maxPages: 30 }).catch(
+                  () => [] as AdminRecord[],
+                ),
                 listEmployees(token, {
                   page: 1,
                   limit: 200,
                   sortBy: "created_at",
                   sortOrder: "DESC",
-                }).then((result) => result.rows).catch(() => [] as AdminRecord[]),
-              ])
-              const withDepartmentAssignments = companyUsers.map((companyUser) => {
-                const flattened = flattenAssigneeRecord(companyUser)
-                const linkedEmployees = employeeDirectory.filter((employee) =>
-                  employeeMatchesCompanyUser(employee, companyUser)
-                )
-                const departmentIds = new Set(collectDepartmentIds(flattened))
-                linkedEmployees.forEach((employee) => collectDepartmentIds(employee).forEach((id) => departmentIds.add(id)))
-                return { ...flattened, department_ids: Array.from(departmentIds) }
-              })
+                })
+                  .then((result) => result.rows)
+                  .catch(() => [] as AdminRecord[]),
+              ]);
+              const withDepartmentAssignments = companyUsers.map(
+                (companyUser) => {
+                  const flattened = flattenAssigneeRecord(companyUser);
+                  const linkedEmployees = employeeDirectory.filter((employee) =>
+                    employeeMatchesCompanyUser(employee, companyUser),
+                  );
+                  const departmentIds = new Set(
+                    collectDepartmentIds(flattened),
+                  );
+                  linkedEmployees.forEach((employee) =>
+                    collectDepartmentIds(employee).forEach((id) =>
+                      departmentIds.add(id),
+                    ),
+                  );
+                  return {
+                    ...flattened,
+                    department_ids: Array.from(departmentIds),
+                  };
+                },
+              );
               return {
                 key,
                 result: {
@@ -1773,12 +2246,15 @@ export function OnboardingView() {
                   total: withDepartmentAssignments.length,
                   totalPages: 1,
                 },
-              }
+              };
             }
             case "roles":
-              return { key, result: await listResource("roles", token) }
+              return { key, result: await listResource("roles", token) };
             case "positions":
-              return { key, result: await listPositions(token, { limit: 200 }) }
+              return {
+                key,
+                result: await listPositions(token, { limit: 200 }),
+              };
             case "branches":
               return {
                 key,
@@ -1788,7 +2264,7 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "departments":
               return {
                 key,
@@ -1798,7 +2274,7 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "shifts":
               return {
                 key,
@@ -1808,17 +2284,21 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "rotationGroups":
               return {
                 key,
-                result: await listShiftResources(token, "shift-rotation-groups", {
-                  page: 1,
-                  limit: 100,
-                  sortBy: "created_at",
-                  sortOrder: "DESC",
-                }),
-              }
+                result: await listShiftResources(
+                  token,
+                  "shift-rotation-groups",
+                  {
+                    page: 1,
+                    limit: 100,
+                    sortBy: "created_at",
+                    sortOrder: "DESC",
+                  },
+                ),
+              };
             case "timetables":
               return {
                 key,
@@ -1828,7 +2308,7 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "accessGroups":
               return {
                 key,
@@ -1838,17 +2318,21 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "accessOrganizations":
               return {
                 key,
-                result: await listAccessControlResources(token, "organizations", {
-                  page: 1,
-                  limit: 100,
-                  sortBy: "created_at",
-                  sortOrder: "DESC",
-                }),
-              }
+                result: await listAccessControlResources(
+                  token,
+                  "organizations",
+                  {
+                    page: 1,
+                    limit: 100,
+                    sortBy: "created_at",
+                    sortOrder: "DESC",
+                  },
+                ),
+              };
             case "attendanceDevices":
               return {
                 key,
@@ -1858,112 +2342,129 @@ export function OnboardingView() {
                   sortBy: "created_at",
                   sortOrder: "DESC",
                 }),
-              }
+              };
             case "attendancePolicies":
-              return { key, result: await listAttendancePolicies(token, { page: 1, limit: 100, is_active: true }) }
+              return {
+                key,
+                result: await listAttendancePolicies(token, {
+                  page: 1,
+                  limit: 100,
+                  is_active: true,
+                }),
+              };
             case "leavePolicies":
-              return { key, result: await listLeavePolicies(token, { page: 1, limit: 100, status: "active" } as never) }
+              return {
+                key,
+                result: await listLeavePolicies(token, {
+                  page: 1,
+                  limit: 100,
+                  status: "active",
+                } as never),
+              };
           }
-        })
-      )
+        }),
+      );
 
       results.forEach((entry) => {
-        if (!entry) return
+        if (!entry) return;
         switch (entry.key) {
           case "employees":
-            setEmployees(entry.result.rows)
-            break
+            setEmployees(entry.result.rows);
+            break;
           case "workflows":
-            setWorkflows(entry.result.rows)
-            break
+            setWorkflows(entry.result.rows);
+            break;
           case "users":
-            setUsers(entry.result.rows)
-            break
+            setUsers(entry.result.rows);
+            break;
           case "roles":
-            setRoles(entry.result)
-            break
+            setRoles(entry.result);
+            break;
           case "positions":
-            setWorkflowPositions(entry.result.rows)
-            break
+            setWorkflowPositions(entry.result.rows);
+            break;
           case "branches":
-            setBranches(entry.result.rows)
-            break
+            setBranches(entry.result.rows);
+            break;
           case "departments":
-            setDepartments(entry.result.rows)
-            break
+            setDepartments(entry.result.rows);
+            break;
           case "shifts":
-            setShiftRecords(entry.result.rows)
-            break
+            setShiftRecords(entry.result.rows);
+            break;
           case "rotationGroups":
-            setRotationGroupRecords(entry.result.rows)
-            break
+            setRotationGroupRecords(entry.result.rows);
+            break;
           case "timetables":
-            setTimetableRecords(entry.result.rows)
-            break
+            setTimetableRecords(entry.result.rows);
+            break;
           case "accessGroups":
-            setAccessGroups(entry.result.rows)
-            break
+            setAccessGroups(entry.result.rows);
+            break;
           case "accessOrganizations":
-            setAccessOrganizations(entry.result.rows)
-            break
+            setAccessOrganizations(entry.result.rows);
+            break;
           case "attendanceDevices":
-            setAttendanceDevices(entry.result.rows)
-            break
+            setAttendanceDevices(entry.result.rows);
+            break;
           case "attendancePolicies":
-            setAttendancePolicies(entry.result.rows)
-            break
+            setAttendancePolicies(entry.result.rows);
+            break;
           case "leavePolicies":
-            setLeavePolicies(entry.result.rows)
-            break
+            setLeavePolicies(entry.result.rows);
+            break;
         }
-      })
+      });
 
       setLoadedLookups((current) => {
-        const next = { ...current }
+        const next = { ...current };
         missingKeys.forEach((key) => {
-          next[key] = true
-        })
-        return next
-      })
+          next[key] = true;
+        });
+        return next;
+      });
     },
-    [loadedLookups]
-  )
+    [loadedLookups],
+  );
 
   const ensureLookups = React.useCallback(
     async (lookupKeys: OnboardingLookupKey[], force = false) => {
-      const token = readStoredToken()
+      const token = readStoredToken();
       if (!token) {
-        const message = "Authentication required. Please log in again."
-        setError(message)
-        showErrorAlert(message)
-        return false
+        const message = "Authentication required. Please log in again.";
+        setError(message);
+        showErrorAlert(message);
+        return false;
       }
 
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
-        await loadLookups(token, lookupKeys, force)
-        return true
+        await loadLookups(token, lookupKeys, force);
+        return true;
       } catch (errorObject) {
-        const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding form data."
-        setError(message)
-        showErrorAlert(message)
-        return false
+        const message =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load onboarding form data.";
+        setError(message);
+        showErrorAlert(message);
+        return false;
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
-    [loadLookups]
-  )
+    [loadLookups],
+  );
 
   const reloadAll = React.useCallback(
     async (targetTab: OnboardingTab = activeTab, force = false) => {
-      const token = readStoredToken()
+      const token = readStoredToken();
       if (!token) {
-        const message = "Authentication required. Please log in again."
-        setError(message)
-        showErrorAlert(message)
-        return
+        const message = "Authentication required. Please log in again.";
+        setError(message);
+        showErrorAlert(message);
+        return;
       }
 
       const requestQuery = {
@@ -1973,23 +2474,26 @@ export function OnboardingView() {
         sortOrder: "DESC" as const,
         search: debouncedRequestSearch.trim() || undefined,
         employee_id:
-          requestEmployeeFilter && Number(requestEmployeeFilter) > 0 ? Number(requestEmployeeFilter) : undefined,
-      }
+          requestEmployeeFilter && Number(requestEmployeeFilter) > 0
+            ? Number(requestEmployeeFilter)
+            : undefined,
+      };
       const workflowQuery = {
         page: 1,
         limit: 100,
         sortBy: "created_at" as const,
         sortOrder: "DESC" as const,
         search: debouncedWorkflowSearch.trim() || undefined,
-        status: workflowStatusFilter !== "all" ? workflowStatusFilter : undefined,
-      }
+        status:
+          workflowStatusFilter !== "all" ? workflowStatusFilter : undefined,
+      };
 
       const fetchKey =
         targetTab === "invitations"
           ? `invitations:${invitationStatusFilter}`
           : targetTab === "requests"
             ? `requests:${JSON.stringify(requestQuery)}`
-            : `workflows:${JSON.stringify(workflowQuery)}`
+            : `workflows:${JSON.stringify(workflowQuery)}`;
 
       if (!force) {
         const lastKey =
@@ -1997,29 +2501,34 @@ export function OnboardingView() {
             ? invitationsFetchKeyRef.current
             : targetTab === "requests"
               ? requestsFetchKeyRef.current
-              : workflowsFetchKeyRef.current
+              : workflowsFetchKeyRef.current;
         if (lastKey === fetchKey) {
-          return
+          return;
         }
       }
 
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
         if (targetTab === "invitations") {
           const { data: invitationRows } = await listEmployeeInvitationHistory(
             token,
             { status: invitationStatusFilter, limit: 100 },
-          )
-          setInvitations(invitationRows)
-          invitationsFetchKeyRef.current = fetchKey
+          );
+          setInvitations(invitationRows);
+          invitationsFetchKeyRef.current = fetchKey;
         } else if (targetTab === "requests") {
           if (isEmployeeMode) {
-            const mine = await listMyOnboardingRequests(token)
-            setRequests(mine)
-            requestsFetchKeyRef.current = fetchKey
+            const mine = await listMyOnboardingRequests(token);
+            setRequests(mine);
+            requestsFetchKeyRef.current = fetchKey;
           } else {
-            const [requestRowsResult, employeesResult, recentEmployeesResult, workflowsResult] = await Promise.all([
+            const [
+              requestRowsResult,
+              employeesResult,
+              recentEmployeesResult,
+              workflowsResult,
+            ] = await Promise.all([
               listOnboardingRequestsIncludingDrafts(token, requestQuery),
               canReadEmployeeDirectory
                 ? listEmployees(token, {
@@ -2046,79 +2555,118 @@ export function OnboardingView() {
                     sortOrder: "DESC",
                   })
                 : Promise.resolve(null),
-            ])
+            ]);
             const onboardingEmployees = mergeEmployeeRows(
               employeesResult?.rows ?? [],
-              recentEmployeesResult?.rows ?? []
-            ).filter(isOnboardingEligibleEmployee)
+              recentEmployeesResult?.rows ?? [],
+            ).filter(isOnboardingEligibleEmployee);
             if (employeesResult || recentEmployeesResult) {
-              setEmployees(onboardingEmployees)
+              setEmployees(onboardingEmployees);
             }
             if (workflowsResult) {
-              setWorkflows(workflowsResult.rows)
+              setWorkflows(workflowsResult.rows);
             }
             setLoadedLookups((current) => ({
               ...current,
-              ...(employeesResult || recentEmployeesResult ? { employees: true } : {}),
+              ...(employeesResult || recentEmployeesResult
+                ? { employees: true }
+                : {}),
               ...(workflowsResult ? { workflows: true } : {}),
-            }))
+            }));
 
-            let requestRows = requestRowsResult
-            const defaultWorkflowId = defaultOnboardingWorkflowId(workflowsResult?.rows ?? [])
+            let requestRows = requestRowsResult;
+            const defaultWorkflowId = defaultOnboardingWorkflowId(
+              workflowsResult?.rows ?? [],
+            );
             const missingEmployees = onboardingEmployees.filter((employee) => {
-              const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-              return employeeId !== null && !collectRequestEmployeeIds(requestRows).has(employeeId)
-            })
+              const employeeId = readNumber(employee, [
+                "id",
+                "employee_id",
+                "employeeId",
+              ]);
+              return (
+                employeeId !== null &&
+                !collectRequestEmployeeIds(requestRows).has(employeeId)
+              );
+            });
 
             if (canCreateOnboardingRequests && missingEmployees.length > 0) {
               const createdDrafts = await Promise.allSettled(
                 missingEmployees.map((employee) => {
-                  const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
+                  const employeeId = readNumber(employee, [
+                    "id",
+                    "employee_id",
+                    "employeeId",
+                  ]);
                   if (employeeId === null) {
-                    return Promise.resolve(null)
+                    return Promise.resolve(null);
                   }
-                  const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+                  const name =
+                    getEmployeeDisplayName(employee) ||
+                    formatEmployeeOptionLabel(employee, employeeId);
                   return ensureDraftOnboardingRequest(token, {
                     employee_id: employeeId,
                     workflow_id: defaultWorkflowId ?? undefined,
-                    title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
-                  })
-                })
-              )
+                    title:
+                      name && name !== "Unknown employee"
+                        ? `Onboarding for ${name}`
+                        : "Onboarding",
+                  });
+                }),
+              );
               const createdRows = createdDrafts.flatMap((result) => {
                 if (result.status !== "fulfilled" || !result.value) {
-                  return []
+                  return [];
                 }
-                return [result.value]
-              })
-              const refreshedRows = await listOnboardingRequestsIncludingDrafts(token, requestQuery)
-              requestRows = mergeOnboardingRequestRows(refreshedRows, createdRows, requestRows)
+                return [result.value];
+              });
+              const refreshedRows = await listOnboardingRequestsIncludingDrafts(
+                token,
+                requestQuery,
+              );
+              requestRows = mergeOnboardingRequestRows(
+                refreshedRows,
+                createdRows,
+                requestRows,
+              );
             }
 
-            const coveredEmployeeIds = collectRequestEmployeeIds(requestRows)
+            const coveredEmployeeIds = collectRequestEmployeeIds(requestRows);
             const pendingRows = onboardingEmployees
               .filter((employee) => {
-                const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"])
-                return employeeId !== null && !coveredEmployeeIds.has(employeeId)
+                const employeeId = readNumber(employee, [
+                  "id",
+                  "employee_id",
+                  "employeeId",
+                ]);
+                return (
+                  employeeId !== null && !coveredEmployeeIds.has(employeeId)
+                );
               })
-              .map(buildPendingOnboardingRow)
+              .map(buildPendingOnboardingRow);
 
-            setRequests([...pendingRows, ...requestRows])
-            requestsFetchKeyRef.current = fetchKey
+            setRequests([...pendingRows, ...requestRows]);
+            requestsFetchKeyRef.current = fetchKey;
           }
         } else {
-          const workflowsResult = await listOnboardingWorkflows(token, workflowQuery)
-          setWorkflows(workflowsResult.rows)
-          setLoadedLookups((current) => ({ ...current, workflows: true }))
-          workflowsFetchKeyRef.current = fetchKey
+          const workflowsResult = await listOnboardingWorkflows(
+            token,
+            workflowQuery,
+          );
+          setWorkflows(workflowsResult.rows);
+          setLoadedLookups((current) => ({ ...current, workflows: true }));
+          workflowsFetchKeyRef.current = fetchKey;
         }
-        setLoadedTabs((current) => ({ ...current, [targetTab]: true }))
+        setLoadedTabs((current) => ({ ...current, [targetTab]: true }));
       } catch (errorObject) {
-        const message = errorObject instanceof Error ? errorObject.message : "Failed to load onboarding data."
-        setError(message)
-        showErrorAlert(message)
+        const message =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load onboarding data.";
+        setError(message);
+        showErrorAlert(message);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [
@@ -2132,29 +2680,35 @@ export function OnboardingView() {
       requestEmployeeFilter,
       workflowStatusFilter,
       invitationStatusFilter,
-    ]
-  )
+    ],
+  );
 
   React.useEffect(() => {
-    if (!actor.ready) return
-    if (activeTab === "invitations" && canViewPendingInvitations) return
-    if (activeTab === "requests" && canViewOnboardingRequests) return
-    if (activeTab === "workflows" && canViewOnboardingWorkflows) return
+    if (!actor.ready) return;
+    if (activeTab === "invitations" && canViewPendingInvitations) return;
+    if (activeTab === "requests" && canViewOnboardingRequests) return;
+    if (activeTab === "workflows" && canViewOnboardingWorkflows) return;
     if (canViewOnboardingRequests) {
-      setActiveTab("requests")
+      setActiveTab("requests");
     } else if (canViewOnboardingWorkflows) {
-      setActiveTab("workflows")
+      setActiveTab("workflows");
     } else if (canViewPendingInvitations) {
-      setActiveTab("invitations")
+      setActiveTab("invitations");
     }
-  }, [activeTab, actor.ready, canViewOnboardingRequests, canViewOnboardingWorkflows, canViewPendingInvitations])
+  }, [
+    activeTab,
+    actor.ready,
+    canViewOnboardingRequests,
+    canViewOnboardingWorkflows,
+    canViewPendingInvitations,
+  ]);
 
   React.useEffect(() => {
-    if (!actor.ready) return
-    if (activeTab === "invitations" && !canViewPendingInvitations) return
-    if (activeTab === "requests" && !canViewOnboardingRequests) return
-    if (activeTab === "workflows" && !canViewOnboardingWorkflows) return
-    void reloadAll(activeTab)
+    if (!actor.ready) return;
+    if (activeTab === "invitations" && !canViewPendingInvitations) return;
+    if (activeTab === "requests" && !canViewOnboardingRequests) return;
+    if (activeTab === "workflows" && !canViewOnboardingWorkflows) return;
+    void reloadAll(activeTab);
   }, [
     activeTab,
     actor.ready,
@@ -2168,50 +2722,58 @@ export function OnboardingView() {
     workflowStatusFilter,
     invitationStatusFilter,
     reloadAll,
-  ])
+  ]);
 
-  const resolveEmployeeLabel = React.useCallback((employeeId: number | null) => {
-    if (employeeId === null) {
-      return "Unknown employee"
-    }
+  const resolveEmployeeLabel = React.useCallback(
+    (employeeId: number | null) => {
+      if (employeeId === null) {
+        return "Unknown employee";
+      }
 
-    const employee = employees.find((row) => readNumber(row, ["id", "employee_id", "user_id"]) === employeeId)
-    if (!employee) {
-      return `Employee #${employeeId}`
-    }
+      const employee = employees.find(
+        (row) =>
+          readNumber(row, ["id", "employee_id", "user_id"]) === employeeId,
+      );
+      if (!employee) {
+        return `Employee #${employeeId}`;
+      }
 
-    return formatEmployeeOptionLabel(employee, employeeId)
-  }, [employees])
+      return formatEmployeeOptionLabel(employee, employeeId);
+    },
+    [employees],
+  );
 
   function resolveWorkflowLabel(workflowId: number | null) {
     if (workflowId === null) {
-      return "Attach workflow (optional)"
+      return "Attach workflow (optional)";
     }
 
-    const workflow = workflows.find((row) => readNumber(row, ["id", "workflow_id"]) === workflowId)
+    const workflow = workflows.find(
+      (row) => readNumber(row, ["id", "workflow_id"]) === workflowId,
+    );
     if (!workflow) {
-      return `Workflow #${workflowId}`
+      return `Workflow #${workflowId}`;
     }
 
-    const workflowName = readString(workflow, ["name", "title"])
-    return workflowName !== "-" ? workflowName : `Workflow #${workflowId}`
+    const workflowName = readString(workflow, ["name", "title"]);
+    return workflowName !== "-" ? workflowName : `Workflow #${workflowId}`;
   }
 
   const requestStatusOptions = React.useMemo(() => {
-    const statuses = new Set<string>(REQUEST_STATUS_FILTER_OPTIONS)
+    const statuses = new Set<string>(REQUEST_STATUS_FILTER_OPTIONS);
     requests.forEach((row) => {
       const value = String(row.status ?? "")
         .trim()
-        .toLowerCase()
-      if (value) statuses.add(value)
-    })
-    return Array.from(statuses)
-  }, [requests])
+        .toLowerCase();
+      if (value) statuses.add(value);
+    });
+    return Array.from(statuses);
+  }, [requests]);
 
   const filteredInvitations = React.useMemo(() => {
-    const searchValue = invitationSearch.trim().toLowerCase()
+    const searchValue = invitationSearch.trim().toLowerCase();
     if (!searchValue) {
-      return invitations
+      return invitations;
     }
     return invitations.filter((row) =>
       [
@@ -2226,85 +2788,102 @@ export function OnboardingView() {
       ].some((value) =>
         String(value ?? "")
           .toLowerCase()
-          .includes(searchValue)
-      )
-    )
-  }, [invitationSearch, invitations])
+          .includes(searchValue),
+      ),
+    );
+  }, [invitationSearch, invitations]);
 
   const resendPendingInvitation = React.useCallback(
     async (row: AdminRecord) => {
-      const invitationId = readNumber(row, ["id", "invitation_id"])
-      const token = readStoredToken()
+      const invitationId = readNumber(row, ["id", "invitation_id"]);
+      const token = readStoredToken();
       if (invitationId === null || !token) {
-        showErrorAlert("Unable to resend this invitation.")
-        return
+        showErrorAlert("Unable to resend this invitation.");
+        return;
       }
 
-      setResendingInvitationId(invitationId)
+      setResendingInvitationId(invitationId);
       try {
-        await resendEmployeeInvitation(token, invitationId)
-        invitationsFetchKeyRef.current = null
-        await reloadAll("invitations", true)
-        showSuccessAlert("Invitation resent by email and SMS.")
+        await resendEmployeeInvitation(token, invitationId);
+        invitationsFetchKeyRef.current = null;
+        await reloadAll("invitations", true);
+        showSuccessAlert("Invitation resent by email and SMS.");
       } catch (errorObject) {
-        showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to resend the invitation.")
+        showErrorAlert(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to resend the invitation.",
+        );
       } finally {
-        setResendingInvitationId(null)
+        setResendingInvitationId(null);
       }
     },
-    [reloadAll]
-  )
+    [reloadAll],
+  );
 
-  const selectableEmployees = React.useMemo(() => employees.filter(isOnboardingEligibleEmployee), [employees])
+  const selectableEmployees = React.useMemo(
+    () => employees.filter(isOnboardingEligibleEmployee),
+    [employees],
+  );
 
   const employeeLabelById = React.useMemo(() => {
-    const map = new Map<number, string>()
+    const map = new Map<number, string>();
     employees.forEach((row) => {
-      const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-      if (employeeId === null) return
-      map.set(employeeId, formatEmployeeOptionLabel(row, employeeId))
-    })
-    return map
-  }, [employees])
+      const employeeId = readNumber(row, ["id", "employee_id", "user_id"]);
+      if (employeeId === null) return;
+      map.set(employeeId, formatEmployeeOptionLabel(row, employeeId));
+    });
+    return map;
+  }, [employees]);
 
   const requestRowEmployeeLabel = React.useCallback(
     (row: AdminRecord) => {
-      const inlineName = getEmployeeDisplayName(row)
+      const inlineName = getEmployeeDisplayName(row);
       if (inlineName) {
-        return inlineName
+        return inlineName;
       }
-      const nestedEmployee = toRecord(row.employee) ?? toRecord(row.employee_profile)
+      const nestedEmployee =
+        toRecord(row.employee) ?? toRecord(row.employee_profile);
       if (nestedEmployee) {
-        const nestedName = getEmployeeDisplayName(nestedEmployee)
+        const nestedName = getEmployeeDisplayName(nestedEmployee);
         if (nestedName) {
-          return nestedName
+          return nestedName;
         }
       }
-      const employeeId = readNumber(row, ["employee_id", "employeeId"])
-      return employeeLabelById.get(employeeId ?? -1) ?? (employeeId === null ? "-" : `Employee #${employeeId}`)
+      const employeeId = readNumber(row, ["employee_id", "employeeId"]);
+      return (
+        employeeLabelById.get(employeeId ?? -1) ??
+        (employeeId === null ? "-" : `Employee #${employeeId}`)
+      );
     },
-    [employeeLabelById]
-  )
+    [employeeLabelById],
+  );
 
   const filteredRequests = React.useMemo(() => {
-    const searchValue = requestSearch.trim().toLowerCase()
+    const searchValue = requestSearch.trim().toLowerCase();
     return requests.filter((row) => {
       const statusValue = String(row.status ?? "")
         .trim()
-        .toLowerCase()
+        .toLowerCase();
       if (requestStatusFilter === "draft") {
         if (!isOnboardingDraftStatus(statusValue)) {
-          return false
+          return false;
         }
-      } else if (requestStatusFilter !== "all" && statusValue !== requestStatusFilter) {
-        return false
+      } else if (
+        requestStatusFilter !== "all" &&
+        statusValue !== requestStatusFilter
+      ) {
+        return false;
       }
 
-      if (!searchValue) return true
+      if (!searchValue) return true;
 
-      const nestedEmployee = toRecord(row.employee) ?? toRecord(row.employee_profile) ?? row
-      if (matchesEmployeeDirectorySearch(nestedEmployee, requestSearch.trim())) {
-        return true
+      const nestedEmployee =
+        toRecord(row.employee) ?? toRecord(row.employee_profile) ?? row;
+      if (
+        matchesEmployeeDirectorySearch(nestedEmployee, requestSearch.trim())
+      ) {
+        return true;
       }
 
       const rowValues = [
@@ -2319,322 +2898,394 @@ export function OnboardingView() {
         row.name,
         row.status,
         requestRowEmployeeLabel(row),
-      ]
+      ];
       return rowValues.some((value) =>
         String(value ?? "")
           .toLowerCase()
-          .includes(searchValue)
-      )
-    })
-  }, [requests, requestSearch, requestStatusFilter, requestRowEmployeeLabel])
+          .includes(searchValue),
+      );
+    });
+  }, [requests, requestSearch, requestStatusFilter, requestRowEmployeeLabel]);
 
   const filteredWorkflows = React.useMemo(() => {
-    const searchValue = workflowSearch.trim().toLowerCase()
+    const searchValue = workflowSearch.trim().toLowerCase();
     return workflows.filter((row) => {
       const statusValue = String(row.status ?? "")
         .trim()
-        .toLowerCase()
-      if (workflowStatusFilter !== "all" && statusValue !== workflowStatusFilter) {
-        return false
+        .toLowerCase();
+      if (
+        workflowStatusFilter !== "all" &&
+        statusValue !== workflowStatusFilter
+      ) {
+        return false;
       }
       if (!searchValue) {
-        return true
+        return true;
       }
-      return [row.id, row.workflow_id, row.name, row.title, row.description, row.status, row.is_default].some((value) =>
+      return [
+        row.id,
+        row.workflow_id,
+        row.name,
+        row.title,
+        row.description,
+        row.status,
+        row.is_default,
+      ].some((value) =>
         String(value ?? "")
           .toLowerCase()
-          .includes(searchValue)
-      )
-    })
-  }, [workflowSearch, workflowStatusFilter, workflows])
+          .includes(searchValue),
+      );
+    });
+  }, [workflowSearch, workflowStatusFilter, workflows]);
 
   const workflowStatusOptions = React.useMemo(() => {
-    const statuses = new Set<string>(WORKFLOW_STATUS_FILTER_OPTIONS)
+    const statuses = new Set<string>(WORKFLOW_STATUS_FILTER_OPTIONS);
     workflows.forEach((row) => {
       const value = String(row.status ?? "")
         .trim()
-        .toLowerCase()
-      if (value) statuses.add(value)
-    })
-    return Array.from(statuses)
-  }, [workflows])
+        .toLowerCase();
+      if (value) statuses.add(value);
+    });
+    return Array.from(statuses);
+  }, [workflows]);
 
-  function resolveOptionLabel(rows: AdminRecord[], id: number | null, idKeys: string[], labelKeys: string[]) {
-    if (id === null) return "-"
-    const found = rows.find((row) => recordMatchesId(row, id, idKeys))
-    if (!found) return "-"
-    const person = personDisplayName(found)
-    if (person) return person
-    const label = readString(found, labelKeys)
-    return label !== "-" ? label : "-"
+  function resolveOptionLabel(
+    rows: AdminRecord[],
+    id: number | null,
+    idKeys: string[],
+    labelKeys: string[],
+  ) {
+    if (id === null) return "-";
+    const found = rows.find((row) => recordMatchesId(row, id, idKeys));
+    if (!found) return "-";
+    const person = personDisplayName(found);
+    if (person) return person;
+    const label = readString(found, labelKeys);
+    return label !== "-" ? label : "-";
   }
 
   function resolveBooleanLabel(value: string) {
-    return value === "true" ? "Submit immediately" : "Save as draft"
+    return value === "true" ? "Submit immediately" : "Save as draft";
   }
 
   function resolveYesNoLabel(value: unknown) {
-    return String(value) === "true" || value === true ? "Yes" : "No"
+    return String(value) === "true" || value === true ? "Yes" : "No";
   }
 
-  function updateRequestProvisioningField<K extends keyof OnboardingProvisioningDraft>(
-    field: K,
-    value: OnboardingProvisioningDraft[K]
-  ) {
+  function updateRequestProvisioningField<
+    K extends keyof OnboardingProvisioningDraft,
+  >(field: K, value: OnboardingProvisioningDraft[K]) {
     setRequestProvisioning((previous) => ({
       ...previous,
       [field]: value,
-    }))
+    }));
   }
 
-  function updateRequestShiftAssignmentField<K extends keyof OnboardingShiftAssignmentDraft>(
-    field: K,
-    value: OnboardingShiftAssignmentDraft[K]
-  ) {
+  function updateRequestShiftAssignmentField<
+    K extends keyof OnboardingShiftAssignmentDraft,
+  >(field: K, value: OnboardingShiftAssignmentDraft[K]) {
     setRequestProvisioning((previous) => ({
       ...previous,
       shiftAssignment: {
         ...previous.shiftAssignment,
         [field]: value,
       },
-    }))
+    }));
   }
 
-  function updateRequestTimetableAssignmentField<K extends keyof OnboardingTimetableAssignmentDraft>(
-    field: K,
-    value: OnboardingTimetableAssignmentDraft[K]
-  ) {
+  function updateRequestTimetableAssignmentField<
+    K extends keyof OnboardingTimetableAssignmentDraft,
+  >(field: K, value: OnboardingTimetableAssignmentDraft[K]) {
     setRequestProvisioning((previous) => ({
       ...previous,
       timetableAssignment: {
         ...previous.timetableAssignment,
         [field]: value,
       },
-    }))
+    }));
   }
 
-  function updateRequestDeviceAssignmentField<K extends keyof OnboardingDeviceAssignmentDraft>(
-    field: K,
-    value: OnboardingDeviceAssignmentDraft[K]
-  ) {
+  function updateRequestDeviceAssignmentField<
+    K extends keyof OnboardingDeviceAssignmentDraft,
+  >(field: K, value: OnboardingDeviceAssignmentDraft[K]) {
     setRequestProvisioning((previous) => ({
       ...previous,
       deviceAssignment: {
         ...previous.deviceAssignment,
         [field]: value,
       },
-    }))
+    }));
   }
 
-  function setRequestAttendanceMode(mode: OnboardingProvisioningDraft["attendanceMode"]) {
+  function setRequestAttendanceMode(
+    mode: OnboardingProvisioningDraft["attendanceMode"],
+  ) {
     setRequestProvisioning((previous) => ({
       ...previous,
       attendanceMode: mode,
-      shiftAssignment: mode === "shift" ? previous.shiftAssignment : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
+      shiftAssignment:
+        mode === "shift"
+          ? previous.shiftAssignment
+          : { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
       timetableAssignment:
-        mode === "timetable" ? previous.timetableAssignment : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
-    }))
+        mode === "timetable"
+          ? previous.timetableAssignment
+          : { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
+    }));
   }
 
-  function extractProvisioning(record: AdminRecord | null): OnboardingProvisioning | null {
+  function extractProvisioning(
+    record: AdminRecord | null,
+  ): OnboardingProvisioning | null {
     if (!record) {
-      return null
+      return null;
     }
-    const directProvisioning = toRecord(record.provisioning)
+    const directProvisioning = toRecord(record.provisioning);
     if (directProvisioning) {
-      return directProvisioning as unknown as OnboardingProvisioning
+      return directProvisioning as unknown as OnboardingProvisioning;
     }
 
-    const metadata = toRecord(record.metadata)
-    const nestedProvisioning = metadata ? toRecord(metadata.provisioning) : null
+    const metadata = toRecord(record.metadata);
+    const nestedProvisioning = metadata
+      ? toRecord(metadata.provisioning)
+      : null;
     if (nestedProvisioning) {
-      return nestedProvisioning as unknown as OnboardingProvisioning
+      return nestedProvisioning as unknown as OnboardingProvisioning;
     }
 
-    return null
+    return null;
   }
 
   function extractMetadata(record: AdminRecord | null) {
     if (!record) {
-      return null
+      return null;
     }
-    return toRecord(record.metadata)
+    return toRecord(record.metadata);
   }
 
   const resolveResponsibleParty = React.useCallback(
-    (step: AdminRecord) => resolveResponsiblePartyLabel(step, roles, users, departments) || "-",
-    [roles, users, departments]
-  )
+    (step: AdminRecord) =>
+      resolveResponsiblePartyLabel(step, roles, users, departments) || "-",
+    [roles, users, departments],
+  );
 
   const assignableUsers = React.useMemo(() => {
-    const departmentId = Number(workflowForm.assigned_department_id)
-    const selectedId = Number(workflowForm.assigned_user_id)
+    const departmentId = Number(workflowForm.assigned_department_id);
+    const selectedId = Number(workflowForm.assigned_user_id);
     const catalog = users.map((user) => {
-      const flattened = flattenAssigneeRecord(user)
+      const flattened = flattenAssigneeRecord(user);
       const linkedEmployees = workflowDepartmentEmployees.filter((employee) =>
-        employeeMatchesCompanyUser(employee, user)
-      )
-      const departmentIds = new Set(collectDepartmentIds(flattened))
+        employeeMatchesCompanyUser(employee, user),
+      );
+      const departmentIds = new Set(collectDepartmentIds(flattened));
       linkedEmployees.forEach((employee) => {
-        collectDepartmentIds(employee).forEach((id) => departmentIds.add(id))
-      })
-      return { ...flattened, department_ids: Array.from(departmentIds) }
-    })
+        collectDepartmentIds(employee).forEach((id) => departmentIds.add(id));
+      });
+      return { ...flattened, department_ids: Array.from(departmentIds) };
+    });
     const filtered = filterAssigneesForStep(catalog, {
-      selectedId: Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
-    })
+      selectedId:
+        Number.isFinite(selectedId) && selectedId > 0 ? selectedId : null,
+    });
     const departmentUsers =
       Number.isFinite(departmentId) && departmentId > 0
         ? filtered.filter((row) => collectDepartmentIds(row).has(departmentId))
-        : []
-    const seen = new Set<number>()
+        : [];
+    const seen = new Set<number>();
     return departmentUsers.filter((row) => {
-      const id = preferredAssigneeId(row)
-      if (id === null || seen.has(id)) return false
-      seen.add(id)
-      return true
-    })
-  }, [users, workflowDepartmentEmployees, workflowForm.assigned_department_id, workflowForm.assigned_user_id])
+      const id = preferredAssigneeId(row);
+      if (id === null || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [
+    users,
+    workflowDepartmentEmployees,
+    workflowForm.assigned_department_id,
+    workflowForm.assigned_user_id,
+  ]);
 
   // Branch is a picker filter; the saved department already identifies its branch.
-  const selectedWorkflowBranchId = workflowBranchId || String(
-    readNumber(
-      departments.find((department) => readNumber(department, ["id", "department_id"]) === Number(workflowForm.assigned_department_id)) ?? {},
-      ["branch_id", "branchId"]
-    ) ?? ""
-  )
+  const selectedWorkflowBranchId =
+    workflowBranchId ||
+    String(
+      readNumber(
+        departments.find(
+          (department) =>
+            readNumber(department, ["id", "department_id"]) ===
+            Number(workflowForm.assigned_department_id),
+        ) ?? {},
+        ["branch_id", "branchId"],
+      ) ?? "",
+    );
 
   const workflowDepartmentOptions = React.useMemo(
     () =>
       departments
-        .filter((department) => selectedWorkflowBranchId !== "" &&
-          readNumber(department, ["branch_id", "branchId"]) === Number(selectedWorkflowBranchId))
+        .filter(
+          (department) =>
+            selectedWorkflowBranchId !== "" &&
+            readNumber(department, ["branch_id", "branchId"]) ===
+              Number(selectedWorkflowBranchId),
+        )
         .map((department) => {
-          const id = readNumber(department, ["id", "department_id"])
-          if (id === null) return null
+          const id = readNumber(department, ["id", "department_id"]);
+          if (id === null) return null;
           const departmentName = resolveOptionLabel(
             departments,
             id,
             ["id", "department_id"],
-            ["name", "title", "code"]
-          )
-          const branchId = readNumber(department, ["branch_id", "branchId"])
+            ["name", "title", "code"],
+          );
+          const branchId = readNumber(department, ["branch_id", "branchId"]);
           const branchName =
             branchId === null
               ? ""
-              : resolveOptionLabel(branches, branchId, ["id", "branch_id"], ["name", "title", "code"])
-          return { id, label: branchName && branchName !== "-" ? `${branchName} — ${departmentName}` : departmentName }
+              : resolveOptionLabel(
+                  branches,
+                  branchId,
+                  ["id", "branch_id"],
+                  ["name", "title", "code"],
+                );
+          return {
+            id,
+            label:
+              branchName && branchName !== "-"
+                ? `${branchName} — ${departmentName}`
+                : departmentName,
+          };
         })
-        .filter((option): option is { id: number; label: string } => option !== null)
+        .filter(
+          (option): option is { id: number; label: string } => option !== null,
+        )
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [branches, departments, selectedWorkflowBranchId]
-  )
+    [branches, departments, selectedWorkflowBranchId],
+  );
 
   const selectedWorkflowDepartmentLabel = React.useMemo(() => {
-    const selectedId = Number(workflowForm.assigned_department_id)
-    return workflowDepartmentOptions.find((option) => option.id === selectedId)?.label ?? "Select department"
-  }, [workflowDepartmentOptions, workflowForm.assigned_department_id])
+    const selectedId = Number(workflowForm.assigned_department_id);
+    return (
+      workflowDepartmentOptions.find((option) => option.id === selectedId)
+        ?.label ?? "Select department"
+    );
+  }, [workflowDepartmentOptions, workflowForm.assigned_department_id]);
 
   const selectedStepAssigneeId = React.useMemo(() => {
-    const value = Number(workflowForm.assigned_user_id)
-    return Number.isFinite(value) && value > 0 ? value : null
-  }, [workflowForm.assigned_user_id])
+    const value = Number(workflowForm.assigned_user_id);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [workflowForm.assigned_user_id]);
   const selectedStepAssignee = React.useMemo(
     () =>
       selectedStepAssigneeId === null
         ? null
-        : users.find(
-            (row) => readNumber(row, ["company_user_id", "companyUserId"]) === selectedStepAssigneeId
-          ) ?? findAssigneeRecord(users, selectedStepAssigneeId),
-    [selectedStepAssigneeId, users]
-  )
+        : (users.find(
+            (row) =>
+              readNumber(row, ["company_user_id", "companyUserId"]) ===
+              selectedStepAssigneeId,
+          ) ?? findAssigneeRecord(users, selectedStepAssigneeId)),
+    [selectedStepAssigneeId, users],
+  );
   const requiredStepPermission = React.useMemo(
     () => requiredPermissionForOnboardingStep(workflowForm.step_type),
-    [workflowForm.step_type]
-  )
+    [workflowForm.step_type],
+  );
   const selectedStepAssigneeMissingPermission =
     selectedStepAssigneeId !== null &&
-    (!selectedStepAssignee || !onboardingAssigneeHasPermission(selectedStepAssignee, workflowForm.step_type))
+    (!selectedStepAssignee ||
+      !onboardingAssigneeHasPermission(
+        selectedStepAssignee,
+        workflowForm.step_type,
+      ));
   const selectedStepAssigneeLabel = selectedStepAssignee
-    ? personDisplayName(selectedStepAssignee) || `User #${selectedStepAssigneeId}`
+    ? personDisplayName(selectedStepAssignee) ||
+      `User #${selectedStepAssigneeId}`
     : selectedStepAssigneeId !== null
       ? `User #${selectedStepAssigneeId}`
-      : ""
+      : "";
 
   const replacementApproverMembershipId = React.useMemo(() => {
-    const value = Number(replacementApproverId)
-    return Number.isFinite(value) && value > 0 ? value : null
-  }, [replacementApproverId])
+    const value = Number(replacementApproverId);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [replacementApproverId]);
   const replacementApprover = React.useMemo(
     () =>
       replacementApproverMembershipId === null
         ? null
-        : users.find(
-            (row) => readNumber(row, ["company_user_id", "companyUserId"]) === replacementApproverMembershipId
-          ) ?? findAssigneeRecord(users, replacementApproverMembershipId),
-    [replacementApproverMembershipId, users]
-  )
+        : (users.find(
+            (row) =>
+              readNumber(row, ["company_user_id", "companyUserId"]) ===
+              replacementApproverMembershipId,
+          ) ?? findAssigneeRecord(users, replacementApproverMembershipId)),
+    [replacementApproverMembershipId, users],
+  );
   const replacementApproverMissingPermission =
     replacementApproverMembershipId !== null &&
-    (!replacementApprover || !onboardingAssigneeHasPermission(replacementApprover, "sign_off"))
+    (!replacementApprover ||
+      !onboardingAssigneeHasPermission(replacementApprover, "sign_off"));
   const approvalAssignmentCandidates = React.useMemo(() => {
-    const seen = new Set<number>()
+    const seen = new Set<number>();
     return users.map(flattenAssigneeRecord).filter((row) => {
-      const id = preferredAssigneeId(row)
-      if (id === null || seen.has(id)) return false
-      seen.add(id)
-      return true
-    })
-  }, [users])
+      const id = preferredAssigneeId(row);
+      if (id === null || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [users]);
 
   const taskAssignableUsers = React.useMemo(() => {
-    const departmentId = Number(taskForm.assigned_department_id)
-    if (!Number.isFinite(departmentId) || departmentId <= 0) return []
-    const catalog = users.map(flattenAssigneeRecord)
-    const hasDepartmentData = catalog.some((row) => collectDepartmentIds(row).size > 0)
-    const filtered = catalog.filter((row) => collectDepartmentIds(row).has(departmentId))
-    const source = hasDepartmentData ? filtered : catalog
-    const seen = new Set<number>()
+    const departmentId = Number(taskForm.assigned_department_id);
+    if (!Number.isFinite(departmentId) || departmentId <= 0) return [];
+    const catalog = users.map(flattenAssigneeRecord);
+    const hasDepartmentData = catalog.some(
+      (row) => collectDepartmentIds(row).size > 0,
+    );
+    const filtered = catalog.filter((row) =>
+      collectDepartmentIds(row).has(departmentId),
+    );
+    const source = hasDepartmentData ? filtered : catalog;
+    const seen = new Set<number>();
     return source.filter((row) => {
-      const id = preferredAssigneeId(row)
-      if (id === null || seen.has(id)) return false
-      seen.add(id)
-      return true
-    })
-  }, [taskForm.assigned_department_id, users])
+      const id = preferredAssigneeId(row);
+      if (id === null || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [taskForm.assigned_department_id, users]);
 
   async function hydrateAssignedUser(assignedId: number | null) {
     if (assignedId === null || assignedId <= 0) {
-      return ""
+      return "";
     }
-    const existing = findAssigneeRecord(users, assignedId)
+    const existing = findAssigneeRecord(users, assignedId);
     if (existing) {
-      return String(preferredAssigneeId(existing) ?? assignedId)
+      return String(preferredAssigneeId(existing) ?? assignedId);
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      return String(assignedId)
+      return String(assignedId);
     }
-    const extra = await loadAssigneeById(token, assignedId)
+    const extra = await loadAssigneeById(token, assignedId);
     if (extra) {
-      setUsers((current) => (findAssigneeRecord(current, assignedId) ? current : [extra, ...current]))
-      return String(preferredAssigneeId(extra) ?? assignedId)
+      setUsers((current) =>
+        findAssigneeRecord(current, assignedId) ? current : [extra, ...current],
+      );
+      return String(preferredAssigneeId(extra) ?? assignedId);
     }
     setUsers((current) =>
       findAssigneeRecord(current, assignedId)
         ? current
-        : [{ id: assignedId, full_name: `User #${assignedId}` }, ...current]
-    )
-    return String(assignedId)
+        : [{ id: assignedId, full_name: `User #${assignedId}` }, ...current],
+    );
+    return String(assignedId);
   }
 
   function resetWorkflowStepForm() {
-    setWorkflowAssignmentKind("user")
-    setWorkflowAssignmentTarget("")
-    setWorkflowBranchId("")
-    setChecklistItemDialogOpen(false)
-    setEditingChecklistItemIndex(null)
-    setChecklistItemForm({ name: "", description: "" })
+    setWorkflowAssignmentKind("user");
+    setWorkflowAssignmentTarget("");
+    setWorkflowBranchId("");
+    setChecklistItemDialogOpen(false);
+    setEditingChecklistItemIndex(null);
+    setChecklistItemForm({ name: "", description: "" });
     setWorkflowForm((prev) => ({
       ...prev,
       step_name: "",
@@ -2645,11 +3296,11 @@ export function OnboardingView() {
       is_required: "true",
       assigned_user_id: "",
       assigned_department_id: "",
-    }))
+    }));
   }
 
   function resetWorkflowForm() {
-    setWorkflowBranchId("")
+    setWorkflowBranchId("");
     setWorkflowForm({
       name: "",
       description: "",
@@ -2663,10 +3314,10 @@ export function OnboardingView() {
       is_required: "true",
       assigned_user_id: "",
       assigned_department_id: "",
-    })
-    setWorkflowSteps([])
-    setPersistedWorkflowStepIds([])
-    setEditingStepIndex(null)
+    });
+    setWorkflowSteps([]);
+    setPersistedWorkflowStepIds([]);
+    setEditingStepIndex(null);
   }
 
   function resetRequestForm() {
@@ -2678,14 +3329,14 @@ export function OnboardingView() {
       planned_start_date: "",
       planned_completion_date: "",
       submit: "true",
-    })
-    setRequestProvisioningEnabled(false)
+    });
+    setRequestProvisioningEnabled(false);
     setRequestProvisioning({
       ...EMPTY_REQUEST_PROVISIONING,
       shiftAssignment: { ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT },
       timetableAssignment: { ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT },
       deviceAssignment: { ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT },
-    })
+    });
   }
 
   const resetDocumentForm = React.useCallback(() => {
@@ -2694,9 +3345,9 @@ export function OnboardingView() {
       description: "",
       document_type: "",
       expiry_date: "",
-    })
-    setDocumentUploadFile(null)
-  }, [])
+    });
+    setDocumentUploadFile(null);
+  }, []);
 
   const resetTaskForm = React.useCallback(() => {
     setTaskForm({
@@ -2707,16 +3358,16 @@ export function OnboardingView() {
       assigned_company_user_id: "",
       assigned_department_id: "",
       due_date: "",
-    })
-  }, [])
+    });
+  }, []);
 
   async function openRequestSheet() {
-    const loaded = await ensureLookups(["employees", "workflows"])
+    const loaded = await ensureLookups(["employees", "workflows"]);
     if (!loaded) {
-      return
+      return;
     }
-    resetRequestForm()
-    setRequestSheetOpen(true)
+    resetRequestForm();
+    setRequestSheetOpen(true);
   }
 
   async function enableRequestProvisioning() {
@@ -2731,11 +3382,11 @@ export function OnboardingView() {
       "attendanceDevices",
       "attendancePolicies",
       "leavePolicies",
-    ])
+    ]);
     if (!loaded) {
-      return
+      return;
     }
-    setRequestProvisioningEnabled(true)
+    setRequestProvisioningEnabled(true);
   }
 
   function buildStepFromWorkflowForm() {
@@ -2743,7 +3394,7 @@ export function OnboardingView() {
       return {
         error: "Step name is required.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
     const checklistItems: WorkflowChecklistItem[] =
@@ -2752,7 +3403,7 @@ export function OnboardingView() {
         : workflowForm.step_checklist_items.map((item) => ({
             name: item.name.trim(),
             description: item.description.trim(),
-          }))
+          }));
     if (
       workflowForm.step_type !== "sign_off" &&
       (checklistItems.length === 0 || checklistItems.some((item) => !item.name))
@@ -2760,48 +3411,59 @@ export function OnboardingView() {
       return {
         error: "Add at least one named checklist item.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
-    const dueDays = Number(workflowForm.due_days)
+    const dueDays = Number(workflowForm.due_days);
     if (!Number.isFinite(dueDays) || dueDays < 1) {
       return {
         error: "Due days must be 1 or greater.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
-    const assignedUserId = Number(workflowForm.assigned_user_id)
-    const assignedDepartmentId = Number(workflowForm.assigned_department_id)
-    const hasAssignedUser = Number.isFinite(assignedUserId) && assignedUserId > 0
-    const hasAssignedDepartment = Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0
+    const assignedUserId = Number(workflowForm.assigned_user_id);
+    const assignedDepartmentId = Number(workflowForm.assigned_department_id);
+    const hasAssignedUser =
+      Number.isFinite(assignedUserId) && assignedUserId > 0;
+    const hasAssignedDepartment =
+      Number.isFinite(assignedDepartmentId) && assignedDepartmentId > 0;
 
     if (workflowAssignmentKind === "user" && !selectedWorkflowBranchId) {
       return {
         error: "Select a branch for this step.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
     if (workflowAssignmentKind === "user" && !hasAssignedDepartment) {
       return {
         error: "Select a department for this step.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
-    if (workflowAssignmentKind === "user" && !workflowDepartmentOptions.some((department) => department.id === assignedDepartmentId)) {
+    if (
+      workflowAssignmentKind === "user" &&
+      !workflowDepartmentOptions.some(
+        (department) => department.id === assignedDepartmentId,
+      )
+    ) {
       return {
         error: "Select a department belonging to the selected branch.",
         step: null as AdminRecord | null,
-      }
+      };
     }
 
-    if (workflowAssignmentKind === "user" && hasAssignedUser && selectedStepAssigneeMissingPermission) {
+    if (
+      workflowAssignmentKind === "user" &&
+      hasAssignedUser &&
+      selectedStepAssigneeMissingPermission
+    ) {
       return {
         error: `${selectedStepAssigneeLabel} needs ${requiredStepPermission} before this step can be assigned to them.`,
         step: null as AdminRecord | null,
-      }
+      };
     }
 
     const stepPayload: OnboardingWorkflowStepDraft = {
@@ -2811,65 +3473,83 @@ export function OnboardingView() {
       checklist_items: checklistItems,
       step_type: workflowForm.step_type.trim() || "task",
       due_days: dueDays,
-      metadata: { ...(editingStepIndex !== null ? workflowSteps[editingStepIndex]?.metadata : {}) },
-    }
-    delete stepPayload.metadata!.assigned_position_id
+      metadata: {
+        ...(editingStepIndex !== null
+          ? workflowSteps[editingStepIndex]?.metadata
+          : {}),
+      },
+    };
+    delete stepPayload.metadata!.assigned_position_id;
 
     if (workflowAssignmentKind !== "user") {
-      const targetId = Number(workflowAssignmentTarget)
-      if (!Number.isInteger(targetId) || targetId <= 0) return { error: `Select a ${workflowAssignmentKind} for this step.`, step: null }
-      if (workflowAssignmentKind === "role") stepPayload.assigned_role_id = targetId
-      else stepPayload.metadata = { ...stepPayload.metadata, assigned_position_id: targetId }
+      const targetId = Number(workflowAssignmentTarget);
+      if (!Number.isInteger(targetId) || targetId <= 0)
+        return {
+          error: `Select a ${workflowAssignmentKind} for this step.`,
+          step: null,
+        };
+      if (workflowAssignmentKind === "role")
+        stepPayload.assigned_role_id = targetId;
+      else
+        stepPayload.metadata = {
+          ...stepPayload.metadata,
+          assigned_position_id: targetId,
+        };
     }
     if (workflowAssignmentKind === "user" && hasAssignedUser) {
-      stepPayload.assigned_user_id = assignedUserId
+      stepPayload.assigned_user_id = assignedUserId;
     }
     if (workflowAssignmentKind === "user" && hasAssignedDepartment) {
-      stepPayload.assigned_department_id = assignedDepartmentId
+      stepPayload.assigned_department_id = assignedDepartmentId;
     }
 
-    return { error: null, step: stepPayload }
+    return { error: null, step: stepPayload };
   }
 
   function openCreateChecklistItemDialog() {
-    setEditingChecklistItemIndex(null)
-    setChecklistItemForm({ name: "", description: "" })
-    setChecklistItemDialogOpen(true)
+    setEditingChecklistItemIndex(null);
+    setChecklistItemForm({ name: "", description: "" });
+    setChecklistItemDialogOpen(true);
   }
 
-  function openEditChecklistItemDialog(item: WorkflowChecklistItem, index: number) {
-    setEditingChecklistItemIndex(index)
-    setChecklistItemForm({ ...item })
-    setChecklistItemDialogOpen(true)
+  function openEditChecklistItemDialog(
+    item: WorkflowChecklistItem,
+    index: number,
+  ) {
+    setEditingChecklistItemIndex(index);
+    setChecklistItemForm({ ...item });
+    setChecklistItemDialogOpen(true);
   }
 
   function saveWorkflowChecklistItem() {
-    const name = checklistItemForm.name.trim()
+    const name = checklistItemForm.name.trim();
     if (!name) {
-      showErrorAlert("Checklist item name is required.")
-      return
+      showErrorAlert("Checklist item name is required.");
+      return;
     }
     const nextItem = {
       name,
       description: checklistItemForm.description.trim(),
-    }
+    };
     setWorkflowForm((prev) => ({
       ...prev,
       step_checklist_items:
         editingChecklistItemIndex === null
           ? [...prev.step_checklist_items, nextItem]
-          : prev.step_checklist_items.map((item, index) => (index === editingChecklistItemIndex ? nextItem : item)),
-    }))
-    setChecklistItemDialogOpen(false)
-    setEditingChecklistItemIndex(null)
-    setChecklistItemForm({ name: "", description: "" })
+          : prev.step_checklist_items.map((item, index) =>
+              index === editingChecklistItemIndex ? nextItem : item,
+            ),
+    }));
+    setChecklistItemDialogOpen(false);
+    setEditingChecklistItemIndex(null);
+    setChecklistItemForm({ name: "", description: "" });
   }
 
   function addWorkflowStep() {
-    const { error: stepError, step } = buildStepFromWorkflowForm()
+    const { error: stepError, step } = buildStepFromWorkflowForm();
     if (stepError || !step) {
-      showErrorAlert(stepError ?? "Invalid step.")
-      return
+      showErrorAlert(stepError ?? "Invalid step.");
+      return;
     }
 
     if (editingStepIndex !== null) {
@@ -2880,50 +3560,79 @@ export function OnboardingView() {
                 ...step,
                 ...(entry.id ? { id: entry.id } : {}),
               } as OnboardingWorkflowStepDraft)
-            : entry
-        )
-      )
-      showSuccessAlert("Workflow step updated.")
+            : entry,
+        ),
+      );
+      showSuccessAlert("Workflow step updated.");
     } else {
-      setWorkflowSteps((prev) => [...prev, step as OnboardingWorkflowStepDraft])
-      showSuccessAlert("Workflow step added.")
+      setWorkflowSteps((prev) => [
+        ...prev,
+        step as OnboardingWorkflowStepDraft,
+      ]);
+      showSuccessAlert("Workflow step added.");
     }
-    setEditingStepIndex(null)
-    setStepDialogOpen(false)
-    resetWorkflowStepForm()
+    setEditingStepIndex(null);
+    setStepDialogOpen(false);
+    resetWorkflowStepForm();
   }
 
   function openCreateStepDialog() {
     void (async () => {
-      const loaded = await ensureLookups(["branches", "users", "departments", "roles", "positions"])
+      const loaded = await ensureLookups([
+        "branches",
+        "users",
+        "departments",
+        "roles",
+        "positions",
+      ]);
       if (!loaded) {
-        return
+        return;
       }
-      setEditingStepIndex(null)
-      resetWorkflowStepForm()
-      setStepDialogOpen(true)
-    })()
+      setEditingStepIndex(null);
+      resetWorkflowStepForm();
+      setStepDialogOpen(true);
+    })();
   }
 
   function removeWorkflowStep(index: number) {
-    setWorkflowSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index))
-    showSuccessAlert("Workflow step removed.")
+    setWorkflowSteps((prev) =>
+      prev.filter((_, stepIndex) => stepIndex !== index),
+    );
+    showSuccessAlert("Workflow step removed.");
   }
 
   function editWorkflowStep(step: OnboardingWorkflowStepDraft, index: number) {
     void (async () => {
-      const loaded = await ensureLookups(["branches", "users", "departments", "roles", "positions"])
+      const loaded = await ensureLookups([
+        "branches",
+        "users",
+        "departments",
+        "roles",
+        "positions",
+      ]);
       if (!loaded) {
-        return
+        return;
       }
-      setEditingStepIndex(index)
-      const positionId = readNumber(step.metadata ?? {}, ["assigned_position_id"])
-      setWorkflowAssignmentKind(positionId ? "position" : step.assigned_role_id ? "role" : "user")
-      setWorkflowAssignmentTarget(positionId ? String(positionId) : step.assigned_role_id ? String(step.assigned_role_id) : "")
-      setWorkflowBranchId("")
+      setEditingStepIndex(index);
+      const positionId = readNumber(step.metadata ?? {}, [
+        "assigned_position_id",
+      ]);
+      setWorkflowAssignmentKind(
+        positionId ? "position" : step.assigned_role_id ? "role" : "user",
+      );
+      setWorkflowAssignmentTarget(
+        positionId
+          ? String(positionId)
+          : step.assigned_role_id
+            ? String(step.assigned_role_id)
+            : "",
+      );
+      setWorkflowBranchId("");
       const assignedUserSelectValue = await hydrateAssignedUser(
-        typeof step.assigned_user_id === "number" ? step.assigned_user_id : null
-      )
+        typeof step.assigned_user_id === "number"
+          ? step.assigned_user_id
+          : null,
+      );
       setWorkflowForm((prev) => ({
         ...prev,
         step_name: String(step.name ?? ""),
@@ -2931,35 +3640,47 @@ export function OnboardingView() {
         step_checklist_items: step.checklist_items.map((item) => ({ ...item })),
         step_type: String(step.step_type ?? "task"),
         due_days: String(step.due_days ?? "1"),
-        is_required: String(step.is_required ?? true) === "true" ? "true" : "false",
+        is_required:
+          String(step.is_required ?? true) === "true" ? "true" : "false",
         assigned_user_id: assignedUserSelectValue,
         assigned_department_id:
-          typeof step.assigned_department_id === "number" ? String(step.assigned_department_id) : "",
-      }))
-      setStepDialogOpen(true)
-    })()
+          typeof step.assigned_department_id === "number"
+            ? String(step.assigned_department_id)
+            : "",
+      }));
+      setStepDialogOpen(true);
+    })();
   }
 
-  async function openEditWorkflowSheet(workflowId: number | null, listRow?: AdminRecord | null) {
+  async function openEditWorkflowSheet(
+    workflowId: number | null,
+    listRow?: AdminRecord | null,
+  ) {
     if (workflowId === null) {
-      return
+      return;
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
     // Prefer the full list row from state when the caller only passes an id.
     const resolvedListRow =
-      listRow ?? workflows.find((row) => readNumber(row, ["id", "workflow_id"]) === workflowId) ?? null
+      listRow ??
+      workflows.find(
+        (row) => readNumber(row, ["id", "workflow_id"]) === workflowId,
+      ) ??
+      null;
 
     // Prefill immediately from the table row so the sheet never looks like a blank create form.
-    const listBasics = workflowFormFromRecord(resolvedListRow)
-    const listSteps = extractWorkflowSteps(resolvedListRow).map((step) => normalizeWorkflowStep(step))
+    const listBasics = workflowFormFromRecord(resolvedListRow);
+    const listSteps = extractWorkflowSteps(resolvedListRow).map((step) =>
+      normalizeWorkflowStep(step),
+    );
 
-    setEditingWorkflowId(workflowId)
-    setEditingStepIndex(null)
+    setEditingWorkflowId(workflowId);
+    setEditingStepIndex(null);
     setWorkflowForm((prev) => ({
       ...prev,
       name: listBasics.name,
@@ -2974,33 +3695,42 @@ export function OnboardingView() {
       is_required: "true",
       assigned_user_id: "",
       assigned_department_id: "",
-    }))
-    setWorkflowSteps(listSteps)
+    }));
+    setWorkflowSteps(listSteps);
     setPersistedWorkflowStepIds(
-      listSteps.map((step) => step.id).filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
-    )
-    setWorkflowSheetOpen(true)
+      listSteps
+        .map((step) => step.id)
+        .filter(
+          (stepId): stepId is number =>
+            typeof stepId === "number" && stepId > 0,
+        ),
+    );
+    setWorkflowSheetOpen(true);
 
     // Lookups are only needed for step assignment dropdowns; don't block showing details.
-    void ensureLookups(["users", "departments"])
+    void ensureLookups(["users", "departments"]);
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
-      const rawWorkflow = await getOnboardingWorkflow(token, workflowId)
-      const workflow = unwrapWorkflowDetail(rawWorkflow)
+      const rawWorkflow = await getOnboardingWorkflow(token, workflowId);
+      const workflow = unwrapWorkflowDetail(rawWorkflow);
       if (!workflow) {
-        throw new Error("Workflow details were not returned by the API.")
+        throw new Error("Workflow details were not returned by the API.");
       }
 
-      let normalizedSteps = extractWorkflowSteps(workflow).map((step) => normalizeWorkflowStep(step))
+      let normalizedSteps = extractWorkflowSteps(workflow).map((step) =>
+        normalizeWorkflowStep(step),
+      );
 
       // Some APIs expose steps only via the nested steps collection endpoint.
       if (normalizedSteps.length === 0) {
         try {
-          const stepRows = await listOnboardingWorkflowSteps(token, workflowId)
+          const stepRows = await listOnboardingWorkflowSteps(token, workflowId);
           if (stepRows.length > 0) {
-            normalizedSteps = stepRows.map((step) => normalizeWorkflowStep(step))
+            normalizedSteps = stepRows.map((step) =>
+              normalizeWorkflowStep(step),
+            );
           }
         } catch {
           // Endpoint may not exist; keep list/detail steps.
@@ -3009,17 +3739,25 @@ export function OnboardingView() {
 
       // Never wipe good list prefill with empty detail fields.
       if (normalizedSteps.length === 0 && listSteps.length > 0) {
-        normalizedSteps = listSteps
+        normalizedSteps = listSteps;
       }
 
-      const detailBasics = workflowFormFromRecord(workflow)
+      const detailBasics = workflowFormFromRecord(workflow);
 
       setWorkflowForm((prev) => ({
         ...prev,
         name: detailBasics.name || listBasics.name || prev.name,
-        description: detailBasics.description || listBasics.description || prev.description,
-        status: detailBasics.status ?? listBasics.status ?? prev.status ?? "active",
-        is_default: detailBasics.is_default ?? listBasics.is_default ?? prev.is_default ?? "false",
+        description:
+          detailBasics.description ||
+          listBasics.description ||
+          prev.description,
+        status:
+          detailBasics.status ?? listBasics.status ?? prev.status ?? "active",
+        is_default:
+          detailBasics.is_default ??
+          listBasics.is_default ??
+          prev.is_default ??
+          "false",
         step_name: "",
         step_description: "",
         step_checklist_items: [],
@@ -3028,148 +3766,183 @@ export function OnboardingView() {
         is_required: "true",
         assigned_user_id: "",
         assigned_department_id: "",
-      }))
-      setWorkflowSteps(normalizedSteps)
+      }));
+      setWorkflowSteps(normalizedSteps);
       setPersistedWorkflowStepIds(
         normalizedSteps
           .map((step) => step.id)
-          .filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
-      )
-      setEditingWorkflowId(workflowId)
+          .filter(
+            (stepId): stepId is number =>
+              typeof stepId === "number" && stepId > 0,
+          ),
+      );
+      setEditingWorkflowId(workflowId);
     } catch (errorObject) {
       // Keep list prefill visible; only surface the load error.
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to load workflow details."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to load workflow details.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function openCreateWorkflowSheet() {
     if (!canCreateOnboardingWorkflows) {
-      showErrorAlert("You do not have permission to create onboarding workflows.")
-      return
+      showErrorAlert(
+        "You do not have permission to create onboarding workflows.",
+      );
+      return;
     }
-    const loaded = await ensureLookups(["users", "departments"])
+    const loaded = await ensureLookups(["users", "departments"]);
     if (!loaded) {
-      return
+      return;
     }
-    resetWorkflowForm()
-    setEditingWorkflowId(null)
-    setWorkflowSheetOpen(true)
+    resetWorkflowForm();
+    setEditingWorkflowId(null);
+    setWorkflowSheetOpen(true);
   }
 
   async function removeWorkflow(workflowId: number | null) {
     if (!canDeleteOnboardingWorkflows) {
-      showErrorAlert("You do not have permission to delete onboarding workflows.")
-      return
+      showErrorAlert(
+        "You do not have permission to delete onboarding workflows.",
+      );
+      return;
     }
     if (workflowId === null) {
-      return
+      return;
     }
-    if (typeof window !== "undefined" && !window.confirm("Delete this onboarding workflow? This cannot be undone.")) {
-      return
+    if (
+      !(await fluentConfirm(
+        "Delete this onboarding workflow? This cannot be undone.",
+      ))
+    ) {
+      return;
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
       try {
-        await deleteOnboardingWorkflow(token, workflowId)
+        await deleteOnboardingWorkflow(token, workflowId);
       } catch {
-        const workflow = await getOnboardingWorkflow(token, workflowId)
+        const workflow = await getOnboardingWorkflow(token, workflowId);
         const stepIds = toRecordList(
-          workflow?.steps ?? workflow?.workflow_steps ?? workflow?.tasks ?? workflow?.activities
+          workflow?.steps ??
+            workflow?.workflow_steps ??
+            workflow?.tasks ??
+            workflow?.activities,
         )
-          .map((step) => readNumber(step, ["id", "step_id", "workflow_step_id"]))
-          .filter((stepId): stepId is number => typeof stepId === "number" && stepId > 0)
+          .map((step) =>
+            readNumber(step, ["id", "step_id", "workflow_step_id"]),
+          )
+          .filter(
+            (stepId): stepId is number =>
+              typeof stepId === "number" && stepId > 0,
+          );
 
         for (const stepId of stepIds) {
-          await deleteOnboardingWorkflowStep(token, workflowId, stepId)
+          await deleteOnboardingWorkflowStep(token, workflowId, stepId);
         }
 
-        await deleteOnboardingWorkflow(token, workflowId)
+        await deleteOnboardingWorkflow(token, workflowId);
       }
-      showSuccessAlert("Workflow deleted successfully.")
-      await reloadAll(activeTab, true)
+      showSuccessAlert("Workflow deleted successfully.");
+      await reloadAll(activeTab, true);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to delete workflow."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to delete workflow.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function cloneWorkflow(workflowId: number | null, row: AdminRecord) {
     if (!canCreateOnboardingWorkflows) {
-      showErrorAlert("You do not have permission to clone onboarding workflows.")
-      return
+      showErrorAlert(
+        "You do not have permission to clone onboarding workflows.",
+      );
+      return;
     }
     if (workflowId === null) {
-      return
+      return;
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
-    const sourceName = readString(row, ["name", "title"])
-    const cloneName = sourceName !== "-" ? `${sourceName} Copy` : `Workflow ${workflowId} Copy`
+    const sourceName = readString(row, ["name", "title"]);
+    const cloneName =
+      sourceName !== "-" ? `${sourceName} Copy` : `Workflow ${workflowId} Copy`;
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
       await cloneOnboardingWorkflow(token, workflowId, {
         name: cloneName,
         is_default: false,
-      })
-      showSuccessAlert("Onboarding workflow cloned.")
-      await reloadAll("workflows", true)
+      });
+      showSuccessAlert("Onboarding workflow cloned.");
+      await reloadAll("workflows", true);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to clone workflow."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to clone workflow.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitWorkflow() {
     if (editingWorkflowId === null && !canCreateOnboardingWorkflows) {
-      showErrorAlert("You do not have permission to create onboarding workflows.")
-      return
+      showErrorAlert(
+        "You do not have permission to create onboarding workflows.",
+      );
+      return;
     }
     if (editingWorkflowId !== null && !canUpdateOnboardingWorkflows) {
-      showErrorAlert("You do not have permission to update onboarding workflows.")
-      return
+      showErrorAlert(
+        "You do not have permission to update onboarding workflows.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
     if (!workflowForm.name.trim()) {
-      showErrorAlert("Workflow name is required.")
-      return
+      showErrorAlert("Workflow name is required.");
+      return;
     }
 
     if (workflowSteps.length === 0) {
-      showErrorAlert("Add at least one workflow step.")
-      return
+      showErrorAlert("Add at least one workflow step.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
       if (editingWorkflowId === null) {
         await createOnboardingWorkflow(token, {
@@ -3178,340 +3951,468 @@ export function OnboardingView() {
           status: workflowForm.status || "active",
           is_default: workflowForm.is_default === "true",
           steps: workflowSteps.map((step) => toWorkflowStepApiPayload(step)),
-        })
-        showSuccessAlert("Onboarding workflow created.")
+        });
+        showSuccessAlert("Onboarding workflow created.");
       } else {
         await patchOnboardingWorkflow(token, editingWorkflowId, {
           name: workflowForm.name.trim(),
           description: workflowForm.description.trim() || undefined,
           status: workflowForm.status || "active",
           is_default: workflowForm.is_default === "true",
-        })
+        });
 
-        const remainingStepIds = new Set(persistedWorkflowStepIds)
+        const remainingStepIds = new Set(persistedWorkflowStepIds);
         for (const step of workflowSteps) {
-          const stepPayload = toWorkflowStepApiPayload(step)
+          const stepPayload = toWorkflowStepApiPayload(step);
 
           if (typeof step.id === "number" && step.id > 0) {
-            await patchOnboardingWorkflowStep(token, editingWorkflowId, step.id, stepPayload)
-            remainingStepIds.delete(step.id)
+            await patchOnboardingWorkflowStep(
+              token,
+              editingWorkflowId,
+              step.id,
+              stepPayload,
+            );
+            remainingStepIds.delete(step.id);
           } else {
-            await createOnboardingWorkflowStep(token, editingWorkflowId, stepPayload)
+            await createOnboardingWorkflowStep(
+              token,
+              editingWorkflowId,
+              stepPayload,
+            );
           }
         }
 
         for (const stepId of remainingStepIds) {
-          await deleteOnboardingWorkflowStep(token, editingWorkflowId, stepId)
+          await deleteOnboardingWorkflowStep(token, editingWorkflowId, stepId);
         }
 
-        showSuccessAlert("Onboarding workflow updated.")
+        showSuccessAlert("Onboarding workflow updated.");
       }
 
-      resetWorkflowForm()
-      setWorkflowSheetOpen(false)
-      setEditingWorkflowId(null)
-      await reloadAll(activeTab, true)
+      resetWorkflowForm();
+      setWorkflowSheetOpen(false);
+      setEditingWorkflowId(null);
+      await reloadAll(activeTab, true);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to create workflow."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create workflow.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function startPendingOnboarding(row: AdminRecord) {
     if (!canCreateOnboardingRequests) {
-      showErrorAlert("You do not have permission to create onboarding requests.")
-      return
+      showErrorAlert(
+        "You do not have permission to create onboarding requests.",
+      );
+      return;
     }
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
     const employee =
       toRecord(row.employee) ??
       employees.find((entry) => {
-        const employeeId = readNumber(entry, ["id", "employee_id", "employeeId"])
-        return employeeId !== null && employeeId === readNumber(row, ["employee_id", "employeeId"])
+        const employeeId = readNumber(entry, [
+          "id",
+          "employee_id",
+          "employeeId",
+        ]);
+        return (
+          employeeId !== null &&
+          employeeId === readNumber(row, ["employee_id", "employeeId"])
+        );
       }) ??
-      row
-    const employeeId = readNumber(employee, ["id", "employee_id", "employeeId"]) ?? readNumber(row, ["employee_id"])
+      row;
+    const employeeId =
+      readNumber(employee, ["id", "employee_id", "employeeId"]) ??
+      readNumber(row, ["employee_id"]);
     if (employeeId === null) {
-      showErrorAlert("Unable to start onboarding because the employee is missing.")
-      return
+      showErrorAlert(
+        "Unable to start onboarding because the employee is missing.",
+      );
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
-      const name = getEmployeeDisplayName(employee) || formatEmployeeOptionLabel(employee, employeeId)
+      const name =
+        getEmployeeDisplayName(employee) ||
+        formatEmployeeOptionLabel(employee, employeeId);
       await ensureDraftOnboardingRequest(token, {
         employee_id: employeeId,
         workflow_id: defaultOnboardingWorkflowId(workflows) ?? undefined,
-        title: name && name !== "Unknown employee" ? `Onboarding for ${name}` : "Onboarding",
-      })
-      showSuccessAlert("Onboarding request created.")
-      await reloadAll("requests", true)
+        title:
+          name && name !== "Unknown employee"
+            ? `Onboarding for ${name}`
+            : "Onboarding",
+      });
+      showSuccessAlert("Onboarding request created.");
+      await reloadAll("requests", true);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to start onboarding."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to start onboarding.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequest() {
     if (!canCreateOnboardingRequests) {
-      showErrorAlert("You do not have permission to create onboarding requests.")
-      return
+      showErrorAlert(
+        "You do not have permission to create onboarding requests.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
     if (!requestForm.employee_id || !requestForm.title.trim()) {
-      showErrorAlert("Employee and title are required.")
-      return
+      showErrorAlert("Employee and title are required.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
       const selectedEmployee =
         employees.find(
-          (row) => readNumber(row, ["id", "employee_id", "user_id"]) === Number(requestForm.employee_id)
-        ) ?? null
+          (row) =>
+            readNumber(row, ["id", "employee_id", "user_id"]) ===
+            Number(requestForm.employee_id),
+        ) ?? null;
       const fallbackEmployeeNo = readString(selectedEmployee ?? {}, [
         "employee_no",
         "employee_number",
         "employee_code",
         "user_no",
-      ])
+      ]);
       const provisioningResult = requestProvisioningEnabled
         ? buildOnboardingProvisioningPayload(requestProvisioning, {
-            fallbackEmployeeNo: fallbackEmployeeNo !== "-" ? fallbackEmployeeNo : undefined,
+            fallbackEmployeeNo:
+              fallbackEmployeeNo !== "-" ? fallbackEmployeeNo : undefined,
           })
-        : {}
+        : {};
       if (provisioningResult.error) {
-        throw new Error(provisioningResult.error)
+        throw new Error(provisioningResult.error);
       }
 
       const createdRequest = await createOnboardingRequest(token, {
         employee_id: Number(requestForm.employee_id),
-        workflow_id: requestForm.workflow_id ? Number(requestForm.workflow_id) : undefined,
+        workflow_id: requestForm.workflow_id
+          ? Number(requestForm.workflow_id)
+          : undefined,
         title: requestForm.title.trim(),
         description: requestForm.description.trim(),
         planned_start_date: requestForm.planned_start_date || undefined,
-        planned_completion_date: requestForm.planned_completion_date || undefined,
+        planned_completion_date:
+          requestForm.planned_completion_date || undefined,
         submit: requestForm.submit === "true",
         provisioning: provisioningResult.provisioning,
-      })
+      });
       if (requestForm.submit === "true") {
-        const createdRecord = toRecord(createdRequest)
-        const createdRequestId = readNumber(createdRecord ?? {}, ["id", "request_id"])
+        const createdRecord = toRecord(createdRequest);
+        const createdRequestId = readNumber(createdRecord ?? {}, [
+          "id",
+          "request_id",
+        ]);
         const createdStatus = readString(createdRecord ?? {}, [
           "status",
           "request_status",
           "onboarding_status",
           "workflow_status",
-        ])
-        let submittedRequest: unknown = createdRequest
-        if (createdRequestId !== null && (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")) {
-          submittedRequest = await submitOnboardingRequest(token, createdRequestId, {
-            allow_incomplete_employee_details: true,
-          })
+        ]);
+        let submittedRequest: unknown = createdRequest;
+        if (
+          createdRequestId !== null &&
+          (isOnboardingDraftStatus(createdStatus) || createdStatus === "-")
+        ) {
+          submittedRequest = await submitOnboardingRequest(
+            token,
+            createdRequestId,
+            {
+              allow_incomplete_employee_details: true,
+            },
+          );
         }
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token,
           request: submittedRequest,
           requesterName: selectedEmployee
-            ? formatEmployeeOptionLabel(selectedEmployee, Number(requestForm.employee_id))
+            ? formatEmployeeOptionLabel(
+                selectedEmployee,
+                Number(requestForm.employee_id),
+              )
             : undefined,
-          loadRequest: createdRequestId === null ? undefined : () => getOnboardingRequest(token, createdRequestId),
-        })
+          loadRequest:
+            createdRequestId === null
+              ? undefined
+              : () => getOnboardingRequest(token, createdRequestId),
+        });
       }
 
-      resetRequestForm()
-      setRequestSheetOpen(false)
-      showSuccessAlert("Onboarding request created.")
-      await reloadAll(activeTab, true)
+      resetRequestForm();
+      setRequestSheetOpen(false);
+      showSuccessAlert("Onboarding request created.");
+      await reloadAll(activeTab, true);
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to create onboarding request."
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create onboarding request.";
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  async function runRequestAction(requestId: number | null, action: RequestAction) {
+  async function runRequestAction(
+    requestId: number | null,
+    action: RequestAction,
+  ) {
     if (requestId === null) {
-      return
+      return;
     }
 
-    if (action === "submit" && !canCreateOnboardingRequests && !canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to submit onboarding requests.")
-      return
+    if (
+      action === "submit" &&
+      !canCreateOnboardingRequests &&
+      !canUpdateOnboardingRequests
+    ) {
+      showErrorAlert(
+        "You do not have permission to submit onboarding requests.",
+      );
+      return;
     }
     if (action === "approve" || action === "reject") {
       if (!canApproveOnboardingRequests) {
-        showErrorAlert("You do not have permission to approve onboarding requests.")
-        return
+        showErrorAlert(
+          "You do not have permission to approve onboarding requests.",
+        );
+        return;
       }
     }
     if (action === "cancel" && !canCancelOnboardingRequests) {
-      showErrorAlert("You do not have permission to cancel onboarding requests.")
-      return
+      showErrorAlert(
+        "You do not have permission to cancel onboarding requests.",
+      );
+      return;
     }
     if (action === "complete" && !canCompleteOnboardingRequests) {
-      showErrorAlert("You do not have permission to complete onboarding requests.")
-      return
+      showErrorAlert(
+        "You do not have permission to complete onboarding requests.",
+      );
+      return;
     }
     if (action === "delete" && !canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to delete onboarding requests.")
-      return
+      showErrorAlert(
+        "You do not have permission to delete onboarding requests.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
+      showErrorAlert("Authentication required. Please log in again.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
-      let approvalResult: unknown
+      let approvalResult: unknown;
       if (action === "submit") {
         const sourceRow =
-          requests.find((row) => readNumber(row, ["id", "request_id"]) === requestId) ??
+          requests.find(
+            (row) => readNumber(row, ["id", "request_id"]) === requestId,
+          ) ??
           selectedRequestRow ??
-          selectedRequestDetails
-        const submittedRequest = await submitOnboardingRequest(token, requestId, {
-          allow_incomplete_employee_details: allowIncompleteWorkflowStart,
-        })
+          selectedRequestDetails;
+        const submittedRequest = await submitOnboardingRequest(
+          token,
+          requestId,
+          {
+            allow_incomplete_employee_details: allowIncompleteWorkflowStart,
+          },
+        );
         void notifySubmittedRequestApprovers({
           kind: "onboarding_request",
           token,
           request: submittedRequest ?? sourceRow,
           loadRequest: () => getOnboardingRequest(token, requestId),
-        })
+        });
       } else if (action === "approve") {
         approvalResult = await approveOnboardingRequest(token, requestId, {
           approve: true,
           comments: "Approved",
-        })
+        });
       } else if (action === "reject") {
         await rejectOnboardingRequest(token, requestId, {
           comments: "Rejected",
-        })
+        });
       } else if (action === "cancel") {
         await cancelOnboardingRequest(token, requestId, {
           reason: "Cancelled by admin",
-        })
+        });
       } else if (action === "complete") {
-        await completeOnboardingRequest(token, requestId)
+        await completeOnboardingRequest(token, requestId);
       } else if (action === "delete") {
-        await deleteOnboardingRequest(token, requestId)
+        await deleteOnboardingRequest(token, requestId);
       }
 
       if (action === "approve") {
-        showSuccessAlert(onboardingActionMessage(approvalResult, "Approval recorded for this level."))
+        showSuccessAlert(
+          onboardingActionMessage(
+            approvalResult,
+            "Approval recorded for this level.",
+          ),
+        );
       } else if (action === "submit") {
-        showSuccessAlert("Onboarding request submitted. It can now be approved.")
+        showSuccessAlert(
+          "Onboarding request submitted. It can now be approved.",
+        );
       } else {
         showSuccessAlert(
-          action === "delete" ? "Onboarding request removed from list." : `Onboarding request ${action}d successfully.`
-        )
+          action === "delete"
+            ? "Onboarding request removed from list."
+            : `Onboarding request ${action}d successfully.`,
+        );
       }
-      await reloadAll(activeTab, true)
+      await reloadAll(activeTab, true);
       if (requestDetailsOpen && readCurrentRequestId() === requestId) {
         await openRequestDetails({
           ...(selectedRequestRow ?? {}),
           id: requestId,
           request_id: requestId,
-        })
+        });
       }
     } catch (errorObject) {
-      const message = errorObject instanceof Error ? errorObject.message : `Failed to ${action} request.`
-      setError(message)
-      showErrorAlert(message)
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : `Failed to ${action} request.`;
+      setError(message);
+      showErrorAlert(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   const requestTimelineNodes = React.useMemo(() => {
     if (!selectedRequestRow) {
-      return []
+      return [];
     }
 
-    const progressRecord = selectedRequestProgress ?? {}
-    const detailRecord = selectedRequestDetails ?? {}
-    const workflowRecord = toRecord(detailRecord.workflow ?? detailRecord.assigned_workflow ?? null)
+    const progressRecord = selectedRequestProgress ?? {};
+    const detailRecord = selectedRequestDetails ?? {};
+    const workflowRecord = toRecord(
+      detailRecord.workflow ?? detailRecord.assigned_workflow ?? null,
+    );
 
     const progressSteps = toRecordList(
       progressRecord.steps ??
         progressRecord.workflow_steps ??
         progressRecord.progress_steps ??
         progressRecord.activities ??
-        progressRecord.tasks
-    )
+        progressRecord.tasks,
+    );
     const workflowSteps =
       selectedWorkflowSteps.length > 0
         ? selectedWorkflowSteps
-        : toRecordList(workflowRecord?.steps ?? workflowRecord?.workflow_steps ?? null)
+        : toRecordList(
+            workflowRecord?.steps ?? workflowRecord?.workflow_steps ?? null,
+          );
     const requestSteps = toRecordList(
-      detailRecord.steps ?? detailRecord.workflow_steps ?? detailRecord.tasks ?? detailRecord.activities
-    )
+      detailRecord.steps ??
+        detailRecord.workflow_steps ??
+        detailRecord.tasks ??
+        detailRecord.activities,
+    );
 
-    const seed = workflowSteps.length ? workflowSteps : progressSteps.length ? progressSteps : requestSteps
-    const progressByKey = new Map<string, AdminRecord>()
+    const seed = workflowSteps.length
+      ? workflowSteps
+      : progressSteps.length
+        ? progressSteps
+        : requestSteps;
+    const progressByKey = new Map<string, AdminRecord>();
     const addProgressEntry = (entry: AdminRecord) => {
       const keys = [
         readString(entry, ["id", "step_id", "task_id", "approval_level"]),
         readString(entry, ["step_name", "name", "title", "task_title"]),
-      ]
+      ];
       keys
         .filter((key) => key && key !== "-")
         .forEach((key) => {
-          progressByKey.set(String(key).toLowerCase(), entry)
-        })
-    }
-    progressSteps.forEach(addProgressEntry)
-    requestSteps.forEach(addProgressEntry)
+          progressByKey.set(String(key).toLowerCase(), entry);
+        });
+    };
+    progressSteps.forEach(addProgressEntry);
+    requestSteps.forEach(addProgressEntry);
 
     const nodes = seed.map((step, index) => {
-      const stepIdKey = readString(step, ["id", "step_id", "task_id", "approval_level"]).toLowerCase()
-      const stepNameKey = readString(step, ["step_name", "name", "title", "task_title"]).toLowerCase()
+      const stepIdKey = readString(step, [
+        "id",
+        "step_id",
+        "task_id",
+        "approval_level",
+      ]).toLowerCase();
+      const stepNameKey = readString(step, [
+        "step_name",
+        "name",
+        "title",
+        "task_title",
+      ]).toLowerCase();
       const matchedProgress = workflowSteps.length
-        ? onboardingStepProgress(step,
-            selectedRequestTasks.length ? selectedRequestTasks : toRecordList(detailRecord.tasks),
-            toRecordList(detailRecord.approvals))
-        : progressByKey.get(stepIdKey) ?? progressByKey.get(stepNameKey) ?? null
-      const source = matchedProgress ?? step
+        ? onboardingStepProgress(
+            step,
+            selectedRequestTasks.length
+              ? selectedRequestTasks
+              : toRecordList(detailRecord.tasks),
+            toRecordList(detailRecord.approvals),
+          )
+        : (progressByKey.get(stepIdKey) ??
+          progressByKey.get(stepNameKey) ??
+          null);
+      const source = matchedProgress ?? step;
       const stepStatus = String(
         source.status ??
           source.step_status ??
           source.approval_status ??
           source.state ??
-          (index === 0 ? "pending" : "queued")
+          (index === 0 ? "pending" : "queued"),
       )
         .trim()
-        .toLowerCase()
+        .toLowerCase();
       const owner =
-        resolveResponsibleParty(source) !== "-" ? resolveResponsibleParty(source) : resolveResponsibleParty(step)
-      const actionLabel = readString(
-        { ...step, ...source },
-        ["name", "title", "step_name", "task_title", "action_type", "task_type"]
-      )
+        resolveResponsibleParty(source) !== "-"
+          ? resolveResponsibleParty(source)
+          : resolveResponsibleParty(step);
+      const actionLabel = readString({ ...step, ...source }, [
+        "name",
+        "title",
+        "step_name",
+        "task_title",
+        "action_type",
+        "task_type",
+      ]);
       return {
         key: `${readString(step, ["id", "step_id", "task_id"])}-${index}`,
         index: index + 1,
@@ -3519,32 +4420,48 @@ export function OnboardingView() {
         status: stepStatus,
         owner,
         completedAt: toTimestamp(
-          source.completed_at ?? source.done_at ?? source.approved_at ?? source.executed_at
+          source.completed_at ??
+            source.done_at ??
+            source.approved_at ??
+            source.executed_at,
         ),
-        required: String(step.is_required ?? source.is_required) === "true" || step.is_required === true,
-      }
-    })
+        required:
+          String(step.is_required ?? source.is_required) === "true" ||
+          step.is_required === true,
+      };
+    });
 
     if (nodes.length === 0) {
       const fallbackStatus = String(
-        readString(selectedRequestRow, ["status", "request_status", "onboarding_status", "workflow_status"])
+        readString(selectedRequestRow, [
+          "status",
+          "request_status",
+          "onboarding_status",
+          "workflow_status",
+        ]),
       )
         .trim()
-        .toLowerCase()
+        .toLowerCase();
       return [
         {
           key: "fallback-step",
           index: 1,
           actionLabel: "Request Created",
           status: fallbackStatus || "pending",
-          owner: readString(selectedRequestRow, ["employee_name", "full_name", "name"]),
-          completedAt: toTimestamp(readString(selectedRequestRow, ["updated_at", "created_at"])),
+          owner: readString(selectedRequestRow, [
+            "employee_name",
+            "full_name",
+            "name",
+          ]),
+          completedAt: toTimestamp(
+            readString(selectedRequestRow, ["updated_at", "created_at"]),
+          ),
           required: true,
         },
-      ]
+      ];
     }
 
-    return nodes
+    return nodes;
   }, [
     resolveResponsibleParty,
     selectedRequestDetails,
@@ -3552,58 +4469,92 @@ export function OnboardingView() {
     selectedRequestTasks,
     selectedRequestRow,
     selectedWorkflowSteps,
-  ])
+  ]);
 
   const approvalSummary = React.useMemo(
     () =>
-      summarizeOnboardingApprovals([selectedRequestDetails, selectedRequestProgress, selectedRequestRow], roles, users),
-    [roles, selectedRequestDetails, selectedRequestProgress, selectedRequestRow, users]
-  )
+      summarizeOnboardingApprovals(
+        [selectedRequestDetails, selectedRequestProgress, selectedRequestRow],
+        roles,
+        users,
+      ),
+    [
+      roles,
+      selectedRequestDetails,
+      selectedRequestProgress,
+      selectedRequestRow,
+      users,
+    ],
+  );
 
   const displayedRequestDocuments = React.useMemo<AdminRecord[]>(
     () => [
-      ...selectedRequestDocuments.map((document) => ({ ...document, source: "onboarding" })),
-      ...toRecordList(selectedRequestDetails?.employee_documents).map((document) => ({
+      ...selectedRequestDocuments.map((document) => ({
         ...document,
-        source: "employee_profile",
+        source: "onboarding",
       })),
+      ...toRecordList(selectedRequestDetails?.employee_documents).map(
+        (document) => ({
+          ...document,
+          source: "employee_profile",
+        }),
+      ),
     ],
-    [selectedRequestDetails, selectedRequestDocuments]
-  )
+    [selectedRequestDetails, selectedRequestDocuments],
+  );
 
   const selectedRequestProvisioningSummary = React.useMemo(() => {
-    const detailProvisioning = extractProvisioning(selectedRequestDetails)
-    const rowProvisioning = extractProvisioning(selectedRequestRow)
-    const provisioning = detailProvisioning ?? rowProvisioning
-    const metadata = extractMetadata(selectedRequestDetails) ?? extractMetadata(selectedRequestRow)
+    const detailProvisioning = extractProvisioning(selectedRequestDetails);
+    const rowProvisioning = extractProvisioning(selectedRequestRow);
+    const provisioning = detailProvisioning ?? rowProvisioning;
+    const metadata =
+      extractMetadata(selectedRequestDetails) ??
+      extractMetadata(selectedRequestRow);
     if (!provisioning && !metadata) {
-      return null
+      return null;
     }
 
     const roleIds = Array.isArray(provisioning?.role_ids)
-      ? provisioning.role_ids.filter((value): value is number => typeof value === "number")
-      : []
+      ? provisioning.role_ids.filter(
+          (value): value is number => typeof value === "number",
+        )
+      : [];
     const branchAccessIds = Array.isArray(provisioning?.branch_access_ids)
-      ? provisioning.branch_access_ids.filter((value): value is number => typeof value === "number")
-      : []
-    const shiftAssignment = provisioning?.shift_assignment
-    const timetableAssignment = provisioning?.timetable_assignment
-    const deviceAssignment = provisioning?.device_assignment
+      ? provisioning.branch_access_ids.filter(
+          (value): value is number => typeof value === "number",
+        )
+      : [];
+    const shiftAssignment = provisioning?.shift_assignment;
+    const timetableAssignment = provisioning?.timetable_assignment;
+    const deviceAssignment = provisioning?.device_assignment;
 
     return {
       rawProvisioning: provisioning,
       roleLabels:
         roleIds.length > 0
           ? roleIds.map((id) =>
-              resolveProvisioningLabel(roles, id, ["id", "role_id"], ["display_name", "name", "title"])
+              resolveProvisioningLabel(
+                roles,
+                id,
+                ["id", "role_id"],
+                ["display_name", "name", "title"],
+              ),
             )
           : [],
       branchAccessLabels:
         branchAccessIds.length > 0
-          ? branchAccessIds.map((id) => resolveProvisioningLabel(branches, id, ["id", "branch_id"], ["name", "title"]))
+          ? branchAccessIds.map((id) =>
+              resolveProvisioningLabel(
+                branches,
+                id,
+                ["id", "branch_id"],
+                ["name", "title"],
+              ),
+            )
           : [],
       attendanceMode:
-        provisioning?.attendance_mode && String(provisioning.attendance_mode).trim()
+        provisioning?.attendance_mode &&
+        String(provisioning.attendance_mode).trim()
           ? toTitleCaseWords(String(provisioning.attendance_mode))
           : "-",
       shiftLabel: shiftAssignment?.shift_id
@@ -3611,7 +4562,7 @@ export function OnboardingView() {
             shiftRecords,
             shiftAssignment.shift_id,
             ["id", "shift_id"],
-            ["name", "title", "code"]
+            ["name", "title", "code"],
           )
         : "-",
       shiftEffectiveFrom: shiftAssignment?.effective_from || "-",
@@ -3620,8 +4571,13 @@ export function OnboardingView() {
         ? resolveProvisioningLabel(
             rotationGroupRecords,
             shiftAssignment.rotation_group_id,
-            ["id", "rotation_group_id", "rotationGroupId", "shift_rotation_group_id"],
-            ["name", "title", "rotation_group_name", "code"]
+            [
+              "id",
+              "rotation_group_id",
+              "rotationGroupId",
+              "shift_rotation_group_id",
+            ],
+            ["name", "title", "rotation_group_name", "code"],
           )
         : "-",
       timetableLabel: timetableAssignment?.timetable_id
@@ -3629,7 +4585,7 @@ export function OnboardingView() {
             timetableRecords,
             timetableAssignment.timetable_id,
             ["id", "timetable_id"],
-            ["name", "title", "code"]
+            ["name", "title", "code"],
           )
         : "-",
       timetableEffectiveFrom: timetableAssignment?.effective_from || "-",
@@ -3641,7 +4597,7 @@ export function OnboardingView() {
             accessGroups,
             deviceAssignment.access_group_id,
             ["id", "access_group_id"],
-            ["name", "title"]
+            ["name", "title"],
           )
         : "-",
       organizationLabel: deviceAssignment?.organization_id
@@ -3649,7 +4605,7 @@ export function OnboardingView() {
             accessOrganizations,
             deviceAssignment.organization_id,
             ["id", "organization_id"],
-            ["name", "title"]
+            ["name", "title"],
           )
         : "-",
       validEnabled: deviceAssignment?.valid_enabled ? "Yes" : "No",
@@ -3659,24 +4615,36 @@ export function OnboardingView() {
       localUiRight: deviceAssignment?.local_ui_right ? "Yes" : "No",
       closeDelayEnabled: deviceAssignment?.close_delay_enabled ? "Yes" : "No",
       maxOpenDoorTime:
-        typeof deviceAssignment?.max_open_door_time === "number" ? String(deviceAssignment.max_open_door_time) : "-",
+        typeof deviceAssignment?.max_open_door_time === "number"
+          ? String(deviceAssignment.max_open_door_time)
+          : "-",
       openDoorTime:
-        typeof deviceAssignment?.open_door_time === "number" ? String(deviceAssignment.open_door_time) : "-",
+        typeof deviceAssignment?.open_door_time === "number"
+          ? String(deviceAssignment.open_door_time)
+          : "-",
       syncNow: deviceAssignment?.sync_now ? "Yes" : "No",
       continueOnError: deviceAssignment?.continue_on_error ? "Yes" : "No",
       deviceLabels:
-        Array.isArray(deviceAssignment?.device_ids) && deviceAssignment.device_ids.length > 0
+        Array.isArray(deviceAssignment?.device_ids) &&
+        deviceAssignment.device_ids.length > 0
           ? deviceAssignment.device_ids.map((id) =>
               resolveProvisioningLabel(
                 attendanceDevices,
                 id,
                 ["id", "device_id"],
-                ["device_name", "name", "title", "device_code", "device_serial_number", "serial_no"]
-              )
+                [
+                  "device_name",
+                  "name",
+                  "title",
+                  "device_code",
+                  "device_serial_number",
+                  "serial_no",
+                ],
+              ),
             )
           : [],
       metadata,
-    }
+    };
   }, [
     accessGroups,
     accessOrganizations,
@@ -3689,832 +4657,1152 @@ export function OnboardingView() {
     selectedRequestRow,
     shiftRecords,
     timetableRecords,
-  ])
+  ]);
 
   const resolveRequestTaskOwner = React.useCallback(
     (task: AdminRecord) => {
-      const step = toRecord(task.workflow_step) ?? selectedWorkflowSteps.find((entry) => readNumber(entry, ["id"]) === readNumber(task, ["workflow_step_id"]))
-      const party = resolveResponsiblePartyLabel(task, roles, users, departments) || resolveResponsiblePartyLabel(step ?? null, roles, users, departments)
-      if (party) return party
-      const nestedUser = toRecord(task.assigned_company_user) ?? toRecord(task.assignee) ?? toRecord(task.user) ?? null
-      const nestedPerson = personDisplayName(nestedUser)
+      const step =
+        toRecord(task.workflow_step) ??
+        selectedWorkflowSteps.find(
+          (entry) =>
+            readNumber(entry, ["id"]) ===
+            readNumber(task, ["workflow_step_id"]),
+        );
+      const party =
+        resolveResponsiblePartyLabel(task, roles, users, departments) ||
+        resolveResponsiblePartyLabel(step ?? null, roles, users, departments);
+      if (party) return party;
+      const nestedUser =
+        toRecord(task.assigned_company_user) ??
+        toRecord(task.assignee) ??
+        toRecord(task.user) ??
+        null;
+      const nestedPerson = personDisplayName(nestedUser);
       if (nestedPerson) {
-        return nestedPerson
+        return nestedPerson;
       }
 
-      const assignedUserId = readNumber(task, ["assigned_company_user_id", "assigned_user_id", "user_id"])
+      const assignedUserId = readNumber(task, [
+        "assigned_company_user_id",
+        "assigned_user_id",
+        "user_id",
+      ]);
       if (assignedUserId !== null) {
         const userLabel = resolveOptionLabel(
           users,
           assignedUserId,
           ["id", "company_user_id", "user_id"],
-          ["full_name", "name", "email"]
-        )
+          ["full_name", "name", "email"],
+        );
         if (userLabel !== "-") {
-          return userLabel
+          return userLabel;
         }
       }
 
-      const nestedDepartment = toRecord(task.assigned_department) ?? toRecord(task.department) ?? null
+      const nestedDepartment =
+        toRecord(task.assigned_department) ?? toRecord(task.department) ?? null;
       if (nestedDepartment) {
-        const nestedLabel = readString(nestedDepartment, ["name", "title"])
+        const nestedLabel = readString(nestedDepartment, ["name", "title"]);
         if (nestedLabel !== "-") {
-          return `Department: ${nestedLabel}`
+          return `Department: ${nestedLabel}`;
         }
       }
 
-      const assignedDepartmentId = readNumber(task, ["assigned_department_id", "department_id"])
+      const assignedDepartmentId = readNumber(task, [
+        "assigned_department_id",
+        "department_id",
+      ]);
       if (assignedDepartmentId !== null) {
         const departmentLabel = resolveOptionLabel(
           departments,
           assignedDepartmentId,
           ["id", "department_id"],
-          ["name", "title"]
-        )
+          ["name", "title"],
+        );
         if (departmentLabel !== "-") {
-          return `Department: ${departmentLabel}`
+          return `Department: ${departmentLabel}`;
         }
       }
 
-      return "-"
+      return "-";
     },
-    [departments, users, roles, selectedWorkflowSteps]
-  )
+    [departments, users, roles, selectedWorkflowSteps],
+  );
 
   function readCurrentRequestId() {
-    return readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["id", "request_id"])
+    return readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+      "id",
+      "request_id",
+    ]);
   }
 
   const employeeDetailsReview = React.useMemo(() => {
-    const review = toRecord(selectedRequestDetails?.employee_details_review)
-    const sections = toRecordList(review?.sections)
+    const review = toRecord(selectedRequestDetails?.employee_details_review);
+    const sections = toRecordList(review?.sections);
     return {
-      status: readString(review ?? {}, ["status"], "not_submitted").toLowerCase(),
+      status: readString(
+        review ?? {},
+        ["status"],
+        "not_submitted",
+      ).toLowerCase(),
       submittedAt: readString(review ?? {}, ["submitted_at"]),
       notProvidedItems: Array.isArray(review?.not_provided_items)
-        ? review.not_provided_items.filter((item): item is string => typeof item === "string")
+        ? review.not_provided_items.filter(
+            (item): item is string => typeof item === "string",
+          )
         : [],
       sections,
-    }
-  }, [selectedRequestDetails])
+    };
+  }, [selectedRequestDetails]);
   const employeeDetailsReviewCounts = React.useMemo(
     () =>
       employeeDetailsReview.sections.reduce<{
-        approved: number
-        changesRequested: number
-        pending: number
+        approved: number;
+        changesRequested: number;
+        pending: number;
       }>(
         (counts, section) => {
-          const status = readString(section, ["status"], "pending").toLowerCase()
-          if (status === "approved") counts.approved += 1
-          else if (status === "changes_requested") counts.changesRequested += 1
-          else counts.pending += 1
-          return counts
+          const status = readString(
+            section,
+            ["status"],
+            "pending",
+          ).toLowerCase();
+          if (status === "approved") counts.approved += 1;
+          else if (status === "changes_requested") counts.changesRequested += 1;
+          else counts.pending += 1;
+          return counts;
         },
-        { approved: 0, changesRequested: 0, pending: 0 }
+        { approved: 0, changesRequested: 0, pending: 0 },
       ),
-    [employeeDetailsReview.sections]
-  )
-  const currentEmployeeReviewSection = employeeDetailsReview.sections[employeeReviewStep] ?? null
-  const currentEmployeeReviewStatus = readString(currentEmployeeReviewSection ?? {}, ["status"], "pending").toLowerCase()
+    [employeeDetailsReview.sections],
+  );
+  const currentEmployeeReviewSection =
+    employeeDetailsReview.sections[employeeReviewStep] ?? null;
+  const currentEmployeeReviewStatus = readString(
+    currentEmployeeReviewSection ?? {},
+    ["status"],
+    "pending",
+  ).toLowerCase();
   const selectedRequestSummary = React.useMemo(() => {
-    const request = selectedRequestDetails ?? selectedRequestRow ?? {}
-    const employee = toRecord(request.employee)
-    const employeeId = readNumber(request, ["employee_id"])
-    const nestedName = personDisplayName(employee)
-    const employeeNumber = readString(employee ?? {}, ["employee_no", "employee_number"], "")
-    const rowName = readString(request, ["employee_name", "employee_full_name"], "")
-    const fallbackName = resolveEmployeeLabel(employeeId)
-    const name = nestedName || (rowName !== "-" ? rowName : "") || fallbackName
+    const request = selectedRequestDetails ?? selectedRequestRow ?? {};
+    const employee = toRecord(request.employee);
+    const employeeId = readNumber(request, ["employee_id"]);
+    const nestedName = personDisplayName(employee);
+    const employeeNumber = readString(
+      employee ?? {},
+      ["employee_no", "employee_number"],
+      "",
+    );
+    const rowName = readString(
+      request,
+      ["employee_name", "employee_full_name"],
+      "",
+    );
+    const fallbackName = resolveEmployeeLabel(employeeId);
+    const name = nestedName || (rowName !== "-" ? rowName : "") || fallbackName;
     return {
-      employee: employeeNumber && employeeNumber !== "-" ? `${name} (${employeeNumber})` : name,
-      status: readString(request, ["status", "request_status"], "Not available"),
-      updated: toTimestamp(request.updated_at ?? request.modified_at ?? request.created_at),
-    }
-  }, [selectedRequestDetails, selectedRequestRow, resolveEmployeeLabel])
+      employee:
+        employeeNumber && employeeNumber !== "-"
+          ? `${name} (${employeeNumber})`
+          : name,
+      status: readString(
+        request,
+        ["status", "request_status"],
+        "Not available",
+      ),
+      updated: toTimestamp(
+        request.updated_at ?? request.modified_at ?? request.created_at,
+      ),
+    };
+  }, [selectedRequestDetails, selectedRequestRow, resolveEmployeeLabel]);
 
   async function openJoiningSalary() {
-    const token = readStoredToken()
-    if (!token) return
+    if (!canReadJoiningSalary) {
+      showErrorAlert(
+        "Payroll profile access is required to view starting salary details.",
+      );
+      return;
+    }
+    const token = readStoredToken();
+    if (!token) return;
     try {
-      setSalaryStructures(await listPayrollSalaryStructures(token))
-      setSalaryDialogOpen(true)
+      setSalaryStructures(await listPayrollSalaryStructures(token));
+      setSalaryDialogOpen(true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Could not load salary structures.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load salary structures.",
+      );
     }
   }
 
   async function openBankVerification() {
-    const token = readStoredToken()
-    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
-    if (!token || !employeeId) return
-    setWorkspaceTab("payroll")
-    setBankVerificationOpen(true)
-    setBankVerificationLoading(true)
+    const token = readStoredToken();
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    );
+    if (!token || !employeeId) return;
+    setWorkspaceTab("payroll");
+    setBankVerificationOpen(true);
+    setBankVerificationLoading(true);
     try {
-      const employee = await getEmployeeById(employeeId, token)
-      setBankAccounts(toRecordList(employee?.bank_accounts))
-      window.setTimeout(() => document.getElementById("onboarding-bank-verification")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
+      const employee = await getEmployeeById(employeeId, token);
+      setBankAccounts(toRecordList(employee?.bank_accounts));
+      window.setTimeout(
+        () =>
+          document
+            .getElementById("onboarding-bank-verification")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+        0,
+      );
     } catch (cause) {
-      showErrorAlert(cause instanceof Error ? cause.message : "Bank details could not be loaded.")
+      showErrorAlert(
+        cause instanceof Error
+          ? cause.message
+          : "Bank details could not be loaded.",
+      );
     } finally {
-      setBankVerificationLoading(false)
+      setBankVerificationLoading(false);
     }
   }
 
   async function verifyBankAccount(account: AdminRecord) {
-    const token = readStoredToken()
-    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
-    const accountId = readNumber(account, ["id"])
-    if (!token || !employeeId || !accountId) return
-    setBankVerificationLoading(true)
-    try {
-      await verifyEmployeeBankAccount(token, employeeId, accountId)
-      showSuccessAlert("Bank account verified successfully.")
-      await openBankVerification()
-      if (selectedRequestRow) await openRequestDetails(selectedRequestRow)
-      setReadinessRevision((current) => current + 1)
-    } catch (cause) {
-      showErrorAlert(cause instanceof Error ? cause.message : "Bank account could not be verified.")
-    } finally {
-      setBankVerificationLoading(false)
-    }
-  }
-  const loadJoiningSalary = React.useCallback(async () => {
-    const token = readStoredToken()
+    const token = readStoredToken();
     const employeeId = readNumber(
       selectedRequestDetails ?? selectedRequestRow ?? {},
       ["employee_id"],
-    )
+    );
+    const accountId = readNumber(account, ["id"]);
+    if (!token || !employeeId || !accountId) return;
+    setBankVerificationLoading(true);
+    try {
+      await verifyEmployeeBankAccount(token, employeeId, accountId);
+      showSuccessAlert("Bank account verified successfully.");
+      await openBankVerification();
+      if (selectedRequestRow) await openRequestDetails(selectedRequestRow);
+      setReadinessRevision((current) => current + 1);
+    } catch (cause) {
+      showErrorAlert(
+        cause instanceof Error
+          ? cause.message
+          : "Bank account could not be verified.",
+      );
+    } finally {
+      setBankVerificationLoading(false);
+    }
+  }
+  const loadJoiningSalary = React.useCallback(async () => {
+    const token = readStoredToken();
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    );
     if (!token || !employeeId || !canReadJoiningSalary) {
-      setJoiningSalary(null)
-      return
+      setJoiningSalary(null);
+      return;
     }
     try {
-      setJoiningSalary(await getEmployeePayrollSalary(token, employeeId))
+      setJoiningSalary(await getEmployeePayrollSalary(token, employeeId));
     } catch {
-      setJoiningSalary(null)
+      setJoiningSalary(null);
     }
-  }, [canReadJoiningSalary, selectedRequestDetails, selectedRequestRow])
+  }, [canReadJoiningSalary, selectedRequestDetails, selectedRequestRow]);
 
   React.useEffect(() => {
-    if (!requestDetailsOpen) return
-    void loadJoiningSalary()
-  }, [loadJoiningSalary, requestDetailsOpen])
+    if (!requestDetailsOpen) return;
+    void loadJoiningSalary();
+  }, [loadJoiningSalary, requestDetailsOpen]);
 
   React.useEffect(() => {
-    const token = readStoredToken()
-    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
+    const token = readStoredToken();
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    );
     if (!requestDetailsOpen || !token || !employeeId) {
-      setWorkspaceEmployeePhoto("")
-      return
+      setWorkspaceEmployeePhoto("");
+      return;
     }
-    let cancelled = false
-    void getEmployeeById(employeeId, token).then((employee) => {
-      if (!cancelled) setWorkspaceEmployeePhoto(extractProfilePhotoUrl(employee ?? {}) ?? "")
-    }).catch(() => { if (!cancelled) setWorkspaceEmployeePhoto("") })
-    return () => { cancelled = true }
-  }, [requestDetailsOpen, selectedRequestDetails, selectedRequestRow])
+    let cancelled = false;
+    void getEmployeeById(employeeId, token)
+      .then((employee) => {
+        if (!cancelled)
+          setWorkspaceEmployeePhoto(
+            extractProfilePhotoUrl(employee ?? {}) ?? "",
+          );
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceEmployeePhoto("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestDetailsOpen, selectedRequestDetails, selectedRequestRow]);
 
-  async function saveEmployeeDetailReview(status: "approved" | "changes_requested") {
+  async function saveEmployeeDetailReview(
+    status: "approved" | "changes_requested",
+  ) {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to review employee details.")
-      return
+      showErrorAlert("You do not have permission to review employee details.");
+      return;
     }
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const sectionKey = currentEmployeeReviewSection ? readString(currentEmployeeReviewSection, ["key"]) : ""
-    const comment = employeeReviewComments[sectionKey]?.trim() ?? ""
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const sectionKey = currentEmployeeReviewSection
+      ? readString(currentEmployeeReviewSection, ["key"])
+      : "";
+    const comment = employeeReviewComments[sectionKey]?.trim() ?? "";
     if (!token || requestId === null || !sectionKey || sectionKey === "-") {
-      showErrorAlert("Missing employee review context.")
-      return
+      showErrorAlert("Missing employee review context.");
+      return;
     }
     if (status === "approved" && currentEmployeeReviewStatus === "approved") {
-      return
+      return;
     }
     if (status === "changes_requested" && !comment) {
-      showErrorAlert("Explain what the employee needs to correct before returning this section.")
-      return
+      showErrorAlert(
+        "Explain what the employee needs to correct before returning this section.",
+      );
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await reviewOnboardingEmployeeDetails(token, requestId, [
-        {
-          section_key: sectionKey,
-          status,
-          comment: comment || undefined,
-        },
-      ], reviewDraftVersions.current[sectionKey] ?? readNumber(selectedRequestDetails ?? {}, ["version"]) ?? undefined)
-      dirtyReviewKeys.current.delete(sectionKey)
-      delete reviewDraftVersions.current[sectionKey]
+      await reviewOnboardingEmployeeDetails(
+        token,
+        requestId,
+        [
+          {
+            section_key: sectionKey,
+            status,
+            comment: comment || undefined,
+          },
+        ],
+        reviewDraftVersions.current[sectionKey] ??
+          readNumber(selectedRequestDetails ?? {}, ["version"]) ??
+          undefined,
+      );
+      dirtyReviewKeys.current.delete(sectionKey);
+      delete reviewDraftVersions.current[sectionKey];
       showSuccessAlert(
-        status === "approved" ? "Section verified." : "Section returned to the employee with your reason."
-      )
-      const nextStep = Math.min(employeeReviewStep + 1, Math.max(employeeDetailsReview.sections.length - 1, 0))
-      await reloadCurrentRequestActivity(requestId)
-      setEmployeeReviewStep(nextStep)
+        status === "approved"
+          ? "Section verified."
+          : "Section returned to the employee with your reason.",
+      );
+      const nextStep = Math.min(
+        employeeReviewStep + 1,
+        Math.max(employeeDetailsReview.sections.length - 1, 0),
+      );
+      await reloadCurrentRequestActivity(requestId);
+      setEmployeeReviewStep(nextStep);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to save the review decision.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to save the review decision.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function reloadCurrentRequestActivity(requestId?: number | null) {
-    const id = requestId ?? readCurrentRequestId()
+    const id = requestId ?? readCurrentRequestId();
     if (id === null) {
-      return
+      return;
     }
-    await reloadAll("requests", true)
+    await reloadAll("requests", true);
     await openRequestDetails({
       ...(selectedRequestRow ?? {}),
       id,
       request_id: id,
-    })
+    });
   }
 
   async function submitRequestDocument() {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to manage onboarding documents.")
-      return
+      showErrorAlert(
+        "You do not have permission to manage onboarding documents.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
     if (!documentForm.title.trim()) {
-      showErrorAlert("Document title is required.")
-      return
+      showErrorAlert("Document title is required.");
+      return;
     }
     if (!documentForm.document_type) {
-      showErrorAlert("Select the type of document being uploaded.")
-      return
+      showErrorAlert("Select the type of document being uploaded.");
+      return;
     }
     if (!documentUploadFile) {
-      showErrorAlert("Choose a document file before uploading.")
-      return
+      showErrorAlert("Choose a document file before uploading.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      const file = await fileToBase64UploadDto(documentUploadFile)
+      const file = await fileToBase64UploadDto(documentUploadFile);
       const result = await uploadOnboardingDocument(token, requestId, {
         title: documentForm.title.trim(),
         description: documentForm.description.trim() || undefined,
         document_type: documentForm.document_type || undefined,
         expiry_date: documentForm.expiry_date || undefined,
         file,
-      })
-      showSuccessAlert(onboardingActionMessage(result, "Onboarding document uploaded."))
-      resetDocumentForm()
-      setShowDocumentComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert(
+        onboardingActionMessage(result, "Onboarding document uploaded."),
+      );
+      resetDocumentForm();
+      setShowDocumentComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to upload document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to upload document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function viewRequestDocument(documentRow: AdminRecord) {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const employeeId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"])
-    const documentId = readNumber(documentRow, ["id", "document_id"])
-    const source = readString(documentRow, ["source"], "onboarding").toLowerCase()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const employeeId = readNumber(
+      selectedRequestDetails ?? selectedRequestRow ?? {},
+      ["employee_id"],
+    );
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
+    const source = readString(
+      documentRow,
+      ["source"],
+      "onboarding",
+    ).toLowerCase();
     if (!token || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
     if (source === "employee_profile" && employeeId === null) {
-      showErrorAlert("Missing employee information for this document.")
-      return
+      showErrorAlert("Missing employee information for this document.");
+      return;
     }
     if (source !== "employee_profile" && requestId === null) {
-      showErrorAlert("Missing onboarding request information for this document.")
-      return
+      showErrorAlert(
+        "Missing onboarding request information for this document.",
+      );
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       const result =
         source === "employee_profile"
           ? await downloadEmployeeDocument(token, employeeId!, documentId)
-          : await downloadOnboardingDocument(token, requestId!, documentId)
-      const url = window.URL.createObjectURL(result.blob)
-      const mimeType = result.contentType ?? readString(documentRow, ["mime_type"], "")
-      const canPreview = mimeType.startsWith("image/") || mimeType === "application/pdf" || mimeType.startsWith("text/")
-      const link = document.createElement("a")
-      link.href = url
+          : await downloadOnboardingDocument(token, requestId!, documentId);
+      const url = window.URL.createObjectURL(result.blob);
+      const mimeType =
+        result.contentType ?? readString(documentRow, ["mime_type"], "");
+      const canPreview =
+        mimeType.startsWith("image/") ||
+        mimeType === "application/pdf" ||
+        mimeType.startsWith("text/");
+      const link = document.createElement("a");
+      link.href = url;
       if (canPreview) {
-        link.target = "_blank"
-        link.rel = "noopener noreferrer"
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
       } else {
-        link.download = result.filename
+        link.download = result.filename;
       }
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to open document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to open document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  async function setRequestDocumentVerified(documentRow: AdminRecord, isVerified: boolean) {
+  async function setRequestDocumentVerified(
+    documentRow: AdminRecord,
+    isVerified: boolean,
+  ) {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to verify onboarding documents.")
-      return
+      showErrorAlert(
+        "You do not have permission to verify onboarding documents.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
     if (!token || requestId === null || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      const result = await verifyOnboardingDocument(token, requestId, documentId, {
-        is_verified: isVerified,
-      })
-      showSuccessAlert(onboardingActionMessage(result, isVerified ? "Document verified." : "Document marked unverified."))
-      await reloadCurrentRequestActivity(requestId)
+      const result = await verifyOnboardingDocument(
+        token,
+        requestId,
+        documentId,
+        {
+          is_verified: isVerified,
+        },
+      );
+      showSuccessAlert(
+        onboardingActionMessage(
+          result,
+          isVerified ? "Document verified." : "Document marked unverified.",
+        ),
+      );
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to update document verification.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update document verification.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function rejectRequestDocument(documentRow: AdminRecord) {
-    if (!canUpdateOnboardingRequests) return
-    const reason = window.prompt("Why is this document being returned for correction?")?.trim()
-    if (!reason) return
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
-    if (!token || requestId === null || documentId === null) return
-    setSaving(true)
+    if (!canUpdateOnboardingRequests) return;
+    const reason = (
+      await fluentPrompt("Why is this document being returned for correction?")
+    )?.trim();
+    if (!reason) return;
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
+    if (!token || requestId === null || documentId === null) return;
+    setSaving(true);
     try {
-      const result = await verifyOnboardingDocument(token, requestId, documentId, {
-        status: "rejected",
-        review_comment: reason,
-      })
-      showSuccessAlert(onboardingActionMessage(result, "Document returned for correction."))
-      await reloadCurrentRequestActivity(requestId)
+      const result = await verifyOnboardingDocument(
+        token,
+        requestId,
+        documentId,
+        {
+          status: "rejected",
+          review_comment: reason,
+        },
+      );
+      showSuccessAlert(
+        onboardingActionMessage(result, "Document returned for correction."),
+      );
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to return document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to return document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function removeRequestDocument(documentRow: AdminRecord) {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to delete onboarding documents.")
-      return
+      showErrorAlert(
+        "You do not have permission to delete onboarding documents.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const documentId = readNumber(documentRow, ["id", "document_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
     if (!token || requestId === null || documentId === null) {
-      showErrorAlert("Missing document identifiers.")
-      return
+      showErrorAlert("Missing document identifiers.");
+      return;
     }
-    if (typeof window !== "undefined" && !window.confirm("Delete this onboarding document?")) {
-      return
+    if (!(await fluentConfirm("Delete this onboarding document?"))) {
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await deleteOnboardingDocument(token, requestId, documentId)
-      showSuccessAlert("Onboarding document deleted.")
-      await reloadCurrentRequestActivity(requestId)
+      await deleteOnboardingDocument(token, requestId, documentId);
+      showSuccessAlert("Onboarding document deleted.");
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to delete document.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to delete document.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function submitRequestTask() {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to manage onboarding tasks.")
-      return
+      showErrorAlert("You do not have permission to manage onboarding tasks.");
+      return;
     }
 
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
     if (!token || requestId === null) {
-      showErrorAlert("Missing request context.")
-      return
+      showErrorAlert("Missing request context.");
+      return;
     }
-    const assetItems = taskForm.asset_items.map((item) => item.trim())
+    const assetItems = taskForm.asset_items.map((item) => item.trim());
     if (taskForm.task_type !== "asset" && !taskForm.title.trim()) {
-      showErrorAlert("Task title is required.")
-      return
+      showErrorAlert("Task title is required.");
+      return;
     }
-    if (taskForm.task_type === "asset" && (assetItems.length === 0 || assetItems.some((item) => !item))) {
-      showErrorAlert("Enter a name for every item to provide.")
-      return
+    if (
+      taskForm.task_type === "asset" &&
+      (assetItems.length === 0 || assetItems.some((item) => !item))
+    ) {
+      showErrorAlert("Enter a name for every item to provide.");
+      return;
     }
     if (taskForm.task_type === "asset" && !taskForm.assigned_department_id) {
-      showErrorAlert("Select the department responsible for providing these items.")
-      return
+      showErrorAlert(
+        "Select the department responsible for providing these items.",
+      );
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      const titles = taskForm.task_type === "asset" ? assetItems : [taskForm.title.trim()]
+      const titles =
+        taskForm.task_type === "asset" ? assetItems : [taskForm.title.trim()];
       for (const title of titles) {
         await createOnboardingTask(token, requestId, {
           title,
           description: taskForm.description.trim() || undefined,
           task_type: taskForm.task_type || "general",
           assigned_company_user_id:
-            taskForm.assigned_company_user_id && Number(taskForm.assigned_company_user_id) > 0
+            taskForm.assigned_company_user_id &&
+            Number(taskForm.assigned_company_user_id) > 0
               ? Number(taskForm.assigned_company_user_id)
               : undefined,
           assigned_department_id:
-            taskForm.assigned_department_id && Number(taskForm.assigned_department_id) > 0
+            taskForm.assigned_department_id &&
+            Number(taskForm.assigned_department_id) > 0
               ? Number(taskForm.assigned_department_id)
               : undefined,
           due_date: taskForm.due_date || undefined,
-        })
+        });
       }
       showSuccessAlert(
         taskForm.task_type === "asset"
           ? `${titles.length} item${titles.length === 1 ? "" : "s"} added and assigned.`
-          : "Onboarding task created."
-      )
-      resetTaskForm()
-      setShowTaskComposer(false)
-      await reloadCurrentRequestActivity(requestId)
+          : "Onboarding task created.",
+      );
+      resetTaskForm();
+      setShowTaskComposer(false);
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to create task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to create task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function completeRequestTask(taskRow: AdminRecord) {
     if (!canUpdateOnboardingRequests && !canCompleteOnboardingRequests) {
-      showErrorAlert("You do not have permission to complete onboarding tasks.")
-      return
+      showErrorAlert(
+        "You do not have permission to complete onboarding tasks.",
+      );
+      return;
     }
 
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const taskId = readNumber(taskRow, ["id", "task_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const taskId = readNumber(taskRow, ["id", "task_id"]);
     if (!token || requestId === null || taskId === null) {
-      showErrorAlert("Missing task identifiers.")
-      return
+      showErrorAlert("Missing task identifiers.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
       const result = await completeOnboardingTask(token, requestId, taskId, {
         completion_notes: "Completed from onboarding workspace",
-      })
-      showSuccessAlert(onboardingActionMessage(result, "Onboarding task completed."))
-      await reloadCurrentRequestActivity(requestId)
+      });
+      showSuccessAlert(
+        onboardingActionMessage(result, "Onboarding task completed."),
+      );
+      await reloadCurrentRequestActivity(requestId);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to complete task.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to complete task.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   function openApprovalAssignmentDialog(approvalRow: AdminRecord) {
     if (!canUpdateOnboardingRequests) {
-      showErrorAlert("You do not have permission to change onboarding approvers.")
-      return
+      showErrorAlert(
+        "You do not have permission to change onboarding approvers.",
+      );
+      return;
     }
-    const status = readString(approvalRow, ["status", "approval_status"]).toLowerCase()
+    const status = readString(approvalRow, [
+      "status",
+      "approval_status",
+    ]).toLowerCase();
     if (status !== "pending") {
-      showErrorAlert("Only a pending approval can be reassigned.")
-      return
+      showErrorAlert("Only a pending approval can be reassigned.");
+      return;
     }
-    setApprovalToReassign(approvalRow)
-    setReplacementApproverId("")
-    setApprovalReassignmentReason("")
-    setRequestDetailsOpen(false)
-    setApprovalAssignmentDialogOpen(true)
-    void ensureLookups(["users"], true)
+    setApprovalToReassign(approvalRow);
+    setReplacementApproverId("");
+    setApprovalReassignmentReason("");
+    setRequestDetailsOpen(false);
+    setApprovalAssignmentDialogOpen(true);
+    void ensureLookups(["users"], true);
   }
 
   async function saveApprovalAssignment() {
-    const token = readStoredToken()
-    const requestId = readCurrentRequestId()
-    const approvalId = readNumber(approvalToReassign ?? {}, ["id", "approval_id"])
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    const approvalId = readNumber(approvalToReassign ?? {}, [
+      "id",
+      "approval_id",
+    ]);
     if (!token || requestId === null || approvalId === null) {
-      showErrorAlert("Missing approval identifiers.")
-      return
+      showErrorAlert("Missing approval identifiers.");
+      return;
     }
     if (replacementApproverMembershipId === null) {
-      showErrorAlert("Select the replacement approver.")
-      return
+      showErrorAlert("Select the replacement approver.");
+      return;
     }
     if (replacementApproverMissingPermission) {
-      showErrorAlert("The replacement person needs onboarding_requests:approve before being assigned.")
-      return
+      showErrorAlert(
+        "The replacement person needs onboarding_requests:approve before being assigned.",
+      );
+      return;
     }
     if (!approvalReassignmentReason.trim()) {
-      showErrorAlert("Enter a reason for changing the approver.")
-      return
+      showErrorAlert("Enter a reason for changing the approver.");
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       await delegateOnboardingApproval(token, requestId, approvalId, {
         delegate_company_user_id: replacementApproverMembershipId,
         reason: approvalReassignmentReason,
-      })
-      setApprovalAssignmentDialogOpen(false)
-      setApprovalToReassign(null)
-      showSuccessAlert("Approver changed successfully.")
-      await reloadCurrentRequestActivity(requestId)
-      setRequestDetailsOpen(true)
+      });
+      setApprovalAssignmentDialogOpen(false);
+      setApprovalToReassign(null);
+      showSuccessAlert("Approver changed successfully.");
+      await reloadCurrentRequestActivity(requestId);
+      setRequestDetailsOpen(true);
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to change the approver.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to change the approver.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  const openRequestDetails = React.useCallback(async (row: AdminRecord) => {
-    const requestId = readNumber(row, ["id", "request_id"])
-    if (requestId === null) {
-      showErrorAlert("Unable to open request details because request ID is missing.")
-      return
-    }
-
-    const token = readStoredToken()
-    if (!token) {
-      showErrorAlert("Authentication required. Please log in again.")
-      return
-    }
-
-    setSelectedRequestRow(row)
-    setRequestDetailsOpen(true)
-    const loadSequence = ++workspaceLoadSequence.current
-    const switchingRequest = workspaceRequestRef.current !== requestId
-    workspaceRequestRef.current = requestId
-    openedHighlightedRequestRef.current = String(requestId)
-    const url = new URL(window.location.href)
-    url.searchParams.set("request_id", String(requestId))
-    window.history.replaceState(null, "", url)
-    if (switchingRequest) {
-    const initialTab = url.searchParams.get("workspace_tab") ?? "overview"
-    setWorkspaceTab(["overview", "details", "payroll", "tasks", "activity"].includes(initialTab) ? initialTab : "overview")
-    dirtyReviewKeys.current.clear()
-    reviewDraftVersions.current = {}
-    setHandoffRequirement(url.searchParams.get("handoff") ? { id: url.searchParams.get("handoff")!, label: url.searchParams.get("handoff")! } : null)
-    setRequestDetailsLoading(true)
-    setSelectedRequestDetails(null)
-    setSelectedRequestProgress(null)
-    setSelectedRequestAuditLogs([])
-    setSelectedRequestDocuments([])
-    setSelectedRequestTasks([])
-    setSelectedWorkflowSteps([])
-    setEmployeeReviewStep(0)
-    setEmployeeReviewComments({})
-    setAllowIncompleteWorkflowStart(false)
-    setShowDocumentComposer(false)
-    setShowTaskComposer(false)
-    resetDocumentForm()
-    resetTaskForm()
-    }
-
-    try {
-      const lookupKeys: OnboardingLookupKey[] = []
-      if (canReadRoles) lookupKeys.push("roles")
-      if (canReadCompanyUsers) lookupKeys.push("users")
-      const lookupsPromise = lookupKeys.length > 0 ? loadLookups(token, lookupKeys) : Promise.resolve()
-      const [detail, progress, auditLogs, documents, tasks] = await Promise.all([
-        getOnboardingRequest(token, requestId),
-        getOnboardingProgress(token, requestId),
-        getOnboardingAuditLogs(token, requestId),
-        canReadOnboardingDocuments ? listOnboardingDocuments(token, requestId) : Promise.resolve([]),
-        canReadOnboardingTasks ? listOnboardingTasks(token, requestId) : Promise.resolve([]),
-      ])
-      await lookupsPromise
-      if (loadSequence !== workspaceLoadSequence.current) return
-      setSelectedRequestDetails(detail)
-      setSelectedRequestProgress(progress)
-      setSelectedRequestAuditLogs(auditLogs)
-      setSelectedRequestDocuments(documents)
-      setSelectedRequestTasks(tasks)
-      const detailReview = toRecord(detail?.employee_details_review)
-      const detailSections = toRecordList(detailReview?.sections)
-      setEmployeeReviewComments((current) => ({ ...current,
-        ...Object.fromEntries(
-          detailSections.map((section) => {
-            const key = readString(section, ["key"])
-            const comment = readString(section, ["comment"], "")
-            return [key, dirtyReviewKeys.current.has(key) ? current[key] : comment === "-" ? "" : comment]
-          })
-        )
-      }))
-
-      const assignedWorkflow = detail ? toRecord(detail.workflow ?? detail.assigned_workflow) : null
-      const workflowId =
-        (detail ? readNumber(detail, ["workflow_id", "onboarding_workflow_id"]) : null) ??
-        readNumber(row, ["workflow_id", "onboarding_workflow_id"]) ??
-        (assignedWorkflow ? readNumber(assignedWorkflow, ["id", "workflow_id"]) : null)
-      if (workflowId !== null && canViewOnboardingWorkflows) {
-        const workflow = await getOnboardingWorkflow(token, workflowId)
-        if (workflow && loadSequence === workspaceLoadSequence.current) {
-          const workflowSteps = toRecordList(
-            workflow.steps ?? workflow.workflow_steps ?? workflow.tasks ?? workflow.activities
-          )
-          setSelectedWorkflowSteps(workflowSteps)
-        }
+  const openRequestDetails = React.useCallback(
+    async (row: AdminRecord) => {
+      const requestId = readNumber(row, ["id", "request_id"]);
+      if (requestId === null) {
+        showErrorAlert(
+          "Unable to open request details because request ID is missing.",
+        );
+        return;
       }
-    } catch (errorObject) {
-      if (loadSequence !== workspaceLoadSequence.current) return
-      const message = errorObject instanceof Error ? errorObject.message : "Failed to load request details."
-      setError(message)
-      showErrorAlert(message)
-    } finally {
-      if (loadSequence === workspaceLoadSequence.current) setRequestDetailsLoading(false)
-    }
-  }, [
-    canReadRoles,
-    canReadCompanyUsers,
-    canReadOnboardingDocuments,
-    canReadOnboardingTasks,
-    canViewOnboardingWorkflows,
-    loadLookups,
-    resetDocumentForm,
-    resetTaskForm,
-  ])
 
-  const liveRequestId = requestDetailsOpen ? readNumber(selectedRequestDetails ?? {}, ["id", "request_id"]) : null
+      const token = readStoredToken();
+      if (!token) {
+        showErrorAlert("Authentication required. Please log in again.");
+        return;
+      }
+
+      setSelectedRequestRow(row);
+      setRequestDetailsOpen(true);
+      const loadSequence = ++workspaceLoadSequence.current;
+      const switchingRequest = workspaceRequestRef.current !== requestId;
+      workspaceRequestRef.current = requestId;
+      openedHighlightedRequestRef.current = String(requestId);
+      const url = new URL(window.location.href);
+      url.searchParams.set("request_id", String(requestId));
+      window.history.replaceState(null, "", url);
+      if (switchingRequest) {
+        const initialTab = url.searchParams.get("workspace_tab") ?? "overview";
+        setWorkspaceTab(
+          ["overview", "details", "payroll", "tasks", "activity"].includes(
+            initialTab,
+          )
+            ? initialTab
+            : "overview",
+        );
+        dirtyReviewKeys.current.clear();
+        reviewDraftVersions.current = {};
+        setHandoffRequirement(
+          url.searchParams.get("handoff")
+            ? {
+                id: url.searchParams.get("handoff")!,
+                label: url.searchParams.get("handoff")!,
+              }
+            : null,
+        );
+        setRequestDetailsLoading(true);
+        setSelectedRequestDetails(null);
+        setSelectedRequestProgress(null);
+        setSelectedRequestAuditLogs([]);
+        setSelectedRequestDocuments([]);
+        setSelectedRequestTasks([]);
+        setSelectedWorkflowSteps([]);
+        setEmployeeReviewStep(0);
+        setEmployeeReviewComments({});
+        setAllowIncompleteWorkflowStart(false);
+        setShowDocumentComposer(false);
+        setShowTaskComposer(false);
+        resetDocumentForm();
+        resetTaskForm();
+      }
+
+      try {
+        const lookupKeys: OnboardingLookupKey[] = [];
+        if (canReadRoles) lookupKeys.push("roles");
+        if (canReadCompanyUsers) lookupKeys.push("users");
+        const lookupsPromise =
+          lookupKeys.length > 0
+            ? loadLookups(token, lookupKeys)
+            : Promise.resolve();
+        const [detail, progress, auditLogs, documents, tasks] =
+          await Promise.all([
+            getOnboardingRequest(token, requestId),
+            getOnboardingProgress(token, requestId),
+            getOnboardingAuditLogs(token, requestId),
+            canReadOnboardingDocuments
+              ? listOnboardingDocuments(token, requestId)
+              : Promise.resolve([]),
+            canReadOnboardingTasks
+              ? listOnboardingTasks(token, requestId)
+              : Promise.resolve([]),
+          ]);
+        await lookupsPromise;
+        if (loadSequence !== workspaceLoadSequence.current) return;
+        setSelectedRequestDetails(detail);
+        setSelectedRequestProgress(progress);
+        setSelectedRequestAuditLogs(auditLogs);
+        setSelectedRequestDocuments(documents);
+        setSelectedRequestTasks(tasks);
+        const detailReview = toRecord(detail?.employee_details_review);
+        const detailSections = toRecordList(detailReview?.sections);
+        setEmployeeReviewComments((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            detailSections.map((section) => {
+              const key = readString(section, ["key"]);
+              const comment = readString(section, ["comment"], "");
+              return [
+                key,
+                dirtyReviewKeys.current.has(key)
+                  ? current[key]
+                  : comment === "-"
+                    ? ""
+                    : comment,
+              ];
+            }),
+          ),
+        }));
+
+        const assignedWorkflow = detail
+          ? toRecord(detail.workflow ?? detail.assigned_workflow)
+          : null;
+        const workflowId =
+          (detail
+            ? readNumber(detail, ["workflow_id", "onboarding_workflow_id"])
+            : null) ??
+          readNumber(row, ["workflow_id", "onboarding_workflow_id"]) ??
+          (assignedWorkflow
+            ? readNumber(assignedWorkflow, ["id", "workflow_id"])
+            : null);
+        if (workflowId !== null && canViewOnboardingWorkflows) {
+          const workflow = await getOnboardingWorkflow(token, workflowId);
+          if (workflow && loadSequence === workspaceLoadSequence.current) {
+            const workflowSteps = toRecordList(
+              workflow.steps ??
+                workflow.workflow_steps ??
+                workflow.tasks ??
+                workflow.activities,
+            );
+            setSelectedWorkflowSteps(workflowSteps);
+          }
+        }
+      } catch (errorObject) {
+        if (loadSequence !== workspaceLoadSequence.current) return;
+        const message =
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to load request details.";
+        setError(message);
+        showErrorAlert(message);
+      } finally {
+        if (loadSequence === workspaceLoadSequence.current)
+          setRequestDetailsLoading(false);
+      }
+    },
+    [
+      canReadRoles,
+      canReadCompanyUsers,
+      canReadOnboardingDocuments,
+      canReadOnboardingTasks,
+      canViewOnboardingWorkflows,
+      loadLookups,
+      resetDocumentForm,
+      resetTaskForm,
+    ],
+  );
+
+  const liveRequestId = requestDetailsOpen
+    ? readNumber(selectedRequestDetails ?? {}, ["id", "request_id"])
+    : null;
   React.useEffect(() => {
-    if (!liveRequestId) return
-    const access = readStoredToken()
-    if (!access) return
-    let cancelled = false
-    let refreshing = false
+    if (!liveRequestId) return;
+    const access = readStoredToken();
+    if (!access) return;
+    let cancelled = false;
+    let refreshing = false;
     const refresh = async () => {
-      if (refreshing || document.visibilityState === "hidden") return
-      refreshing = true
+      if (refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
       const [detail, tasks, activity] = await Promise.allSettled([
         getOnboardingRequest(access, liveRequestId),
         listOnboardingTasks(access, liveRequestId),
         getOnboardingAuditLogs(access, liveRequestId),
-      ])
+      ]);
       if (!cancelled) {
-        if (detail.status === "fulfilled" && detail.value) setSelectedRequestDetails(detail.value)
-        if (tasks.status === "fulfilled") setSelectedRequestTasks(tasks.value)
-        if (activity.status === "fulfilled") setSelectedRequestAuditLogs(activity.value)
+        if (detail.status === "fulfilled" && detail.value)
+          setSelectedRequestDetails(detail.value);
+        if (tasks.status === "fulfilled") setSelectedRequestTasks(tasks.value);
+        if (activity.status === "fulfilled")
+          setSelectedRequestAuditLogs(activity.value);
       }
-      refreshing = false
-    }
-    const onFocus = () => void refresh()
-    const interval = window.setInterval(onFocus, 30_000)
-    window.addEventListener("focus", onFocus)
-    document.addEventListener("visibilitychange", onFocus)
+      refreshing = false;
+    };
+    const onFocus = () => void refresh();
+    const interval = window.setInterval(onFocus, 30_000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
     return () => {
-      cancelled = true
-      window.clearInterval(interval)
-      window.removeEventListener("focus", onFocus)
-      document.removeEventListener("visibilitychange", onFocus)
-    }
-  }, [liveRequestId])
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [liveRequestId]);
 
   React.useEffect(() => {
-    if (!requestDetailsOpen) return
-    const url = new URL(window.location.href)
-    url.searchParams.set("workspace_tab", workspaceTab)
-    window.history.replaceState(null, "", url)
-  }, [requestDetailsOpen, workspaceTab])
+    if (!requestDetailsOpen) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("workspace_tab", workspaceTab);
+    window.history.replaceState(null, "", url);
+  }, [requestDetailsOpen, workspaceTab]);
 
   React.useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (dirtyReviewKeys.current.size) { event.preventDefault(); event.returnValue = "" } }
-    window.addEventListener("beforeunload", warn)
-    return () => window.removeEventListener("beforeunload", warn)
-  }, [])
+    const warn = (event: BeforeUnloadEvent) => {
+      if (dirtyReviewKeys.current.size) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
 
-  function closeWorkspace() {
-    if (dirtyReviewKeys.current.size && !window.confirm("Discard unsaved review notes and return to onboarding?")) return
-    dirtyReviewKeys.current.clear()
-    workspaceRequestRef.current = null
-    workspaceLoadSequence.current += 1
-    setRequestDetailsOpen(false)
-    const url = new URL(window.location.href)
-    url.searchParams.delete("request_id")
-    url.searchParams.delete("workspace_tab")
-    url.searchParams.delete("handoff")
-    window.history.replaceState(null, "", url)
+  async function closeWorkspace() {
+    if (
+      dirtyReviewKeys.current.size &&
+      !(await fluentConfirm(
+        "Discard unsaved review notes and return to onboarding?",
+      ))
+    )
+      return;
+    dirtyReviewKeys.current.clear();
+    workspaceRequestRef.current = null;
+    workspaceLoadSequence.current += 1;
+    setRequestDetailsOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("request_id");
+    url.searchParams.delete("workspace_tab");
+    url.searchParams.delete("handoff");
+    window.history.replaceState(null, "", url);
   }
 
-  const openedHighlightedRequestRef = React.useRef("")
+  const openedHighlightedRequestRef = React.useRef("");
   React.useEffect(() => {
     if (activeTab !== "requests" || !highlightedRequestId) {
-      return
+      return;
     }
     if (openedHighlightedRequestRef.current === highlightedRequestId) {
-      return
+      return;
     }
 
     const highlightedRow = requests.find(
-      (row) => String(readNumber(row, ["id", "request_id"]) ?? "") === highlightedRequestId
-    ) ?? { id: highlightedRequestId, request_id: highlightedRequestId }
+      (row) =>
+        String(readNumber(row, ["id", "request_id"]) ?? "") ===
+        highlightedRequestId,
+    ) ?? { id: highlightedRequestId, request_id: highlightedRequestId };
 
-    openedHighlightedRequestRef.current = highlightedRequestId
-    void openRequestDetails(highlightedRow)
-  }, [activeTab, highlightedRequestId, requests, openRequestDetails])
+    openedHighlightedRequestRef.current = highlightedRequestId;
+    void openRequestDetails(highlightedRow);
+  }, [activeTab, highlightedRequestId, requests, openRequestDetails]);
 
   function openChangeWorkflowDialog(row: AdminRecord) {
-    const requestId = readNumber(row, ["id", "request_id"])
-    const token = readStoredToken()
+    const requestId = readNumber(row, ["id", "request_id"]);
+    const token = readStoredToken();
     if (!token || requestId === null) {
-      showErrorAlert("Unable to change the workflow because the request ID is missing.")
-      return
+      showErrorAlert(
+        "Unable to change the workflow because the request ID is missing.",
+      );
+      return;
     }
 
-    const currentWorkflowId = readNumber(row, ["workflow_id", "onboarding_workflow_id"])
-    setChangeWorkflowRequest(row)
-    setReplacementWorkflowId(currentWorkflowId === null ? "" : String(currentWorkflowId))
-    setChangeWorkflowDialogOpen(true)
+    const currentWorkflowId = readNumber(row, [
+      "workflow_id",
+      "onboarding_workflow_id",
+    ]);
+    setChangeWorkflowRequest(row);
+    setReplacementWorkflowId(
+      currentWorkflowId === null ? "" : String(currentWorkflowId),
+    );
+    setChangeWorkflowDialogOpen(true);
 
-    void ensureLookups(["workflows"], true)
+    void ensureLookups(["workflows"], true);
     void getOnboardingRequest(token, requestId)
       .then((detail) => {
-        const resolved = detail ?? row
-        const workflowId = readNumber(resolved, ["workflow_id", "onboarding_workflow_id"])
-        setChangeWorkflowRequest({ ...row, ...resolved })
-        setReplacementWorkflowId(workflowId === null ? "" : String(workflowId))
+        const resolved = detail ?? row;
+        const workflowId = readNumber(resolved, [
+          "workflow_id",
+          "onboarding_workflow_id",
+        ]);
+        setChangeWorkflowRequest({ ...row, ...resolved });
+        setReplacementWorkflowId(workflowId === null ? "" : String(workflowId));
       })
       .catch((errorObject) => {
-        showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to refresh the onboarding request.")
-      })
+        showErrorAlert(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Failed to refresh the onboarding request.",
+        );
+      });
   }
 
   async function saveRequestWorkflowChange() {
-    const requestId = readNumber(changeWorkflowRequest ?? {}, ["id", "request_id"])
-    const workflowId = Number(replacementWorkflowId)
-    const currentWorkflowId = readNumber(changeWorkflowRequest ?? {}, ["workflow_id", "onboarding_workflow_id"])
-    const token = readStoredToken()
+    const requestId = readNumber(changeWorkflowRequest ?? {}, [
+      "id",
+      "request_id",
+    ]);
+    const workflowId = Number(replacementWorkflowId);
+    const currentWorkflowId = readNumber(changeWorkflowRequest ?? {}, [
+      "workflow_id",
+      "onboarding_workflow_id",
+    ]);
+    const token = readStoredToken();
     if (!token || requestId === null) {
-      showErrorAlert("Missing onboarding request information.")
-      return
+      showErrorAlert("Missing onboarding request information.");
+      return;
     }
     if (!Number.isFinite(workflowId) || workflowId <= 0) {
-      showErrorAlert("Select a replacement workflow.")
-      return
+      showErrorAlert("Select a replacement workflow.");
+      return;
     }
     if (workflowId === currentWorkflowId) {
-      showErrorAlert("Select a different workflow.")
-      return
+      showErrorAlert("Select a different workflow.");
+      return;
     }
 
-    setSaving(true)
+    setSaving(true);
     try {
-      await patchOnboardingRequest(token, requestId, { workflow_id: workflowId })
-      setChangeWorkflowDialogOpen(false)
-      setChangeWorkflowRequest(null)
-      showSuccessAlert("Onboarding workflow changed and pending assignments were refreshed.")
-      await reloadAll("requests", true)
+      await patchOnboardingRequest(token, requestId, {
+        workflow_id: workflowId,
+      });
+      setChangeWorkflowDialogOpen(false);
+      setChangeWorkflowRequest(null);
+      showSuccessAlert(
+        "Onboarding workflow changed and pending assignments were refreshed.",
+      );
+      await reloadAll("requests", true);
       if (requestDetailsOpen && readCurrentRequestId() === requestId) {
-        await reloadCurrentRequestActivity(requestId)
+        await reloadCurrentRequestActivity(requestId);
       }
     } catch (errorObject) {
-      showErrorAlert(errorObject instanceof Error ? errorObject.message : "Failed to change the workflow.")
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to change the workflow.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   function renderOnboardingRequestActions(row: AdminRecord) {
-    const pendingEmployee = isPendingOnboardingRow(row)
-    const requestId = pendingEmployee ? null : readNumber(row, ["id", "request_id"])
+    const pendingEmployee = isPendingOnboardingRow(row);
+    const requestId = pendingEmployee
+      ? null
+      : readNumber(row, ["id", "request_id"]);
     const requestStatus = String(
-      readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
-    ).toLowerCase()
-    const isCancelled = requestStatus === "cancelled"
-    const isCompleted = requestStatus === "completed" || requestStatus === "rejected"
-    const isDraft = isOnboardingDraftStatus(requestStatus)
-    const allowedActions = parseAllowedActions(row)
-    const rowApprovalSummary = summarizeOnboardingApprovals([row], roles, users)
-    const hasPendingApproval = rowApprovalSummary.pending.length > 0
+      readString(row, [
+        "status",
+        "request_status",
+        "onboarding_status",
+        "workflow_status",
+      ]),
+    ).toLowerCase();
+    const isCancelled = requestStatus === "cancelled";
+    const isCompleted =
+      requestStatus === "completed" || requestStatus === "rejected";
+    const isDraft = isOnboardingDraftStatus(requestStatus);
+    const allowedActions = parseAllowedActions(row);
+    const rowApprovalSummary = summarizeOnboardingApprovals(
+      [row],
+      roles,
+      users,
+    );
+    const hasPendingApproval = rowApprovalSummary.pending.length > 0;
     const canSubmit =
       !pendingEmployee &&
       (canCreateOnboardingRequests || canUpdateOnboardingRequests) &&
       isDraft &&
       !isCancelled &&
-      allowedActions.has("submit")
+      allowedActions.has("submit");
     const canApprove =
       !pendingEmployee &&
       canApproveOnboardingRequests &&
@@ -4522,7 +5810,7 @@ export function OnboardingView() {
       !isCancelled &&
       !isCompleted &&
       hasPendingApproval &&
-      allowedActions.has("approve")
+      allowedActions.has("approve");
     const canReject =
       !pendingEmployee &&
       canApproveOnboardingRequests &&
@@ -4530,22 +5818,29 @@ export function OnboardingView() {
       !isCancelled &&
       !isCompleted &&
       hasPendingApproval &&
-      allowedActions.has("reject")
+      allowedActions.has("reject");
     const canCancel =
-      !pendingEmployee && canCancelOnboardingRequests && !isCancelled && !isCompleted && allowedActions.has("cancel")
+      !pendingEmployee &&
+      canCancelOnboardingRequests &&
+      !isCancelled &&
+      !isCompleted &&
+      allowedActions.has("cancel");
     const canComplete =
       !pendingEmployee &&
       canCompleteOnboardingRequests &&
       !isCancelled &&
       !isCompleted &&
-      allowedActions.has("complete")
-    const canDelete = !pendingEmployee && canUpdateOnboardingRequests && allowedActions.has("delete")
+      allowedActions.has("complete");
+    const canDelete =
+      !pendingEmployee &&
+      canUpdateOnboardingRequests &&
+      allowedActions.has("delete");
     const canChangeWorkflow =
       !pendingEmployee &&
       canUpdateOnboardingRequests &&
       !isCancelled &&
       !isCompleted &&
-      (isDraft || hasPendingApproval)
+      (isDraft || hasPendingApproval);
 
     return (
       <div
@@ -4564,7 +5859,9 @@ export function OnboardingView() {
               Start
             </Button>
           ) : (
-            <span className="text-[11px] text-muted-foreground">Awaiting request</span>
+            <span className="text-[11px] text-muted-foreground">
+              Awaiting request
+            </span>
           )
         ) : canSubmit ? (
           <Button
@@ -4592,7 +5889,11 @@ export function OnboardingView() {
             disabled={saving}
             onClick={() => void runRequestAction(requestId, "approve")}
           >
-            <BadgeCheck size={14} animation="path-loop" animateOnHover="path-loop" />
+            <BadgeCheck
+              size={14}
+              animation="path-loop"
+              animateOnHover="path-loop"
+            />
             Approve
           </Button>
         ) : null}
@@ -4677,7 +5978,7 @@ export function OnboardingView() {
           <span className="text-[11px] text-muted-foreground">No actions</span>
         ) : null}
       </div>
-    )
+    );
   }
 
   const invitationColumns: Column<AdminRecord>[] = [
@@ -4704,14 +6005,17 @@ export function OnboardingView() {
       label: "Status",
       defaultWidth: 105,
       render: (row) => {
-        const status = invitationEffectiveStatus(row)
+        const status = invitationEffectiveStatus(row);
         return (
           <span
-            className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(status))}
+            className={cn(
+              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              statusBadgeClass(status),
+            )}
           >
             {toTitleCaseWords(status || "-")}
           </span>
-        )
+        );
       },
     },
     {
@@ -4722,15 +6026,18 @@ export function OnboardingView() {
       render: (row) => (
         <div className="flex flex-wrap gap-1">
           {(["email", "sms"] as const).map((channel) => {
-            const status = invitationDeliveryStatus(row, channel)
+            const status = invitationDeliveryStatus(row, channel);
             return (
               <span
                 key={channel}
-                className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", statusBadgeClass(status))}
+                className={cn(
+                  "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  statusBadgeClass(status),
+                )}
               >
                 {channel.toUpperCase()}: {toTitleCaseWords(status)}
               </span>
-            )
+            );
           })}
         </div>
       ),
@@ -4753,13 +6060,16 @@ export function OnboardingView() {
       defaultWidth: 110,
       sortable: false,
       render: (row) => {
-        const invitationId = readNumber(row, ["id", "invitation_id"])
-        const resending = invitationId !== null && resendingInvitationId === invitationId
+        const invitationId = readNumber(row, ["id", "invitation_id"]);
+        const resending =
+          invitationId !== null && resendingInvitationId === invitationId;
         if (!canResendPendingInvitations) {
-          return <span className="text-[11px] text-muted-foreground">View only</span>
+          return (
+            <span className="text-[11px] text-muted-foreground">View only</span>
+          );
         }
         if (!canResendInvitation(row)) {
-          return <span className="text-[11px] text-muted-foreground">-</span>
+          return <span className="text-[11px] text-muted-foreground">-</span>;
         }
         return (
           <Button
@@ -4770,13 +6080,18 @@ export function OnboardingView() {
             disabled={invitationId === null || resending}
             onClick={() => void resendPendingInvitation(row)}
           >
-            <Send className={cn("mr-1.5 h-3.5 w-3.5", resending ? "animate-pulse" : "")} />
+            <Send
+              className={cn(
+                "mr-1.5 h-3.5 w-3.5",
+                resending ? "animate-pulse" : "",
+              )}
+            />
             {resending ? "Sending..." : "Resend"}
           </Button>
-        )
+        );
       },
     },
-  ]
+  ];
 
   const onboardingRequestColumns: Column<AdminRecord>[] = [
     {
@@ -4784,14 +6099,24 @@ export function OnboardingView() {
       label: "ID",
       defaultWidth: 90,
       render: (row) => {
-        const requestId = isPendingOnboardingRow(row) ? null : readNumber(row, ["id", "request_id"])
-        const requestNo = readString(row, ["onboarding_no", "request_no", "request_code"])
+        const requestId = isPendingOnboardingRow(row)
+          ? null
+          : readNumber(row, ["id", "request_id"]);
+        const requestNo = readString(row, [
+          "onboarding_no",
+          "request_no",
+          "request_code",
+        ]);
         return (
           <div className="min-w-0">
             <p className="truncate text-xs font-medium">{requestId ?? "-"}</p>
-            {requestNo !== "-" ? <p className="truncate text-[11px] text-muted-foreground">{requestNo}</p> : null}
+            {requestNo !== "-" ? (
+              <p className="truncate text-[11px] text-muted-foreground">
+                {requestNo}
+              </p>
+            ) : null}
           </div>
-        )
+        );
       },
     },
     {
@@ -4812,15 +6137,20 @@ export function OnboardingView() {
       defaultWidth: 120,
       render: (row) => {
         const requestStatus = String(
-          readString(row, ["status", "request_status", "onboarding_status", "workflow_status"])
-        ).toLowerCase()
+          readString(row, [
+            "status",
+            "request_status",
+            "onboarding_status",
+            "workflow_status",
+          ]),
+        ).toLowerCase();
         return (
           <span
             className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(requestStatus)}`}
           >
             {toTitleCaseWords(readString(row, ["status"]))}
           </span>
-        )
+        );
       },
     },
     {
@@ -4830,7 +6160,7 @@ export function OnboardingView() {
       sortable: false,
       render: (row) => renderOnboardingRequestActions(row),
     },
-  ]
+  ];
 
   const onboardingWorkflowColumns: Column<AdminRecord>[] = [
     {
@@ -4844,7 +6174,10 @@ export function OnboardingView() {
       label: "Name",
       defaultWidth: 220,
       render: (row) => (
-        <span className="block max-w-[260px] truncate" title={readString(row, ["name", "title"])}>
+        <span
+          className="block max-w-[260px] truncate"
+          title={readString(row, ["name", "title"])}
+        >
           {readString(row, ["name", "title"])}
         </span>
       ),
@@ -4854,7 +6187,10 @@ export function OnboardingView() {
       label: "Description",
       defaultWidth: 300,
       render: (row) => (
-        <span className="block max-w-[360px] truncate text-xs text-slate-600" title={readString(row, ["description"])}>
+        <span
+          className="block max-w-[360px] truncate text-xs text-slate-600"
+          title={readString(row, ["description"])}
+        >
           {readString(row, ["description"])}
         </span>
       ),
@@ -4864,21 +6200,22 @@ export function OnboardingView() {
       label: "Status",
       defaultWidth: 110,
       render: (row) => {
-        const workflowStatus = readString(row, ["status"])
+        const workflowStatus = readString(row, ["status"]);
         return (
           <span
             className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusBadgeClass(workflowStatus)}`}
           >
             {toTitleCaseWords(workflowStatus)}
           </span>
-        )
+        );
       },
     },
     {
       key: "default",
       label: "Default",
       defaultWidth: 80,
-      render: (row) => (asTruthyBoolean(row.is_default ?? row.default) ? "Yes" : "No"),
+      render: (row) =>
+        asTruthyBoolean(row.is_default ?? row.default) ? "Yes" : "No",
     },
     {
       key: "actions",
@@ -4886,9 +6223,12 @@ export function OnboardingView() {
       defaultWidth: 140,
       sortable: false,
       render: (row) => {
-        const workflowId = readNumber(row, ["id", "workflow_id"])
+        const workflowId = readNumber(row, ["id", "workflow_id"]);
         return (
-          <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="flex items-center justify-end gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
             {canUpdateOnboardingWorkflows ? (
               <Button
                 type="button"
@@ -4932,10 +6272,10 @@ export function OnboardingView() {
               </Button>
             ) : null}
           </div>
-        )
+        );
       },
     },
-  ]
+  ];
 
   return (
     <section
@@ -4944,22 +6284,35 @@ export function OnboardingView() {
         "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div hidden={requestDetailsOpen} className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        hidden={requestDetailsOpen}
+        className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
             Onboarding
           </h1>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Manage invitations, employee onboarding requests, and reusable workflows
+            Manage invitations, employee onboarding requests, and reusable
+            workflows
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[10px] font-medium text-muted-foreground">
-          {canViewPendingInvitations ? <span>{invitations.length} invitations</span> : null}
-          {canViewOnboardingRequests ? <span>{filteredRequests.length} requests</span> : null}
-          {canViewOnboardingWorkflows ? <span>{filteredWorkflows.length} workflows</span> : null}
+          {canViewPendingInvitations ? (
+            <span>{invitations.length} invitations</span>
+          ) : null}
+          {canViewOnboardingRequests ? (
+            <span>{filteredRequests.length} requests</span>
+          ) : null}
+          {canViewOnboardingWorkflows ? (
+            <span>{filteredWorkflows.length} workflows</span>
+          ) : null}
         </div>
       </div>
-      <div hidden={requestDetailsOpen} className="tab-rail-scroll bg-muted/[0.12] px-3">
+      <div
+        hidden={requestDetailsOpen}
+        className="tab-rail-scroll bg-muted/[0.12] px-3"
+      >
         <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
           {canViewPendingInvitations ? (
             <button
@@ -4969,7 +6322,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "invitations"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               Invitations
@@ -4984,7 +6337,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "requests"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               Requests
@@ -4998,7 +6351,7 @@ export function OnboardingView() {
                 "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
                 activeTab === "workflows"
                   ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               Workflows
@@ -5028,7 +6381,9 @@ export function OnboardingView() {
             frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
             showExport={false}
-            getRowId={(row, index) => String(readNumber(row, ["id", "invitation_id"]) ?? index)}
+            getRowId={(row, index) =>
+              String(readNumber(row, ["id", "invitation_id"]) ?? index)
+            }
             onRowSelect={(_, row) => setSelectedInvitation(row ?? null)}
             toolbarStart={
               <>
@@ -5046,7 +6401,9 @@ export function OnboardingView() {
                   className="min-w-[8.5rem]"
                   value={invitationStatusFilter}
                   onChange={(value) =>
-                    setInvitationStatusFilter(value as EmployeeInvitationHistoryStatus)
+                    setInvitationStatusFilter(
+                      value as EmployeeInvitationHistoryStatus,
+                    )
                   }
                   options={INVITATION_STATUS_FILTERS}
                 />
@@ -5061,14 +6418,19 @@ export function OnboardingView() {
                 aria-label="Refresh invitations"
                 title="Refresh"
               >
-                <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
+                <RefreshCw
+                  className={cn(
+                    "size-3.5 text-primary",
+                    loading ? "animate-spin" : "",
+                  )}
+                />
               </button>
             }
           />
           <Sheet
             open={selectedInvitation !== null}
             onOpenChange={(open) => {
-              if (!open) setSelectedInvitation(null)
+              if (!open) setSelectedInvitation(null);
             }}
           >
             <SheetContent
@@ -5076,9 +6438,12 @@ export function OnboardingView() {
               className="w-full overflow-y-auto data-[side=right]:w-full sm:data-[side=right]:w-[32rem] data-[side=right]:sm:max-w-none"
             >
               <SheetHeader>
-                <SheetTitle>{invitationDisplayName(selectedInvitation)}</SheetTitle>
+                <SheetTitle>
+                  {invitationDisplayName(selectedInvitation)}
+                </SheetTitle>
                 <SheetDescription>
-                  Invitation details and the latest result returned by each delivery channel.
+                  Invitation details and the latest result returned by each
+                  delivery channel.
                 </SheetDescription>
               </SheetHeader>
 
@@ -5086,39 +6451,83 @@ export function OnboardingView() {
                 <div className="space-y-5 px-4 pb-6">
                   <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2">
                     {[
-                      ["Status", toTitleCaseWords(invitationEffectiveStatus(selectedInvitation) || "-")],
+                      [
+                        "Status",
+                        toTitleCaseWords(
+                          invitationEffectiveStatus(selectedInvitation) || "-",
+                        ),
+                      ],
                       ["Email", readString(selectedInvitation, ["email"])],
                       ["Phone", readString(selectedInvitation, ["phone"])],
-                      ["Employment type", toTitleCaseWords(readString(selectedInvitation, ["employment_type"]))],
-                      ["Created", formatInvitationDate(selectedInvitation.created_at ?? selectedInvitation.createdAt)],
-                      ["Expires", formatInvitationDate(selectedInvitation.expires_at ?? selectedInvitation.expiresAt)],
+                      [
+                        "Employment type",
+                        toTitleCaseWords(
+                          readString(selectedInvitation, ["employment_type"]),
+                        ),
+                      ],
+                      [
+                        "Created",
+                        formatInvitationDate(
+                          selectedInvitation.created_at ??
+                            selectedInvitation.createdAt,
+                        ),
+                      ],
+                      [
+                        "Expires",
+                        formatInvitationDate(
+                          selectedInvitation.expires_at ??
+                            selectedInvitation.expiresAt,
+                        ),
+                      ],
                     ].map(([label, value]) => (
                       <div key={label} className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           {label}
                         </p>
-                        <p className="mt-0.5 break-words text-sm text-foreground">{value}</p>
+                        <p className="mt-0.5 break-words text-sm text-foreground">
+                          {value}
+                        </p>
                       </div>
                     ))}
                   </div>
 
                   {(["email", "sms"] as const).map((channel) => {
-                    const status = invitationDeliveryStatus(selectedInvitation, channel)
+                    const status = invitationDeliveryStatus(
+                      selectedInvitation,
+                      channel,
+                    );
                     const lastError = formatInvitationDeliveryError(
-                      invitationDeliveryValue(selectedInvitation, channel, ["last_error", "lastError"])
-                    )
-                    const messageId = invitationDeliveryValue(selectedInvitation, channel, ["message_id", "messageId"])
-                    const transport = invitationDeliveryValue(selectedInvitation, channel, ["transport"])
+                      invitationDeliveryValue(selectedInvitation, channel, [
+                        "last_error",
+                        "lastError",
+                      ]),
+                    );
+                    const messageId = invitationDeliveryValue(
+                      selectedInvitation,
+                      channel,
+                      ["message_id", "messageId"],
+                    );
+                    const transport = invitationDeliveryValue(
+                      selectedInvitation,
+                      channel,
+                      ["transport"],
+                    );
                     const deliveryService =
-                      transport === "system_smtp" || (transport === "-" && channel === "email")
+                      transport === "system_smtp" ||
+                      (transport === "-" && channel === "email")
                         ? "Platform SMTP (MAIL_*)"
                         : transport === "company_smtp"
                           ? "Company SMTP"
-                          : transport === "sms_gateway" || (transport === "-" && channel === "sms")
+                          : transport === "sms_gateway" ||
+                              (transport === "-" && channel === "sms")
                             ? "SMS gateway"
-                            : transport
-                    const gatewayAccepted = channel === "sms" && ["accepted", "sent"].includes(status.toLowerCase())
-                    const statusLabel = gatewayAccepted ? "Accepted by gateway" : toTitleCaseWords(status)
+                            : transport;
+                    const gatewayAccepted =
+                      channel === "sms" &&
+                      ["accepted", "sent"].includes(status.toLowerCase());
+                    const statusLabel = gatewayAccepted
+                      ? "Accepted by gateway"
+                      : toTitleCaseWords(status);
                     const failureReason =
                       lastError !== "-"
                         ? lastError
@@ -5126,17 +6535,22 @@ export function OnboardingView() {
                           ? "The current backend did not return the stored failure reason. Deploy the backend update, then resend to capture the latest provider error."
                           : gatewayAccepted
                             ? "The SMS gateway accepted the request. Handset delivery is not confirmed because the gateway did not return a delivery receipt."
-                            : "No failure recorded."
+                            : "No failure recorded.";
                     return (
-                      <section key={channel} className="space-y-2 rounded-lg border border-border p-3">
+                      <section
+                        key={channel}
+                        className="space-y-2 rounded-lg border border-border p-3"
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="text-sm font-semibold text-foreground">
-                            {channel === "email" ? "Email delivery" : "SMS delivery"}
+                            {channel === "email"
+                              ? "Email delivery"
+                              : "SMS delivery"}
                           </h3>
                           <span
                             className={cn(
                               "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
-                              statusBadgeClass(status)
+                              statusBadgeClass(status),
                             )}
                           >
                             {statusLabel}
@@ -5144,21 +6558,33 @@ export function OnboardingView() {
                         </div>
                         <dl className="grid gap-2 text-xs">
                           <div>
-                            <dt className="font-medium text-muted-foreground">Delivery service</dt>
-                            <dd className="mt-0.5 text-foreground">{deliveryService}</dd>
-                          </div>
-                          <div>
-                            <dt className="font-medium text-muted-foreground">Provider reference</dt>
-                            <dd className="mt-0.5 break-all text-foreground">{messageId}</dd>
+                            <dt className="font-medium text-muted-foreground">
+                              Delivery service
+                            </dt>
+                            <dd className="mt-0.5 text-foreground">
+                              {deliveryService}
+                            </dd>
                           </div>
                           <div>
                             <dt className="font-medium text-muted-foreground">
-                              {gatewayAccepted ? "Delivery details" : "Failure reason"}
+                              Provider reference
+                            </dt>
+                            <dd className="mt-0.5 break-all text-foreground">
+                              {messageId}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-medium text-muted-foreground">
+                              {gatewayAccepted
+                                ? "Delivery details"
+                                : "Failure reason"}
                             </dt>
                             <dd
                               className={cn(
                                 "mt-0.5 whitespace-pre-wrap break-words",
-                                status.toLowerCase() === "failed" ? "text-destructive" : "text-foreground"
+                                status.toLowerCase() === "failed"
+                                  ? "text-destructive"
+                                  : "text-foreground",
                               )}
                             >
                               {failureReason}
@@ -5166,13 +6592,17 @@ export function OnboardingView() {
                           </div>
                         </dl>
                       </section>
-                    )
+                    );
                   })}
 
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    Invitation emails use the platform SMTP connection configured with MAIL_* settings. You can test it
-                    from the dedicated{" "}
-                    <Link href="/dashboard/smtp" className="font-semibold underline underline-offset-2">
+                    Invitation emails use the platform SMTP connection
+                    configured with MAIL_* settings. You can test it from the
+                    dedicated{" "}
+                    <Link
+                      href="/dashboard/smtp"
+                      className="font-semibold underline underline-offset-2"
+                    >
                       SMTP page
                     </Link>
                     .
@@ -5184,10 +6614,19 @@ export function OnboardingView() {
                         type="button"
                         size="sm"
                         disabled={
-                          readNumber(selectedInvitation, ["id", "invitation_id"]) === null ||
-                          resendingInvitationId === readNumber(selectedInvitation, ["id", "invitation_id"])
+                          readNumber(selectedInvitation, [
+                            "id",
+                            "invitation_id",
+                          ]) === null ||
+                          resendingInvitationId ===
+                            readNumber(selectedInvitation, [
+                              "id",
+                              "invitation_id",
+                            ])
                         }
-                        onClick={() => void resendPendingInvitation(selectedInvitation)}
+                        onClick={() =>
+                          void resendPendingInvitation(selectedInvitation)
+                        }
                       >
                         <Send className="mr-1.5 h-3.5 w-3.5" />
                         Resend invitation
@@ -5202,895 +6641,1332 @@ export function OnboardingView() {
       ) : activeTab === "requests" && canViewOnboardingRequests ? (
         <div className="space-y-2">
           <div hidden={requestDetailsOpen}>
-          {!isEmployeeMode ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-              <div className="w-56 max-w-full"><FluentSelect ariaLabel="Onboarding view" value={requestPresentation} onChange={setRequestPresentation} options={[{ value: "overview", label: "HR readiness overview" }, { value: "requests", label: "All requests" }]} /></div>
-              {requestPresentation === "overview" && canCreateOnboardingRequests ? <Button size="sm" onClick={() => void openRequestSheet()}>Create Request</Button> : null}
-            </div>
-          ) : null}
-          {!isEmployeeMode && requestPresentation === "overview" ? (
-            <OnboardingHrOverview token={readStoredToken() ?? ""} detailsOpen={requestDetailsOpen || requestSheetOpen || loading || saving} onOpen={(id, requirement) => {
-              if (requirement?.id === "independently approved starting salary") {
-                window.location.assign("/dashboard/employees/salary-approvals")
-                return
-              }
-              void openRequestDetails({ id }).then(() => {
-                if (requirement?.action === "payroll" || requirement?.action === "contracts") setWorkspaceTab("payroll")
-                else if (requirement?.action === "tasks" || requirement?.action === "approvals") setWorkspaceTab("tasks")
-                else if (requirement?.action === "details") setWorkspaceTab("details")
-              })
-            }} />
-          ) : (
-          <ResizableTable
-            title="Onboarding Requests"
-            className="px-3 pb-3"
-            data={filteredRequests}
-            columns={onboardingRequestColumns}
-            loading={loading}
-            storageKey="onboarding-requests"
-            enableAnimations
-            compact
-            toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
-            frameClassName="rounded-none border-0 shadow-none"
-            itemsPerPage={15}
-            showExport={false}
-            getRowId={(row, index) => {
-              if (isPendingOnboardingRow(row)) {
-                return `pending-${readNumber(row, ["employee_id", "employeeId"]) ?? index}`
-              }
-              return String(readNumber(row, ["id", "request_id"]) ?? index)
-            }}
-            onRowSelect={(_, row) => {
-              if (!row || isPendingOnboardingRow(row)) {
-                return
-              }
-              void openRequestDetails(row)
-            }}
-            toolbarStart={
-              <>
-                <FluentSearchBox
-                  size="small"
-                  aria-label="Search onboarding requests"
-                  className="!w-[14rem] max-w-full shrink-0"
-                  placeholder="Search name, email, phone, user no."
-                  value={requestSearch}
-                  onChange={(_event, data) => setRequestSearch(data.value)}
-                />
-                <FluentSelect
-                  ariaLabel="Filter request status"
-                  size="small"
-                  className="min-w-[8.5rem]"
-                  value={requestStatusFilter}
-                  onChange={setRequestStatusFilter}
-                  options={requestStatusOptions.map((status) => ({
-                    value: status,
-                    label: status === "all" ? "All statuses" : toTitleCaseWords(status),
-                  }))}
-                />
-                {isEmployeeMode ? null : (
+            {!isEmployeeMode ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                <div className="w-56 max-w-full">
                   <FluentSelect
-                    ariaLabel="Filter by employee"
-                    size="small"
-                    className="min-w-[9rem] max-w-[12rem]"
-                    value={requestEmployeeFilter}
-                    placeholder="All employees"
-                    onChange={setRequestEmployeeFilter}
+                    ariaLabel="Onboarding view"
+                    value={requestPresentation}
+                    onChange={setRequestPresentation}
                     options={[
-                      { value: "", label: "All employees" },
-                      ...employees.flatMap((row) => {
-                        const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                        if (employeeId === null) return []
-                        return [{ value: String(employeeId), label: resolveEmployeeLabel(employeeId) }]
-                      }),
+                      { value: "overview", label: "HR readiness overview" },
+                      { value: "requests", label: "All requests" },
                     ]}
                   />
-                )}
-              </>
-            }
-            toolbarActions={
-              <>
-                {canCreateOnboardingRequests && !isEmployeeMode ? (
-                  <Button
-                    type="button"
-                    className="h-8 px-2.5 text-xs"
-                    onClick={() => {
-                      void openRequestSheet()
-                    }}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                </div>
+                {requestPresentation === "overview" &&
+                canCreateOnboardingRequests ? (
+                  <Button size="sm" onClick={() => void openRequestSheet()}>
                     Create Request
                   </Button>
                 ) : null}
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
-                  onClick={() => void reloadAll(activeTab, true)}
-                  disabled={loading}
-                  aria-label="Refresh"
-                  title="Refresh"
-                >
-                  <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
-                </button>
-              </>
-            }
-          />
-          )}
-          <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
-            <SheetContent
-              side="right"
-              showCloseButton={false}
-              className={cn(
-                "gap-0 p-0",
-                "data-[side=right]:w-[min(100vw-1rem,36rem)] data-[side=right]:max-w-[36rem]",
-                "sm:data-[side=right]:max-w-[36rem]"
-              )}
-            >
-              <div className="flex h-full min-h-0 flex-col bg-background">
-                <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <SheetTitle className="text-base font-semibold text-slate-900">
-                      Create Onboarding Request
-                    </SheetTitle>
-                    <SheetDescription className="sr-only">
-                      Start onboarding for an employee. Fill the basics first; add provisioning only if they need system
-                      access setup now.
-                    </SheetDescription>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <button
-                            type="button"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                            aria-label="About create onboarding request"
-                          />
-                        }
+              </div>
+            ) : null}
+            {!isEmployeeMode && requestPresentation === "overview" ? (
+              <OnboardingHrOverview
+                token={readStoredToken() ?? ""}
+                detailsOpen={
+                  requestDetailsOpen || requestSheetOpen || loading || saving
+                }
+                onOpen={(id, requirement) => {
+                  if (
+                    requirement?.id === "independently approved starting salary"
+                  ) {
+                    window.location.assign(
+                      "/dashboard/employees/salary-approvals",
+                    );
+                    return;
+                  }
+                  void openRequestDetails({ id }).then(() => {
+                    if (
+                      requirement?.action === "payroll" ||
+                      requirement?.action === "contracts"
+                    )
+                      setWorkspaceTab("payroll");
+                    else if (
+                      requirement?.action === "tasks" ||
+                      requirement?.action === "approvals"
+                    )
+                      setWorkspaceTab("tasks");
+                    else if (requirement?.action === "details")
+                      setWorkspaceTab("details");
+                  });
+                }}
+              />
+            ) : (
+              <ResizableTable
+                title="Onboarding Requests"
+                className="px-3 pb-3"
+                data={filteredRequests}
+                columns={onboardingRequestColumns}
+                loading={loading}
+                storageKey="onboarding-requests"
+                enableAnimations
+                compact
+                toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
+                frameClassName="rounded-none border-0 shadow-none"
+                itemsPerPage={15}
+                showExport={false}
+                getRowId={(row, index) => {
+                  if (isPendingOnboardingRow(row)) {
+                    return `pending-${readNumber(row, ["employee_id", "employeeId"]) ?? index}`;
+                  }
+                  return String(readNumber(row, ["id", "request_id"]) ?? index);
+                }}
+                onRowSelect={(_, row) => {
+                  if (!row || isPendingOnboardingRow(row)) {
+                    return;
+                  }
+                  void openRequestDetails(row);
+                }}
+                toolbarStart={
+                  <>
+                    <FluentSearchBox
+                      size="small"
+                      aria-label="Search onboarding requests"
+                      className="!w-[14rem] max-w-full shrink-0"
+                      placeholder="Search name, email, phone, user no."
+                      value={requestSearch}
+                      onChange={(_event, data) => setRequestSearch(data.value)}
+                    />
+                    <FluentSelect
+                      ariaLabel="Filter request status"
+                      size="small"
+                      className="min-w-[8.5rem]"
+                      value={requestStatusFilter}
+                      onChange={setRequestStatusFilter}
+                      options={requestStatusOptions.map((status) => ({
+                        value: status,
+                        label:
+                          status === "all"
+                            ? "All statuses"
+                            : toTitleCaseWords(status),
+                      }))}
+                    />
+                    {isEmployeeMode ? null : (
+                      <FluentSelect
+                        ariaLabel="Filter by employee"
+                        size="small"
+                        className="min-w-[9rem] max-w-[12rem]"
+                        value={requestEmployeeFilter}
+                        placeholder="All employees"
+                        onChange={setRequestEmployeeFilter}
+                        options={[
+                          { value: "", label: "All employees" },
+                          ...employees.flatMap((row) => {
+                            const employeeId = readNumber(row, [
+                              "id",
+                              "employee_id",
+                              "user_id",
+                            ]);
+                            if (employeeId === null) return [];
+                            return [
+                              {
+                                value: String(employeeId),
+                                label: resolveEmployeeLabel(employeeId),
+                              },
+                            ];
+                          }),
+                        ]}
+                      />
+                    )}
+                  </>
+                }
+                toolbarActions={
+                  <>
+                    {canCreateOnboardingRequests && !isEmployeeMode ? (
+                      <Button
+                        type="button"
+                        className="h-8 px-2.5 text-xs"
+                        onClick={() => {
+                          void openRequestSheet();
+                        }}
                       >
-                        <CircleHelp className="h-3.5 w-3.5" />
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="bottom"
-                        align="start"
-                        className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
-                      >
-                        Start onboarding for an employee. Fill the basics first; add provisioning only if they need
-                        system access setup now.
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
-                    onClick={() => setRequestSheetOpen(false)}
-                    aria-label="Close"
-                    title="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </header>
-
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                  <div className="w-full space-y-5">
-                    <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm sm:grid-cols-2">
-                      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 sm:col-span-2">
-                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">1</span>
-                        <div><p className="text-sm font-semibold text-slate-900">Request details</p><p className="text-xs text-slate-500">Choose the employee and the workflow that will guide their onboarding.</p></div>
-                      </div>
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
-                        Request title
-                        <Input
-                          className="h-9 bg-white text-slate-900 placeholder:text-slate-400"
-                          value={requestForm.title}
-                          onChange={(event) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              title: event.target.value,
-                            }))
-                          }
-                          placeholder="e.g. Onboarding for Jane Doe"
-                        />
-                      </label>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                        Employee
-                        <Select
-                          value={requestForm.employee_id}
-                          onValueChange={(value) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              employee_id: value ?? "",
-                            }))
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Create Request
+                      </Button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm disabled:opacity-60"
+                      onClick={() => void reloadAll(activeTab, true)}
+                      disabled={loading}
+                      aria-label="Refresh"
+                      title="Refresh"
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "size-3.5 text-primary",
+                          loading ? "animate-spin" : "",
+                        )}
+                      />
+                    </button>
+                  </>
+                }
+              />
+            )}
+            <Sheet open={requestSheetOpen} onOpenChange={setRequestSheetOpen}>
+              <SheetContent
+                side="right"
+                showCloseButton={false}
+                className={cn(
+                  "gap-0 p-0",
+                  "data-[side=right]:w-[min(100vw-1rem,36rem)] data-[side=right]:max-w-[36rem]",
+                  "sm:data-[side=right]:max-w-[36rem]",
+                )}
+              >
+                <div className="flex h-full min-h-0 flex-col bg-background">
+                  <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <SheetTitle className="text-base font-semibold text-slate-900">
+                        Create Onboarding Request
+                      </SheetTitle>
+                      <SheetDescription className="sr-only">
+                        Start onboarding for an employee. Fill the basics first;
+                        add provisioning only if they need system access setup
+                        now.
+                      </SheetDescription>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                              aria-label="About create onboarding request"
+                            />
                           }
                         >
-                          <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                            <SelectValue placeholder="Select employee">
-                              <span className="truncate text-slate-900">
-                                {requestForm.employee_id
-                                  ? resolveEmployeeLabel(Number(requestForm.employee_id))
-                                  : "Select employee"}
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent
-                            className={cn(selectPopupClassName, "min-w-[min(100vw-2rem,22rem)]")}
-                            alignItemWithTrigger={false}
-                            align="start"
-                          >
-                            {selectableEmployees.length === 0 ? (
-                              <SelectItem value="__no_employees__" disabled className="text-slate-500">
-                                No onboarding/pending employees
-                              </SelectItem>
-                            ) : (
-                              selectableEmployees.map((row, index) => {
-                                const employeeId = readNumber(row, ["id", "employee_id", "user_id"])
-                                if (employeeId === null) return null
-                                const label = formatEmployeeOptionLabel(row, employeeId)
-                                const searchBits = [
-                                  label,
-                                  getEmployeeDisplayName(row),
-                                  readString(row, ["employee_no", "employee_number", "user_no", "employeeNo"]),
-                                  readString(row, ["email", "work_email", "personal_email"]),
-                                  getEmployeeEmploymentStatus(row),
-                                  String(employeeId),
-                                ]
-                                  .filter((part) => part && part !== "-")
-                                  .join(" ")
-                                return (
-                                  <SelectItem
-                                    key={`create-req-employee-${employeeId}-${index}`}
-                                    value={String(employeeId)}
-                                    className="text-slate-900"
-                                    data-search-text={searchBits}
-                                  >
-                                    {label}
-                                  </SelectItem>
-                                )
-                              })
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </label>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                        Workflow
-                        <Select
-                          value={requestForm.workflow_id}
-                          onValueChange={(value) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              workflow_id: value ?? "",
-                            }))
-                          }
+                          <CircleHelp className="h-3.5 w-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="bottom"
+                          align="start"
+                          className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
                         >
-                          <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                            <SelectValue placeholder="Optional">
-                              <span className="truncate text-slate-900">
-                                {requestForm.workflow_id
-                                  ? resolveWorkflowLabel(Number(requestForm.workflow_id))
-                                  : "Optional — pick a checklist"}
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className={selectPopupClassName}>
-                            {workflows.map((row) => {
-                              const workflowId = readNumber(row, ["id", "workflow_id"])
-                              if (workflowId === null) return null
-                              return (
-                                <SelectItem key={workflowId} value={String(workflowId)} className="text-slate-900">
-                                  {readString(row, ["name", "title"])}
-                                </SelectItem>
-                              )
-                            })}
-                          </SelectContent>
-                        </Select>
-                      </label>
-
-                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
-                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">2</span>
-                        <div><p className="text-sm font-semibold text-slate-900">Schedule</p><p className="text-xs text-slate-500">Decide whether to start now and set the expected onboarding dates.</p></div>
-                      </div>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                        When to start
-                        <Select
-                          value={requestForm.submit}
-                          onValueChange={(value) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              submit: value ?? "true",
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                            <SelectValue placeholder="Submission mode">
-                              {resolveBooleanLabel(requestForm.submit)}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className={selectPopupClassName}>
-                            <SelectItem value="true" className="text-slate-900">
-                              Submit immediately
-                            </SelectItem>
-                            <SelectItem value="false" className="text-slate-900">
-                              Save as draft
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </label>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                        Planned start
-                        <DateInput
-                          className="h-9"
-
-                          value={requestForm.planned_start_date}
-                          onChange={(event) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              planned_start_date: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                        Planned completion
-                        <DateInput
-                          className="h-9"
-
-                          value={requestForm.planned_completion_date}
-                          onChange={(event) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              planned_completion_date: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-
-                      <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
-                        <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">3</span>
-                        <div><p className="text-sm font-semibold text-slate-900">Notes</p><p className="text-xs text-slate-500">Add optional context for HR, managers, and other owners.</p></div>
-                      </div>
-
-                      <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
-                        Description
-                        <Input
-                          className="h-9"
-                          value={requestForm.description}
-                          onChange={(event) =>
-                            setRequestForm((prev) => ({
-                              ...prev,
-                              description: event.target.value,
-                            }))
-                          }
-                          placeholder="Optional notes for HR / managers"
-                        />
-                      </label>
+                          Start onboarding for an employee. Fill the basics
+                          first; add provisioning only if they need system
+                          access setup now.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                      onClick={() => setRequestSheetOpen(false)}
+                      aria-label="Close"
+                      title="Close"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </header>
 
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="mr-1 flex size-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">4</span>
-                        <Checkbox
-                          id="include-provisioning"
-                          checked={requestProvisioningEnabled}
-                          onCheckedChange={(value) => {
-                            const checked = Boolean(value)
-                            if (checked) {
-                              void enableRequestProvisioning()
-                              return
-                            }
-                            setRequestProvisioningEnabled(false)
-                            setRequestProvisioning({
-                              ...EMPTY_REQUEST_PROVISIONING,
-                              shiftAssignment: {
-                                ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
-                              },
-                              timetableAssignment: {
-                                ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
-                              },
-                              deviceAssignment: {
-                                ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
-                              },
-                            })
-                          }}
-                        />
-                        <label htmlFor="include-provisioning" className="text-sm font-medium text-slate-900">
-                          Include provisioning
-                        </label>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <button
-                                type="button"
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                                aria-label="What is provisioning?"
-                              />
-                            }
-                          >
-                            <CircleHelp className="h-3.5 w-3.5" />
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            align="start"
-                            className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
-                          >
-                            <p className="font-medium text-white">What does this mean?</p>
-                            <p className="mt-1 text-slate-200">
-                              Provisioning means preparing the employee&apos;s access before or during onboarding: which
-                              roles they get, which branches they can work in, their shift or timetable, and which
-                              attendance/access devices they should appear on. Turn this on only if you want to set
-                              those up now; you can skip it and configure access later.
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                    <div className="w-full space-y-5">
+                      <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm sm:grid-cols-2">
+                        <div className="flex items-center gap-3 border-b border-slate-200 pb-3 sm:col-span-2">
+                          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                            1
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Request details
                             </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-
-                      {requestProvisioningEnabled ? (
-                        <div className="mt-4 space-y-4">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="grid gap-1 text-xs font-medium">
-                              Attendance policy
-                              <FluentSelect ariaLabel="Attendance policy" value={requestProvisioning.attendancePolicyId} onChange={(value) => updateRequestProvisioningField("attendancePolicyId", value)} options={[{ value: "", label: "Use company default" }, ...attendancePolicies.map((row) => ({ value: String(readRecordId(row, ["id"]) ?? ""), label: readString(row, ["name", "policy_name"], "Attendance policy") }))]} />
-                            </label>
-                            <label className="grid gap-1 text-xs font-medium">
-                              Leave policy
-                              <FluentSelect ariaLabel="Leave policy" value={requestProvisioning.leavePolicyId} onChange={(value) => updateRequestProvisioningField("leavePolicyId", value)} options={[{ value: "", label: "Use employee eligibility rules" }, ...leavePolicies.map((row) => ({ value: String(readRecordId(row, ["id"]) ?? ""), label: readString(row, ["name", "policy_name"], "Leave policy") }))]} />
-                            </label>
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <MultiSelectChecklist
-                              compact
-                              label="Roles (what they can do in the system)"
-                              options={requestRoleOptions}
-                              selectedIds={requestProvisioning.roleIds}
-                              onToggle={(id, checked) =>
-                                updateRequestProvisioningField(
-                                  "roleIds",
-                                  toggleNumericId(requestProvisioning.roleIds, id, checked)
-                                )
-                              }
-                              emptyText="No roles available."
-                            />
-                            <MultiSelectChecklist
-                              compact
-                              label="Branch access (where they can work)"
-                              options={requestBranchAccessOptions}
-                              selectedIds={requestProvisioning.branchAccessIds}
-                              onToggle={(id, checked) =>
-                                updateRequestProvisioningField(
-                                  "branchAccessIds",
-                                  toggleNumericId(requestProvisioning.branchAccessIds, id, checked)
-                                )
-                              }
-                              emptyText="No branches available."
-                            />
-                          </div>
-
-                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                              Attendance mode
-                              <Select
-                                value={requestProvisioning.attendanceMode || "none"}
-                                onValueChange={(value) =>
-                                  setRequestAttendanceMode(
-                                    value === "none" ? "" : (value as OnboardingProvisioningDraft["attendanceMode"])
-                                  )
-                                }
-                              >
-                                <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                  <SelectValue placeholder="Attendance mode" />
-                                </SelectTrigger>
-                                <SelectContent className={selectPopupClassName}>
-                                  <SelectItem value="none" className="text-slate-900">
-                                    None for now
-                                  </SelectItem>
-                                  <SelectItem value="shift" className="text-slate-900">
-                                    Shift
-                                  </SelectItem>
-                                  <SelectItem value="timetable" className="text-slate-900">
-                                    Timetable
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </label>
-
-                            {requestProvisioning.attendanceMode === "shift" ? (
-                              <>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Shift
-                                  <Select
-                                    value={requestProvisioning.shiftAssignment.shiftId || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestShiftAssignmentField(
-                                        "shiftId",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Select shift" />
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        Select shift
-                                      </SelectItem>
-                                      {requestShiftOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.id}
-                                          value={String(option.id)}
-                                          className="text-slate-900"
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Effective from
-                                  <DateInput
-                                    className="h-9"
-
-                                    value={requestProvisioning.shiftAssignment.effectiveFrom}
-                                    onChange={(event) =>
-                                      updateRequestShiftAssignmentField("effectiveFrom", event.target.value)
-                                    }
-                                  />
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Effective to
-                                  <DateInput
-                                    className="h-9"
-
-                                    value={requestProvisioning.shiftAssignment.effectiveTo}
-                                    onChange={(event) =>
-                                      updateRequestShiftAssignmentField("effectiveTo", event.target.value)
-                                    }
-                                  />
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Rotation group (optional)
-                                  <Select
-                                    value={requestProvisioning.shiftAssignment.rotationGroupId || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestShiftAssignmentField(
-                                        "rotationGroupId",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Select rotation group">
-                                        <span className="text-slate-900">
-                                          {requestProvisioning.shiftAssignment.rotationGroupId
-                                            ? (requestRotationGroupOptions.find(
-                                                (option) =>
-                                                  String(option.id) ===
-                                                  requestProvisioning.shiftAssignment.rotationGroupId
-                                              )?.label ??
-                                              `Rotation group #${requestProvisioning.shiftAssignment.rotationGroupId}`)
-                                            : "None"}
-                                        </span>
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        None
-                                      </SelectItem>
-                                      {requestRotationGroupOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.id}
-                                          value={String(option.id)}
-                                          className="text-slate-900"
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                              </>
-                            ) : null}
-
-                            {requestProvisioning.attendanceMode === "timetable" ? (
-                              <>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Timetable
-                                  <Select
-                                    value={requestProvisioning.timetableAssignment.timetableId || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestTimetableAssignmentField(
-                                        "timetableId",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Select timetable" />
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        Select timetable
-                                      </SelectItem>
-                                      {requestTimetableOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.id}
-                                          value={String(option.id)}
-                                          className="text-slate-900"
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Effective from
-                                  <DateInput
-                                    className="h-9"
-
-                                    value={requestProvisioning.timetableAssignment.effectiveFrom}
-                                    onChange={(event) =>
-                                      updateRequestTimetableAssignmentField("effectiveFrom", event.target.value)
-                                    }
-                                  />
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Effective to
-                                  <DateInput
-                                    className="h-9"
-
-                                    value={requestProvisioning.timetableAssignment.effectiveTo}
-                                    onChange={(event) =>
-                                      updateRequestTimetableAssignmentField("effectiveTo", event.target.value)
-                                    }
-                                  />
-                                </label>
-                              </>
-                            ) : null}
-                          </div>
-
-                          <div className="border-t border-slate-100 pt-4">
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                id="device-provisioning"
-                                checked={requestProvisioning.deviceAssignment.enabled}
-                                onCheckedChange={(value) =>
-                                  updateRequestDeviceAssignmentField("enabled", Boolean(value))
-                                }
-                              />
-                              <label htmlFor="device-provisioning" className="text-sm font-medium text-slate-900">
-                                Also set up access devices
-                              </label>
-                              <Tooltip>
-                                <TooltipTrigger
-                                  render={
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                                      aria-label="What are access devices?"
-                                    />
-                                  }
-                                >
-                                  <CircleHelp className="h-3.5 w-3.5" />
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  align="start"
-                                  className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
-                                >
-                                  Attendance or door devices the employee should be registered on (for fingerprint,
-                                  card, or face check-in). Skip if devices will be assigned later.
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-
-                            {requestProvisioning.deviceAssignment.enabled ? (
-                              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Access group
-                                  <Select
-                                    value={requestProvisioning.deviceAssignment.accessGroupId || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestDeviceAssignmentField(
-                                        "accessGroupId",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Access group" />
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        Select access group
-                                      </SelectItem>
-                                      {requestAccessGroupOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.id}
-                                          value={String(option.id)}
-                                          className="text-slate-900"
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Organization
-                                  <Select
-                                    value={requestProvisioning.deviceAssignment.organizationId || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestDeviceAssignmentField(
-                                        "organizationId",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Optional" />
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        None
-                                      </SelectItem>
-                                      {requestAccessOrganizationOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.id}
-                                          value={String(option.id)}
-                                          className="text-slate-900"
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Employee no. on device
-                                  <Input
-                                    className="h-9 bg-white text-slate-900"
-                                    value={requestProvisioning.deviceAssignment.employeeNo}
-                                    onChange={(event) =>
-                                      updateRequestDeviceAssignmentField("employeeNo", event.target.value)
-                                    }
-                                    placeholder="Optional override"
-                                  />
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Verify mode
-                                  <Select
-                                    value={requestProvisioning.deviceAssignment.userVerifyMode || "none"}
-                                    onValueChange={(value) =>
-                                      updateRequestDeviceAssignmentField(
-                                        "userVerifyMode",
-                                        (value ?? "none") === "none" ? "" : (value ?? "")
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-9 w-full bg-white text-slate-900">
-                                      <SelectValue placeholder="Select verify mode">
-                                        {USER_VERIFY_MODE_OPTIONS.find(
-                                          (option) =>
-                                            option.value === requestProvisioning.deviceAssignment.userVerifyMode
-                                        )?.label ?? "Select verify mode"}
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent className={selectPopupClassName}>
-                                      <SelectItem value="none" className="text-slate-900">
-                                        Not set
-                                      </SelectItem>
-                                      {USER_VERIFY_MODE_OPTIONS.map((option) => (
-                                        <SelectItem key={option.value} value={option.value} className="text-slate-900">
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Valid from
-                                  <DateTimeInput
-                                    aria-label="Valid from"
-                                    value={requestProvisioning.deviceAssignment.validBeginTime}
-                                    onChange={(event) =>
-                                      updateRequestDeviceAssignmentField("validBeginTime", event.target.value)
-                                    }
-                                  />
-                                </label>
-                                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-                                  Valid until
-                                  <DateTimeInput
-                                    aria-label="Valid until"
-                                    value={requestProvisioning.deviceAssignment.validEndTime}
-                                    onChange={(event) =>
-                                      updateRequestDeviceAssignmentField("validEndTime", event.target.value)
-                                    }
-                                  />
-                                </label>
-                                <div className="sm:col-span-2 lg:col-span-3">
-                                  <MultiSelectChecklist
-                                    compact
-                                    label="Devices to enroll"
-                                    options={requestAttendanceDeviceOptions}
-                                    selectedIds={requestProvisioning.deviceAssignment.deviceIds}
-                                    onToggle={(id, checked) =>
-                                      updateRequestDeviceAssignmentField(
-                                        "deviceIds",
-                                        toggleNumericId(requestProvisioning.deviceAssignment.deviceIds, id, checked)
-                                      )
-                                    }
-                                    emptyText="No attendance devices available."
-                                  />
-                                </div>
-                                <div className="flex flex-wrap gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-3">
-                                  {[
-                                    ["validEnabled", "Use validity window"],
-                                    ["localUiRight", "Allow local device UI"],
-                                    ["closeDelayEnabled", "Enable close delay"],
-                                    ["syncNow", "Sync to devices now"],
-                                    ["continueOnError", "Continue if one device fails"],
-                                  ].map(([key, label]) => (
-                                    <label key={key} className="inline-flex items-center gap-2 text-sm text-slate-700">
-                                      <Checkbox
-                                        checked={Boolean(
-                                          requestProvisioning.deviceAssignment[
-                                            key as keyof OnboardingDeviceAssignmentDraft
-                                          ]
-                                        )}
-                                        onCheckedChange={(value) =>
-                                          updateRequestDeviceAssignmentField(
-                                            key as keyof OnboardingDeviceAssignmentDraft,
-                                            Boolean(value) as never
-                                          )
-                                        }
-                                      />
-                                      {label}
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
+                            <p className="text-xs text-slate-500">
+                              Choose the employee and the workflow that will
+                              guide their onboarding.
+                            </p>
                           </div>
                         </div>
-                      ) : null}
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                          Request title
+                          <Input
+                            className="h-9 bg-white text-slate-900 placeholder:text-slate-400"
+                            value={requestForm.title}
+                            onChange={(event) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                title: event.target.value,
+                              }))
+                            }
+                            placeholder="e.g. Onboarding for Jane Doe"
+                          />
+                        </label>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                          Employee
+                          <Select
+                            value={requestForm.employee_id}
+                            onValueChange={(value) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                employee_id: value ?? "",
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                              <SelectValue placeholder="Select employee">
+                                <span className="truncate text-slate-900">
+                                  {requestForm.employee_id
+                                    ? resolveEmployeeLabel(
+                                        Number(requestForm.employee_id),
+                                      )
+                                    : "Select employee"}
+                                </span>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent
+                              className={cn(
+                                selectPopupClassName,
+                                "min-w-[min(100vw-2rem,22rem)]",
+                              )}
+                              alignItemWithTrigger={false}
+                              align="start"
+                            >
+                              {selectableEmployees.length === 0 ? (
+                                <SelectItem
+                                  value="__no_employees__"
+                                  disabled
+                                  className="text-slate-500"
+                                >
+                                  No onboarding/pending employees
+                                </SelectItem>
+                              ) : (
+                                selectableEmployees.map((row, index) => {
+                                  const employeeId = readNumber(row, [
+                                    "id",
+                                    "employee_id",
+                                    "user_id",
+                                  ]);
+                                  if (employeeId === null) return null;
+                                  const label = formatEmployeeOptionLabel(
+                                    row,
+                                    employeeId,
+                                  );
+                                  const searchBits = [
+                                    label,
+                                    getEmployeeDisplayName(row),
+                                    readString(row, [
+                                      "employee_no",
+                                      "employee_number",
+                                      "user_no",
+                                      "employeeNo",
+                                    ]),
+                                    readString(row, [
+                                      "email",
+                                      "work_email",
+                                      "personal_email",
+                                    ]),
+                                    getEmployeeEmploymentStatus(row),
+                                    String(employeeId),
+                                  ]
+                                    .filter((part) => part && part !== "-")
+                                    .join(" ");
+                                  return (
+                                    <SelectItem
+                                      key={`create-req-employee-${employeeId}-${index}`}
+                                      value={String(employeeId)}
+                                      className="text-slate-900"
+                                      data-search-text={searchBits}
+                                    >
+                                      {label}
+                                    </SelectItem>
+                                  );
+                                })
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </label>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                          Workflow
+                          <Select
+                            value={requestForm.workflow_id}
+                            onValueChange={(value) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                workflow_id: value ?? "",
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                              <SelectValue placeholder="Optional">
+                                <span className="truncate text-slate-900">
+                                  {requestForm.workflow_id
+                                    ? resolveWorkflowLabel(
+                                        Number(requestForm.workflow_id),
+                                      )
+                                    : "Optional — pick a checklist"}
+                                </span>
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={selectPopupClassName}>
+                              {workflows.map((row) => {
+                                const workflowId = readNumber(row, [
+                                  "id",
+                                  "workflow_id",
+                                ]);
+                                if (workflowId === null) return null;
+                                return (
+                                  <SelectItem
+                                    key={workflowId}
+                                    value={String(workflowId)}
+                                    className="text-slate-900"
+                                  >
+                                    {readString(row, ["name", "title"])}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </label>
+
+                        <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                            2
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Schedule
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Decide whether to start now and set the expected
+                              onboarding dates.
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                          When to start
+                          <Select
+                            value={requestForm.submit}
+                            onValueChange={(value) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                submit: value ?? "true",
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                              <SelectValue placeholder="Submission mode">
+                                {resolveBooleanLabel(requestForm.submit)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={selectPopupClassName}>
+                              <SelectItem
+                                value="true"
+                                className="text-slate-900"
+                              >
+                                Submit immediately
+                              </SelectItem>
+                              <SelectItem
+                                value="false"
+                                className="text-slate-900"
+                              >
+                                Save as draft
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </label>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                          Planned start
+                          <DateInput
+                            className="h-9"
+
+                            value={requestForm.planned_start_date}
+                            onChange={(event) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                planned_start_date: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                          Planned completion
+                          <DateInput
+                            className="h-9"
+
+                            value={requestForm.planned_completion_date}
+                            onChange={(event) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                planned_completion_date: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+
+                        <div className="mt-1 flex items-center gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                          <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                            3
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Notes
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Add optional context for HR, managers, and other
+                              owners.
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="grid gap-1.5 text-sm font-medium text-slate-700 sm:col-span-2">
+                          Description
+                          <Input
+                            className="h-9"
+                            value={requestForm.description}
+                            onChange={(event) =>
+                              setRequestForm((prev) => ({
+                                ...prev,
+                                description: event.target.value,
+                              }))
+                            }
+                            placeholder="Optional notes for HR / managers"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="mr-1 flex size-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                            4
+                          </span>
+                          <Checkbox
+                            id="include-provisioning"
+                            checked={requestProvisioningEnabled}
+                            onCheckedChange={(value) => {
+                              const checked = Boolean(value);
+                              if (checked) {
+                                void enableRequestProvisioning();
+                                return;
+                              }
+                              setRequestProvisioningEnabled(false);
+                              setRequestProvisioning({
+                                ...EMPTY_REQUEST_PROVISIONING,
+                                shiftAssignment: {
+                                  ...EMPTY_ONBOARDING_SHIFT_ASSIGNMENT,
+                                },
+                                timetableAssignment: {
+                                  ...EMPTY_ONBOARDING_TIMETABLE_ASSIGNMENT,
+                                },
+                                deviceAssignment: {
+                                  ...EMPTY_ONBOARDING_DEVICE_ASSIGNMENT,
+                                },
+                              });
+                            }}
+                          />
+                          <label
+                            htmlFor="include-provisioning"
+                            className="text-sm font-medium text-slate-900"
+                          >
+                            Include provisioning
+                          </label>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                  aria-label="What is provisioning?"
+                                />
+                              }
+                            >
+                              <CircleHelp className="h-3.5 w-3.5" />
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              align="start"
+                              className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
+                            >
+                              <p className="font-medium text-white">
+                                What does this mean?
+                              </p>
+                              <p className="mt-1 text-slate-200">
+                                Provisioning means preparing the employee&apos;s
+                                access before or during onboarding: which roles
+                                they get, which branches they can work in, their
+                                shift or timetable, and which attendance/access
+                                devices they should appear on. Turn this on only
+                                if you want to set those up now; you can skip it
+                                and configure access later.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+
+                        {requestProvisioningEnabled ? (
+                          <div className="mt-4 space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <label className="grid gap-1 text-xs font-medium">
+                                Attendance policy
+                                <FluentSelect
+                                  ariaLabel="Attendance policy"
+                                  value={requestProvisioning.attendancePolicyId}
+                                  onChange={(value) =>
+                                    updateRequestProvisioningField(
+                                      "attendancePolicyId",
+                                      value,
+                                    )
+                                  }
+                                  options={[
+                                    { value: "", label: "Use company default" },
+                                    ...attendancePolicies.map((row) => ({
+                                      value: String(
+                                        readRecordId(row, ["id"]) ?? "",
+                                      ),
+                                      label: readString(
+                                        row,
+                                        ["name", "policy_name"],
+                                        "Attendance policy",
+                                      ),
+                                    })),
+                                  ]}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-xs font-medium">
+                                Leave policy
+                                <FluentSelect
+                                  ariaLabel="Leave policy"
+                                  value={requestProvisioning.leavePolicyId}
+                                  onChange={(value) =>
+                                    updateRequestProvisioningField(
+                                      "leavePolicyId",
+                                      value,
+                                    )
+                                  }
+                                  options={[
+                                    {
+                                      value: "",
+                                      label: "Use employee eligibility rules",
+                                    },
+                                    ...leavePolicies.map((row) => ({
+                                      value: String(
+                                        readRecordId(row, ["id"]) ?? "",
+                                      ),
+                                      label: readString(
+                                        row,
+                                        ["name", "policy_name"],
+                                        "Leave policy",
+                                      ),
+                                    })),
+                                  ]}
+                                />
+                              </label>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <MultiSelectChecklist
+                                compact
+                                label="Roles (what they can do in the system)"
+                                options={requestRoleOptions}
+                                selectedIds={requestProvisioning.roleIds}
+                                onToggle={(id, checked) =>
+                                  updateRequestProvisioningField(
+                                    "roleIds",
+                                    toggleNumericId(
+                                      requestProvisioning.roleIds,
+                                      id,
+                                      checked,
+                                    ),
+                                  )
+                                }
+                                emptyText="No roles available."
+                              />
+                              <MultiSelectChecklist
+                                compact
+                                label="Branch access (where they can work)"
+                                options={requestBranchAccessOptions}
+                                selectedIds={
+                                  requestProvisioning.branchAccessIds
+                                }
+                                onToggle={(id, checked) =>
+                                  updateRequestProvisioningField(
+                                    "branchAccessIds",
+                                    toggleNumericId(
+                                      requestProvisioning.branchAccessIds,
+                                      id,
+                                      checked,
+                                    ),
+                                  )
+                                }
+                                emptyText="No branches available."
+                              />
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                              <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                Attendance mode
+                                <Select
+                                  value={
+                                    requestProvisioning.attendanceMode || "none"
+                                  }
+                                  onValueChange={(value) =>
+                                    setRequestAttendanceMode(
+                                      value === "none"
+                                        ? ""
+                                        : (value as OnboardingProvisioningDraft["attendanceMode"]),
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                    <SelectValue placeholder="Attendance mode" />
+                                  </SelectTrigger>
+                                  <SelectContent
+                                    className={selectPopupClassName}
+                                  >
+                                    <SelectItem
+                                      value="none"
+                                      className="text-slate-900"
+                                    >
+                                      None for now
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="shift"
+                                      className="text-slate-900"
+                                    >
+                                      Shift
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="timetable"
+                                      className="text-slate-900"
+                                    >
+                                      Timetable
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </label>
+
+                              {requestProvisioning.attendanceMode ===
+                              "shift" ? (
+                                <>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Shift
+                                    <Select
+                                      value={
+                                        requestProvisioning.shiftAssignment
+                                          .shiftId || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestShiftAssignmentField(
+                                          "shiftId",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Select shift" />
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          Select shift
+                                        </SelectItem>
+                                        {requestShiftOptions.map((option) => (
+                                          <SelectItem
+                                            key={option.id}
+                                            value={String(option.id)}
+                                            className="text-slate-900"
+                                          >
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Effective from
+                                    <DateInput
+                                      className="h-9"
+
+                                      value={
+                                        requestProvisioning.shiftAssignment
+                                          .effectiveFrom
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestShiftAssignmentField(
+                                          "effectiveFrom",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Effective to
+                                    <DateInput
+                                      className="h-9"
+
+                                      value={
+                                        requestProvisioning.shiftAssignment
+                                          .effectiveTo
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestShiftAssignmentField(
+                                          "effectiveTo",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Rotation group (optional)
+                                    <Select
+                                      value={
+                                        requestProvisioning.shiftAssignment
+                                          .rotationGroupId || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestShiftAssignmentField(
+                                          "rotationGroupId",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Select rotation group">
+                                          <span className="text-slate-900">
+                                            {requestProvisioning.shiftAssignment
+                                              .rotationGroupId
+                                              ? (requestRotationGroupOptions.find(
+                                                  (option) =>
+                                                    String(option.id) ===
+                                                    requestProvisioning
+                                                      .shiftAssignment
+                                                      .rotationGroupId,
+                                                )?.label ??
+                                                `Rotation group #${requestProvisioning.shiftAssignment.rotationGroupId}`)
+                                              : "None"}
+                                          </span>
+                                        </SelectValue>
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          None
+                                        </SelectItem>
+                                        {requestRotationGroupOptions.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.id}
+                                              value={String(option.id)}
+                                              className="text-slate-900"
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                </>
+                              ) : null}
+
+                              {requestProvisioning.attendanceMode ===
+                              "timetable" ? (
+                                <>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Timetable
+                                    <Select
+                                      value={
+                                        requestProvisioning.timetableAssignment
+                                          .timetableId || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestTimetableAssignmentField(
+                                          "timetableId",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Select timetable" />
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          Select timetable
+                                        </SelectItem>
+                                        {requestTimetableOptions.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.id}
+                                              value={String(option.id)}
+                                              className="text-slate-900"
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Effective from
+                                    <DateInput
+                                      className="h-9"
+
+                                      value={
+                                        requestProvisioning.timetableAssignment
+                                          .effectiveFrom
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestTimetableAssignmentField(
+                                          "effectiveFrom",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Effective to
+                                    <DateInput
+                                      className="h-9"
+
+                                      value={
+                                        requestProvisioning.timetableAssignment
+                                          .effectiveTo
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestTimetableAssignmentField(
+                                          "effectiveTo",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                </>
+                              ) : null}
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-4">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id="device-provisioning"
+                                  checked={
+                                    requestProvisioning.deviceAssignment.enabled
+                                  }
+                                  onCheckedChange={(value) =>
+                                    updateRequestDeviceAssignmentField(
+                                      "enabled",
+                                      Boolean(value),
+                                    )
+                                  }
+                                />
+                                <label
+                                  htmlFor="device-provisioning"
+                                  className="text-sm font-medium text-slate-900"
+                                >
+                                  Also set up access devices
+                                </label>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                        aria-label="What are access devices?"
+                                      />
+                                    }
+                                  >
+                                    <CircleHelp className="h-3.5 w-3.5" />
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    align="start"
+                                    className="max-w-80 bg-slate-900 px-3 py-2 text-left text-xs leading-relaxed text-white"
+                                  >
+                                    Attendance or door devices the employee
+                                    should be registered on (for fingerprint,
+                                    card, or face check-in). Skip if devices
+                                    will be assigned later.
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+
+                              {requestProvisioning.deviceAssignment.enabled ? (
+                                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Access group
+                                    <Select
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .accessGroupId || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "accessGroupId",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Access group" />
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          Select access group
+                                        </SelectItem>
+                                        {requestAccessGroupOptions.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.id}
+                                              value={String(option.id)}
+                                              className="text-slate-900"
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Organization
+                                    <Select
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .organizationId || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "organizationId",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Optional" />
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          None
+                                        </SelectItem>
+                                        {requestAccessOrganizationOptions.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.id}
+                                              value={String(option.id)}
+                                              className="text-slate-900"
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Employee no. on device
+                                    <Input
+                                      className="h-9 bg-white text-slate-900"
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .employeeNo
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "employeeNo",
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="Optional override"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Verify mode
+                                    <Select
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .userVerifyMode || "none"
+                                      }
+                                      onValueChange={(value) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "userVerifyMode",
+                                          (value ?? "none") === "none"
+                                            ? ""
+                                            : (value ?? ""),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9 w-full bg-white text-slate-900">
+                                        <SelectValue placeholder="Select verify mode">
+                                          {USER_VERIFY_MODE_OPTIONS.find(
+                                            (option) =>
+                                              option.value ===
+                                              requestProvisioning
+                                                .deviceAssignment
+                                                .userVerifyMode,
+                                          )?.label ?? "Select verify mode"}
+                                        </SelectValue>
+                                      </SelectTrigger>
+                                      <SelectContent
+                                        className={selectPopupClassName}
+                                      >
+                                        <SelectItem
+                                          value="none"
+                                          className="text-slate-900"
+                                        >
+                                          Not set
+                                        </SelectItem>
+                                        {USER_VERIFY_MODE_OPTIONS.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.value}
+                                              value={option.value}
+                                              className="text-slate-900"
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Valid from
+                                    <DateTimeInput
+                                      aria-label="Valid from"
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .validBeginTime
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "validBeginTime",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                                    Valid until
+                                    <DateTimeInput
+                                      aria-label="Valid until"
+                                      value={
+                                        requestProvisioning.deviceAssignment
+                                          .validEndTime
+                                      }
+                                      onChange={(event) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "validEndTime",
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                  <div className="sm:col-span-2 lg:col-span-3">
+                                    <MultiSelectChecklist
+                                      compact
+                                      label="Devices to enroll"
+                                      options={requestAttendanceDeviceOptions}
+                                      selectedIds={
+                                        requestProvisioning.deviceAssignment
+                                          .deviceIds
+                                      }
+                                      onToggle={(id, checked) =>
+                                        updateRequestDeviceAssignmentField(
+                                          "deviceIds",
+                                          toggleNumericId(
+                                            requestProvisioning.deviceAssignment
+                                              .deviceIds,
+                                            id,
+                                            checked,
+                                          ),
+                                        )
+                                      }
+                                      emptyText="No attendance devices available."
+                                    />
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-4 gap-y-2 sm:col-span-2 lg:col-span-3">
+                                    {[
+                                      ["validEnabled", "Use validity window"],
+                                      ["localUiRight", "Allow local device UI"],
+                                      [
+                                        "closeDelayEnabled",
+                                        "Enable close delay",
+                                      ],
+                                      ["syncNow", "Sync to devices now"],
+                                      [
+                                        "continueOnError",
+                                        "Continue if one device fails",
+                                      ],
+                                    ].map(([key, label]) => (
+                                      <label
+                                        key={key}
+                                        className="inline-flex items-center gap-2 text-sm text-slate-700"
+                                      >
+                                        <Checkbox
+                                          checked={Boolean(
+                                            requestProvisioning
+                                              .deviceAssignment[
+                                              key as keyof OnboardingDeviceAssignmentDraft
+                                            ],
+                                          )}
+                                          onCheckedChange={(value) =>
+                                            updateRequestDeviceAssignmentField(
+                                              key as keyof OnboardingDeviceAssignmentDraft,
+                                              Boolean(value) as never,
+                                            )
+                                          }
+                                        />
+                                        {label}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-background px-4 py-3 sm:px-6">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 px-3"
+                      onClick={() => setRequestSheetOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-9 px-3"
+                      onClick={() => void submitRequest()}
+                      disabled={saving}
+                    >
+                      {saving ? "Creating…" : "Create Request"}
+                    </Button>
+                  </footer>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+          <OverlayDrawer
+            open={requestDetailsOpen}
+            onOpenChange={(_, data) => {
+              if (!data.open) closeWorkspace();
+            }}
+            position="end"
+            size="full"
+            className="!h-dvh !max-w-none !overflow-hidden !rounded-none !border-0 !p-0"
+          >
+            <DrawerHeaderTitle className="sr-only">
+              Employee onboarding workspace
+            </DrawerHeaderTitle>
+            <section
+              aria-label="Employee onboarding workspace"
+              className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-4"
+            >
+              <FluentButton
+                appearance="subtle"
+                className="self-start"
+                onClick={closeWorkspace}
+              >
+                ← Back to onboarding
+              </FluentButton>
+              <header className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <FluentAvatar
+                      name={selectedRequestSummary.employee}
+                      image={
+                        workspaceEmployeePhoto
+                          ? { src: workspaceEmployeePhoto }
+                          : undefined
+                      }
+                      size={48}
+                    />
+                    <div className="min-w-0">
+                      <h1 className="break-words text-xl font-semibold">
+                        {selectedRequestSummary.employee}
+                      </h1>
+                      <p className="text-sm text-muted-foreground">
+                        Employee onboarding workspace
+                      </p>
                     </div>
                   </div>
                 </div>
-
-                <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-background px-4 py-3 sm:px-6">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 px-3"
-                    onClick={() => setRequestSheetOpen(false)}
+                <div className="flex flex-col items-start gap-2">
+                  <FluentBadge
+                    appearance="tint"
+                    color={
+                      selectedRequestSummary.status === "completed"
+                        ? "success"
+                        : "informative"
+                    }
                   >
-                    Cancel
-                  </Button>
-                  <Button type="button" className="h-9 px-3" onClick={() => void submitRequest()} disabled={saving}>
-                    {saving ? "Creating…" : "Create Request"}
-                  </Button>
-                </footer>
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          </div>
-          <OverlayDrawer open={requestDetailsOpen} onOpenChange={(_, data) => { if (!data.open) closeWorkspace() }} position="end" size="full" className="!h-dvh !max-w-none !overflow-hidden !rounded-none !border-0 !p-0">
-            <DrawerHeaderTitle className="sr-only">Employee onboarding workspace</DrawerHeaderTitle>
-            <section aria-label="Employee onboarding workspace" className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-4">
-              <FluentButton appearance="subtle" className="self-start" onClick={closeWorkspace}>← Back to onboarding</FluentButton>
-              <header className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3"><FluentAvatar name={selectedRequestSummary.employee} image={workspaceEmployeePhoto ? { src: workspaceEmployeePhoto } : undefined} size={48} /><div className="min-w-0"><h1 className="break-words text-xl font-semibold">{selectedRequestSummary.employee}</h1><p className="text-sm text-muted-foreground">Employee onboarding workspace</p></div></div>
+                    {toTitleCaseWords(
+                      readString(
+                        toRecord(selectedRequestDetails?.employee) ?? {},
+                        ["employment_status"],
+                        "onboarding",
+                      ),
+                    )}
+                  </FluentBadge>
+                  <p className="text-xs text-muted-foreground">
+                    Request {toTitleCaseWords(selectedRequestSummary.status)} ·
+                    Updated {selectedRequestSummary.updated}
+                  </p>
                 </div>
-                <div className="flex flex-col items-start gap-2"><FluentBadge appearance="tint" color={selectedRequestSummary.status === "completed" ? "success" : "informative"}>{toTitleCaseWords(readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employment_status"], "onboarding"))}</FluentBadge><p className="text-xs text-muted-foreground">Request {toTitleCaseWords(selectedRequestSummary.status)} · Updated {selectedRequestSummary.updated}</p></div>
-                <div id="onboarding-activation-summary" className="min-w-[16rem] flex-1 sm:max-w-sm" />
+                <div
+                  id="onboarding-activation-summary"
+                  className="min-w-[16rem] flex-1 sm:max-w-sm"
+                />
               </header>
-              <div className="min-w-0 shrink-0 overflow-x-auto"><FluentTabList aria-label="Employee workspace sections" selectedValue={workspaceTab} onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}>
-                <FluentTab value="overview">Overview</FluentTab><FluentTab value="details">Employee details</FluentTab><FluentTab value="payroll">{canReadPayrollProfile ? "Payroll & contract" : "Contract"}</FluentTab><FluentTab value="tasks">Tasks & documents</FluentTab><FluentTab value="activity">Activity</FluentTab>
-              </FluentTabList></div>
+              <div className="min-w-0 shrink-0 overflow-x-auto">
+                <FluentTabList
+                  aria-label="Employee workspace sections"
+                  selectedValue={workspaceTab}
+                  onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}
+                >
+                  <FluentTab value="overview">Overview</FluentTab>
+                  <FluentTab value="details">Employee details</FluentTab>
+                  {canReadPayrollProfile ? (
+                    <FluentTab value="payroll">Payroll</FluentTab>
+                  ) : null}
+                  {canReadEmploymentContracts ? (
+                    <FluentTab value="contracts">Contract</FluentTab>
+                  ) : null}
+                  <FluentTab value="tasks">Tasks & documents</FluentTab>
+                  <FluentTab value="activity">Activity</FluentTab>
+                </FluentTabList>
+              </div>
 
               {requestDetailsLoading ? (
                 <div className="m-3 border border-border p-4 text-sm text-muted-foreground">
@@ -6098,10 +7974,17 @@ export function OnboardingView() {
                 </div>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto text-foreground [&_.border-slate-200]:border-border [&_.border-slate-300]:border-border [&_.bg-slate-50]:bg-muted/20 [&_.bg-white]:bg-background [&_.text-slate-500]:text-muted-foreground [&_.text-slate-600]:text-muted-foreground [&_.text-slate-700]:text-foreground [&_.text-slate-800]:text-foreground [&_.text-slate-900]:text-foreground">
-
                   {readCurrentRequestId() ? (
                     <div hidden={workspaceTab !== "overview"} className="pb-4">
-                      <div className="mb-4"><OnboardingWorkspaceUpdates key={readCurrentRequestId()} token={readStoredToken() ?? ""} requestId={readCurrentRequestId()!} activity={selectedRequestAuditLogs} onActivity={() => setWorkspaceTab("activity")} /></div>
+                      <div className="mb-4">
+                        <OnboardingWorkspaceUpdates
+                          key={readCurrentRequestId()}
+                          token={readStoredToken() ?? ""}
+                          requestId={readCurrentRequestId()!}
+                          activity={selectedRequestAuditLogs}
+                          onActivity={() => setWorkspaceTab("activity")}
+                        />
+                      </div>
                       <OnboardingReadinessOverview
                         key={readCurrentRequestId()}
                         token={readStoredToken() ?? ""}
@@ -6109,48 +7992,93 @@ export function OnboardingView() {
                         employeeName={selectedRequestSummary.employee}
                         canActivate={canCompleteOnboardingRequests}
                         canViewPayroll={canReadPayrollProfile}
+                        canViewContracts={canReadEmploymentContracts}
                         saving={saving}
                         refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}:${readinessRevision}`}
                         summaryTargetId="onboarding-activation-summary"
-                        onDiscuss={(id, label) => setHandoffRequirement({ id, label })}
-                        onActivate={() => void runRequestAction(readCurrentRequestId()!, "complete")}
+                        onDiscuss={(id, label) =>
+                          setHandoffRequirement({ id, label })
+                        }
+                        onActivate={() =>
+                          void runRequestAction(
+                            readCurrentRequestId()!,
+                            "complete",
+                          )
+                        }
                         onNavigate={(action, requirementId) => {
                           if (requirementId === "employee-profile") {
-                            const employeeNo = readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employee_no"], "")
-                            if (employeeNo) window.location.assign(`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`)
-                            else setWorkspaceTab("details")
-                            return
+                            const employeeNo = readString(
+                              toRecord(selectedRequestDetails?.employee) ?? {},
+                              ["employee_no"],
+                              "",
+                            );
+                            if (employeeNo)
+                              window.location.assign(
+                                `/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`,
+                              );
+                            else setWorkspaceTab("details");
+                            return;
                           }
-                          setWorkspaceTab(action === "contracts" || action === "payroll" ? "payroll" : action === "approvals" ? "tasks" : action)
-                          if (requirementId === "independently approved starting salary") {
-                            if (canApproveJoiningSalary) window.location.assign("/dashboard/employees/salary-approvals")
-                            else showErrorAlert("Salary approval access is required. Ask the assigned payroll approver to complete this requirement.")
-                            return
+                          setWorkspaceTab(
+                            action === "contracts"
+                              ? "contracts"
+                              : action === "payroll"
+                                ? "payroll"
+                                : action === "approvals"
+                                  ? "tasks"
+                                  : action,
+                          );
+                          if (
+                            requirementId ===
+                            "independently approved starting salary"
+                          ) {
+                            if (canApproveJoiningSalary)
+                              window.location.assign(
+                                "/dashboard/employees/salary-approvals",
+                              );
+                            else
+                              showErrorAlert(
+                                "Salary approval access is required. Ask the assigned payroll approver to complete this requirement.",
+                              );
+                            return;
                           }
                           if (requirementId === "bank account") {
-                            void openBankVerification()
-                            return
+                            void openBankVerification();
+                            return;
                           }
                           if (action === "payroll" && canReadJoiningSalary) {
-                            setPayrollDrawerOpen(true)
-                            return
+                            setPayrollDrawerOpen(true);
+                            return;
                           }
                           window.setTimeout(() => {
-                            const target = document.getElementById(`onboarding-workspace-${action}`)
-                            target?.scrollIntoView({ behavior: "smooth", block: "start" })
-                            target?.focus({ preventScroll: true })
-                          }, 0)
+                            const target = document.getElementById(
+                              `onboarding-workspace-${action}`,
+                            );
+                            target?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start",
+                            });
+                            target?.focus({ preventScroll: true });
+                          }, 0);
                         }}
                       />
                     </div>
                   ) : null}
 
-                  <section hidden={workspaceTab !== "details"} id="onboarding-workspace-details" tabIndex={-1} className="overflow-hidden border-b border-border bg-background">
+                  <section
+                    hidden={workspaceTab !== "details"}
+                    id="onboarding-workspace-details"
+                    tabIndex={-1}
+                    className="overflow-hidden border-b border-border bg-background"
+                  >
                     <div className="flex flex-col gap-2 border-b border-border bg-muted/[0.12] px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Employee details review</p>
+                        <p className="text-sm font-semibold text-foreground">
+                          Employee details review
+                        </p>
                         <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          Verify each section. Return only the sections that need correction and include a reason.
+                          Verify each section. Return only the sections that
+                          need correction and include a reason.
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
@@ -6168,12 +8096,14 @@ export function OnboardingView() {
                             "px-2 py-1 font-semibold",
                             employeeDetailsReview.status === "approved"
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                              : employeeDetailsReview.status === "changes_requested"
+                              : employeeDetailsReview.status ===
+                                  "changes_requested"
                                 ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
-                                : employeeDetailsReview.status === "submitted" ||
+                                : employeeDetailsReview.status ===
+                                      "submitted" ||
                                     employeeDetailsReview.status === "in_review"
                                   ? "bg-primary/10 text-primary"
-                                  : "bg-muted text-muted-foreground"
+                                  : "bg-muted text-muted-foreground",
                           )}
                         >
                           {toTitleCaseWords(employeeDetailsReview.status)}
@@ -6183,9 +8113,17 @@ export function OnboardingView() {
 
                     {employeeDetailsReview.notProvidedItems.length > 0 ? (
                       <div className="border-b border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                        Employee marked as unavailable: {employeeDetailsReview.notProvidedItems
-                          .map((key) => key === "professional_qualifications" ? "Professional qualifications" : key === "experience_details" ? "Previous work experience" : key)
-                          .join(", ")}.
+                        Employee marked as unavailable:{" "}
+                        {employeeDetailsReview.notProvidedItems
+                          .map((key) =>
+                            key === "professional_qualifications"
+                              ? "Professional qualifications"
+                              : key === "experience_details"
+                                ? "Previous work experience"
+                                : key,
+                          )
+                          .join(", ")}
+                        .
                       </div>
                     ) : null}
 
@@ -6197,63 +8135,98 @@ export function OnboardingView() {
                       <div className="grid min-h-[280px] lg:grid-cols-[200px_minmax(0,1fr)]">
                         <nav className="border-b border-border bg-muted/[0.12] p-1.5 lg:border-b-0 lg:border-r">
                           <ol className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
-                            {employeeDetailsReview.sections.map((section, index) => {
-                              const sectionStatus = readString(section, ["status"], "pending").toLowerCase()
-                              const active = index === employeeReviewStep
-                              const sectionFields = toRecordList(section.fields)
-                              const allFieldsPresent =
-                                sectionFields.length > 0 &&
-                                sectionFields.every((field) => hasEmployeeReviewValue(readString(field, ["value"])))
-                              return (
-                                <li key={readString(section, ["key"], String(index))}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEmployeeReviewStep(index)}
-                                    data-hrms-button-tone={active ? "brand" : undefined}
-                                    className={cn(
-                                      "flex min-h-11 w-full items-center gap-2 border border-transparent px-2 py-1.5 text-left text-[11px] transition",
-                                      active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
+                            {employeeDetailsReview.sections.map(
+                              (section, index) => {
+                                const sectionStatus = readString(
+                                  section,
+                                  ["status"],
+                                  "pending",
+                                ).toLowerCase();
+                                const active = index === employeeReviewStep;
+                                const sectionFields = toRecordList(
+                                  section.fields,
+                                );
+                                const allFieldsPresent =
+                                  sectionFields.length > 0 &&
+                                  sectionFields.every((field) =>
+                                    hasEmployeeReviewValue(
+                                      readString(field, ["value"]),
+                                    ),
+                                  );
+                                return (
+                                  <li
+                                    key={readString(
+                                      section,
+                                      ["key"],
+                                      String(index),
                                     )}
                                   >
-                                    <span
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setEmployeeReviewStep(index)
+                                      }
+                                      data-hrms-button-tone={
+                                        active ? "brand" : undefined
+                                      }
                                       className={cn(
-                                        "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-                                        sectionStatus === "approved"
-                                          ? "bg-emerald-500 text-white"
-                                          : allFieldsPresent
-                                            ? "bg-emerald-500 text-white ring-2 ring-emerald-200"
-                                            : active
-                                              ? "bg-white/20 text-white"
-                                            : sectionStatus === "changes_requested"
-                                              ? "bg-rose-100 text-rose-700"
-                                              : "bg-slate-200 text-slate-700"
+                                        "flex min-h-11 w-full items-center gap-2 border border-transparent px-2 py-1.5 text-left text-[11px] transition",
+                                        active
+                                          ? "bg-primary text-primary-foreground"
+                                          : "text-foreground hover:bg-muted",
                                       )}
                                     >
-                                      {sectionStatus === "approved" ? "✓" : index + 1}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block truncate font-medium">
-                                        {readString(section, ["label"], "Section")}
-                                      </span>
                                       <span
                                         className={cn(
-                                          "mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-medium",
+                                          "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
                                           sectionStatus === "approved"
-                                            ? "bg-emerald-100 text-emerald-700"
-                                            : sectionStatus === "changes_requested"
-                                              ? "bg-destructive/10 text-destructive"
-                                              : sectionStatus === "in_review" || sectionStatus === "submitted"
-                                                ? "bg-primary/10 text-primary"
-                                                : "bg-amber-100 text-amber-700"
+                                            ? "bg-emerald-500 text-white"
+                                            : allFieldsPresent
+                                              ? "bg-emerald-500 text-white ring-2 ring-emerald-200"
+                                              : active
+                                                ? "bg-white/20 text-white"
+                                                : sectionStatus ===
+                                                    "changes_requested"
+                                                  ? "bg-rose-100 text-rose-700"
+                                                  : "bg-slate-200 text-slate-700",
                                         )}
                                       >
-                                        {toTitleCaseWords(sectionStatus)}
+                                        {sectionStatus === "approved"
+                                          ? "✓"
+                                          : index + 1}
                                       </span>
-                                    </span>
-                                  </button>
-                                </li>
-                              )
-                            })}
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate font-medium">
+                                          {readString(
+                                            section,
+                                            ["label"],
+                                            "Section",
+                                          )}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-medium",
+                                            sectionStatus === "approved"
+                                              ? "bg-emerald-100 text-emerald-700"
+                                              : sectionStatus ===
+                                                  "changes_requested"
+                                                ? "bg-destructive/10 text-destructive"
+                                                : sectionStatus ===
+                                                      "in_review" ||
+                                                    sectionStatus ===
+                                                      "submitted"
+                                                  ? "bg-primary/10 text-primary"
+                                                  : "bg-amber-100 text-amber-700",
+                                          )}
+                                        >
+                                          {toTitleCaseWords(sectionStatus)}
+                                        </span>
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              },
+                            )}
                           </ol>
                         </nav>
 
@@ -6261,20 +8234,38 @@ export function OnboardingView() {
                           <div className="space-y-3 p-3 sm:p-4">
                             <div className="flex flex-wrap items-baseline gap-2">
                               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                                Step {employeeReviewStep + 1} of {employeeDetailsReview.sections.length}
+                                Step {employeeReviewStep + 1} of{" "}
+                                {employeeDetailsReview.sections.length}
                               </p>
                               <h3 className="text-sm font-semibold text-foreground">
-                                {readString(currentEmployeeReviewSection, ["label"], "Employee details")}
+                                {readString(
+                                  currentEmployeeReviewSection,
+                                  ["label"],
+                                  "Employee details",
+                                )}
                               </h3>
                             </div>
 
                             <div className="grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
-                              {toRecordList(currentEmployeeReviewSection.fields).map((reviewField, index) => (
+                              {toRecordList(
+                                currentEmployeeReviewSection.fields,
+                              ).map((reviewField, index) =>
                                 (() => {
-                                  const value = readString(reviewField, ["value"])
-                                  const previousField = toRecordList(currentEmployeeReviewSection.previous_fields).find((field) => readString(field, ["label"]) === readString(reviewField, ["label"]))
-                                  const previousValue = previousField ? readString(previousField, ["value"]) : null
-                                  const isFilled = hasEmployeeReviewValue(value)
+                                  const value = readString(reviewField, [
+                                    "value",
+                                  ]);
+                                  const previousField = toRecordList(
+                                    currentEmployeeReviewSection.previous_fields,
+                                  ).find(
+                                    (field) =>
+                                      readString(field, ["label"]) ===
+                                      readString(reviewField, ["label"]),
+                                  );
+                                  const previousValue = previousField
+                                    ? readString(previousField, ["value"])
+                                    : null;
+                                  const isFilled =
+                                    hasEmployeeReviewValue(value);
                                   return (
                                     <div
                                       key={`${readString(reviewField, ["label"])}-${index}`}
@@ -6282,44 +8273,73 @@ export function OnboardingView() {
                                     >
                                       <div className="flex items-center gap-1.5">
                                         {isFilled ? (
-                                          <CheckCheck className="size-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+                                          <CheckCheck
+                                            className="size-3.5 shrink-0 text-emerald-600"
+                                            aria-hidden="true"
+                                          />
                                         ) : (
                                           <span className="size-3.5 shrink-0 rounded-full border border-slate-300" />
                                         )}
                                         <p
                                           className={cn(
                                             "text-[10px] font-medium uppercase tracking-wide",
-                                            isFilled ? "text-emerald-700" : "text-muted-foreground"
+                                            isFilled
+                                              ? "text-emerald-700"
+                                              : "text-muted-foreground",
                                           )}
                                         >
-                                          {readString(reviewField, ["label"], "Field")}
+                                          {readString(
+                                            reviewField,
+                                            ["label"],
+                                            "Field",
+                                          )}
                                         </p>
                                       </div>
                                       <p
                                         className={cn(
                                           "mt-0.5 whitespace-pre-wrap pl-5 text-xs",
-                                          isFilled ? "text-foreground" : "text-muted-foreground"
+                                          isFilled
+                                            ? "text-foreground"
+                                            : "text-muted-foreground",
                                         )}
                                       >
                                         {value}
                                       </p>
-                                      {previousValue !== null && previousValue !== value ? <p className="mt-1 text-xs text-muted-foreground">Changed since review · Previously: <span className="whitespace-pre-wrap">{previousValue}</span></p> : null}
+                                      {previousValue !== null &&
+                                      previousValue !== value ? (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          Changed since review · Previously:{" "}
+                                          <span className="whitespace-pre-wrap">
+                                            {previousValue}
+                                          </span>
+                                        </p>
+                                      ) : null}
                                     </div>
-                                  )
-                                })()
-                              ))}
+                                  );
+                                })(),
+                              )}
                             </div>
 
-                            {toRecordList(currentEmployeeReviewSection.attachments).length > 0 ? (
+                            {toRecordList(
+                              currentEmployeeReviewSection.attachments,
+                            ).length > 0 ? (
                               <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3">
-                                <p className="text-xs font-semibold text-foreground">Uploaded evidence</p>
+                                <p className="text-xs font-semibold text-foreground">
+                                  Uploaded evidence
+                                </p>
                                 <div className="grid gap-2 md:grid-cols-2">
-                                  {toRecordList(currentEmployeeReviewSection.attachments).map((attachment, index) => {
-                                    const mimeType = readString(attachment, ["mime_type"], "")
+                                  {toRecordList(
+                                    currentEmployeeReviewSection.attachments,
+                                  ).map((attachment, index) => {
+                                    const mimeType = readString(
+                                      attachment,
+                                      ["mime_type"],
+                                      "",
+                                    );
                                     const canPreview =
                                       mimeType.startsWith("image/") ||
                                       mimeType === "application/pdf" ||
-                                      mimeType.startsWith("text/")
+                                      mimeType.startsWith("text/");
                                     return (
                                       <div
                                         key={`employee-review-attachment-${readNumber(attachment, ["id"]) ?? index}`}
@@ -6327,10 +8347,21 @@ export function OnboardingView() {
                                       >
                                         <div className="min-w-0">
                                           <p className="truncate text-xs font-medium text-foreground">
-                                            {readString(attachment, ["title", "original_file_name"], `Attachment ${index + 1}`)}
+                                            {readString(
+                                              attachment,
+                                              ["title", "original_file_name"],
+                                              `Attachment ${index + 1}`,
+                                            )}
                                           </p>
                                           <p className="truncate text-[10px] text-muted-foreground">
-                                            {readString(attachment, ["original_file_name", "document_type"], "Document")}
+                                            {readString(
+                                              attachment,
+                                              [
+                                                "original_file_name",
+                                                "document_type",
+                                              ],
+                                              "Document",
+                                            )}
                                           </p>
                                         </div>
                                         <Button
@@ -6338,46 +8369,87 @@ export function OnboardingView() {
                                           variant="outline"
                                           size="sm"
                                           disabled={saving}
-                                          onClick={() => void viewRequestDocument(attachment)}
+                                          onClick={() =>
+                                            void viewRequestDocument(attachment)
+                                          }
                                         >
-                                          {canPreview ? <Eye data-icon="inline-start" /> : <Download data-icon="inline-start" />}
+                                          {canPreview ? (
+                                            <Eye data-icon="inline-start" />
+                                          ) : (
+                                            <Download data-icon="inline-start" />
+                                          )}
                                           {canPreview ? "View" : "Download"}
                                         </Button>
                                       </div>
-                                    )
+                                    );
                                   })}
                                 </div>
                               </div>
                             ) : null}
 
-                            <FluentButton disabled={saving} onClick={async () => {
-                              if (!window.confirm("Reload the latest employee details while keeping your review notes? Review any changes before saving your decision.")) return
-                              const requestId = readCurrentRequestId()
-                              const token = readStoredToken()
-                              if (!requestId || !token) return
-                              try {
-                                const latest = await getOnboardingRequest(token, requestId)
-                                if (workspaceRequestRef.current !== requestId) return
-                                setSelectedRequestDetails(latest)
-                                reviewDraftVersions.current = {}
-                                showSuccessAlert("Latest details loaded. Your notes are retained; review the changes before saving.")
-                              } catch (cause) { showErrorAlert(cause instanceof Error ? cause.message : "Could not reload details. Your notes are retained.") }
-                            }}>Reload latest review details</FluentButton>
+                            <FluentButton
+                              disabled={saving}
+                              onClick={async () => {
+                                if (
+                                  !(await fluentConfirm(
+                                    "Reload the latest employee details while keeping your review notes? Review any changes before saving your decision.",
+                                  ))
+                                )
+                                  return;
+                                const requestId = readCurrentRequestId();
+                                const token = readStoredToken();
+                                if (!requestId || !token) return;
+                                try {
+                                  const latest = await getOnboardingRequest(
+                                    token,
+                                    requestId,
+                                  );
+                                  if (workspaceRequestRef.current !== requestId)
+                                    return;
+                                  setSelectedRequestDetails(latest);
+                                  reviewDraftVersions.current = {};
+                                  showSuccessAlert(
+                                    "Latest details loaded. Your notes are retained; review the changes before saving.",
+                                  );
+                                } catch (cause) {
+                                  showErrorAlert(
+                                    cause instanceof Error
+                                      ? cause.message
+                                      : "Could not reload details. Your notes are retained.",
+                                  );
+                                }
+                              }}
+                            >
+                              Reload latest review details
+                            </FluentButton>
                             <label className="grid gap-1.5 text-xs font-medium text-foreground">
                               Review note
                               <Textarea
                                 className="min-h-16 border border-input bg-background px-3 py-2 text-xs font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 value={
-                                  employeeReviewComments[readString(currentEmployeeReviewSection, ["key"], "")] ?? ""
+                                  employeeReviewComments[
+                                    readString(
+                                      currentEmployeeReviewSection,
+                                      ["key"],
+                                      "",
+                                    )
+                                  ] ?? ""
                                 }
                                 onChange={(event) => {
-                                  const key = readString(currentEmployeeReviewSection, ["key"], "")
-                                  dirtyReviewKeys.current.add(key)
-                                  reviewDraftVersions.current[key] ??= readNumber(selectedRequestDetails ?? {}, ["version"]) ?? 0
+                                  const key = readString(
+                                    currentEmployeeReviewSection,
+                                    ["key"],
+                                    "",
+                                  );
+                                  dirtyReviewKeys.current.add(key);
+                                  reviewDraftVersions.current[key] ??=
+                                    readNumber(selectedRequestDetails ?? {}, [
+                                      "version",
+                                    ]) ?? 0;
                                   setEmployeeReviewComments((current) => ({
                                     ...current,
                                     [key]: event.target.value,
-                                  }))
+                                  }));
                                 }}
                                 placeholder="Required when returning this section; optional when verifying."
                               />
@@ -6392,20 +8464,35 @@ export function OnboardingView() {
                                   disabled={
                                     saving ||
                                     !employeeReviewComments[
-                                      readString(currentEmployeeReviewSection, ["key"], "")
+                                      readString(
+                                        currentEmployeeReviewSection,
+                                        ["key"],
+                                        "",
+                                      )
                                     ]?.trim()
                                   }
-                                  onClick={() => void saveEmployeeDetailReview("changes_requested")}
+                                  onClick={() =>
+                                    void saveEmployeeDetailReview(
+                                      "changes_requested",
+                                    )
+                                  }
                                 >
                                   Request changes & notify employee
                                 </Button>
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={saving || currentEmployeeReviewStatus === "approved"}
-                                  onClick={() => void saveEmployeeDetailReview("approved")}
+                                  disabled={
+                                    saving ||
+                                    currentEmployeeReviewStatus === "approved"
+                                  }
+                                  onClick={() =>
+                                    void saveEmployeeDetailReview("approved")
+                                  }
                                 >
-                                  {currentEmployeeReviewStatus === "approved" ? "Approved" : "Approve & notify employee"}
+                                  {currentEmployeeReviewStatus === "approved"
+                                    ? "Approved"
+                                    : "Approve & notify employee"}
                                 </Button>
                               </div>
                             ) : null}
@@ -6415,1141 +8502,1844 @@ export function OnboardingView() {
                     )}
                   </section>
 
-                  <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-contracts" tabIndex={-1} className="border-b p-3">
-                    {bankVerificationOpen ? <div id="onboarding-bank-verification" className="mb-5 rounded-lg border border-border bg-muted/20 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div><h2 className="text-base font-semibold">Verify bank account</h2><p className="mt-1 text-sm text-muted-foreground">This is the exact payroll requirement blocking activation. Review the account below and verify it independently.</p></div>
-                        <FluentButton appearance="subtle" onClick={() => setBankVerificationOpen(false)}>Close</FluentButton>
-                      </div>
-                      {bankVerificationLoading ? <p className="mt-4 text-sm text-muted-foreground">Loading bank details…</p> : bankAccounts.length ? <div className="mt-4 space-y-3">{bankAccounts.map((account) => {
-                        const accountNumber = readString(account, ["account_number"], "")
-                        const maskedAccount = accountNumber ? `${"•".repeat(Math.max(0, accountNumber.length - 4))}${accountNumber.slice(-4)}` : "Not provided"
-                        const status = readString(account, ["verification_status"], "PENDING").toUpperCase()
-                        return <div key={readString(account, ["id"])} className="grid gap-3 rounded-md border bg-background p-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
-                          <div><p className="text-xs font-medium text-muted-foreground">Bank</p><p className="text-sm font-semibold">{readString(account, ["bank_name"], "Not provided")}</p></div>
-                          <div><p className="text-xs font-medium text-muted-foreground">Account holder</p><p className="text-sm font-semibold">{readString(account, ["account_name"], "Not provided")}</p></div>
-                          <div><p className="text-xs font-medium text-muted-foreground">Account number</p><p className="text-sm font-semibold">{maskedAccount}</p></div>
-                          <div><p className="text-xs font-medium text-muted-foreground">Status</p><FluentBadge appearance="tint" color={status === "VERIFIED" ? "success" : "warning"}>{toTitleCaseWords(status)}</FluentBadge></div>
-                          <FluentButton appearance={status === "PENDING" ? "primary" : "secondary"} disabled={bankVerificationLoading || status !== "PENDING"} onClick={() => void verifyBankAccount(account)}>{status === "VERIFIED" ? "Verified" : "Verify account"}</FluentButton>
-                        </div>
-                      })}</div> : <Alert className="mt-4"><AlertTitle>No bank account found</AlertTitle><AlertDescription>Add the employee bank account in Employee details, then return here to verify it.</AlertDescription></Alert>}
-                      <p className="mt-3 text-xs text-muted-foreground">For separation of duties, the user who created the bank account cannot verify it. Another authorized user must complete verification.</p>
-                    </div> : null}
-                    {readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? (
-                      <EmploymentContractsView
-                        key={readNumber(selectedRequestDetails ?? {}, ["employee_id"])}
-                        employee={{
-                          ...(toRecord(selectedRequestDetails?.employee) ?? {}),
-                          id: readNumber(selectedRequestDetails ?? {}, ["employee_id"]),
-                          full_name: selectedRequestSummary.employee,
-                        }}
-                        canManage={canPerformPermission(actorPermissions, "employees:update")}
-                      />
-                    ) : <p>Employee details are unavailable. Reload this request to review contracts.</p>}
-                  </section>
-
-                    {canReadPayrollProfile ? <section hidden={workspaceTab !== "payroll"} id="onboarding-workspace-payroll" tabIndex={-1} className="border-b border-border bg-background px-3 py-4">
-                      {(() => {
-                        const compensation = toRecord(joiningSalary?.compensation)
-                        const approval = toRecord(compensation?.approval)
-                        const approvedBy = toRecord(approval?.approved_by)
-                        const assignedTo = toRecord(approval?.assigned_to)
-                        const status = readString(compensation ?? {}, ["status"], "")
-                        const approved = status === "ACTIVE" || status === "SCHEDULED"
-                        const pending = status === "PENDING_APPROVAL"
-                        const baseSalary = Number(compensation?.baseSalary)
-                        const currency = readString(compensation ?? {}, ["currency"], "TZS")
-                        const amount = Number.isFinite(baseSalary)
-                          ? `${currency} ${baseSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : "—"
-
-                        return <div className="space-y-4">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Joining salary &amp; payroll</p>
-                                {approved ? <FluentBadge appearance="tint" color="success">Salary approved</FluentBadge> : null}
-                                {pending ? <FluentBadge appearance="tint" color="warning">Awaiting approval</FluentBadge> : null}
-                              </div>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {approved
-                                  ? "The starting salary is approved and available to payroll. Future changes must use the salary revision workflow."
-                                  : pending
-                                    ? `The starting salary is waiting for ${readString(assignedTo ?? {}, ["name"], "an eligible salary approver")}.`
-                                    : "Assign the effective salary structure and route it for independent approval."}
-                              </p>
-                            </div>
-                            {canReadJoiningSalary ? <div className="flex flex-wrap gap-2">
-                              {canReadPayrollProfile ? <FluentButton onClick={() => setPayrollDrawerOpen(true)}>Open payroll setup</FluentButton> : null}
-                              <Button type="button" size="sm" variant={approved || pending ? "outline" : "default"} onClick={() => void openJoiningSalary()}>
-                                {approved || pending ? "View salary details" : "Implement salary"}
-                              </Button>
-                            </div> : null}
-                          </div>
-
-                          {compensation ? <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
-                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Base salary</p><p className="mt-1 text-sm font-semibold">{amount}</p></div>
-                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Structure</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["salaryStructureCode"], "—")}</p></div>
-                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Effective from</p><p className="mt-1 text-sm font-semibold">{readString(compensation, ["effectiveFrom"], "—")}</p></div>
-                            <div className="bg-background p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{approved ? "Approved by" : "Assigned approver"}</p><p className="mt-1 text-sm font-semibold">{readString((approved ? approvedBy : assignedTo) ?? {}, ["name"], "Not recorded")}</p></div>
-                          </div> : null}
-
-                          {!canReadJoiningSalary ? <p className="text-xs text-muted-foreground">Ask an authorized payroll user to complete the outstanding payroll requirements.</p> : null}
-                          <p className="text-xs text-muted-foreground">Payroll setup, TIN, pension, health enrollment, and verified bank account remain separate activation checks.</p>
-                        </div>
-                      })()}
-                    </section> : null}
-
-                  <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
-                  <details hidden={workspaceTab !== "overview"} className="bg-background p-3">
-                    <summary className="cursor-pointer text-sm font-semibold">Request details</summary>
-                    <div className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Request Code</p>
-                        <p className="text-sm text-slate-900">
-                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-                            "request_no",
-                            "request_code",
-                            "onboarding_no",
-                            "onboarding_code",
-                            "reference_no",
-                          ])}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Workflow</p>
-                        <p className="text-sm text-slate-900">
-                          {resolveWorkflowLabel(
-                            readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-                              "workflow_id",
-                              "onboarding_workflow_id",
-                            ])
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Workflow stage</p>
-                        <p className="text-sm text-slate-900">
-                          {isOnboardingDraftStatus(
-                            readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
-                          )
-                            ? "Waiting for HR to start"
-                            : "Workflow started"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Title</p>
-                        <p className="text-sm text-slate-900">
-                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["title", "name"])}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Planned Start</p>
-                        <p className="text-sm text-slate-900">
-                          {toTimestamp(
-                            selectedRequestDetails?.planned_start_date ?? selectedRequestRow?.planned_start_date
-                          )}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Planned Completion</p>
-                        <p className="text-sm text-slate-900">
-                          {toTimestamp(
-                            selectedRequestDetails?.planned_completion_date ??
-                              selectedRequestRow?.planned_completion_date
-                          )}
-                        </p>
-                      </div>
-                      <div className="md:col-span-2 xl:col-span-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Description</p>
-                        <p className="text-sm text-slate-900">
-                          {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["description", "notes"])}
-                        </p>
-                      </div>
-                    </div>
-                  </details>
-
-                  {workspaceTab === "tasks" && isOnboardingActableStatus(
-                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["status", "request_status"])
-                  ) && approvalSummary.pending.length > 0 ? (
-                    <div className="border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/25">
-                      <p className="text-xs font-medium uppercase tracking-wide text-amber-800">Pending approval</p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">{approvalSummary.waitingLabel}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Only the assigned approver for the current workflow level can approve or reject.
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {(() => {
-                    const acknowledgedAt = readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-                      "employee_acknowledged_at",
-                      "employeeAcknowledgedAt",
-                    ])
-                    const needsAcknowledgement = !acknowledgedAt || acknowledgedAt === "-"
-                    return (
-                      <section hidden={workspaceTab !== "overview"} className="space-y-2 bg-background p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                  <section
+                    hidden={
+                      workspaceTab !== "payroll" && workspaceTab !== "contracts"
+                    }
+                    id="onboarding-workspace-contracts"
+                    tabIndex={-1}
+                    className="border-b p-3"
+                  >
+                    {workspaceTab === "payroll" && bankVerificationOpen ? (
+                      <div
+                        id="onboarding-bank-verification"
+                        className="mb-5 rounded-lg border border-border bg-muted/20 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-foreground">Employee acknowledgement</p>
-                            <p className="text-xs text-muted-foreground">
-                              {needsAcknowledgement
-                                ? "Waiting for the employee to acknowledge this request from their onboarding dashboard."
-                                : `Acknowledged ${toTimestamp(acknowledgedAt)}.`}
+                            <h2 className="text-base font-semibold">
+                              Verify bank account
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              This is the exact payroll requirement blocking
+                              activation. Review the account below and verify it
+                              independently.
                             </p>
                           </div>
-                        </div>
-                      </section>
-                    )
-                  })()}
-
-                  <section hidden={workspaceTab !== "tasks"} id="onboarding-workspace-approvals" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Approval trail</p>
-                      {approvalSummary.pending.length > 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {approvalSummary.currentLevel > 0
-                            ? `Current level ${approvalSummary.currentLevel}. ${approvalSummary.waitingLabel}.`
-                            : approvalSummary.waitingLabel}
-                        </p>
-                      ) : null}
-                    </div>
-                    {approvalSummary.rows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No approval records on this request.</p>
-                    ) : (
-                      <div className="divide-y divide-border">
-                        {approvalSummary.rows.map((approval, index) => (
-                          <div
-                            key={`onboarding-approval-${approval.id ?? index}`}
-                            className="py-2.5 first:pt-0 last:pb-0"
+                          <FluentButton
+                            appearance="subtle"
+                            onClick={() => setBankVerificationOpen(false)}
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-foreground">
-                                {approval.name ||
-                                  readString(approval.raw, ["title", "step_name", "approval_name", "name"]) ||
-                                  `Level ${approval.level || index + 1}`}
-                              </p>
-                              <span className="text-xs text-muted-foreground">
-                                {approval.status.toLowerCase() === "pending" && !approval.isCurrent
-                                  ? "Queued"
-                                  : toTitleCaseWords(approval.status || "pending")}
-                                {approval.level > 0 ? ` • Level ${approval.level}` : ""}
-                                {approval.isCurrent ? " • Current" : ""}
-                              </span>
-                            </div>
-                            {approval.email ? (
-                              <a className="mt-0.5 block text-xs text-primary hover:underline" href={`mailto:${approval.email}`}>
-                                {approval.email}
-                              </a>
-                            ) : null}
-                            {approval.comments ? (
-                              <p className="mt-1 text-xs text-muted-foreground">{approval.comments}</p>
-                            ) : null}
-                            {canUpdateOnboardingRequests && approval.status.toLowerCase() === "pending" && approval.isCurrent ? (
-                              <button
-                                type="button"
-                                className="mt-2 text-xs font-medium text-primary"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={() => openApprovalAssignmentDialog(approval.raw)}
-                              >
-                                Change approver
-                              </button>
-                            ) : null}
+                            Close
+                          </FluentButton>
+                        </div>
+                        {bankVerificationLoading ? (
+                          <p className="mt-4 text-sm text-muted-foreground">
+                            Loading bank details…
+                          </p>
+                        ) : bankAccounts.length ? (
+                          <div className="mt-4 space-y-3">
+                            {bankAccounts.map((account) => {
+                              const accountNumber = readString(
+                                account,
+                                ["account_number"],
+                                "",
+                              );
+                              const maskedAccount = accountNumber
+                                ? `${"•".repeat(Math.max(0, accountNumber.length - 4))}${accountNumber.slice(-4)}`
+                                : "Not provided";
+                              const status = readString(
+                                account,
+                                ["verification_status"],
+                                "PENDING",
+                              ).toUpperCase();
+                              return (
+                                <div
+                                  key={readString(account, ["id"])}
+                                  className="grid gap-3 rounded-md border bg-background p-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end"
+                                >
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Bank
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                      {readString(
+                                        account,
+                                        ["bank_name"],
+                                        "Not provided",
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Account holder
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                      {readString(
+                                        account,
+                                        ["account_name"],
+                                        "Not provided",
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Account number
+                                    </p>
+                                    <p className="text-sm font-semibold">
+                                      {maskedAccount}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Status
+                                    </p>
+                                    <FluentBadge
+                                      appearance="tint"
+                                      color={
+                                        status === "VERIFIED"
+                                          ? "success"
+                                          : "warning"
+                                      }
+                                    >
+                                      {toTitleCaseWords(status)}
+                                    </FluentBadge>
+                                  </div>
+                                  <FluentButton
+                                    appearance={
+                                      status === "PENDING"
+                                        ? "primary"
+                                        : "secondary"
+                                    }
+                                    disabled={
+                                      bankVerificationLoading ||
+                                      status !== "PENDING"
+                                    }
+                                    onClick={() =>
+                                      void verifyBankAccount(account)
+                                    }
+                                  >
+                                    {status === "VERIFIED"
+                                      ? "Verified"
+                                      : "Verify account"}
+                                  </FluentButton>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
+                        ) : (
+                          <Alert className="mt-4">
+                            <AlertTitle>No bank account found</AlertTitle>
+                            <AlertDescription>
+                              Add the employee bank account in Employee details,
+                              then return here to verify it.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          For separation of duties, the user who created the
+                          bank account cannot verify it. Another authorized user
+                          must complete verification.
+                        </p>
                       </div>
-                    )}
+                    ) : null}
+                    {workspaceTab === "contracts" &&
+                    canReadEmploymentContracts &&
+                    readNumber(selectedRequestDetails ?? {}, [
+                      "employee_id",
+                    ]) ? (
+                      <EmploymentContractsView
+                        key={readNumber(selectedRequestDetails ?? {}, [
+                          "employee_id",
+                        ])}
+                        employee={{
+                          ...(toRecord(selectedRequestDetails?.employee) ?? {}),
+                          id: readNumber(selectedRequestDetails ?? {}, [
+                            "employee_id",
+                          ]),
+                          full_name: selectedRequestSummary.employee,
+                        }}
+                        canManage={canManageEmploymentContracts}
+                      />
+                    ) : workspaceTab === "contracts" &&
+                      canReadEmploymentContracts ? (
+                      <p>
+                        Employee details are unavailable. Reload this request to
+                        review contracts.
+                      </p>
+                    ) : null}
                   </section>
 
-                  {selectedRequestProvisioningSummary ? (
-                    <details hidden={workspaceTab !== "overview"} className="group bg-background xl:col-span-2">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
-                        <span>Provisioning summary</span>
-                        <span className="text-[10px] font-medium text-muted-foreground group-open:hidden">
-                          Open configuration details
-                        </span>
-                        <span className="hidden text-[10px] font-medium text-muted-foreground group-open:inline">
-                          Hide details
-                        </span>
-                      </summary>
-                      <div className="grid gap-x-4 gap-y-2 border-t border-border px-3 py-2.5 md:grid-cols-2 xl:grid-cols-4">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Roles</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.roleLabels.length > 0
-                              ? selectedRequestProvisioningSummary.roleLabels.join(", ")
-                              : "-"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Branch Access</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.branchAccessLabels.length > 0
-                              ? selectedRequestProvisioningSummary.branchAccessLabels.join(", ")
-                              : "-"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Attendance Mode</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.attendanceMode}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Shift</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.shiftLabel}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Shift Effective From
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.shiftEffectiveFrom}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Shift Effective To
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.shiftEffectiveTo}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Rotation Group</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.rotationGroupLabel}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timetable</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.timetableLabel}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Timetable Effective From
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.timetableEffectiveFrom}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Timetable Effective To
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.timetableEffectiveTo}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Device Setup</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.deviceConfigured}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Device Employee No
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.deviceEmployeeNo}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Access Group</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.accessGroupLabel}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Organization</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.organizationLabel}
-                          </p>
-                        </div>
-                        <div className="md:col-span-2 xl:col-span-3">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Devices</p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.deviceLabels.length > 0
-                              ? selectedRequestProvisioningSummary.deviceLabels.join(", ")
-                              : "-"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Validity Enabled</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validEnabled}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid Begin Time</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validBeginTime}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Valid End Time</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.validEndTime}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Verify Mode</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.userVerifyMode}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Local UI Right</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.localUiRight}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Close Delay Enabled
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {selectedRequestProvisioningSummary.closeDelayEnabled}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Max Open Door Time
-                          </p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.maxOpenDoorTime}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Open Door Time</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.openDoorTime}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Sync Now</p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.syncNow}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Continue On Error
-                          </p>
-                          <p className="text-sm text-slate-900">{selectedRequestProvisioningSummary.continueOnError}</p>
-                        </div>
-                      </div>
-                    </details>
-                  ) : null}
+                  {canReadPayrollProfile ? (
+                    <section
+                      hidden={workspaceTab !== "payroll"}
+                      id="onboarding-workspace-payroll"
+                      tabIndex={-1}
+                      className="border-b border-border bg-background px-3 py-4"
+                    >
+                      {(() => {
+                        const compensation = toRecord(
+                          joiningSalary?.compensation,
+                        );
+                        const approval = toRecord(compensation?.approval);
+                        const approvedBy = toRecord(approval?.approved_by);
+                        const assignedTo = toRecord(approval?.assigned_to);
+                        const status = readString(
+                          compensation ?? {},
+                          ["status"],
+                          "",
+                        );
+                        const approved =
+                          status === "ACTIVE" || status === "SCHEDULED";
+                        const pending = status === "PENDING_APPROVAL";
+                        const baseSalary = Number(compensation?.baseSalary);
+                        const currency = readString(
+                          compensation ?? {},
+                          ["currency"],
+                          "TZS",
+                        );
+                        const amount = Number.isFinite(baseSalary)
+                          ? `${currency} ${baseSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "—";
 
-                  <div hidden={workspaceTab !== "tasks"} className="space-y-2 bg-background p-3 xl:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-900">Documents</p>
-                      {canUpdateOnboardingRequests ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => {
-                            resetDocumentForm()
-                            setShowDocumentComposer((current) => !current)
-                          }}
-                          disabled={saving}
-                        >
-                          {showDocumentComposer ? "Hide upload" : "Upload document"}
-                        </Button>
-                      ) : null}
-                    </div>
-
-                    {showDocumentComposer ? (
-                      <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Title
-                          <Input
-                            className="h-9 bg-white text-slate-900"
-                            value={documentForm.title}
-                            onChange={(event) =>
-                              setDocumentForm((prev) => ({
-                                ...prev,
-                                title: event.target.value,
-                              }))
-                            }
-                            placeholder="Document title"
-                          />
-                        </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Document type
-                          <Select
-                            value={documentForm.document_type}
-                            onValueChange={(value) =>
-                              setDocumentForm((prev) => ({ ...prev, document_type: value ?? "" }))
-                            }
-                          >
-                            <SelectTrigger className="h-9 w-full bg-background">
-                              <SelectValue placeholder="Select document type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                {ONBOARDING_DOCUMENT_TYPES.map((type) => (
-                                  <SelectItem key={type.value} value={type.value}>
-                                    {type.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                        </label>
-                        <div className="grid gap-1 text-xs font-medium text-slate-700">
-                          <span>Expiry date</span>
-                          <Popover>
-                            <PopoverTrigger className="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal text-foreground outline-none transition hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                              <CalendarDays className="text-muted-foreground" />
-                              <span className={documentForm.expiry_date ? "text-foreground" : "text-muted-foreground"}>
-                                {documentForm.expiry_date
-                                  ? parseDateOnly(documentForm.expiry_date)?.toLocaleDateString()
-                                  : "Select expiry date"}
-                              </span>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={parseDateOnly(documentForm.expiry_date)}
-                                onSelect={(date) =>
-                                  setDocumentForm((prev) => ({ ...prev, expiry_date: toDateOnlyValue(date) }))
-                                }
-                                fromYear={new Date().getFullYear()}
-                                toYear={new Date().getFullYear() + 50}
-                              />
-                              {documentForm.expiry_date ? (
-                                <div className="flex justify-end border-t border-border p-2">
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                                    Joining salary &amp; payroll
+                                  </p>
+                                  {approved ? (
+                                    <FluentBadge
+                                      appearance="tint"
+                                      color="success"
+                                    >
+                                      Salary approved
+                                    </FluentBadge>
+                                  ) : null}
+                                  {pending ? (
+                                    <FluentBadge
+                                      appearance="tint"
+                                      color="warning"
+                                    >
+                                      Awaiting approval
+                                    </FluentBadge>
+                                  ) : null}
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {approved
+                                    ? "The starting salary is approved and available to payroll. Future changes must use the salary revision workflow."
+                                    : pending
+                                      ? `The starting salary is waiting for ${readString(assignedTo ?? {}, ["name"], "an eligible salary approver")}.`
+                                      : "Assign the effective salary structure and route it for independent approval."}
+                                </p>
+                              </div>
+                              {canReadJoiningSalary ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {canReadPayrollProfile ? (
+                                    <FluentButton
+                                      onClick={() => setPayrollDrawerOpen(true)}
+                                    >
+                                      Open payroll setup
+                                    </FluentButton>
+                                  ) : null}
                                   <Button
                                     type="button"
-                                    variant="ghost"
                                     size="sm"
-                                    onClick={() => setDocumentForm((prev) => ({ ...prev, expiry_date: "" }))}
+                                    variant={
+                                      approved || pending
+                                        ? "outline"
+                                        : "default"
+                                    }
+                                    onClick={() => void openJoiningSalary()}
                                   >
-                                    Clear date
+                                    {approved || pending
+                                      ? "View salary details"
+                                      : "Implement salary"}
                                   </Button>
                                 </div>
                               ) : null}
-                            </PopoverContent>
-                          </Popover>
+                            </div>
+
+                            {compensation ? (
+                              <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+                                <div className="bg-background p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Base salary
+                                  </p>
+                                  <p className="mt-1 text-sm font-semibold">
+                                    {amount}
+                                  </p>
+                                </div>
+                                <div className="bg-background p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Structure
+                                  </p>
+                                  <p className="mt-1 text-sm font-semibold">
+                                    {readString(
+                                      compensation,
+                                      ["salaryStructureCode"],
+                                      "—",
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="bg-background p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Effective from
+                                  </p>
+                                  <p className="mt-1 text-sm font-semibold">
+                                    {readString(
+                                      compensation,
+                                      ["effectiveFrom"],
+                                      "—",
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="bg-background p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {approved
+                                      ? "Approved by"
+                                      : "Assigned approver"}
+                                  </p>
+                                  <p className="mt-1 text-sm font-semibold">
+                                    {readString(
+                                      (approved ? approvedBy : assignedTo) ??
+                                        {},
+                                      ["name"],
+                                      "Not recorded",
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {!canReadJoiningSalary ? (
+                              <p className="text-xs text-muted-foreground">
+                                Ask an authorized payroll user to complete the
+                                outstanding payroll requirements.
+                              </p>
+                            ) : null}
+                            <p className="text-xs text-muted-foreground">
+                              Payroll setup, TIN, pension, health enrollment,
+                              and verified bank account remain separate
+                              activation checks.
+                            </p>
+                          </div>
+                        );
+                      })()}
+                    </section>
+                  ) : null}
+
+                  <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
+                    <details
+                      hidden={workspaceTab !== "overview"}
+                      className="bg-background p-3"
+                    >
+                      <summary className="cursor-pointer text-sm font-semibold">
+                        Request details
+                      </summary>
+                      <div className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Request Code
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {readString(
+                              selectedRequestDetails ??
+                                selectedRequestRow ??
+                                {},
+                              [
+                                "request_no",
+                                "request_code",
+                                "onboarding_no",
+                                "onboarding_code",
+                                "reference_no",
+                              ],
+                            )}
+                          </p>
                         </div>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          File
-                          <Input
-                            className="h-9 bg-white text-slate-900 file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-medium"
-                            type="file"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0] ?? null
-                              setDocumentUploadFile(file)
-                              if (!file) return
-                              setDocumentForm((prev) => ({
-                                ...prev,
-                                title: prev.title.trim() || file.name.replace(/\.[^.]+$/, ""),
-                              }))
-                            }}
-                          />
-                        </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
-                          Description
-                          <Textarea
-                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                            value={documentForm.description}
-                            onChange={(event) =>
-                              setDocumentForm((prev) => ({
-                                ...prev,
-                                description: event.target.value,
-                              }))
-                            }
-                            placeholder="Optional document notes"
-                          />
-                        </label>
-                        <div className="flex justify-end gap-2 md:col-span-2">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Workflow
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {resolveWorkflowLabel(
+                              readNumber(
+                                selectedRequestDetails ??
+                                  selectedRequestRow ??
+                                  {},
+                                ["workflow_id", "onboarding_workflow_id"],
+                              ),
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Workflow stage
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {isOnboardingDraftStatus(
+                              readString(
+                                selectedRequestDetails ??
+                                  selectedRequestRow ??
+                                  {},
+                                ["status", "request_status"],
+                              ),
+                            )
+                              ? "Waiting for HR to start"
+                              : "Workflow started"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Title
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {readString(
+                              selectedRequestDetails ??
+                                selectedRequestRow ??
+                                {},
+                              ["title", "name"],
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Planned Start
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {toTimestamp(
+                              selectedRequestDetails?.planned_start_date ??
+                                selectedRequestRow?.planned_start_date,
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Planned Completion
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {toTimestamp(
+                              selectedRequestDetails?.planned_completion_date ??
+                                selectedRequestRow?.planned_completion_date,
+                            )}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2 xl:col-span-3">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Description
+                          </p>
+                          <p className="text-sm text-slate-900">
+                            {readString(
+                              selectedRequestDetails ??
+                                selectedRequestRow ??
+                                {},
+                              ["description", "notes"],
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+
+                    {workspaceTab === "tasks" &&
+                    isOnboardingActableStatus(
+                      readString(
+                        selectedRequestDetails ?? selectedRequestRow ?? {},
+                        ["status", "request_status"],
+                      ),
+                    ) &&
+                    approvalSummary.pending.length > 0 ? (
+                      <div className="border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/25">
+                        <p className="text-xs font-medium uppercase tracking-wide text-amber-800">
+                          Pending approval
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {approvalSummary.waitingLabel}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Only the assigned approver for the current workflow
+                          level can approve or reject.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {(() => {
+                      const acknowledgedAt = readString(
+                        selectedRequestDetails ?? selectedRequestRow ?? {},
+                        ["employee_acknowledged_at", "employeeAcknowledgedAt"],
+                      );
+                      const needsAcknowledgement =
+                        !acknowledgedAt || acknowledgedAt === "-";
+                      return (
+                        <section
+                          hidden={workspaceTab !== "overview"}
+                          className="space-y-2 bg-background p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                Employee acknowledgement
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {needsAcknowledgement
+                                  ? "Waiting for the employee to acknowledge this request from their onboarding dashboard."
+                                  : `Acknowledged ${toTimestamp(acknowledgedAt)}.`}
+                              </p>
+                            </div>
+                          </div>
+                        </section>
+                      );
+                    })()}
+
+                    <section
+                      hidden={workspaceTab !== "tasks"}
+                      id="onboarding-workspace-approvals"
+                      tabIndex={-1}
+                      className="space-y-2 bg-background p-3 xl:col-span-2"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          Approval trail
+                        </p>
+                        {approvalSummary.pending.length > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {approvalSummary.currentLevel > 0
+                              ? `Current level ${approvalSummary.currentLevel}. ${approvalSummary.waitingLabel}.`
+                              : approvalSummary.waitingLabel}
+                          </p>
+                        ) : null}
+                      </div>
+                      {approvalSummary.rows.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No approval records on this request.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-border">
+                          {approvalSummary.rows.map((approval, index) => (
+                            <div
+                              key={`onboarding-approval-${approval.id ?? index}`}
+                              className="py-2.5 first:pt-0 last:pb-0"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-foreground">
+                                  {approval.name ||
+                                    readString(approval.raw, [
+                                      "title",
+                                      "step_name",
+                                      "approval_name",
+                                      "name",
+                                    ]) ||
+                                    `Level ${approval.level || index + 1}`}
+                                </p>
+                                <span className="text-xs text-muted-foreground">
+                                  {approval.status.toLowerCase() ===
+                                    "pending" && !approval.isCurrent
+                                    ? "Queued"
+                                    : toTitleCaseWords(
+                                        approval.status || "pending",
+                                      )}
+                                  {approval.level > 0
+                                    ? ` • Level ${approval.level}`
+                                    : ""}
+                                  {approval.isCurrent ? " • Current" : ""}
+                                </span>
+                              </div>
+                              {approval.email ? (
+                                <a
+                                  className="mt-0.5 block text-xs text-primary hover:underline"
+                                  href={`mailto:${approval.email}`}
+                                >
+                                  {approval.email}
+                                </a>
+                              ) : null}
+                              {approval.comments ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {approval.comments}
+                                </p>
+                              ) : null}
+                              {canUpdateOnboardingRequests &&
+                              approval.status.toLowerCase() === "pending" &&
+                              approval.isCurrent ? (
+                                <button
+                                  type="button"
+                                  className="mt-2 text-xs font-medium text-primary"
+                                  onPointerDown={(event) =>
+                                    event.stopPropagation()
+                                  }
+                                  onClick={() =>
+                                    openApprovalAssignmentDialog(approval.raw)
+                                  }
+                                >
+                                  Change approver
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    {selectedRequestProvisioningSummary ? (
+                      <details
+                        hidden={workspaceTab !== "overview"}
+                        className="group bg-background xl:col-span-2"
+                      >
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                          <span>Provisioning summary</span>
+                          <span className="text-[10px] font-medium text-muted-foreground group-open:hidden">
+                            Open configuration details
+                          </span>
+                          <span className="hidden text-[10px] font-medium text-muted-foreground group-open:inline">
+                            Hide details
+                          </span>
+                        </summary>
+                        <div className="grid gap-x-4 gap-y-2 border-t border-border px-3 py-2.5 md:grid-cols-2 xl:grid-cols-4">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Roles
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.roleLabels
+                                .length > 0
+                                ? selectedRequestProvisioningSummary.roleLabels.join(
+                                    ", ",
+                                  )
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Branch Access
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary
+                                .branchAccessLabels.length > 0
+                                ? selectedRequestProvisioningSummary.branchAccessLabels.join(
+                                    ", ",
+                                  )
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Attendance Mode
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.attendanceMode
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Shift
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.shiftLabel}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Shift Effective From
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.shiftEffectiveFrom
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Shift Effective To
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.shiftEffectiveTo
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Rotation Group
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.rotationGroupLabel
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Timetable
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.timetableLabel
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Timetable Effective From
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.timetableEffectiveFrom
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Timetable Effective To
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.timetableEffectiveTo
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Device Setup
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.deviceConfigured
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Device Employee No
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.deviceEmployeeNo
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Access Group
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.accessGroupLabel
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Organization
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.organizationLabel
+                              }
+                            </p>
+                          </div>
+                          <div className="md:col-span-2 xl:col-span-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Devices
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.deviceLabels
+                                .length > 0
+                                ? selectedRequestProvisioningSummary.deviceLabels.join(
+                                    ", ",
+                                  )
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Validity Enabled
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.validEnabled}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Valid Begin Time
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.validBeginTime
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Valid End Time
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.validEndTime}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Verify Mode
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.userVerifyMode
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Local UI Right
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.localUiRight}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Close Delay Enabled
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.closeDelayEnabled
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Max Open Door Time
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.maxOpenDoorTime
+                              }
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Open Door Time
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.openDoorTime}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Sync Now
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {selectedRequestProvisioningSummary.syncNow}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Continue On Error
+                            </p>
+                            <p className="text-sm text-slate-900">
+                              {
+                                selectedRequestProvisioningSummary.continueOnError
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </details>
+                    ) : null}
+
+                    <div
+                      hidden={workspaceTab !== "tasks"}
+                      className="space-y-2 bg-background p-3 xl:col-span-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">
+                          Documents
+                        </p>
+                        {canUpdateOnboardingRequests ? (
                           <Button
                             type="button"
                             variant="outline"
                             className="h-8 px-3 text-xs"
                             onClick={() => {
-                              resetDocumentForm()
-                              setShowDocumentComposer(false)
+                              resetDocumentForm();
+                              setShowDocumentComposer((current) => !current);
                             }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            className="h-8 px-3 text-xs"
-                            onClick={() => void submitRequestDocument()}
                             disabled={saving}
                           >
-                            {saving ? "Uploading..." : "Upload"}
+                            {showDocumentComposer
+                              ? "Hide upload"
+                              : "Upload document"}
                           </Button>
-                        </div>
+                        ) : null}
                       </div>
-                    ) : null}
 
-                    {displayedRequestDocuments.length === 0 ? (
-                      <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        No onboarding documents attached yet.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {displayedRequestDocuments.map((documentRow, index) => {
-                          const documentId = readNumber(documentRow, ["id", "document_id"])
-                          const title = readString(documentRow, ["title", "name", "file_name"])
-                          const typeCode = readString(documentRow, ["document_type", "document_type_code", "type_code", "type"])
-                          const source = readString(documentRow, ["source"], "onboarding").toLowerCase()
-                          const mimeType = readString(documentRow, ["mime_type"], "")
-                          const canPreview =
-                            mimeType.startsWith("image/") ||
-                            mimeType === "application/pdf" ||
-                            mimeType.startsWith("text/")
-                          const isVerified = asTruthyBoolean(
-                            documentRow.is_verified ?? documentRow.verified ?? documentRow.isVerified
-                          )
-                          return (
-                            <div
-                              key={`onboarding-document-${documentId ?? index}`}
-                              className="border border-border bg-background p-3"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-900">
-                                    {title !== "-" ? title : `Document #${documentId ?? index + 1}`}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {typeCode !== "-" ? toTitleCaseWords(typeCode) : "No type"} •{" "}
-                                    {source === "employee_profile"
-                                      ? "Employee upload"
-                                      : isVerified
-                                        ? "Verified"
-                                        : "Pending verification"}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() => void viewRequestDocument(documentRow)}
-                                    disabled={saving}
-                                  >
-                                    {canPreview ? <Eye data-icon="inline-start" /> : <Download data-icon="inline-start" />}
-                                    {canPreview ? "View" : "Download"}
-                                  </Button>
-                                  {canUpdateOnboardingRequests && source === "onboarding" ? (
-                                    <>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="h-7 px-2 text-[11px]"
-                                        onClick={() => void setRequestDocumentVerified(documentRow, !isVerified)}
-                                        disabled={saving}
-                                      >
-                                        {isVerified ? "Mark unverified" : "Verify"}
-                                      </Button>
-                                      {!isVerified ? (
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          className="h-7 px-2 text-[11px] text-rose-600"
-                                          onClick={() => void rejectRequestDocument(documentRow)}
-                                          disabled={saving}
-                                        >
-                                          Return for correction
-                                        </Button>
-                                      ) : null}
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="h-7 px-2 text-[11px] text-rose-600"
-                                        onClick={() => void removeRequestDocument(documentRow)}
-                                        disabled={saving}
-                                      >
-                                        Delete
-                                      </Button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="mt-2 grid gap-2 md:grid-cols-3">
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    Expiry
-                                  </p>
-                                  <p className="text-sm text-slate-900">{toTimestamp(documentRow.expiry_date)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    Uploaded
-                                  </p>
-                                  <p className="text-sm text-slate-900">
-                                    {toTimestamp(documentRow.created_at ?? documentRow.uploaded_at)}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    Description
-                                  </p>
-                                  <p className="text-sm text-slate-900">
-                                    {readString(documentRow, ["description", "notes", "remarks"])}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <div hidden={workspaceTab !== "tasks"} id="onboarding-workspace-tasks" tabIndex={-1} className="space-y-2 bg-background p-3 xl:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-900">Tasks</p>
-                      {canUpdateOnboardingRequests ? (
-                        <Button
-                          type="button"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => {
-                            void ensureLookups(["users", "departments"])
-                            resetTaskForm()
-                            setShowTaskComposer((current) => !current)
-                          }}
-                          disabled={saving}
-                        >
-                          {!showTaskComposer ? <Plus data-icon="inline-start" /> : null}
-                          {showTaskComposer ? "Hide task form" : "Add task"}
-                        </Button>
-                      ) : null}
-                    </div>
-
-                    {showTaskComposer ? (
-                      <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
-                        {taskForm.task_type === "asset" ? (
-                          <div className="grid gap-2 md:col-span-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-medium text-slate-700">Items to provide</p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 px-2.5 text-xs"
-                                onClick={() =>
-                                  setTaskForm((prev) => ({
-                                    ...prev,
-                                    asset_items: [...prev.asset_items, ""],
-                                  }))
-                                }
-                              >
-                                <Plus className="mr-1 h-3.5 w-3.5" />
-                                Add another item
-                              </Button>
-                            </div>
-                            {taskForm.asset_items.map((item, index) => (
-                              <div key={`asset-item-${index}`} className="flex items-center gap-2">
-                                <span className="w-5 text-right text-xs font-semibold text-slate-500">
-                                  {index + 1}.
-                                </span>
-                                <Input
-                                  className="h-9 flex-1 bg-white text-slate-900"
-                                  value={item}
-                                  onChange={(event) =>
-                                    setTaskForm((prev) => ({
-                                      ...prev,
-                                      asset_items: prev.asset_items.map((entry, itemIndex) =>
-                                        itemIndex === index ? event.target.value : entry
-                                      ),
-                                    }))
-                                  }
-                                  placeholder={index === 0 ? "e.g. Laptop" : "Another item"}
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 text-slate-500 hover:text-red-600"
-                                  onClick={() =>
-                                    setTaskForm((prev) => ({
-                                      ...prev,
-                                      asset_items:
-                                        prev.asset_items.length === 1
-                                          ? [""]
-                                          : prev.asset_items.filter((_, itemIndex) => itemIndex !== index),
-                                    }))
-                                  }
-                                  aria-label={`Remove item ${index + 1}`}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
+                      {showDocumentComposer ? (
+                        <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
                           <label className="grid gap-1 text-xs font-medium text-slate-700">
                             Title
                             <Input
                               className="h-9 bg-white text-slate-900"
-                              value={taskForm.title}
+                              value={documentForm.title}
                               onChange={(event) =>
-                                setTaskForm((prev) => ({
+                                setDocumentForm((prev) => ({
                                   ...prev,
                                   title: event.target.value,
                                 }))
                               }
-                              placeholder="Task title"
+                              placeholder="Document title"
                             />
                           </label>
-                        )}
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Task type
-                          <FluentSelect
-                            ariaLabel="Task type"
-                            value={taskForm.task_type}
-                            onChange={(value) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                task_type: value,
-                              }))
-                            }
-                            options={ONBOARDING_TASK_TYPE_OPTIONS.map((type) => ({
-                              value: type,
-                              label: toTitleCaseWords(type),
-                            }))}
-                          />
-                        </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Department{taskForm.task_type === "asset" ? " *" : ""}
-                          <FluentSelect
-                            ariaLabel="Department"
-                            value={taskForm.assigned_department_id}
-                            placeholder={taskForm.task_type === "asset" ? "Select department" : "Optional department"}
-                            onChange={(value) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                assigned_department_id: value,
-                                assigned_company_user_id: "",
-                              }))
-                            }
-                            options={[
-                              {
-                                value: "",
-                                label: taskForm.task_type === "asset" ? "Select department" : "Optional department",
-                              },
-                              ...departments.flatMap((row) => {
-                                const departmentId = readNumber(row, ["id", "department_id"])
-                                if (departmentId === null) return []
-                                return [{
-                                  value: String(departmentId),
-                                  label: resolveOptionLabel(
-                                    departments,
-                                    departmentId,
-                                    ["id", "department_id"],
-                                    ["name", "title"]
-                                  ),
-                                }]
-                              }),
-                            ]}
-                          />
-                        </label>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                          Specific person (optional)
-                          <FluentSelect
-                            ariaLabel="Specific person"
-                            value={taskForm.assigned_company_user_id}
-                            disabled={taskForm.task_type === "asset" && !taskForm.assigned_department_id}
-                            placeholder={
-                              taskForm.assigned_department_id
-                                ? "Everyone in the department"
-                                : taskForm.task_type === "asset"
-                                  ? "Select a department first"
-                                  : "Optional user"
-                            }
-                            onChange={(value) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                assigned_company_user_id: value,
-                              }))
-                            }
-                            options={[
-                              {
-                                value: "",
-                                label: taskForm.assigned_department_id
-                                  ? "Everyone in the department"
-                                  : taskForm.task_type === "asset"
-                                    ? "Select a department first"
-                                    : "Optional user",
-                              },
-                              ...(taskForm.assigned_department_id ? taskAssignableUsers : users).flatMap((row) => {
-                                const userId = preferredAssigneeId(row)
-                                if (userId === null) return []
-                                return [{
-                                  value: String(userId),
-                                  label: resolveOptionLabel(
-                                    [row, ...users],
-                                    userId,
-                                    ["id", "company_user_id", "user_id"],
-                                    ["full_name", "name", "email"]
-                                  ),
-                                }]
-                              }),
-                            ]}
-                          />
-                          {taskForm.assigned_department_id ? (
-                            <span className="font-normal text-slate-500">
-                              Leave blank to notify and assign the whole department.
-                            </span>
-                          ) : null}
-                        </label>
-                        <div className="grid gap-1 text-xs font-medium text-slate-700">
-                          <span>Due date</span>
-                          <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
-                            <Popover>
-                              <PopoverTrigger className="flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                                <CalendarDays className="text-muted-foreground" />
-                                <span className={taskForm.due_date ? "text-foreground" : "text-muted-foreground"}>
-                                  {taskForm.due_date
-                                    ? parseDateOnly(taskForm.due_date.slice(0, 10))?.toLocaleDateString()
-                                    : "Select date"}
-                                </span>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={parseDateOnly(taskForm.due_date.slice(0, 10))}
-                                  onSelect={(date) =>
-                                    setTaskForm((prev) => ({
-                                      ...prev,
-                                      due_date: date
-                                        ? `${toDateOnlyValue(date)}T${prev.due_date.split("T")[1] || "17:00"}`
-                                        : "",
-                                    }))
-                                  }
-                                />
-                              </PopoverContent>
-                            </Popover>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            Document type
                             <Select
-                              value={taskForm.due_date.split("T")[1] || "17:00"}
+                              value={documentForm.document_type}
                               onValueChange={(value) =>
-                                setTaskForm((prev) => ({
+                                setDocumentForm((prev) => ({
                                   ...prev,
-                                  due_date: prev.due_date
-                                    ? `${prev.due_date.slice(0, 10)}T${value ?? "17:00"}`
-                                    : prev.due_date,
+                                  document_type: value ?? "",
                                 }))
                               }
-                              disabled={!taskForm.due_date}
                             >
-                              <SelectTrigger className="h-9 w-full">
-                                <SelectValue placeholder="Time" />
+                              <SelectTrigger className="h-9 w-full bg-background">
+                                <SelectValue placeholder="Select document type" />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectGroup>
-                                  {TASK_DUE_TIME_OPTIONS.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                      {option.label}
+                                  {ONBOARDING_DOCUMENT_TYPES.map((type) => (
+                                    <SelectItem
+                                      key={type.value}
+                                      value={type.value}
+                                    >
+                                      {type.label}
                                     </SelectItem>
                                   ))}
                                 </SelectGroup>
                               </SelectContent>
                             </Select>
+                          </label>
+                          <div className="grid gap-1 text-xs font-medium text-slate-700">
+                            <span>Expiry date</span>
+                            <Popover>
+                              <PopoverTrigger className="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal text-foreground outline-none transition hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                                <CalendarDays className="text-muted-foreground" />
+                                <span
+                                  className={
+                                    documentForm.expiry_date
+                                      ? "text-foreground"
+                                      : "text-muted-foreground"
+                                  }
+                                >
+                                  {documentForm.expiry_date
+                                    ? parseDateOnly(
+                                        documentForm.expiry_date,
+                                      )?.toLocaleDateString()
+                                    : "Select expiry date"}
+                                </span>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-auto p-0"
+                                align="start"
+                              >
+                                <Calendar
+                                  mode="single"
+                                  selected={parseDateOnly(
+                                    documentForm.expiry_date,
+                                  )}
+                                  onSelect={(date) =>
+                                    setDocumentForm((prev) => ({
+                                      ...prev,
+                                      expiry_date: toDateOnlyValue(date),
+                                    }))
+                                  }
+                                  fromYear={new Date().getFullYear()}
+                                  toYear={new Date().getFullYear() + 50}
+                                />
+                                {documentForm.expiry_date ? (
+                                  <div className="flex justify-end border-t border-border p-2">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setDocumentForm((prev) => ({
+                                          ...prev,
+                                          expiry_date: "",
+                                        }))
+                                      }
+                                    >
+                                      Clear date
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            File
+                            <Input
+                              className="h-9 bg-white text-slate-900 file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-medium"
+                              type="file"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0] ?? null;
+                                setDocumentUploadFile(file);
+                                if (!file) return;
+                                setDocumentForm((prev) => ({
+                                  ...prev,
+                                  title:
+                                    prev.title.trim() ||
+                                    file.name.replace(/\.[^.]+$/, ""),
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
+                            Description
+                            <Textarea
+                              className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                              value={documentForm.description}
+                              onChange={(event) =>
+                                setDocumentForm((prev) => ({
+                                  ...prev,
+                                  description: event.target.value,
+                                }))
+                              }
+                              placeholder="Optional document notes"
+                            />
+                          </label>
+                          <div className="flex justify-end gap-2 md:col-span-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => {
+                                resetDocumentForm();
+                                setShowDocumentComposer(false);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => void submitRequestDocument()}
+                              disabled={saving}
+                            >
+                              {saving ? "Uploading..." : "Upload"}
+                            </Button>
                           </div>
                         </div>
-                        <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
-                          Description
-                          <Textarea
-                            className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                            value={taskForm.description}
-                            onChange={(event) =>
-                              setTaskForm((prev) => ({
-                                ...prev,
-                                description: event.target.value,
-                              }))
-                            }
-                            placeholder="Optional task instructions"
-                          />
-                        </label>
-                        <div className="flex justify-end gap-2 md:col-span-2">
+                      ) : null}
+
+                      {displayedRequestDocuments.length === 0 ? (
+                        <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                          No onboarding documents attached yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {displayedRequestDocuments.map(
+                            (documentRow, index) => {
+                              const documentId = readNumber(documentRow, [
+                                "id",
+                                "document_id",
+                              ]);
+                              const title = readString(documentRow, [
+                                "title",
+                                "name",
+                                "file_name",
+                              ]);
+                              const typeCode = readString(documentRow, [
+                                "document_type",
+                                "document_type_code",
+                                "type_code",
+                                "type",
+                              ]);
+                              const source = readString(
+                                documentRow,
+                                ["source"],
+                                "onboarding",
+                              ).toLowerCase();
+                              const mimeType = readString(
+                                documentRow,
+                                ["mime_type"],
+                                "",
+                              );
+                              const canPreview =
+                                mimeType.startsWith("image/") ||
+                                mimeType === "application/pdf" ||
+                                mimeType.startsWith("text/");
+                              const isVerified = asTruthyBoolean(
+                                documentRow.is_verified ??
+                                  documentRow.verified ??
+                                  documentRow.isVerified,
+                              );
+                              return (
+                                <div
+                                  key={`onboarding-document-${documentId ?? index}`}
+                                  className="border border-border bg-background p-3"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-medium text-slate-900">
+                                        {title !== "-"
+                                          ? title
+                                          : `Document #${documentId ?? index + 1}`}
+                                      </p>
+                                      <p className="text-xs text-slate-500">
+                                        {typeCode !== "-"
+                                          ? toTitleCaseWords(typeCode)
+                                          : "No type"}{" "}
+                                        •{" "}
+                                        {source === "employee_profile"
+                                          ? "Employee upload"
+                                          : isVerified
+                                            ? "Verified"
+                                            : "Pending verification"}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[11px]"
+                                        onClick={() =>
+                                          void viewRequestDocument(documentRow)
+                                        }
+                                        disabled={saving}
+                                      >
+                                        {canPreview ? (
+                                          <Eye data-icon="inline-start" />
+                                        ) : (
+                                          <Download data-icon="inline-start" />
+                                        )}
+                                        {canPreview ? "View" : "Download"}
+                                      </Button>
+                                      {canUpdateOnboardingRequests &&
+                                      source === "onboarding" ? (
+                                        <>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="h-7 px-2 text-[11px]"
+                                            onClick={() =>
+                                              void setRequestDocumentVerified(
+                                                documentRow,
+                                                !isVerified,
+                                              )
+                                            }
+                                            disabled={saving}
+                                          >
+                                            {isVerified
+                                              ? "Mark unverified"
+                                              : "Verify"}
+                                          </Button>
+                                          {!isVerified ? (
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className="h-7 px-2 text-[11px] text-rose-600"
+                                              onClick={() =>
+                                                void rejectRequestDocument(
+                                                  documentRow,
+                                                )
+                                              }
+                                              disabled={saving}
+                                            >
+                                              Return for correction
+                                            </Button>
+                                          ) : null}
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="h-7 px-2 text-[11px] text-rose-600"
+                                            onClick={() =>
+                                              void removeRequestDocument(
+                                                documentRow,
+                                              )
+                                            }
+                                            disabled={saving}
+                                          >
+                                            Delete
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                                    <div>
+                                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                        Expiry
+                                      </p>
+                                      <p className="text-sm text-slate-900">
+                                        {toTimestamp(documentRow.expiry_date)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                        Uploaded
+                                      </p>
+                                      <p className="text-sm text-slate-900">
+                                        {toTimestamp(
+                                          documentRow.created_at ??
+                                            documentRow.uploaded_at,
+                                        )}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                        Description
+                                      </p>
+                                      <p className="text-sm text-slate-900">
+                                        {readString(documentRow, [
+                                          "description",
+                                          "notes",
+                                          "remarks",
+                                        ])}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      hidden={workspaceTab !== "tasks"}
+                      id="onboarding-workspace-tasks"
+                      tabIndex={-1}
+                      className="space-y-2 bg-background p-3 xl:col-span-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">
+                          Tasks
+                        </p>
+                        {canUpdateOnboardingRequests ? (
                           <Button
                             type="button"
-                            variant="outline"
                             className="h-8 px-3 text-xs"
                             onClick={() => {
-                              resetTaskForm()
-                              setShowTaskComposer(false)
+                              void ensureLookups(["users", "departments"]);
+                              resetTaskForm();
+                              setShowTaskComposer((current) => !current);
                             }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            className="h-8 px-3 text-xs"
-                            onClick={() => void submitRequestTask()}
                             disabled={saving}
                           >
-                            {saving ? "Creating..." : taskForm.task_type === "asset" ? "Add items" : "Create task"}
+                            {!showTaskComposer ? (
+                              <Plus data-icon="inline-start" />
+                            ) : null}
+                            {showTaskComposer ? "Hide task form" : "Add task"}
                           </Button>
-                        </div>
+                        ) : null}
                       </div>
-                    ) : null}
 
-                    {selectedRequestTasks.length === 0 ? (
-                      <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        No onboarding tasks have been created for this request.
-                      </p>
-                    ) : (
-                      <div className="divide-y divide-border overflow-hidden border border-border">
-                        {selectedRequestTasks.map((taskRow, index) => {
-                          const taskId = readNumber(taskRow, ["id", "task_id"])
-                          const taskStatus = readString(taskRow, ["status", "task_status"])
-                          const isTaskClosed = ["completed", "cancelled"].includes(taskStatus.trim().toLowerCase())
-                          return (
-                            <div
-                              key={`onboarding-task-${taskId ?? index}`}
-                              className="bg-background px-3 py-2.5"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-900">
-                                    {readString(taskRow, ["title", "name", "task_title"])}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
-                                      ? "Item handover"
-                                      : toTitleCaseWords(readString(taskRow, ["task_type", "type"]))}{" "}
-                                    • {taskStatus !== "-" ? toTitleCaseWords(taskStatus) : "Pending"}
-                                  </p>
-                                </div>
-                                {!isTaskClosed && (canUpdateOnboardingRequests || canCompleteOnboardingRequests) ? (
+                      {showTaskComposer ? (
+                        <div className="grid gap-3 border border-border bg-muted/[0.12] p-3 md:grid-cols-2">
+                          {taskForm.task_type === "asset" ? (
+                            <div className="grid gap-2 md:col-span-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-medium text-slate-700">
+                                  Items to provide
+                                </p>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 px-2.5 text-xs"
+                                  onClick={() =>
+                                    setTaskForm((prev) => ({
+                                      ...prev,
+                                      asset_items: [...prev.asset_items, ""],
+                                    }))
+                                  }
+                                >
+                                  <Plus className="mr-1 h-3.5 w-3.5" />
+                                  Add another item
+                                </Button>
+                              </div>
+                              {taskForm.asset_items.map((item, index) => (
+                                <div
+                                  key={`asset-item-${index}`}
+                                  className="flex items-center gap-2"
+                                >
+                                  <span className="w-5 text-right text-xs font-semibold text-slate-500">
+                                    {index + 1}.
+                                  </span>
+                                  <Input
+                                    className="h-9 flex-1 bg-white text-slate-900"
+                                    value={item}
+                                    onChange={(event) =>
+                                      setTaskForm((prev) => ({
+                                        ...prev,
+                                        asset_items: prev.asset_items.map(
+                                          (entry, itemIndex) =>
+                                            itemIndex === index
+                                              ? event.target.value
+                                              : entry,
+                                        ),
+                                      }))
+                                    }
+                                    placeholder={
+                                      index === 0
+                                        ? "e.g. Laptop"
+                                        : "Another item"
+                                    }
+                                  />
                                   <Button
                                     type="button"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() => void completeRequestTask(taskRow)}
-                                    disabled={saving}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 text-slate-500 hover:text-red-600"
+                                    onClick={() =>
+                                      setTaskForm((prev) => ({
+                                        ...prev,
+                                        asset_items:
+                                          prev.asset_items.length === 1
+                                            ? [""]
+                                            : prev.asset_items.filter(
+                                                (_, itemIndex) =>
+                                                  itemIndex !== index,
+                                              ),
+                                      }))
+                                    }
+                                    aria-label={`Remove item ${index + 1}`}
                                   >
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
-                                      ? "Mark as given"
-                                      : "Complete task"}
+                                    <Trash2 className="h-4 w-4" />
                                   </Button>
-                                ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <label className="grid gap-1 text-xs font-medium text-slate-700">
+                              Title
+                              <Input
+                                className="h-9 bg-white text-slate-900"
+                                value={taskForm.title}
+                                onChange={(event) =>
+                                  setTaskForm((prev) => ({
+                                    ...prev,
+                                    title: event.target.value,
+                                  }))
+                                }
+                                placeholder="Task title"
+                              />
+                            </label>
+                          )}
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            Task type
+                            <FluentSelect
+                              ariaLabel="Task type"
+                              value={taskForm.task_type}
+                              onChange={(value) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  task_type: value,
+                                }))
+                              }
+                              options={ONBOARDING_TASK_TYPE_OPTIONS.map(
+                                (type) => ({
+                                  value: type,
+                                  label: toTitleCaseWords(type),
+                                }),
+                              )}
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            Department
+                            {taskForm.task_type === "asset" ? " *" : ""}
+                            <FluentSelect
+                              ariaLabel="Department"
+                              value={taskForm.assigned_department_id}
+                              placeholder={
+                                taskForm.task_type === "asset"
+                                  ? "Select department"
+                                  : "Optional department"
+                              }
+                              onChange={(value) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  assigned_department_id: value,
+                                  assigned_company_user_id: "",
+                                }))
+                              }
+                              options={[
+                                {
+                                  value: "",
+                                  label:
+                                    taskForm.task_type === "asset"
+                                      ? "Select department"
+                                      : "Optional department",
+                                },
+                                ...departments.flatMap((row) => {
+                                  const departmentId = readNumber(row, [
+                                    "id",
+                                    "department_id",
+                                  ]);
+                                  if (departmentId === null) return [];
+                                  return [
+                                    {
+                                      value: String(departmentId),
+                                      label: resolveOptionLabel(
+                                        departments,
+                                        departmentId,
+                                        ["id", "department_id"],
+                                        ["name", "title"],
+                                      ),
+                                    },
+                                  ];
+                                }),
+                              ]}
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700">
+                            Specific person (optional)
+                            <FluentSelect
+                              ariaLabel="Specific person"
+                              value={taskForm.assigned_company_user_id}
+                              disabled={
+                                taskForm.task_type === "asset" &&
+                                !taskForm.assigned_department_id
+                              }
+                              placeholder={
+                                taskForm.assigned_department_id
+                                  ? "Everyone in the department"
+                                  : taskForm.task_type === "asset"
+                                    ? "Select a department first"
+                                    : "Optional user"
+                              }
+                              onChange={(value) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  assigned_company_user_id: value,
+                                }))
+                              }
+                              options={[
+                                {
+                                  value: "",
+                                  label: taskForm.assigned_department_id
+                                    ? "Everyone in the department"
+                                    : taskForm.task_type === "asset"
+                                      ? "Select a department first"
+                                      : "Optional user",
+                                },
+                                ...(taskForm.assigned_department_id
+                                  ? taskAssignableUsers
+                                  : users
+                                ).flatMap((row) => {
+                                  const userId = preferredAssigneeId(row);
+                                  if (userId === null) return [];
+                                  return [
+                                    {
+                                      value: String(userId),
+                                      label: resolveOptionLabel(
+                                        [row, ...users],
+                                        userId,
+                                        ["id", "company_user_id", "user_id"],
+                                        ["full_name", "name", "email"],
+                                      ),
+                                    },
+                                  ];
+                                }),
+                              ]}
+                            />
+                            {taskForm.assigned_department_id ? (
+                              <span className="font-normal text-slate-500">
+                                Leave blank to notify and assign the whole
+                                department.
+                              </span>
+                            ) : null}
+                          </label>
+                          <div className="grid gap-1 text-xs font-medium text-slate-700">
+                            <span>Due date</span>
+                            <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
+                              <Popover>
+                                <PopoverTrigger className="flex h-9 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-left text-sm font-normal outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                                  <CalendarDays className="text-muted-foreground" />
+                                  <span
+                                    className={
+                                      taskForm.due_date
+                                        ? "text-foreground"
+                                        : "text-muted-foreground"
+                                    }
+                                  >
+                                    {taskForm.due_date
+                                      ? parseDateOnly(
+                                          taskForm.due_date.slice(0, 10),
+                                        )?.toLocaleDateString()
+                                      : "Select date"}
+                                  </span>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  className="w-auto p-0"
+                                  align="start"
+                                >
+                                  <Calendar
+                                    mode="single"
+                                    selected={parseDateOnly(
+                                      taskForm.due_date.slice(0, 10),
+                                    )}
+                                    onSelect={(date) =>
+                                      setTaskForm((prev) => ({
+                                        ...prev,
+                                        due_date: date
+                                          ? `${toDateOnlyValue(date)}T${prev.due_date.split("T")[1] || "17:00"}`
+                                          : "",
+                                      }))
+                                    }
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <Select
+                                value={
+                                  taskForm.due_date.split("T")[1] || "17:00"
+                                }
+                                onValueChange={(value) =>
+                                  setTaskForm((prev) => ({
+                                    ...prev,
+                                    due_date: prev.due_date
+                                      ? `${prev.due_date.slice(0, 10)}T${value ?? "17:00"}`
+                                      : prev.due_date,
+                                  }))
+                                }
+                                disabled={!taskForm.due_date}
+                              >
+                                <SelectTrigger className="h-9 w-full">
+                                  <SelectValue placeholder="Time" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    {TASK_DUE_TIME_OPTIONS.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <label className="grid gap-1 text-xs font-medium text-slate-700 md:col-span-2">
+                            Description
+                            <Textarea
+                              className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                              value={taskForm.description}
+                              onChange={(event) =>
+                                setTaskForm((prev) => ({
+                                  ...prev,
+                                  description: event.target.value,
+                                }))
+                              }
+                              placeholder="Optional task instructions"
+                            />
+                          </label>
+                          <div className="flex justify-end gap-2 md:col-span-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => {
+                                resetTaskForm();
+                                setShowTaskComposer(false);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => void submitRequestTask()}
+                              disabled={saving}
+                            >
+                              {saving
+                                ? "Creating..."
+                                : taskForm.task_type === "asset"
+                                  ? "Add items"
+                                  : "Create task"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {selectedRequestTasks.length === 0 ? (
+                        <p className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                          No onboarding tasks have been created for this
+                          request.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-border overflow-hidden border border-border">
+                          {selectedRequestTasks.map((taskRow, index) => {
+                            const taskId = readNumber(taskRow, [
+                              "id",
+                              "task_id",
+                            ]);
+                            const taskStatus = readString(taskRow, [
+                              "status",
+                              "task_status",
+                            ]);
+                            const isTaskClosed = [
+                              "completed",
+                              "cancelled",
+                            ].includes(taskStatus.trim().toLowerCase());
+                            return (
+                              <div
+                                key={`onboarding-task-${taskId ?? index}`}
+                                className="bg-background px-3 py-2.5"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-medium text-slate-900">
+                                      {readString(taskRow, [
+                                        "title",
+                                        "name",
+                                        "task_title",
+                                      ])}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                      {readString(taskRow, [
+                                        "task_type",
+                                        "type",
+                                      ]).toLowerCase() === "asset"
+                                        ? "Item handover"
+                                        : toTitleCaseWords(
+                                            readString(taskRow, [
+                                              "task_type",
+                                              "type",
+                                            ]),
+                                          )}{" "}
+                                      •{" "}
+                                      {taskStatus !== "-"
+                                        ? toTitleCaseWords(taskStatus)
+                                        : "Pending"}
+                                    </p>
+                                  </div>
+                                  {!isTaskClosed &&
+                                  (canUpdateOnboardingRequests ||
+                                    canCompleteOnboardingRequests) ? (
+                                    <Button
+                                      type="button"
+                                      className="h-7 px-2 text-[11px]"
+                                      onClick={() =>
+                                        void completeRequestTask(taskRow)
+                                      }
+                                      disabled={saving}
+                                    >
+                                      {readString(taskRow, [
+                                        "task_type",
+                                        "type",
+                                      ]).toLowerCase() === "asset"
+                                        ? "Mark as given"
+                                        : "Complete task"}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-3">
+                                  <div>
+                                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                      {readString(taskRow, [
+                                        "task_type",
+                                        "type",
+                                      ]).toLowerCase() === "asset"
+                                        ? "Provider"
+                                        : "Owner"}
+                                    </p>
+                                    <p className="text-xs text-slate-900">
+                                      {resolveRequestTaskOwner(taskRow)}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                      Due
+                                    </p>
+                                    <p className="text-xs text-slate-900">
+                                      {toTimestamp(taskRow.due_date)}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                      Completed
+                                    </p>
+                                    <p className="text-xs text-slate-900">
+                                      {toTimestamp(taskRow.completed_at)}
+                                    </p>
+                                  </div>
+                                  <div className="md:col-span-3">
+                                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                                      Description
+                                    </p>
+                                    <p className="text-xs text-slate-900">
+                                      {readString(taskRow, [
+                                        "description",
+                                        "completion_notes",
+                                        "notes",
+                                      ])}
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-3">
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    {readString(taskRow, ["task_type", "type"]).toLowerCase() === "asset"
-                                      ? "Provider"
-                                      : "Owner"}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <section
+                      hidden={workspaceTab !== "tasks"}
+                      className="flex flex-col gap-3 bg-background p-3 xl:col-span-2"
+                    >
+                      <FluentButton
+                        aria-expanded={workflowMapVisible}
+                        onClick={() => setWorkflowMapVisible((value) => !value)}
+                      >
+                        {workflowMapVisible
+                          ? "Hide workflow map"
+                          : "Show workflow map"}
+                      </FluentButton>
+                      <div
+                        hidden={!workflowMapVisible}
+                        className="divide-y divide-border overflow-hidden border border-border"
+                      >
+                        {requestTimelineNodes.map((node, idx) => {
+                          const isDone =
+                            node.status.includes("complete") ||
+                            node.status.includes("approved") ||
+                            node.status.includes("done") ||
+                            node.status.includes("verified");
+                          const isPending =
+                            node.status.includes("pending") ||
+                            node.status.includes("review") ||
+                            node.status.includes("in_progress") ||
+                            node.status.includes("active");
+                          const badgeClass = isDone
+                            ? "bg-emerald-100 text-emerald-700"
+                            : isPending
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-slate-100 text-slate-700";
+                          return (
+                            <div
+                              key={node.key}
+                              className="relative bg-background py-2 pl-10 pr-3"
+                            >
+                              {idx < requestTimelineNodes.length - 1 ? (
+                                <span className="absolute left-[19px] top-8 h-[calc(100%-1rem)] w-px bg-slate-200" />
+                              ) : null}
+                              <span
+                                className={`absolute left-2 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                                  isDone
+                                    ? "bg-emerald-500 text-white"
+                                    : isPending
+                                      ? "bg-amber-500 text-white"
+                                      : "bg-slate-300 text-slate-700"
+                                }`}
+                              >
+                                {node.index}
+                              </span>
+                              <div>
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {toTitleCaseWords(String(node.actionLabel))}
                                   </p>
-                                  <p className="text-xs text-slate-900">{resolveRequestTaskOwner(taskRow)}</p>
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                                  >
+                                    {toTitleCaseWords(String(node.status))}
+                                  </span>
                                 </div>
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Due</p>
-                                  <p className="text-xs text-slate-900">{toTimestamp(taskRow.due_date)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    Completed
-                                  </p>
-                                  <p className="text-xs text-slate-900">{toTimestamp(taskRow.completed_at)}</p>
-                                </div>
-                                <div className="md:col-span-3">
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                                    Description
-                                  </p>
-                                  <p className="text-xs text-slate-900">
-                                    {readString(taskRow, ["description", "completion_notes", "notes"])}
-                                  </p>
+                                <p className="mt-1 text-xs text-slate-600">
+                                  {isPending &&
+                                  approvalSummary.pendingLabels.length > 0
+                                    ? "Pending approver"
+                                    : "Owner"}
+                                  :{" "}
+                                  <span className="font-medium text-slate-800">
+                                    {isPending &&
+                                    approvalSummary.pendingLabels.length > 0
+                                      ? approvalSummary.pendingLabels.join(", ")
+                                      : node.owner && node.owner !== "-"
+                                        ? node.owner
+                                        : "Unassigned"}
+                                  </span>
+                                </p>
+                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                                  <span>
+                                    {isPending
+                                      ? "Waiting to be completed"
+                                      : isDone
+                                        ? "Completed"
+                                        : "Not started"}
+                                  </span>
+                                  {node.required ? (
+                                    <span>Required step</span>
+                                  ) : null}
+                                  {node.completedAt !== "-" ? (
+                                    <span>Completed {node.completedAt}</span>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
-                          )
+                          );
                         })}
                       </div>
-                    )}
-                  </div>
+                    </section>
 
-                  <section hidden={workspaceTab !== "tasks"} className="flex flex-col gap-3 bg-background p-3 xl:col-span-2">
-                    <FluentButton aria-expanded={workflowMapVisible} onClick={() => setWorkflowMapVisible((value) => !value)}>{workflowMapVisible ? "Hide workflow map" : "Show workflow map"}</FluentButton>
-                    <div hidden={!workflowMapVisible} className="divide-y divide-border overflow-hidden border border-border">
-                      {requestTimelineNodes.map((node, idx) => {
-                        const isDone =
-                          node.status.includes("complete") ||
-                          node.status.includes("approved") ||
-                          node.status.includes("done") ||
-                          node.status.includes("verified")
-                        const isPending =
-                          node.status.includes("pending") ||
-                          node.status.includes("review") ||
-                          node.status.includes("in_progress") ||
-                          node.status.includes("active")
-                        const badgeClass = isDone
-                          ? "bg-emerald-100 text-emerald-700"
-                          : isPending
-                            ? "bg-amber-100 text-amber-700"
-                            : "bg-slate-100 text-slate-700"
-                        return (
-                          <div key={node.key} className="relative bg-background py-2 pl-10 pr-3">
-                            {idx < requestTimelineNodes.length - 1 ? (
-                              <span className="absolute left-[19px] top-8 h-[calc(100%-1rem)] w-px bg-slate-200" />
-                            ) : null}
-                            <span
-                              className={`absolute left-2 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                                isDone
-                                  ? "bg-emerald-500 text-white"
-                                  : isPending
-                                    ? "bg-amber-500 text-white"
-                                    : "bg-slate-300 text-slate-700"
-                              }`}
+                    <section
+                      hidden={workspaceTab !== "activity"}
+                      className="space-y-2 bg-background p-3 xl:col-span-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                        Activity record
+                      </p>
+                      {selectedRequestAuditLogs.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No activity record available for this request.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-border overflow-hidden border border-border">
+                          {selectedRequestAuditLogs.map((entry, index) => (
+                            <div
+                              key={`audit-${readString(entry, ["id", "log_id"])}-${index}`}
+                              className="bg-background px-3 py-2"
                             >
-                              {node.index}
-                            </span>
-                            <div>
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {toTitleCaseWords(String(node.actionLabel))}
+                                <p className="text-sm font-medium text-slate-900">
+                                  {onboardingActivityLabel(
+                                    readString(entry, [
+                                      "action",
+                                      "event",
+                                      "type",
+                                      "activity",
+                                    ]) || "Updated",
+                                  )}
                                 </p>
-                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
-                                  {toTitleCaseWords(String(node.status))}
-                                </span>
+                                <p className="text-xs text-slate-500">
+                                  {toTimestamp(
+                                    entry.created_at ??
+                                      entry.timestamp ??
+                                      entry.occurred_at ??
+                                      entry.updated_at,
+                                  )}
+                                </p>
                               </div>
                               <p className="mt-1 text-xs text-slate-600">
-                                {isPending && approvalSummary.pendingLabels.length > 0 ? "Pending approver" : "Owner"}:{" "}
+                                By{" "}
                                 <span className="font-medium text-slate-800">
-                                  {isPending && approvalSummary.pendingLabels.length > 0
-                                    ? approvalSummary.pendingLabels.join(", ")
-                                    : node.owner && node.owner !== "-"
-                                      ? node.owner
-                                      : "Unassigned"}
+                                  {resolveAuditActorLabel(entry, users) || "-"}
                                 </span>
-                              </p>
-                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                                <span>
-                                  {isPending ? "Waiting to be completed" : isDone ? "Completed" : "Not started"}
-                                </span>
-                                {node.required ? <span>Required step</span> : null}
-                                {node.completedAt !== "-" ? <span>Completed {node.completedAt}</span> : null}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </section>
-
-                  <section hidden={workspaceTab !== "activity"} className="space-y-2 bg-background p-3 xl:col-span-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground">Activity record</p>
-                    {selectedRequestAuditLogs.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No activity record available for this request.</p>
-                    ) : (
-                      <div className="divide-y divide-border overflow-hidden border border-border">
-                        {selectedRequestAuditLogs.map((entry, index) => (
-                          <div
-                            key={`audit-${readString(entry, ["id", "log_id"])}-${index}`}
-                            className="bg-background px-3 py-2"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-slate-900">
-                                {onboardingActivityLabel(readString(entry, ["action", "event", "type", "activity"]) || "Updated")}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {toTimestamp(
-                                  entry.created_at ?? entry.timestamp ?? entry.occurred_at ?? entry.updated_at
-                                )}
+                                {readString(entry, [
+                                  "description",
+                                  "message",
+                                  "remarks",
+                                  "comment",
+                                ]) !== "-"
+                                  ? ` • ${readString(entry, ["description", "message", "remarks", "comment"])}`
+                                  : ""}
                               </p>
                             </div>
-                            <p className="mt-1 text-xs text-slate-600">
-                              By <span className="font-medium text-slate-800">{resolveAuditActorLabel(entry, users) || "-"}</span>
-                              {readString(entry, ["description", "message", "remarks", "comment"]) !== "-"
-                                ? ` • ${readString(entry, ["description", "message", "remarks", "comment"])}`
-                                : ""}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
+                          ))}
+                        </div>
+                      )}
+                    </section>
                   </div>
                 </div>
               )}
@@ -7557,26 +10347,32 @@ export function OnboardingView() {
               <footer className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-border bg-background pt-3">
                 {(() => {
                   const selectedStatus = String(
-                    readString(selectedRequestDetails ?? selectedRequestRow ?? {}, [
-                      "status",
-                      "request_status",
-                      "onboarding_status",
-                      "workflow_status",
-                    ])
-                  ).toLowerCase()
-                  const selectedId = readCurrentRequestId()
+                    readString(
+                      selectedRequestDetails ?? selectedRequestRow ?? {},
+                      [
+                        "status",
+                        "request_status",
+                        "onboarding_status",
+                        "workflow_status",
+                      ],
+                    ),
+                  ).toLowerCase();
+                  const selectedId = readCurrentRequestId();
                   const showSubmit =
                     isOnboardingDraftStatus(selectedStatus) &&
-                    (canCreateOnboardingRequests || canUpdateOnboardingRequests)
+                    (canCreateOnboardingRequests ||
+                      canUpdateOnboardingRequests);
                   const showApprove =
                     canApproveOnboardingRequests &&
                     !isOnboardingDraftStatus(selectedStatus) &&
                     isOnboardingActableStatus(selectedStatus) &&
-                    approvalSummary.pending.length > 0
+                    approvalSummary.pending.length > 0;
                   return (
                     <>
                       {showApprove && approvalSummary.waitingLabel ? (
-                        <p className="mr-auto text-xs text-muted-foreground">{approvalSummary.waitingLabel}</p>
+                        <p className="mr-auto text-xs text-muted-foreground">
+                          {approvalSummary.waitingLabel}
+                        </p>
                       ) : null}
                       {showSubmit ? (
                         <div className="mr-auto flex flex-wrap items-center gap-3">
@@ -7584,11 +10380,17 @@ export function OnboardingView() {
                             <label className="flex max-w-xl items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
                               <Checkbox
                                 checked={allowIncompleteWorkflowStart}
-                                onCheckedChange={(value) => setAllowIncompleteWorkflowStart(Boolean(value))}
+                                onCheckedChange={(value) =>
+                                  setAllowIncompleteWorkflowStart(
+                                    Boolean(value),
+                                  )
+                                }
                               />
                               <span>
-                                Start before the employee finishes or HR verifies every section. The employee can
-                                continue updating details while the workflow runs.
+                                Start before the employee finishes or HR
+                                verifies every section. The employee can
+                                continue updating details while the workflow
+                                runs.
                               </span>
                             </label>
                           ) : null}
@@ -7598,9 +10400,12 @@ export function OnboardingView() {
                             disabled={
                               saving ||
                               selectedId === null ||
-                              (employeeDetailsReview.status !== "approved" && !allowIncompleteWorkflowStart)
+                              (employeeDetailsReview.status !== "approved" &&
+                                !allowIncompleteWorkflowStart)
                             }
-                            onClick={() => void runRequestAction(selectedId, "submit")}
+                            onClick={() =>
+                              void runRequestAction(selectedId, "submit")
+                            }
                           >
                             Start onboarding workflow
                           </Button>
@@ -7611,60 +10416,122 @@ export function OnboardingView() {
                           type="button"
                           size="sm"
                           disabled={saving || selectedId === null}
-                          onClick={() => void runRequestAction(selectedId, "approve")}
+                          onClick={() =>
+                            void runRequestAction(selectedId, "approve")
+                          }
                         >
                           Approve
                         </Button>
                       ) : null}
                     </>
-                  )
+                  );
                 })()}
-                <Button type="button" variant="outline" size="sm" onClick={closeWorkspace}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={closeWorkspace}
+                >
                   Close
                 </Button>
               </footer>
             </section>
 
-          {handoffRequirement && requestDetailsOpen && readCurrentRequestId() ? <OnboardingHandoffDrawer key={`${readCurrentRequestId()}-${handoffRequirement.id}`} token={readStoredToken() ?? ""} requestId={readCurrentRequestId()!} employeeName={selectedRequestSummary.employee} requirement={handoffRequirement} canWrite={canUpdateOnboardingRequests && !["completed", "cancelled", "activating"].includes(selectedRequestSummary.status)} onClose={() => setHandoffRequirement(null)} /> : null}
-          <PayrollEmployeeSalaryDialog
-            drawer
-            open={salaryDialogOpen}
-            onOpenChange={setSalaryDialogOpen}
-            employeeId={String(readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["employee_id"]))}
-            employeeLabel={selectedRequestSummary.employee}
-            structures={salaryStructures}
-            canEdit={canManageJoiningSalary}
-            canApprove={canApproveJoiningSalary}
-            onChanged={() => {
-              void loadJoiningSalary()
-              const row = selectedRequestRow
-              if (row) void openRequestDetails(row)
-            }}
-          />
-          {payrollDrawerOpen && readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? <OnboardingPayrollDrawer token={readStoredToken() ?? ""} employeeId={readNumber(selectedRequestDetails ?? {}, ["employee_id"])!} employeeName={selectedRequestSummary.employee} employeeNo={readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employee_no"], "")} canEdit={canManageJoiningSalary} onClose={() => setPayrollDrawerOpen(false)} onChanged={() => { if (selectedRequestRow) void openRequestDetails(selectedRequestRow) }} /> : null}
+            {handoffRequirement &&
+            requestDetailsOpen &&
+            readCurrentRequestId() ? (
+              <OnboardingHandoffDrawer
+                key={`${readCurrentRequestId()}-${handoffRequirement.id}`}
+                token={readStoredToken() ?? ""}
+                requestId={readCurrentRequestId()!}
+                employeeName={selectedRequestSummary.employee}
+                requirement={handoffRequirement}
+                canWrite={
+                  canUpdateOnboardingRequests &&
+                  !["completed", "cancelled", "activating"].includes(
+                    selectedRequestSummary.status,
+                  )
+                }
+                onClose={() => setHandoffRequirement(null)}
+              />
+            ) : null}
+            <PayrollEmployeeSalaryDialog
+              drawer
+              open={salaryDialogOpen}
+              onOpenChange={setSalaryDialogOpen}
+              employeeId={String(
+                readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, [
+                  "employee_id",
+                ]),
+              )}
+              employeeLabel={selectedRequestSummary.employee}
+              structures={salaryStructures}
+              canEdit={canManageJoiningSalary}
+              canApprove={canApproveJoiningSalary}
+              onChanged={() => {
+                void loadJoiningSalary();
+                const row = selectedRequestRow;
+                if (row) void openRequestDetails(row);
+              }}
+            />
+            {payrollDrawerOpen &&
+            readNumber(selectedRequestDetails ?? {}, ["employee_id"]) ? (
+              <OnboardingPayrollDrawer
+                token={readStoredToken() ?? ""}
+                employeeId={readNumber(selectedRequestDetails ?? {}, [
+                  "employee_id",
+                ])!}
+                employeeName={selectedRequestSummary.employee}
+                employeeNo={readString(
+                  toRecord(selectedRequestDetails?.employee) ?? {},
+                  ["employee_no"],
+                  "",
+                )}
+                canEdit={canManageJoiningSalary}
+                onClose={() => setPayrollDrawerOpen(false)}
+                onChanged={() => {
+                  if (selectedRequestRow)
+                    void openRequestDetails(selectedRequestRow);
+                }}
+              />
+            ) : null}
           </OverlayDrawer>
-          <Dialog open={changeWorkflowDialogOpen} onOpenChange={setChangeWorkflowDialogOpen}>
+          <Dialog
+            open={changeWorkflowDialogOpen}
+            onOpenChange={setChangeWorkflowDialogOpen}
+          >
             <DialogPopup from="bottom" className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>Change onboarding workflow</DialogTitle>
                 <DialogDescription>
-                  Select the workflow that should replace the one currently attached to this request.
+                  Select the workflow that should replace the one currently
+                  attached to this request.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
                   <p className="font-medium text-foreground">
-                    {readString(changeWorkflowRequest ?? {}, ["onboarding_no", "request_no", "title"])}
+                    {readString(changeWorkflowRequest ?? {}, [
+                      "onboarding_no",
+                      "request_no",
+                      "title",
+                    ])}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Pending approvals and tasks from the old workflow will be replaced. A workflow cannot be changed
-                    after an approval or task has been actioned.
+                    Pending approvals and tasks from the old workflow will be
+                    replaced. A workflow cannot be changed after an approval or
+                    task has been actioned.
                   </p>
                 </div>
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
-                  <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
-                      <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
+                  <Select
+                    value={replacementWorkflowId}
+                    onValueChange={(value) =>
+                      setReplacementWorkflowId(value ?? "")
+                    }
+                  >
+                    <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
                           ? resolveWorkflowLabel(Number(replacementWorkflowId))
@@ -7675,23 +10542,37 @@ export function OnboardingView() {
                     </SelectTrigger>
                     <SelectContent>
                       {workflows.map((workflow) => {
-                        const workflowId = readNumber(workflow, ["id", "workflow_id"])
-                        if (workflowId === null) return null
+                        const workflowId = readNumber(workflow, [
+                          "id",
+                          "workflow_id",
+                        ]);
+                        if (workflowId === null) return null;
                         return (
-                          <SelectItem key={workflowId} value={String(workflowId)}>
+                          <SelectItem
+                            key={workflowId}
+                            value={String(workflowId)}
+                          >
                             {readString(workflow, ["name", "title"])}
                           </SelectItem>
-                        )
+                        );
                       })}
                     </SelectContent>
                   </Select>
                 </label>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setChangeWorkflowDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setChangeWorkflowDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="button" disabled={saving || !replacementWorkflowId} onClick={saveRequestWorkflowChange}>
+                <Button
+                  type="button"
+                  disabled={saving || !replacementWorkflowId}
+                  onClick={saveRequestWorkflowChange}
+                >
                   {saving ? "Changing…" : "Change Workflow"}
                 </Button>
               </DialogFooter>
@@ -7701,28 +10582,37 @@ export function OnboardingView() {
           <Dialog
             open={approvalAssignmentDialogOpen}
             onOpenChange={(open) => {
-              setApprovalAssignmentDialogOpen(open)
-              if (!open) setRequestDetailsOpen(true)
+              setApprovalAssignmentDialogOpen(open);
+              if (!open) setRequestDetailsOpen(true);
             }}
           >
             <DialogPopup from="bottom" className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle>Change approval assignee</DialogTitle>
                 <DialogDescription>
-                  Replace the person assigned to this pending approval. The workflow template itself is not changed.
+                  Replace the person assigned to this pending approval. The
+                  workflow template itself is not changed.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   New approver
-                  <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
+                  <Select
+                    value={replacementApproverId}
+                    onValueChange={(value) =>
+                      setReplacementApproverId(value ?? "")
+                    }
+                  >
                     <SelectTrigger
                       className="h-11 w-full"
-                      aria-invalid={replacementApproverMissingPermission || undefined}
+                      aria-invalid={
+                        replacementApproverMissingPermission || undefined
+                      }
                     >
                       <SelectValue placeholder="Select approver">
                         {replacementApprover
-                          ? personDisplayName(replacementApprover) || `User #${replacementApproverMembershipId}`
+                          ? personDisplayName(replacementApprover) ||
+                            `User #${replacementApproverMembershipId}`
                           : loading
                             ? "Loading people…"
                             : "Select approver"}
@@ -7730,15 +10620,22 @@ export function OnboardingView() {
                     </SelectTrigger>
                     <SelectContent>
                       {approvalAssignmentCandidates.map((user) => {
-                        const userId = preferredAssigneeId(user)
-                        if (userId === null) return null
-                        const label = personDisplayName(user) || `User #${userId}`
-                        const hasPermission = onboardingAssigneeHasPermission(user, "sign_off")
+                        const userId = preferredAssigneeId(user);
+                        if (userId === null) return null;
+                        const label =
+                          personDisplayName(user) || `User #${userId}`;
+                        const hasPermission = onboardingAssigneeHasPermission(
+                          user,
+                          "sign_off",
+                        );
                         return (
                           <SelectItem key={userId} value={String(userId)}>
-                            {label}{hasPermission ? "" : " — missing approval permission"}
+                            {label}
+                            {hasPermission
+                              ? ""
+                              : " — missing approval permission"}
                           </SelectItem>
-                        )
+                        );
                       })}
                     </SelectContent>
                   </Select>
@@ -7748,8 +10645,13 @@ export function OnboardingView() {
                     <ShieldAlert className="size-4" />
                     <AlertTitle>Approval permission required</AlertTitle>
                     <AlertDescription>
-                      This person needs <code className="text-xs">onboarding_requests:approve</code>. Use the permission
-                      link from the workflow assignment warning or Company Access Management before assigning them.
+                      This person needs{" "}
+                      <code className="text-xs">
+                        onboarding_requests:approve
+                      </code>
+                      . Use the permission link from the workflow assignment
+                      warning or Company Access Management before assigning
+                      them.
                     </AlertDescription>
                   </Alert>
                 ) : null}
@@ -7757,7 +10659,9 @@ export function OnboardingView() {
                   Reason for change
                   <Textarea
                     value={approvalReassignmentReason}
-                    onChange={(event) => setApprovalReassignmentReason(event.target.value)}
+                    onChange={(event) =>
+                      setApprovalReassignmentReason(event.target.value)
+                    }
                     placeholder="Explain why the approver is being replaced"
                     className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
@@ -7768,8 +10672,8 @@ export function OnboardingView() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setApprovalAssignmentDialogOpen(false)
-                    setRequestDetailsOpen(true)
+                    setApprovalAssignmentDialogOpen(false);
+                    setRequestDetailsOpen(true);
                   }}
                 >
                   Cancel
@@ -7804,12 +10708,17 @@ export function OnboardingView() {
             frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
             showExport={false}
-            getRowId={(row, index) => String(readNumber(row, ["id", "workflow_id"]) ?? index)}
+            getRowId={(row, index) =>
+              String(readNumber(row, ["id", "workflow_id"]) ?? index)
+            }
             onRowSelect={(_, row) => {
               if (!row || !canUpdateOnboardingWorkflows) {
-                return
+                return;
               }
-              void openEditWorkflowSheet(readNumber(row, ["id", "workflow_id"]), row)
+              void openEditWorkflowSheet(
+                readNumber(row, ["id", "workflow_id"]),
+                row,
+              );
             }}
             toolbarStart={
               <>
@@ -7829,7 +10738,10 @@ export function OnboardingView() {
                   onChange={setWorkflowStatusFilter}
                   options={workflowStatusOptions.map((status) => ({
                     value: status,
-                    label: status === "all" ? "All statuses" : toTitleCaseWords(status),
+                    label:
+                      status === "all"
+                        ? "All statuses"
+                        : toTitleCaseWords(status),
                   }))}
                 />
               </>
@@ -7841,7 +10753,7 @@ export function OnboardingView() {
                     type="button"
                     className="h-8 px-2.5 text-xs"
                     onClick={() => {
-                      void openCreateWorkflowSheet()
+                      void openCreateWorkflowSheet();
                     }}
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -7856,7 +10768,12 @@ export function OnboardingView() {
                   aria-label="Refresh"
                   title="Refresh"
                 >
-                  <RefreshCw className={cn("size-3.5 text-primary", loading ? "animate-spin" : "")} />
+                  <RefreshCw
+                    className={cn(
+                      "size-3.5 text-primary",
+                      loading ? "animate-spin" : "",
+                    )}
+                  />
                 </button>
               </>
             }
@@ -7865,10 +10782,10 @@ export function OnboardingView() {
           <Sheet
             open={workflowSheetOpen}
             onOpenChange={(open) => {
-              setWorkflowSheetOpen(open)
+              setWorkflowSheetOpen(open);
               if (!open) {
-                setEditingWorkflowId(null)
-                setEditingStepIndex(null)
+                setEditingWorkflowId(null);
+                setEditingStepIndex(null);
               }
             }}
           >
@@ -7923,22 +10840,27 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Workflow status">
+                      <SelectTrigger
+                        className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                        aria-label="Workflow status"
+                      >
                         <SelectValue placeholder="Status">
-                          <span>{toTitleCaseWords(workflowForm.status || "active")}</span>
+                          <span>
+                            {toTitleCaseWords(workflowForm.status || "active")}
+                          </span>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="active">
-                          Active
-                        </SelectItem>
-                        <SelectItem value="inactive">
-                          Inactive
-                        </SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Default workflow" size="small" className="gap-1">
+                  <Field
+                    label="Default workflow"
+                    size="small"
+                    className="gap-1"
+                  >
                     <Select
                       value={workflowForm.is_default || "false"}
                       onValueChange={(value) =>
@@ -7948,20 +10870,21 @@ export function OnboardingView() {
                         }))
                       }
                     >
-                      <SelectTrigger className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20" aria-label="Default workflow">
+                      <SelectTrigger
+                        className="h-9 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                        aria-label="Default workflow"
+                      >
                         <SelectValue placeholder="Default workflow">
                           <span>
-                            {workflowForm.is_default === "true" ? "Default" : "Not default"}
+                            {workflowForm.is_default === "true"
+                              ? "Default"
+                              : "Not default"}
                           </span>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className={selectPopupClassName}>
-                        <SelectItem value="true">
-                          Default
-                        </SelectItem>
-                        <SelectItem value="false">
-                          Not default
-                        </SelectItem>
+                        <SelectItem value="true">Default</SelectItem>
+                        <SelectItem value="false">Not default</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
@@ -7994,7 +10917,9 @@ export function OnboardingView() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">Workflow Steps ({workflowSteps.length})</p>
+                  <p className="text-sm font-medium">
+                    Workflow Steps ({workflowSteps.length})
+                  </p>
                   {workflowSteps.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
                       {editingWorkflowId === null
@@ -8004,45 +10929,144 @@ export function OnboardingView() {
                           : "This workflow has no steps yet. Click Add Step to add one."}
                     </p>
                   ) : (
-                    <div className="overflow-hidden rounded-lg border border-border bg-background" role="table" aria-label="Workflow steps">
-                      <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid" role="row">
-                        <span>Step</span><span>Checklist</span><span>Assignment</span><span>Actions</span>
+                    <div
+                      className="overflow-hidden rounded-lg border border-border bg-background"
+                      role="table"
+                      aria-label="Workflow steps"
+                    >
+                      <div
+                        className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid"
+                        role="row"
+                      >
+                        <span>Step</span>
+                        <span>Checklist</span>
+                        <span>Assignment</span>
+                        <span>Actions</span>
                       </div>
                       <div className="divide-y divide-border">
                         {workflowSteps.map((step, index) => {
-                          const checklist = step.checklist_items.length > 0
-                            ? step.checklist_items.map((item) => item.name).join(", ")
-                            : "No checklist items"
+                          const checklist =
+                            step.checklist_items.length > 0
+                              ? step.checklist_items
+                                  .map((item) => item.name)
+                                  .join(", ")
+                              : "No checklist items";
                           const assignment = step.assigned_user_id
-                            ? resolveOptionLabel(users, step.assigned_user_id, ["id", "user_id", "company_user_id"], ["full_name", "name", "email"])
+                            ? resolveOptionLabel(
+                                users,
+                                step.assigned_user_id,
+                                ["id", "user_id", "company_user_id"],
+                                ["full_name", "name", "email"],
+                              )
                             : step.assigned_department_id
                               ? "Whole department"
                               : step.assigned_role_id
-                                ? resolveOptionLabel(roles, step.assigned_role_id, ["id"], ["name", "title"])
+                                ? resolveOptionLabel(
+                                    roles,
+                                    step.assigned_role_id,
+                                    ["id"],
+                                    ["name", "title"],
+                                  )
                                 : step.metadata?.assigned_position_id
-                                  ? resolveOptionLabel(workflowPositions, Number(step.metadata.assigned_position_id), ["id"], ["name", "title"])
-                                  : "Unassigned"
+                                  ? resolveOptionLabel(
+                                      workflowPositions,
+                                      Number(
+                                        step.metadata.assigned_position_id,
+                                      ),
+                                      ["id"],
+                                      ["name", "title"],
+                                    )
+                                  : "Unassigned";
                           const assignmentGroup = resolveOptionLabel(
                             departments,
                             step.assigned_department_id ?? null,
                             ["id", "department_id"],
                             ["name", "title", "code"],
-                          )
-                          return <div key={`step-${index}`} className="grid gap-4 px-4 py-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center" role="row">
-                            <div className="flex min-w-0 gap-3">
-                              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span>
+                          );
+                          return (
+                            <div
+                              key={`step-${index}`}
+                              className="grid gap-4 px-4 py-3 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center"
+                              role="row"
+                            >
+                              <div className="flex min-w-0 gap-3">
+                                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                  {index + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-foreground">
+                                    {step.name || `Step ${index + 1}`}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {toTitleCaseWords(step.step_type || "task")}{" "}
+                                    ·{" "}
+                                    {resolveYesNoLabel(step.is_required) ===
+                                    "Yes"
+                                      ? "Required"
+                                      : "Optional"}{" "}
+                                    ·{" "}
+                                    {step.due_days
+                                      ? `${String(step.due_days)} day(s)`
+                                      : "No due date"}
+                                  </p>
+                                </div>
+                              </div>
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-foreground">{step.name || `Step ${index + 1}`}</p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">{toTitleCaseWords(step.step_type || "task")} · {resolveYesNoLabel(step.is_required) === "Yes" ? "Required" : "Optional"} · {step.due_days ? `${String(step.due_days)} day(s)` : "No due date"}</p>
+                                <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Checklist
+                                </p>
+                                <p
+                                  className="truncate text-sm"
+                                  title={checklist}
+                                >
+                                  {checklist}
+                                </p>
+                                {step.description ? (
+                                  <p
+                                    className="truncate text-xs text-muted-foreground"
+                                    title={step.description}
+                                  >
+                                    {step.description}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Assignment
+                                </p>
+                                <p className="truncate text-sm font-medium">
+                                  {assignmentGroup || assignment}
+                                </p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {assignmentGroup ? assignment : ""}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 md:justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="size-8 p-0"
+                                  onClick={() => editWorkflowStep(step, index)}
+                                  aria-label={`Edit step ${index + 1}`}
+                                  title="Edit step"
+                                >
+                                  <Edit16Regular data-icon="icon-only" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="size-8 p-0 text-rose-600"
+                                  onClick={() => removeWorkflowStep(index)}
+                                  aria-label={`Remove step ${index + 1}`}
+                                  title="Remove step"
+                                >
+                                  <Delete16Regular data-icon="icon-only" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Checklist</p><p className="truncate text-sm" title={checklist}>{checklist}</p>{step.description ? <p className="truncate text-xs text-muted-foreground" title={step.description}>{step.description}</p> : null}</div>
-                            <div className="min-w-0"><p className="md:hidden text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignment</p><p className="truncate text-sm font-medium">{assignmentGroup || assignment}</p><p className="truncate text-xs text-muted-foreground">{assignmentGroup ? assignment : ""}</p></div>
-                            <div className="flex items-center gap-1 md:justify-end">
-                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0" onClick={() => editWorkflowStep(step, index)} aria-label={`Edit step ${index + 1}`} title="Edit step"><Edit16Regular data-icon="icon-only" /></Button>
-                              <Button type="button" size="sm" variant="ghost" className="size-8 p-0 text-rose-600" onClick={() => removeWorkflowStep(index)} aria-label={`Remove step ${index + 1}`} title="Remove step"><Delete16Regular data-icon="icon-only" /></Button>
-                            </div>
-                          </div>
+                          );
                         })}
                       </div>
                     </div>
@@ -8056,15 +11080,21 @@ export function OnboardingView() {
                   variant="outline"
                   className="border-border bg-background text-foreground"
                   onClick={() => {
-                    setWorkflowSheetOpen(false)
-                    setEditingWorkflowId(null)
-                    resetWorkflowForm()
+                    setWorkflowSheetOpen(false);
+                    setEditingWorkflowId(null);
+                    resetWorkflowForm();
                   }}
                 >
                   Cancel
                 </Button>
-                <Button type="button" onClick={() => void submitWorkflow()} disabled={saving}>
-                  {editingWorkflowId === null ? "Create Workflow" : "Save Workflow"}
+                <Button
+                  type="button"
+                  onClick={() => void submitWorkflow()}
+                  disabled={saving}
+                >
+                  {editingWorkflowId === null
+                    ? "Create Workflow"
+                    : "Save Workflow"}
                 </Button>
               </SheetFooter>
             </SheetContent>
@@ -8073,18 +11103,23 @@ export function OnboardingView() {
           <Dialog
             open={stepDialogOpen}
             onOpenChange={(open) => {
-              setStepDialogOpen(open)
+              setStepDialogOpen(open);
               if (!open) {
-                setChecklistItemDialogOpen(false)
-                setEditingChecklistItemIndex(null)
+                setChecklistItemDialogOpen(false);
+                setEditingChecklistItemIndex(null);
               }
             }}
           >
             <DialogPopup from="bottom" className="sm:max-w-[980px]">
               <DialogHeader>
-                <DialogTitle>{editingStepIndex === null ? "Add Workflow Step" : "Edit Workflow Step"}</DialogTitle>
+                <DialogTitle>
+                  {editingStepIndex === null
+                    ? "Add Workflow Step"
+                    : "Edit Workflow Step"}
+                </DialogTitle>
                 <DialogDescription>
-                  Configure one step and save it to the list before creating the workflow.
+                  Configure one step and save it to the list before creating the
+                  workflow.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 md:grid-cols-2">
@@ -8108,12 +11143,20 @@ export function OnboardingView() {
                   <div className="grid gap-3 rounded-lg border border-border bg-muted/20 p-3 md:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-medium text-foreground">Checklist</p>
+                        <p className="text-sm font-medium text-foreground">
+                          Checklist
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          Each item becomes a separately trackable task when the workflow runs.
+                          Each item becomes a separately trackable task when the
+                          workflow runs.
                         </p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={openCreateChecklistItemDialog}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={openCreateChecklistItemDialog}
+                      >
                         <Plus className="h-4 w-4" />
                         Add checklist item
                       </Button>
@@ -8124,61 +11167,71 @@ export function OnboardingView() {
                       </div>
                     ) : (
                       <ol className="grid gap-2">
-                        {workflowForm.step_checklist_items.map((item, itemIndex) => (
-                          <li
-                            key={`workflow-checklist-${itemIndex}`}
-                            className="flex items-start gap-3 rounded-md border border-border bg-background p-3"
-                          >
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                              {itemIndex + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-foreground">{item.name}</p>
-                              {item.description ? (
-                                <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
-                                  {item.description}
+                        {workflowForm.step_checklist_items.map(
+                          (item, itemIndex) => (
+                            <li
+                              key={`workflow-checklist-${itemIndex}`}
+                              className="flex items-start gap-3 rounded-md border border-border bg-background p-3"
+                            >
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                {itemIndex + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground">
+                                  {item.name}
                                 </p>
-                              ) : (
-                                <p className="mt-0.5 text-xs text-muted-foreground">No description</p>
-                              )}
-                            </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => openEditChecklistItemDialog(item, itemIndex)}
-                                aria-label={`Edit checklist item ${itemIndex + 1}`}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() =>
-                                  setWorkflowForm((prev) => ({
-                                    ...prev,
-                                    step_checklist_items: prev.step_checklist_items.filter(
-                                      (_, index) => index !== itemIndex
-                                    ),
-                                  }))
-                                }
-                                aria-label={`Remove checklist item ${itemIndex + 1}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </li>
-                        ))}
+                                {item.description ? (
+                                  <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+                                    {item.description}
+                                  </p>
+                                ) : (
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    No description
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() =>
+                                    openEditChecklistItemDialog(item, itemIndex)
+                                  }
+                                  aria-label={`Edit checklist item ${itemIndex + 1}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  onClick={() =>
+                                    setWorkflowForm((prev) => ({
+                                      ...prev,
+                                      step_checklist_items:
+                                        prev.step_checklist_items.filter(
+                                          (_, index) => index !== itemIndex,
+                                        ),
+                                    }))
+                                  }
+                                  aria-label={`Remove checklist item ${itemIndex + 1}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </li>
+                          ),
+                        )}
                       </ol>
                     )}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground md:col-span-2">
-                    Sign-off records one approval and does not create checklist tasks.
+                    Sign-off records one approval and does not create checklist
+                    tasks.
                   </div>
                 )}
                 <div className="grid gap-1">
@@ -8202,7 +11255,8 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Choose whether this step creates tasks or records an approval.
+                    Choose whether this step creates tasks or records an
+                    approval.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -8216,7 +11270,9 @@ export function OnboardingView() {
                     }
                   >
                     <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
-                      <SelectValue placeholder="Required">{resolveYesNoLabel(workflowForm.is_required)}</SelectValue>
+                      <SelectValue placeholder="Required">
+                        {resolveYesNoLabel(workflowForm.is_required)}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="true">Yes</SelectItem>
@@ -8224,7 +11280,8 @@ export function OnboardingView() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Choose Yes if onboarding cannot continue until this step is complete.
+                    Choose Yes if onboarding cannot continue until this step is
+                    complete.
                   </p>
                 </div>
                 <div className="grid gap-1">
@@ -8242,176 +11299,268 @@ export function OnboardingView() {
                     className="h-11 rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Set how many days the assignee has to complete this step (at least 1).
+                    Set how many days the assignee has to complete this step (at
+                    least 1).
                   </p>
                 </div>
-                <Field label="Assign step to" hint="Role and position assignments reach their active company members.">
-                  <FluentSelect ariaLabel="Assign step to" value={workflowAssignmentKind} onChange={(value) => {
-                    setWorkflowAssignmentKind(value as "user" | "role" | "position")
-                    setWorkflowAssignmentTarget("")
-                  }} options={[{ value: "user", label: "Person or department" }, { value: "role", label: "Role" }, { value: "position", label: "Position" }]} />
+                <Field
+                  label="Assign step to"
+                  hint="Role and position assignments reach their active company members."
+                >
+                  <FluentSelect
+                    ariaLabel="Assign step to"
+                    value={workflowAssignmentKind}
+                    onChange={(value) => {
+                      setWorkflowAssignmentKind(
+                        value as "user" | "role" | "position",
+                      );
+                      setWorkflowAssignmentTarget("");
+                    }}
+                    options={[
+                      { value: "user", label: "Person or department" },
+                      { value: "role", label: "Role" },
+                      { value: "position", label: "Position" },
+                    ]}
+                  />
                 </Field>
                 {workflowAssignmentKind !== "user" ? (
-                  <Field label={workflowAssignmentKind === "role" ? "Role" : "Position"}>
-                    <FluentSelect ariaLabel={workflowAssignmentKind === "role" ? "Assigned role" : "Assigned position"} value={workflowAssignmentTarget} onChange={setWorkflowAssignmentTarget} placeholder={`Select ${workflowAssignmentKind}`} options={(workflowAssignmentKind === "role" ? roles : workflowPositions).map((row) => ({
-                      value: String(readNumber(row, ["id"])), label: readString(row, ["name", "title"]),
-                    }))} />
+                  <Field
+                    label={
+                      workflowAssignmentKind === "role" ? "Role" : "Position"
+                    }
+                  >
+                    <FluentSelect
+                      ariaLabel={
+                        workflowAssignmentKind === "role"
+                          ? "Assigned role"
+                          : "Assigned position"
+                      }
+                      value={workflowAssignmentTarget}
+                      onChange={setWorkflowAssignmentTarget}
+                      placeholder={`Select ${workflowAssignmentKind}`}
+                      options={(workflowAssignmentKind === "role"
+                        ? roles
+                        : workflowPositions
+                      ).map((row) => ({
+                        value: String(readNumber(row, ["id"])),
+                        label: readString(row, ["name", "title"]),
+                      }))}
+                    />
                   </Field>
                 ) : null}
-                <div className={workflowAssignmentKind === "user" ? "contents" : "hidden"}>
-                <Field label="Branch" hint="Choose a branch first to see its departments.">
-                  <Select
-                    value={selectedWorkflowBranchId || "none"}
-                    onValueChange={(value) => {
-                      setWorkflowBranchId(!value || value === "none" ? "" : value)
-                      setWorkflowDepartmentEmployees([])
-                      setWorkflowForm((prev) => ({ ...prev, assigned_department_id: "", assigned_user_id: "" }))
-                    }}
+                <div
+                  className={
+                    workflowAssignmentKind === "user" ? "contents" : "hidden"
+                  }
+                >
+                  <Field
+                    label="Branch"
+                    hint="Choose a branch first to see its departments."
                   >
-                    <SelectTrigger aria-label="Branch" className="w-full">
-                      <SelectValue placeholder="Select branch">
-                        {selectedWorkflowBranchId ? resolveBranchLabel(Number(selectedWorkflowBranchId)) : "Select branch"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="none">Select branch</SelectItem>
-                        {requestBranchAccessOptions.map((branch) => (
-                          <SelectItem key={branch.id} value={String(branch.id)}>{branch.label}</SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <div className="grid gap-1">
-                  <Select
-                    disabled={!selectedWorkflowBranchId}
-                    value={workflowForm.assigned_department_id || "none"}
-                    onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        assigned_department_id: !value || value === "none" ? "" : value,
-                        assigned_user_id: "",
-                      }))
-                    }
-                  >
-                    <SelectTrigger aria-label="Department" className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
-                      <SelectValue placeholder="Select department">
-                        {workflowForm.assigned_department_id
-                          ? selectedWorkflowDepartmentLabel
-                          : selectedWorkflowBranchId ? "Select department" : "Select branch first"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Select department</SelectItem>
-                      {workflowDepartmentOptions.map((department) => {
-                        return (
-                          <SelectItem key={department.id} value={String(department.id)}>
-                            {department.label}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedWorkflowBranchId && workflowDepartmentOptions.length === 0
-                      ? "No departments are available in this branch."
-                      : "Choose the department responsible for completing this step."}
-                  </p>
-                </div>
-                <div className="grid gap-1">
-                  <Select
-                    value={workflowForm.assigned_user_id || "none"}
-                    onValueChange={(value) =>
-                      setWorkflowForm((prev) => ({
-                        ...prev,
-                        assigned_user_id: !value || value === "none" ? "" : value,
-                      }))
-                    }
-                    disabled={!workflowForm.assigned_department_id}
-                  >
-                    <SelectTrigger
-                      className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                      aria-invalid={selectedStepAssigneeMissingPermission || undefined}
+                    <Select
+                      value={selectedWorkflowBranchId || "none"}
+                      onValueChange={(value) => {
+                        setWorkflowBranchId(
+                          !value || value === "none" ? "" : value,
+                        );
+                        setWorkflowDepartmentEmployees([]);
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          assigned_department_id: "",
+                          assigned_user_id: "",
+                        }));
+                      }}
                     >
-                      <SelectValue placeholder="Specific person (optional)">
-                        {workflowForm.assigned_user_id
-                          ? selectedStepAssigneeLabel
-                          : workflowForm.assigned_department_id
-                            ? "Whole department"
-                            : "Select department first"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Whole department</SelectItem>
-                      {assignableUsers.map((row) => {
-                        const userId = preferredAssigneeId(row)
-                        if (userId === null) return null
-                        const label = resolveOptionLabel(
-                          [row, ...users],
-                          userId,
-                          ["id", "company_user_id", "user_id"],
-                          ["full_name", "name", "email"]
-                        )
-                        const hasRequiredPermission = onboardingAssigneeHasPermission(row, workflowForm.step_type)
-                        return (
-                          <SelectItem key={userId} value={String(userId)} data-search-text={`${label} ${userId}`}>
-                            {label}{hasRequiredPermission ? "" : " — missing required permission"}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                  {workflowForm.assigned_department_id && assignableUsers.length === 0 ? (
+                      <SelectTrigger aria-label="Branch" className="w-full">
+                        <SelectValue placeholder="Select branch">
+                          {selectedWorkflowBranchId
+                            ? resolveBranchLabel(
+                                Number(selectedWorkflowBranchId),
+                              )
+                            : "Select branch"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="none">Select branch</SelectItem>
+                          {requestBranchAccessOptions.map((branch) => (
+                            <SelectItem
+                              key={branch.id}
+                              value={String(branch.id)}
+                            >
+                              {branch.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <div className="grid gap-1">
+                    <Select
+                      disabled={!selectedWorkflowBranchId}
+                      value={workflowForm.assigned_department_id || "none"}
+                      onValueChange={(value) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          assigned_department_id:
+                            !value || value === "none" ? "" : value,
+                          assigned_user_id: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        aria-label="Department"
+                        className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                      >
+                        <SelectValue placeholder="Select department">
+                          {workflowForm.assigned_department_id
+                            ? selectedWorkflowDepartmentLabel
+                            : selectedWorkflowBranchId
+                              ? "Select department"
+                              : "Select branch first"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Select department</SelectItem>
+                        {workflowDepartmentOptions.map((department) => {
+                          return (
+                            <SelectItem
+                              key={department.id}
+                              value={String(department.id)}
+                            >
+                              {department.label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      No active company users are assigned to this department.
+                      {selectedWorkflowBranchId &&
+                      workflowDepartmentOptions.length === 0
+                        ? "No departments are available in this branch."
+                        : "Choose the department responsible for completing this step."}
                     </p>
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">
-                    Choose a person from the selected department, or leave this as Whole department to assign the step
-                    to its active members. Assignees can track their tasks under My Requests → To do.
-                  </p>
-                  {selectedStepAssigneeMissingPermission ? (
-                    <Alert variant="destructive" className="mt-2">
-                      <ShieldAlert className="size-4" />
-                      <AlertTitle>Permission required before assignment</AlertTitle>
-                      <AlertDescription className="grid gap-2">
-                        <p>
-                          {selectedStepAssigneeLabel} cannot be assigned to this step until they have the
-                          <code className="mx-1 rounded bg-destructive/10 px-1 py-0.5 text-xs">
-                            {requiredStepPermission}
-                          </code>
-                          permission.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            render={
-                              <Link
-                                href={`/dashboard/companies?membership_id=${selectedStepAssigneeId}&permission=${encodeURIComponent(requiredStepPermission)}`}
-                                target="_blank"
-                                rel="noreferrer"
+                  </div>
+                  <div className="grid gap-1">
+                    <Select
+                      value={workflowForm.assigned_user_id || "none"}
+                      onValueChange={(value) =>
+                        setWorkflowForm((prev) => ({
+                          ...prev,
+                          assigned_user_id:
+                            !value || value === "none" ? "" : value,
+                        }))
+                      }
+                      disabled={!workflowForm.assigned_department_id}
+                    >
+                      <SelectTrigger
+                        className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                        aria-invalid={
+                          selectedStepAssigneeMissingPermission || undefined
+                        }
+                      >
+                        <SelectValue placeholder="Specific person (optional)">
+                          {workflowForm.assigned_user_id
+                            ? selectedStepAssigneeLabel
+                            : workflowForm.assigned_department_id
+                              ? "Whole department"
+                              : "Select department first"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Whole department</SelectItem>
+                        {assignableUsers.map((row) => {
+                          const userId = preferredAssigneeId(row);
+                          if (userId === null) return null;
+                          const label = resolveOptionLabel(
+                            [row, ...users],
+                            userId,
+                            ["id", "company_user_id", "user_id"],
+                            ["full_name", "name", "email"],
+                          );
+                          const hasRequiredPermission =
+                            onboardingAssigneeHasPermission(
+                              row,
+                              workflowForm.step_type,
+                            );
+                          return (
+                            <SelectItem
+                              key={userId}
+                              value={String(userId)}
+                              data-search-text={`${label} ${userId}`}
+                            >
+                              {label}
+                              {hasRequiredPermission
+                                ? ""
+                                : " — missing required permission"}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {workflowForm.assigned_department_id &&
+                    assignableUsers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No active company users are assigned to this department.
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Choose a person from the selected department, or leave
+                      this as Whole department to assign the step to its active
+                      members. Assignees can track their tasks under My Requests
+                      → To do.
+                    </p>
+                    {selectedStepAssigneeMissingPermission ? (
+                      <Alert variant="destructive" className="mt-2">
+                        <ShieldAlert className="size-4" />
+                        <AlertTitle>
+                          Permission required before assignment
+                        </AlertTitle>
+                        <AlertDescription className="grid gap-2">
+                          <p>
+                            {selectedStepAssigneeLabel} cannot be assigned to
+                            this step until they have the
+                            <code className="mx-1 rounded bg-destructive/10 px-1 py-0.5 text-xs">
+                              {requiredStepPermission}
+                            </code>
+                            permission.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              render={
+                                <Link
+                                  href={`/dashboard/companies?membership_id=${selectedStepAssigneeId}&permission=${encodeURIComponent(requiredStepPermission)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                />
+                              }
+                            >
+                              Fix user permission
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={loading}
+                              onClick={() =>
+                                void ensureLookups(["users"], true)
+                              }
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  "size-3.5",
+                                  loading ? "animate-spin" : "",
+                                )}
                               />
-                            }
-                          >
-                            Fix user permission
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => void ensureLookups(["users"], true)}
-                          >
-                            <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
-                            Recheck permissions
-                          </Button>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                </div>
+                              Recheck permissions
+                            </Button>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -8419,9 +11568,9 @@ export function OnboardingView() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setStepDialogOpen(false)
-                    setEditingStepIndex(null)
-                    resetWorkflowStepForm()
+                    setStepDialogOpen(false);
+                    setEditingStepIndex(null);
+                    resetWorkflowStepForm();
                   }}
                 >
                   Cancel
@@ -8429,7 +11578,10 @@ export function OnboardingView() {
                 <Button
                   type="button"
                   onClick={addWorkflowStep}
-                  disabled={workflowAssignmentKind === "user" && selectedStepAssigneeMissingPermission}
+                  disabled={
+                    workflowAssignmentKind === "user" &&
+                    selectedStepAssigneeMissingPermission
+                  }
                   className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                 >
                   <Plus className="h-4 w-4" />
@@ -8442,30 +11594,41 @@ export function OnboardingView() {
           <Dialog
             open={changeWorkflowDialogOpen}
             onOpenChange={(open) => {
-              setChangeWorkflowDialogOpen(open)
-              if (!open) setChangeWorkflowRequest(null)
+              setChangeWorkflowDialogOpen(open);
+              if (!open) setChangeWorkflowRequest(null);
             }}
           >
             <DialogPopup from="bottom" className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>Change onboarding workflow</DialogTitle>
                 <DialogDescription>
-                  Select the workflow that should replace the one currently attached to this request.
+                  Select the workflow that should replace the one currently
+                  attached to this request.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
                   <p className="font-medium text-foreground">
-                    {readString(changeWorkflowRequest ?? {}, ["onboarding_no", "request_no", "title"])}
+                    {readString(changeWorkflowRequest ?? {}, [
+                      "onboarding_no",
+                      "request_no",
+                      "title",
+                    ])}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Pending approvals and tasks from the old workflow will be replaced. A workflow cannot be changed
-                    after an approval or task has been actioned.
+                    Pending approvals and tasks from the old workflow will be
+                    replaced. A workflow cannot be changed after an approval or
+                    task has been actioned.
                   </p>
                 </div>
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   Replacement workflow
-                  <Select value={replacementWorkflowId} onValueChange={(value) => setReplacementWorkflowId(value ?? "")}>
+                  <Select
+                    value={replacementWorkflowId}
+                    onValueChange={(value) =>
+                      setReplacementWorkflowId(value ?? "")
+                    }
+                  >
                     <SelectTrigger className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20">
                       <SelectValue placeholder="Select workflow">
                         {replacementWorkflowId
@@ -8475,23 +11638,37 @@ export function OnboardingView() {
                     </SelectTrigger>
                     <SelectContent>
                       {workflows.map((workflow) => {
-                        const workflowId = readNumber(workflow, ["id", "workflow_id"])
-                        if (workflowId === null) return null
+                        const workflowId = readNumber(workflow, [
+                          "id",
+                          "workflow_id",
+                        ]);
+                        if (workflowId === null) return null;
                         return (
-                          <SelectItem key={workflowId} value={String(workflowId)}>
+                          <SelectItem
+                            key={workflowId}
+                            value={String(workflowId)}
+                          >
                             {readString(workflow, ["name", "title"])}
                           </SelectItem>
-                        )
+                        );
                       })}
                     </SelectContent>
                   </Select>
                 </label>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setChangeWorkflowDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setChangeWorkflowDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="button" disabled={saving || !replacementWorkflowId} onClick={saveRequestWorkflowChange}>
+                <Button
+                  type="button"
+                  disabled={saving || !replacementWorkflowId}
+                  onClick={saveRequestWorkflowChange}
+                >
                   {saving ? "Changing…" : "Change Workflow"}
                 </Button>
               </DialogFooter>
@@ -8501,12 +11678,12 @@ export function OnboardingView() {
           <Dialog
             open={approvalAssignmentDialogOpen}
             onOpenChange={(open) => {
-              setApprovalAssignmentDialogOpen(open)
+              setApprovalAssignmentDialogOpen(open);
               if (!open) {
-                setApprovalToReassign(null)
-                setReplacementApproverId("")
-                setApprovalReassignmentReason("")
-                setRequestDetailsOpen(true)
+                setApprovalToReassign(null);
+                setReplacementApproverId("");
+                setApprovalReassignmentReason("");
+                setRequestDetailsOpen(true);
               }
             }}
           >
@@ -8514,34 +11691,50 @@ export function OnboardingView() {
               <DialogHeader>
                 <DialogTitle>Change approval assignee</DialogTitle>
                 <DialogDescription>
-                  Replace the person assigned to this pending approval. The workflow template itself is not changed.
+                  Replace the person assigned to this pending approval. The
+                  workflow template itself is not changed.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <label className="grid gap-1.5 text-sm font-medium text-foreground">
                   New approver
-                  <Select value={replacementApproverId} onValueChange={(value) => setReplacementApproverId(value ?? "")}>
+                  <Select
+                    value={replacementApproverId}
+                    onValueChange={(value) =>
+                      setReplacementApproverId(value ?? "")
+                    }
+                  >
                     <SelectTrigger
                       className="h-11 w-full rounded-md !border !border-input bg-background focus-visible:!border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-                      aria-invalid={replacementApproverMissingPermission || undefined}
+                      aria-invalid={
+                        replacementApproverMissingPermission || undefined
+                      }
                     >
                       <SelectValue placeholder="Select approver">
                         {replacementApprover
-                          ? personDisplayName(replacementApprover) || `User #${replacementApproverMembershipId}`
+                          ? personDisplayName(replacementApprover) ||
+                            `User #${replacementApproverMembershipId}`
                           : "Select approver"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {approvalAssignmentCandidates.map((user) => {
-                        const userId = preferredAssigneeId(user)
-                        if (userId === null) return null
-                        const label = personDisplayName(user) || `User #${userId}`
-                        const hasPermission = onboardingAssigneeHasPermission(user, "sign_off")
+                        const userId = preferredAssigneeId(user);
+                        if (userId === null) return null;
+                        const label =
+                          personDisplayName(user) || `User #${userId}`;
+                        const hasPermission = onboardingAssigneeHasPermission(
+                          user,
+                          "sign_off",
+                        );
                         return (
                           <SelectItem key={userId} value={String(userId)}>
-                            {label}{hasPermission ? "" : " — missing approval permission"}
+                            {label}
+                            {hasPermission
+                              ? ""
+                              : " — missing approval permission"}
                           </SelectItem>
-                        )
+                        );
                       })}
                     </SelectContent>
                   </Select>
@@ -8552,8 +11745,11 @@ export function OnboardingView() {
                     <AlertTitle>Approval permission required</AlertTitle>
                     <AlertDescription className="grid gap-2">
                       <p>
-                        This person needs <code className="text-xs">onboarding_requests:approve</code> before they can
-                        replace the current approver.
+                        This person needs{" "}
+                        <code className="text-xs">
+                          onboarding_requests:approve
+                        </code>{" "}
+                        before they can replace the current approver.
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -8576,7 +11772,12 @@ export function OnboardingView() {
                           disabled={loading}
                           onClick={() => void ensureLookups(["users"], true)}
                         >
-                          <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
+                          <RefreshCw
+                            className={cn(
+                              "size-3.5",
+                              loading ? "animate-spin" : "",
+                            )}
+                          />
                           Recheck permissions
                         </Button>
                       </div>
@@ -8587,7 +11788,9 @@ export function OnboardingView() {
                   Reason for change
                   <Textarea
                     value={approvalReassignmentReason}
-                    onChange={(event) => setApprovalReassignmentReason(event.target.value)}
+                    onChange={(event) =>
+                      setApprovalReassignmentReason(event.target.value)
+                    }
                     placeholder="Explain why the approver is being replaced"
                     className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
@@ -8598,11 +11801,11 @@ export function OnboardingView() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setApprovalAssignmentDialogOpen(false)
-                    setApprovalToReassign(null)
-                    setReplacementApproverId("")
-                    setApprovalReassignmentReason("")
-                    setRequestDetailsOpen(true)
+                    setApprovalAssignmentDialogOpen(false);
+                    setApprovalToReassign(null);
+                    setReplacementApproverId("");
+                    setApprovalReassignmentReason("");
+                    setRequestDetailsOpen(true);
                   }}
                 >
                   Cancel
@@ -8626,20 +11829,23 @@ export function OnboardingView() {
           <Dialog
             open={checklistItemDialogOpen}
             onOpenChange={(open) => {
-              setChecklistItemDialogOpen(open)
+              setChecklistItemDialogOpen(open);
               if (!open) {
-                setEditingChecklistItemIndex(null)
-                setChecklistItemForm({ name: "", description: "" })
+                setEditingChecklistItemIndex(null);
+                setChecklistItemForm({ name: "", description: "" });
               }
             }}
           >
             <DialogPopup from="bottom" className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>
-                  {editingChecklistItemIndex === null ? "Add Checklist Item" : "Edit Checklist Item"}
+                  {editingChecklistItemIndex === null
+                    ? "Add Checklist Item"
+                    : "Edit Checklist Item"}
                 </DialogTitle>
                 <DialogDescription>
-                  Give this item a clear name and add any instructions the assignee needs.
+                  Give this item a clear name and add any instructions the
+                  assignee needs.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
@@ -8673,7 +11879,11 @@ export function OnboardingView() {
                 </label>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setChecklistItemDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setChecklistItemDialogOpen(false)}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -8681,7 +11891,9 @@ export function OnboardingView() {
                   onClick={saveWorkflowChecklistItem}
                   className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                 >
-                  {editingChecklistItemIndex === null ? "Add Item" : "Save Item"}
+                  {editingChecklistItemIndex === null
+                    ? "Add Item"
+                    : "Save Item"}
                 </Button>
               </DialogFooter>
             </DialogPopup>
@@ -8689,5 +11901,5 @@ export function OnboardingView() {
         </div>
       ) : null}
     </section>
-  )
+  );
 }

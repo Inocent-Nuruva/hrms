@@ -36,8 +36,8 @@ afterEach(async () => {
   container.remove()
   vi.unstubAllGlobals()
 })
-async function render(canActivate = true, canViewPayroll = false) {
-  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} canViewPayroll={canViewPayroll} saving={false} onActivate={activate} onNavigate={navigate} />))
+async function render(canActivate = true, canViewPayroll = false, canViewContracts = true) {
+  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} canViewPayroll={canViewPayroll} canViewContracts={canViewContracts} saving={false} onActivate={activate} onNavigate={navigate} />))
 }
 function button(label: string) {
   return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
@@ -86,6 +86,11 @@ describe("onboarding activation overview", () => {
     expect(container.textContent).toContain("Tax identification number")
     expect(container.textContent).toContain("Payroll & salary")
     expect(container.textContent).toContain("2 activation requirements outstanding")
+  })
+  it("hides contract requirements without contract read access", async () => {
+    await render(true, false, false)
+    expect(container.textContent).not.toContain("Signed contract")
+    expect(container.textContent).not.toContain("Employment contract")
   })
   it("fails closed and lets HR retry a failed readiness check", async () => {
     getReadiness.mockRejectedValueOnce(new Error("Unavailable"))
