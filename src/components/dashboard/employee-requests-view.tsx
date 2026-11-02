@@ -68,7 +68,7 @@ import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { RequestActionInbox } from "./request-action-inbox"
 import { listAllMyActionItems } from "@/lib/admin-api"
-import { isOpenAction } from "./request-inbox-utils"
+import { isEmployeeRequestAction, isOpenAction } from "./request-inbox-utils"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
 
@@ -441,8 +441,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     }
   }
 
-  const pendingActions = actions.filter(isOpenAction).length
-  const doneActions = actions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length
+  const requestActions = actions.filter(isEmployeeRequestAction)
+  const pendingActions = requestActions.filter(isOpenAction).length
+  const doneActions = requestActions.filter((row) => readString(row, ["status"]).toUpperCase() === "COMPLETED").length
 
   const rows =
     activeTab === "timeline"
@@ -753,36 +754,24 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               ]
 
   return (
-    <section className="w-full min-w-0 space-y-4">
+    <section className={cn("w-full min-w-0", activeTab === "actions" ? "flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden" : "space-y-4")}>
       <header
         className={cn(
           "flex min-w-0 flex-col gap-3 border-b border-border bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
-          pageBleedClass,
+          activeTab !== "actions" && pageBleedClass,
         )}
       >
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
-            My requests
-          </p>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground">
-              {copy.title}
-              {activeTab === "actions" ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
-                  {loading ? "…" : pendingActions}
-                </span>
-              ) : null}
+              {activeTab === "actions" ? "My requests" : copy.title}
             </h1>
             {activeTab === "actions" ? (
-              <span className="flex items-center gap-1.5 text-xs tabular-nums">
+              <span className="text-xs tabular-nums text-muted-foreground">
                 {loading ? (
-                  <span className="text-muted-foreground">Updating…</span>
+                  "Updating…"
                 ) : (
-                  <>
-                    <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                      {doneActions} completed
-                    </span>
-                  </>
+                  `${pendingActions} pending · ${doneActions} completed`
                 )}
               </span>
             ) : null}

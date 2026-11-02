@@ -1,9 +1,10 @@
-"use client"
+"use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
-import * as React from "react"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
+import { Textarea } from "@/components/ui/textarea";
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
+import * as React from "react";
 import {
   Button as FluentButton,
   Combobox,
@@ -19,19 +20,19 @@ import {
   DialogSurface as FluentDialogSurface,
   DialogTitle as FluentDialogTitle,
   Text as FluentText,
-} from "@fluentui/react-components"
+} from "@fluentui/react-components";
 import {
   Add20Regular,
   ArrowClockwise20Regular,
   Delete20Regular,
   Dismiss20Regular,
   Edit20Regular,
-} from "@fluentui/react-icons"
-import { useRouter } from "next/navigation"
-import { toast } from "@/components/ui/fluent-toast-store"
+} from "@fluentui/react-icons";
+import { useRouter } from "next/navigation";
+import { toast } from "@/components/ui/fluent-toast-store";
 
-import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
+import { SearchToggleField } from "@/components/common/search-toggle-field";
+import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
 import {
   DetailField,
   HeroBand,
@@ -54,9 +55,9 @@ import {
   rowId,
   secondaryButtonClass,
   textareaClass,
-} from "@/components/dashboard/talent-visuals"
-import { cn } from "@/lib/utils"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+} from "@/components/dashboard/talent-visuals";
+import { cn } from "@/lib/utils";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   createProbationCase,
   createProbationObjective,
@@ -75,11 +76,14 @@ import {
   updateProbationCase,
   updateProbationPolicy,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { canAccessDashboardRoute, canPerformPermission } from "@/lib/dashboard-permissions"
-import { readStoredSessionTokens } from "@/lib/session-client"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+} from "@/lib/admin-api";
+import {
+  canAccessDashboardRoute,
+  canPerformPermission,
+} from "@/lib/dashboard-permissions";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   Sheet,
   SheetContent,
@@ -87,13 +91,19 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 
-export type ProbationHrTab = "overview" | "policies" | "cases" | "team"
+export type ProbationHrTab = "overview" | "policies" | "cases" | "team";
 
-type FormMode = "policy" | "manager-review" | "hr-decision" | "case" | "case-edit" | "objective"
+type FormMode =
+  | "policy"
+  | "manager-review"
+  | "hr-decision"
+  | "case"
+  | "case-edit"
+  | "objective";
 
-const CASE_EDITABLE_STATUSES = ["ACTIVE", "OBJECTIVES_PENDING"]
+const CASE_EDITABLE_STATUSES = ["ACTIVE", "OBJECTIVES_PENDING"];
 
 const EMPLOYMENT_TYPES = [
   "full_time",
@@ -102,7 +112,7 @@ const EMPLOYMENT_TYPES = [
   "intern",
   "consultant",
   "temporary",
-] as const
+] as const;
 
 const MANAGER_RECOMMENDATIONS = [
   "CONFIRM",
@@ -110,14 +120,14 @@ const MANAGER_RECOMMENDATIONS = [
   "DO_NOT_CONFIRM",
   "TERMINATE",
   "FURTHER_REVIEW",
-] as const
+] as const;
 
 const HR_DECISIONS = [
   "CONFIRMED",
   "EXTENDED",
   "NOT_CONFIRMED",
   "TERMINATION_RECOMMENDED",
-] as const
+] as const;
 
 const CASE_CYCLE = [
   "DRAFT",
@@ -131,31 +141,39 @@ const CASE_CYCLE = [
   "NOT_CONFIRMED",
   "TERMINATION_RECOMMENDED",
   "CANCELLED",
-]
+];
 
 function readStoredToken() {
-  return readStoredSessionTokens().accessToken.trim()
+  return readStoredSessionTokens().accessToken.trim();
 }
 
 function caseNo(row: AdminRecord | null | undefined) {
-  return readString(row, ["caseNo", "case_no", "caseNumber"], rowId(row) ? `Case #${rowId(row)}` : "Case")
+  return readString(
+    row,
+    ["caseNo", "case_no", "caseNumber"],
+    rowId(row) ? `Case #${rowId(row)}` : "Case",
+  );
 }
 
 function probationLetterType(row: AdminRecord | null | undefined) {
-  const status = readString(row, ["status"]).toUpperCase()
-  const decision = readString(row, ["finalDecision", "final_decision"]).toUpperCase()
-  if (status === "EXTENDED" || decision === "EXTENDED") return "EXTENSION"
-  if (status === "NOT_CONFIRMED" || decision === "NOT_CONFIRMED") return "NOT_CONFIRMED"
-  return "CONFIRMATION"
+  const status = readString(row, ["status"]).toUpperCase();
+  const decision = readString(row, [
+    "finalDecision",
+    "final_decision",
+  ]).toUpperCase();
+  if (status === "EXTENDED" || decision === "EXTENDED") return "EXTENSION";
+  if (status === "NOT_CONFIRMED" || decision === "NOT_CONFIRMED")
+    return "NOT_CONFIRMED";
+  return "CONFIRMATION";
 }
 
 export function ProbationManagementView({
   activeTab,
 }: {
-  activeTab: ProbationHrTab
+  activeTab: ProbationHrTab;
 }) {
-  const router = useRouter()
-  const actor = useDashboardActor()
+  const router = useRouter();
+  const actor = useDashboardActor();
   const activeRoute =
     activeTab === "overview"
       ? "/dashboard/probation/overview"
@@ -163,267 +181,377 @@ export function ProbationManagementView({
         ? "/dashboard/probation/policies"
         : activeTab === "cases"
           ? "/dashboard/probation/cases"
-          : "/dashboard/probation/team"
+          : "/dashboard/probation/team";
   const canAccess =
     actor.ready &&
-    canAccessDashboardRoute(activeRoute, actor.permissionLabels, actor.accessMode)
+    canAccessDashboardRoute(
+      activeRoute,
+      actor.permissionLabels,
+      actor.accessMode,
+    );
   const canCreatePolicy = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_policies:create"],
     mode: "any",
-  })
+  });
   const canUpdatePolicy = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_policies:update"],
     mode: "any",
-  })
+  });
   const canDeletePolicy = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_policies:delete"],
     mode: "any",
-  })
+  });
   const canDeleteCase = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_cases:delete"],
     mode: "any",
-  })
+  });
   const canCreateCase = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_cases:create"],
     mode: "any",
-  })
+  });
   const canUpdateCase = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_cases:update"],
     mode: "any",
-  })
+  });
   const canCreateObjective = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_objectives:create", "probation_cases:update"],
     mode: "any",
-  })
+  });
   const canManagerReview = canPerformPermission(actor.permissionLabels, {
-    permissions: ["probation_reviews:manager-review", "probation_reviews:manager-review-any"],
+    permissions: [
+      "probation_reviews:manager-review",
+      "probation_reviews:manager-review-any",
+    ],
     mode: "any",
-  })
+  });
   const canHrDecision = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_reviews:hr-decision"],
     mode: "any",
-  })
+  });
   const canGenerateLetter = canPerformPermission(actor.permissionLabels, {
     permissions: ["probation_letters:generate"],
     mode: "any",
-  })
+  });
 
   const fallbackHref =
-    actor.accessMode === "employee" ? "/dashboard/me/probation" : "/dashboard"
+    actor.accessMode === "employee" ? "/dashboard/me/probation" : "/dashboard";
 
   React.useEffect(() => {
-    if (!actor.ready || canAccess) return
-    router.replace(fallbackHref)
-  }, [actor.ready, canAccess, fallbackHref, router])
+    if (!actor.ready || canAccess) return;
+    router.replace(fallbackHref);
+  }, [actor.ready, canAccess, fallbackHref, router]);
 
-  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
-  const [policies, setPolicies] = React.useState<AdminRecord[]>([])
-  const [cases, setCases] = React.useState<AdminRecord[]>([])
-  const [teamCases, setTeamCases] = React.useState<AdminRecord[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState("")
-  const [detailOpen, setDetailOpen] = React.useState(false)
-  const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(null)
-  const [caseOpen, setCaseOpen] = React.useState(false)
-  const [caseDetail, setCaseDetail] = React.useState<AdminRecord | null>(null)
-  const [caseLoading, setCaseLoading] = React.useState(false)
-  const [formOpen, setFormOpen] = React.useState(false)
-  const [criterionDialogOpen, setCriterionDialogOpen] = React.useState(false)
-  const [criterionDraft, setCriterionDraft] = React.useState({ code: "", name: "", weight: "", description: "" })
-  const [criterionError, setCriterionError] = React.useState<string | null>(null)
-  const [formMode, setFormMode] = React.useState<FormMode>("policy")
-  const [form, setForm] = React.useState<Record<string, string>>({})
-  const [employeeQuery, setEmployeeQuery] = React.useState("")
-  const [employeeOptions, setEmployeeOptions] = React.useState<AdminRecord[]>([])
-  const [employeeLookupLoading, setEmployeeLookupLoading] = React.useState(false)
-  const [formError, setFormError] = React.useState<string | null>(null)
-  const [saving, setSaving] = React.useState(false)
-  const [busyId, setBusyId] = React.useState("")
+  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null);
+  const [policies, setPolicies] = React.useState<AdminRecord[]>([]);
+  const [cases, setCases] = React.useState<AdminRecord[]>([]);
+  const [teamCases, setTeamCases] = React.useState<AdminRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("");
+  const [detailOpen, setDetailOpen] = React.useState(false);
+  const [detailRecord, setDetailRecord] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [caseOpen, setCaseOpen] = React.useState(false);
+  const [caseDetail, setCaseDetail] = React.useState<AdminRecord | null>(null);
+  const [caseLoading, setCaseLoading] = React.useState(false);
+  const [formOpen, setFormOpen] = React.useState(false);
+  const [criterionDialogOpen, setCriterionDialogOpen] = React.useState(false);
+  const [criterionDraft, setCriterionDraft] = React.useState({
+    code: "",
+    name: "",
+    weight: "",
+    description: "",
+  });
+  const [criterionError, setCriterionError] = React.useState<string | null>(
+    null,
+  );
+  const [formMode, setFormMode] = React.useState<FormMode>("policy");
+  const [form, setForm] = React.useState<Record<string, string>>({});
+  const [employeeQuery, setEmployeeQuery] = React.useState("");
+  const [employeeOptions, setEmployeeOptions] = React.useState<AdminRecord[]>(
+    [],
+  );
+  const [employeeLookupLoading, setEmployeeLookupLoading] =
+    React.useState(false);
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [busyId, setBusyId] = React.useState("");
   const [criteriaRows, setCriteriaRows] = React.useState<
     Array<{ code: string; name: string; weight: string; description: string }>
-  >([])
+  >([]);
 
   const openCriterionDialog = React.useCallback(() => {
-    setCriterionDraft({ code: "", name: "", weight: "", description: "" })
-    setCriterionError(null)
-    setCriterionDialogOpen(true)
-  }, [])
+    setCriterionDraft({ code: "", name: "", weight: "", description: "" });
+    setCriterionError(null);
+    setCriterionDialogOpen(true);
+  }, []);
 
   const addCriterion = React.useCallback(() => {
-    const code = criterionDraft.code.trim()
-    const name = criterionDraft.name.trim()
-    const weight = Number(criterionDraft.weight)
+    const code = criterionDraft.code.trim();
+    const name = criterionDraft.name.trim();
+    const weight = Number(criterionDraft.weight);
     if (!code || !name || criterionDraft.weight.trim() === "") {
-      setCriterionError("Enter a code, name, and weight to add this criterion.")
-      return
+      setCriterionError(
+        "Enter a code, name, and weight to add this criterion.",
+      );
+      return;
     }
     if (!Number.isFinite(weight) || weight < 0 || weight > 100) {
-      setCriterionError("Weight must be between 0 and 100.")
-      return
+      setCriterionError("Weight must be between 0 and 100.");
+      return;
     }
-    if (criteriaRows.some((row) => row.code.trim().toLowerCase() === code.toLowerCase())) {
-      setCriterionError("A criterion with this code already exists.")
-      return
+    if (
+      criteriaRows.some(
+        (row) => row.code.trim().toLowerCase() === code.toLowerCase(),
+      )
+    ) {
+      setCriterionError("A criterion with this code already exists.");
+      return;
     }
-    setCriteriaRows((current) => [{ ...criterionDraft, code, name }, ...current])
-    setCriterionDialogOpen(false)
-  }, [criterionDraft, criteriaRows])
+    setCriteriaRows((current) => [
+      { ...criterionDraft, code, name },
+      ...current,
+    ]);
+    setCriterionDialogOpen(false);
+  }, [criterionDraft, criteriaRows]);
 
   const load = React.useCallback(async () => {
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      setError("Authentication required. Please log in again.")
-      setLoading(false)
-      return
+      setError("Authentication required. Please log in again.");
+      setLoading(false);
+      return;
     }
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const tasks: Array<Promise<unknown>> = [getProbationDashboard(token).then(setDashboard)]
-      if (activeTab === "policies" || activeTab === "overview" || activeTab === "cases") {
-        tasks.push(listProbationPolicies(token).then(setPolicies))
+      const tasks: Array<Promise<unknown>> = [
+        getProbationDashboard(token).then(setDashboard),
+      ];
+      if (
+        activeTab === "policies" ||
+        activeTab === "overview" ||
+        activeTab === "cases"
+      ) {
+        tasks.push(listProbationPolicies(token).then(setPolicies));
       }
       if (activeTab === "cases" || activeTab === "overview") {
-        tasks.push(listProbationCases(token, statusFilter || undefined).then(setCases))
+        tasks.push(
+          listProbationCases(token, statusFilter || undefined).then(setCases),
+        );
       }
       if (activeTab === "team" || activeTab === "overview") {
-        tasks.push(listMyTeamProbationCases(token, statusFilter || undefined).then(setTeamCases))
+        tasks.push(
+          listMyTeamProbationCases(token, statusFilter || undefined).then(
+            setTeamCases,
+          ),
+        );
       }
-      const results = await Promise.allSettled(tasks)
+      const results = await Promise.allSettled(tasks);
       const permissionFailure = results.find(
-        (result) => result.status === "rejected" && isPermissionError(result.reason),
-      )
-      const failed = permissionFailure ?? results.find((result) => result.status === "rejected")
+        (result) =>
+          result.status === "rejected" && isPermissionError(result.reason),
+      );
+      const failed =
+        permissionFailure ??
+        results.find((result) => result.status === "rejected");
       if (failed && failed.status === "rejected") {
         setError(
-          failed.reason instanceof Error ? failed.reason.message : "Could not load probation data.",
-        )
+          failed.reason instanceof Error
+            ? failed.reason.message
+            : "Could not load probation data.",
+        );
       }
     } catch (errorObject) {
-      setError(errorObject instanceof Error ? errorObject.message : "Could not load probation data.")
+      setError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load probation data.",
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [activeTab, statusFilter])
+  }, [activeTab, statusFilter]);
 
   React.useEffect(() => {
-    if (!canAccess) return
-    void load()
-  }, [canAccess, load])
+    if (!canAccess) return;
+    void load();
+  }, [canAccess, load]);
 
   React.useEffect(() => {
-    const query = employeeQuery.trim()
+    const query = employeeQuery.trim();
     if (!formOpen || formMode !== "case" || form.employee_id || !query) {
-      setEmployeeOptions([])
-      setEmployeeLookupLoading(false)
-      return
+      setEmployeeOptions([]);
+      setEmployeeLookupLoading(false);
+      return;
     }
 
-    const controller = new AbortController()
+    const controller = new AbortController();
     const timeout = window.setTimeout(() => {
-      const token = readStoredToken()
-      if (!token) return
-      setEmployeeLookupLoading(true)
-      void listEmployees(token, { page: 1, limit: 20, search: query }, { signal: controller.signal })
+      const token = readStoredToken();
+      if (!token) return;
+      setEmployeeLookupLoading(true);
+      void listEmployees(
+        token,
+        { page: 1, limit: 20, search: query },
+        { signal: controller.signal },
+      )
         .then((result) => setEmployeeOptions(result.rows))
         .catch(() => {
-          if (!controller.signal.aborted) setEmployeeOptions([])
+          if (!controller.signal.aborted) setEmployeeOptions([]);
         })
         .finally(() => {
-          if (!controller.signal.aborted) setEmployeeLookupLoading(false)
-        })
-    }, 250)
+          if (!controller.signal.aborted) setEmployeeLookupLoading(false);
+        });
+    }, 250);
 
     return () => {
-      window.clearTimeout(timeout)
-      controller.abort()
-    }
-  }, [employeeQuery, form.employee_id, formMode, formOpen])
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [employeeQuery, form.employee_id, formMode, formOpen]);
 
   const rows =
-    activeTab === "policies" ? policies : activeTab === "team" ? teamCases : cases
+    activeTab === "policies"
+      ? policies
+      : activeTab === "team"
+        ? teamCases
+        : cases;
   const visibleRows = rows.filter((row) => {
-    if (!search.trim()) return true
-    return JSON.stringify(row).toLowerCase().includes(search.trim().toLowerCase())
-  })
+    if (!search.trim()) return true;
+    return JSON.stringify(row)
+      .toLowerCase()
+      .includes(search.trim().toLowerCase());
+  });
 
   const openCount =
     readNumber(dashboard, ["open_cases", "openCases", "in_progress"]) ??
-    cases.filter((row) => !["CONFIRMED", "NOT_CONFIRMED", "CLOSED"].includes(readString(row, ["status"]).toUpperCase())).length
+    cases.filter(
+      (row) =>
+        !["CONFIRMED", "NOT_CONFIRMED", "CLOSED"].includes(
+          readString(row, ["status"]).toUpperCase(),
+        ),
+    ).length;
   const dueSoon =
-    readNumber(dashboard, ["due_this_week", "dueThisWeek", "due_soon", "dueSoon"]) ?? 0
+    readNumber(dashboard, [
+      "due_this_week",
+      "dueThisWeek",
+      "due_soon",
+      "dueSoon",
+    ]) ?? 0;
   const confirmationRate = readNumber(dashboard, [
     "confirmation_rate",
     "confirmationRate",
     "average_score",
     "averageScore",
-  ])
+  ]);
   const cycleCounts = React.useMemo(
     () =>
       CASE_CYCLE.map((status) => ({
         status,
-        count: cases.filter((row) => readString(row, ["status"]).toUpperCase() === status).length,
+        count: cases.filter(
+          (row) => readString(row, ["status"]).toUpperCase() === status,
+        ).length,
       })),
     [cases],
-  )
+  );
 
   async function openCase(row: AdminRecord) {
-    const token = readStoredToken()
-    const id = rowId(row)
-    setCaseDetail(row)
-    setCaseOpen(true)
-    if (!token || !id) return
-    setCaseLoading(true)
+    const token = readStoredToken();
+    const id = rowId(row);
+    setCaseDetail(row);
+    setCaseOpen(true);
+    if (!token || !id) return;
+    setCaseLoading(true);
     try {
-      const detail = await getProbationCase(token, id)
-      if (detail) setCaseDetail(detail)
+      const detail = await getProbationCase(token, id);
+      if (detail) setCaseDetail(detail);
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not load the case.")
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load the case.",
+      );
     } finally {
-      setCaseLoading(false)
+      setCaseLoading(false);
     }
   }
 
   function openForm(
     mode: FormMode,
     seed: Record<string, string> = {},
-    criteria: Array<{ code: string; name: string; weight: string; description: string }> = [],
+    criteria: Array<{
+      code: string;
+      name: string;
+      weight: string;
+      description: string;
+    }> = [],
   ) {
-    setFormMode(mode)
-    setForm(seed)
-    if (mode === "case") setEmployeeQuery("")
-    setCriteriaRows(mode === "policy" ? (criteria.length > 0 ? criteria : [{ code: "", name: "", weight: "100", description: "" }]) : [])
-    setFormError(null)
-    setFormOpen(true)
+    setFormMode(mode);
+    setForm(seed);
+    if (mode === "case") setEmployeeQuery("");
+    setCriteriaRows(
+      mode === "policy"
+        ? criteria.length > 0
+          ? criteria
+          : [{ code: "", name: "", weight: "100", description: "" }]
+        : [],
+    );
+    setFormError(null);
+    setFormOpen(true);
   }
 
   async function onSave() {
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      setFormError("Authentication required. Please log in again.")
-      return
+      setFormError("Authentication required. Please log in again.");
+      return;
     }
-    setSaving(true)
-    setFormError(null)
+    setSaving(true);
+    setFormError(null);
     try {
       if (formMode === "policy") {
-        if (!form.code || !form.name || !form.probation_period_days || !form.effective_from) {
-          throw new Error("Code, name, duration, and effective from are required.")
+        if (
+          !form.code ||
+          !form.name ||
+          !form.probation_period_days ||
+          !form.effective_from
+        ) {
+          throw new Error(
+            "Code, name, duration, and effective from are required.",
+          );
         }
-        const incompleteCriterion = criteriaRows.find((row) =>
-          !row.code.trim() || !row.name.trim() || !row.weight.trim(),
-        )
+        const incompleteCriterion = criteriaRows.find(
+          (row) => !row.code.trim() || !row.name.trim() || !row.weight.trim(),
+        );
         if (incompleteCriterion) {
-          throw new Error("Complete each criterion or remove the empty row before saving.")
+          throw new Error(
+            "Complete each criterion or remove the empty row before saving.",
+          );
         }
-        const criterionWeightTotal = criteriaRows.reduce((sum, row) => sum + Number(row.weight), 0)
-        if (criteriaRows.length > 0 && Math.abs(criterionWeightTotal - 100) > 0.001) {
-          throw new Error(`Criterion weights must total 100. Current total: ${criterionWeightTotal}.`)
+        const criterionWeightTotal = criteriaRows.reduce(
+          (sum, row) => sum + Number(row.weight),
+          0,
+        );
+        if (
+          criteriaRows.length > 0 &&
+          Math.abs(criterionWeightTotal - 100) > 0.001
+        ) {
+          throw new Error(
+            `Criterion weights must total 100. Current total: ${criterionWeightTotal}.`,
+          );
         }
-        if (criteriaRows.some((row) => !Number.isFinite(Number(row.weight)) || Number(row.weight) < 0 || Number(row.weight) > 100)) {
-          throw new Error("Each criterion weight must be between 0 and 100.")
+        if (
+          criteriaRows.some(
+            (row) =>
+              !Number.isFinite(Number(row.weight)) ||
+              Number(row.weight) < 0 ||
+              Number(row.weight) > 100,
+          )
+        ) {
+          throw new Error("Each criterion weight must be between 0 and 100.");
         }
         const payload = {
           code: form.code,
@@ -436,31 +564,38 @@ export function ProbationManagementView({
           minimum_confirmation_score: form.minimum_confirmation_score
             ? Number(form.minimum_confirmation_score)
             : undefined,
-          maximum_extensions: form.maximum_extensions ? Number(form.maximum_extensions) : undefined,
-          default_extension_days: form.default_extension_days ? Number(form.default_extension_days) : undefined,
+          maximum_extensions: form.maximum_extensions
+            ? Number(form.maximum_extensions)
+            : undefined,
+          default_extension_days: form.default_extension_days
+            ? Number(form.default_extension_days)
+            : undefined,
           manager_review_required: form.manager_review_required !== "false",
           hr_approval_required: form.hr_approval_required !== "false",
-          confirmation_letter_required: form.confirmation_letter_required !== "false",
+          confirmation_letter_required:
+            form.confirmation_letter_required !== "false",
           is_default: form.is_default === "true",
           effective_from: form.effective_from,
           effective_to: form.effective_to || undefined,
-          criteria: criteriaRows.filter((row) => row.code && row.name && row.weight).map((row) => ({
-            code: row.code,
-            name: row.name,
-            weight: Number(row.weight),
-            description: row.description || undefined,
-            self_rating_enabled: true,
-            is_required: true,
-          })),
-        }
+          criteria: criteriaRows
+            .filter((row) => row.code && row.name && row.weight)
+            .map((row) => ({
+              code: row.code,
+              name: row.name,
+              weight: Number(row.weight),
+              description: row.description || undefined,
+              self_rating_enabled: true,
+              is_required: true,
+            })),
+        };
         if (form.id) {
-          await updateProbationPolicy(token, form.id, payload)
+          await updateProbationPolicy(token, form.id, payload);
         } else {
-          await createProbationPolicy(token, payload)
+          await createProbationPolicy(token, payload);
         }
       } else if (formMode === "manager-review") {
         if (!form.case_id || !form.recommendation || !form.comments) {
-          throw new Error("Recommendation and comments are required.")
+          throw new Error("Recommendation and comments are required.");
         }
         await submitProbationManagerReview(token, form.case_id, {
           recommendation: form.recommendation,
@@ -468,39 +603,43 @@ export function ProbationManagementView({
           recommended_extension_days: form.recommended_extension_days
             ? Number(form.recommended_extension_days)
             : undefined,
-        })
+        });
       } else if (formMode === "hr-decision") {
         if (!form.case_id || !form.decision || !form.comments) {
-          throw new Error("Decision and comments are required.")
+          throw new Error("Decision and comments are required.");
         }
         await submitProbationHrDecision(token, form.case_id, {
           decision: form.decision,
           comments: form.comments,
           confirmation_date: form.confirmation_date || undefined,
-          extension_days: form.extension_days ? Number(form.extension_days) : undefined,
+          extension_days: form.extension_days
+            ? Number(form.extension_days)
+            : undefined,
           extension_end_date: form.extension_end_date || undefined,
-        })
+        });
       } else if (formMode === "case") {
         if (!form.employee_id || !form.start_date) {
-          throw new Error("Choose an employee by number and enter a start date.")
+          throw new Error(
+            "Choose an employee by number and enter a start date.",
+          );
         }
         await createProbationCase(token, {
           employee_id: Number(form.employee_id),
           start_date: form.start_date,
           policy_id: form.policy_id ? Number(form.policy_id) : undefined,
-        })
+        });
       } else if (formMode === "case-edit") {
         if (!form.case_id) {
-          throw new Error("Missing case reference.")
+          throw new Error("Missing case reference.");
         }
         await updateProbationCase(token, form.case_id, {
           start_date: form.start_date || undefined,
           current_due_date: form.current_due_date || undefined,
           policy_id: form.policy_id ? Number(form.policy_id) : undefined,
-        })
+        });
       } else if (formMode === "objective") {
         if (!form.case_id || !form.title) {
-          throw new Error("Objective title is required.")
+          throw new Error("Objective title is required.");
         }
         await createProbationObjective(token, form.case_id, {
           title: form.title,
@@ -508,56 +647,82 @@ export function ProbationManagementView({
           expected_result: form.expected_result || undefined,
           weight: form.weight ? Number(form.weight) : undefined,
           due_date: form.due_date || undefined,
-        })
+        });
       }
-      toast.success("Saved.")
-      setFormOpen(false)
-      await load()
+      toast.success("Saved.");
+      setFormOpen(false);
+      await load();
       if (form.case_id) {
-        const detail = await getProbationCase(token, form.case_id)
-        if (detail) setCaseDetail(detail)
+        const detail = await getProbationCase(token, form.case_id);
+        if (detail) setCaseDetail(detail);
       }
     } catch (errorObject) {
-      setFormError(errorObject instanceof Error ? errorObject.message : "Could not save.")
+      setFormError(
+        errorObject instanceof Error ? errorObject.message : "Could not save.",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  const onDeletePolicy = React.useCallback(async (row: AdminRecord) => {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    if (!window.confirm(`Delete policy "${optionLabel(row)}"? This cannot be undone.`)) return
-    setBusyId(`policy-${id}`)
-    try {
-      await deleteProbationPolicy(token, id)
-      toast.success("Policy deleted.")
-      await load()
-    } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete the policy.")
-    } finally {
-      setBusyId("")
-    }
-  }, [load])
+  const onDeletePolicy = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken();
+      const id = rowId(row);
+      if (!token || !id) return;
+      if (
+        !(await fluentConfirm(
+          `Delete policy "${optionLabel(row)}"? This cannot be undone.`,
+        ))
+      )
+        return;
+      setBusyId(`policy-${id}`);
+      try {
+        await deleteProbationPolicy(token, id);
+        toast.success("Policy deleted.");
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not delete the policy.",
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
 
-  const onDeleteCase = React.useCallback(async (row: AdminRecord) => {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    if (!window.confirm(`Delete case "${caseNo(row)}"? This cannot be undone.`)) return
-    setBusyId(`case-${id}`)
-    try {
-      await deleteProbationCase(token, id)
-      toast.success("Case deleted.")
-      setCaseOpen(false)
-      await load()
-    } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not delete the case.")
-    } finally {
-      setBusyId("")
-    }
-  }, [load])
+  const onDeleteCase = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken();
+      const id = rowId(row);
+      if (!token || !id) return;
+      if (
+        !(await fluentConfirm(
+          `Delete case "${caseNo(row)}"? This cannot be undone.`,
+        ))
+      )
+        return;
+      setBusyId(`case-${id}`);
+      try {
+        await deleteProbationCase(token, id);
+        toast.success("Case deleted.");
+        setCaseOpen(false);
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not delete the case.",
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
 
   const columns = React.useMemo<Column<AdminRecord>[]>(() => {
     if (activeTab === "policies") {
@@ -568,31 +733,39 @@ export function ProbationManagementView({
           render: (row) => (
             <div className="space-y-0.5">
               <p className="font-medium">{optionLabel(row)}</p>
-              <p className="text-xs text-muted-foreground">{readString(row, ["code"])}</p>
+              <p className="text-xs text-muted-foreground">
+                {readString(row, ["code"])}
+              </p>
             </div>
           ),
         },
         {
           key: "days",
           label: "Days",
-          render: (row) => readString(row, ["probationPeriodDays", "probation_period_days"], "—"),
+          render: (row) =>
+            readString(
+              row,
+              ["probationPeriodDays", "probation_period_days"],
+              "—",
+            ),
         },
         {
           key: "status",
           label: "Status",
           render: (row) => {
-            const status = readString(row, ["status"], "ACTIVE")
+            const status = readString(row, ["status"], "ACTIVE");
             return (
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
                 {prettify(status)}
               </span>
-            )
+            );
           },
         },
         {
           key: "default",
           label: "Default",
-          render: (row) => (readBoolean(row, ["isDefault", "is_default"]) ? "Yes" : "No"),
+          render: (row) =>
+            readBoolean(row, ["isDefault", "is_default"]) ? "Yes" : "No",
         },
         {
           key: "actions",
@@ -608,13 +781,15 @@ export function ProbationManagementView({
                   aria-label={`Edit policy ${optionLabel(row)}`}
                   title={`Edit policy ${optionLabel(row)}`}
                   onClick={(event) => {
-                    event.stopPropagation()
-                    const criteria = asRecordArray(row.criteria).map((criterion) => ({
-                      code: readString(criterion, ["code"]),
-                      name: readString(criterion, ["name"]),
-                      weight: readString(criterion, ["weight"]),
-                      description: readString(criterion, ["description"]),
-                    }))
+                    event.stopPropagation();
+                    const criteria = asRecordArray(row.criteria).map(
+                      (criterion) => ({
+                        code: readString(criterion, ["code"]),
+                        name: readString(criterion, ["name"]),
+                        weight: readString(criterion, ["weight"]),
+                        description: readString(criterion, ["description"]),
+                      }),
+                    );
                     openForm(
                       "policy",
                       {
@@ -622,13 +797,24 @@ export function ProbationManagementView({
                         code: readString(row, ["code"]),
                         name: readString(row, ["name"]),
                         description: readString(row, ["description"]),
-                        employment_type: readString(row, ["employmentType", "employment_type"]),
-                        probation_period_days: readString(row, ["probationPeriodDays", "probation_period_days"]),
-                        effective_from: String(row.effectiveFrom ?? row.effective_from ?? "").slice(0, 10),
-                        minimum_confirmation_score: readString(row, ["minimumConfirmationScore", "minimum_confirmation_score"]),
+                        employment_type: readString(row, [
+                          "employmentType",
+                          "employment_type",
+                        ]),
+                        probation_period_days: readString(row, [
+                          "probationPeriodDays",
+                          "probation_period_days",
+                        ]),
+                        effective_from: String(
+                          row.effectiveFrom ?? row.effective_from ?? "",
+                        ).slice(0, 10),
+                        minimum_confirmation_score: readString(row, [
+                          "minimumConfirmationScore",
+                          "minimum_confirmation_score",
+                        ]),
                       },
                       criteria,
-                    )
+                    );
                   }}
                 />
               ) : null}
@@ -637,20 +823,25 @@ export function ProbationManagementView({
                   type="button"
                   appearance="subtle"
                   size="small"
-                icon={busyId === `policy-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <Delete20Regular />}
+                  icon={
+                    busyId === `policy-${rowId(row)}` ? (
+                      <FluentLoadingIndicator className="size-4 animate-spin" />
+                    ) : (
+                      <Delete20Regular />
+                    )
+                  }
                   aria-label={`Delete policy ${optionLabel(row)}`}
                   disabled={busyId === `policy-${rowId(row)}`}
                   onClick={(event) => {
-                    event.stopPropagation()
-                    void onDeletePolicy(row)
+                    event.stopPropagation();
+                    void onDeletePolicy(row);
                   }}
-                >
-                </FluentButton>
+                ></FluentButton>
               ) : null}
             </div>
           ),
         },
-      ]
+      ];
     }
     return [
       {
@@ -659,24 +850,34 @@ export function ProbationManagementView({
         render: (row) => (
           <div className="space-y-0.5">
             <p className="font-medium">{caseNo(row)}</p>
-            <p className="text-xs text-muted-foreground">{employeeLabel(row)}</p>
+            <p className="text-xs text-muted-foreground">
+              {employeeLabel(row)}
+            </p>
           </div>
         ),
       },
       {
         key: "status",
         label: "Status",
-        render: (row) => <StatusChip value={readString(row, ["status"], "OPEN")} />,
+        render: (row) => (
+          <StatusChip value={readString(row, ["status"], "OPEN")} />
+        ),
       },
       {
         key: "due",
         label: "Due",
-        render: (row) => formatDate(row.currentDueDate ?? row.current_due_date ?? row.originalDueDate),
+        render: (row) =>
+          formatDate(
+            row.currentDueDate ?? row.current_due_date ?? row.originalDueDate,
+          ),
       },
       {
         key: "decision",
         label: "Decision",
-        render: (row) => prettify(readString(row, ["finalDecision", "final_decision"], "Pending")),
+        render: (row) =>
+          prettify(
+            readString(row, ["finalDecision", "final_decision"], "Pending"),
+          ),
       },
       {
         key: "actions",
@@ -687,8 +888,8 @@ export function ProbationManagementView({
               type="button"
               className={actionButtonClass}
               onClick={(event) => {
-                event.stopPropagation()
-                void openCase(row)
+                event.stopPropagation();
+                void openCase(row);
               }}
             >
               Open
@@ -699,20 +900,32 @@ export function ProbationManagementView({
                 className={cn(actionButtonClass, "text-rose-600")}
                 disabled={busyId === `case-${rowId(row)}`}
                 onClick={(event) => {
-                  event.stopPropagation()
-                  void onDeleteCase(row)
+                  event.stopPropagation();
+                  void onDeleteCase(row);
                 }}
               >
-                {busyId === `case-${rowId(row)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <Delete20Regular />}
+                {busyId === `case-${rowId(row)}` ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <Delete20Regular />
+                )}
               </button>
             ) : null}
           </div>
         ),
       },
-    ]
-  }, [activeTab, canUpdatePolicy, canDeletePolicy, canDeleteCase, busyId, onDeleteCase, onDeletePolicy])
+    ];
+  }, [
+    activeTab,
+    canUpdatePolicy,
+    canDeletePolicy,
+    canDeleteCase,
+    busyId,
+    onDeleteCase,
+    onDeletePolicy,
+  ]);
 
-  if (!canAccess) return null
+  if (!canAccess) return null;
 
   return (
     <section className="space-y-4">
@@ -727,7 +940,13 @@ export function ProbationManagementView({
             actions={
               <FluentButton
                 appearance="secondary"
-                icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwise20Regular />}
+                icon={
+                  loading ? (
+                    <FluentLoadingIndicator className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowClockwise20Regular />
+                  )
+                }
                 onClick={() => void load()}
                 disabled={loading}
               >
@@ -743,43 +962,84 @@ export function ProbationManagementView({
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <FluentCard appearance="outline" className="min-w-0 p-3">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Confirmation rate</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Confirmation rate
+                </p>
                 <p className="text-xl font-semibold tabular-nums text-foreground">
-                  {confirmationRate === null ? "—" : `${Math.round(confirmationRate)}%`}
+                  {confirmationRate === null
+                    ? "—"
+                    : `${Math.round(confirmationRate)}%`}
                 </p>
               </div>
               <FluentProgressBar
                 className="mt-2"
-                value={confirmationRate === null ? 0 : Math.max(0, Math.min(100, confirmationRate))}
+                value={
+                  confirmationRate === null
+                    ? 0
+                    : Math.max(0, Math.min(100, confirmationRate))
+                }
                 max={100}
                 thickness="medium"
                 aria-label="Confirmation rate"
               />
-              <p className="mt-1.5 text-xs text-muted-foreground">Confirmed probation cases</p>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Confirmed probation cases
+              </p>
             </FluentCard>
             {[
-              { label: "Open cases", value: openCount, hint: "Still in the cycle" },
-              { label: "Due this week", value: dueSoon, hint: "Need a review now" },
-              { label: "Policies", value: policies.length, hint: "Active confirmation rules" },
-              { label: "My team", value: teamCases.length, hint: "Probation cases in your team" },
+              {
+                label: "Open cases",
+                value: openCount,
+                hint: "Still in the cycle",
+              },
+              {
+                label: "Due this week",
+                value: dueSoon,
+                hint: "Need a review now",
+              },
+              {
+                label: "Policies",
+                value: policies.length,
+                hint: "Active confirmation rules",
+              },
+              {
+                label: "My team",
+                value: teamCases.length,
+                hint: "Probation cases in your team",
+              },
             ].map((item) => (
-              <FluentCard key={item.label} appearance="outline" className="min-w-0 p-3">
-                <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
-                <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-foreground">{item.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+              <FluentCard
+                key={item.label}
+                appearance="outline"
+                className="min-w-0 p-3"
+              >
+                <p className="text-xs font-medium text-muted-foreground">
+                  {item.label}
+                </p>
+                <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-foreground">
+                  {item.value}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {item.hint}
+                </p>
               </FluentCard>
             ))}
           </div>
           <FluentCard appearance="outline" className="p-3 sm:p-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <h2 className="text-sm font-semibold">Confirmation cycle</h2>
-              <p className="text-xs text-muted-foreground">{cases.length} total</p>
+              <p className="text-xs text-muted-foreground">
+                {cases.length} total
+              </p>
             </div>
             <ol className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-1">
               {cycleCounts.map((step, index) => {
-                const last = index === cycleCounts.length - 1
+                const last = index === cycleCounts.length - 1;
                 return (
-                  <li key={step.status} className="relative flex items-start sm:min-w-0 sm:flex-1 sm:flex-col">
+                  <li
+                    key={step.status}
+                    className="relative flex items-start sm:min-w-0 sm:flex-1 sm:flex-col"
+                  >
                     {last ? null : (
                       <span
                         className="absolute left-[17px] top-9 h-[calc(100%+0.75rem)] w-px bg-border sm:hidden"
@@ -800,14 +1060,19 @@ export function ProbationManagementView({
                         {step.count}
                       </span>
                       {last ? null : (
-                        <span className="mx-3 hidden h-px flex-1 bg-border sm:block" aria-hidden />
+                        <span
+                          className="mx-3 hidden h-px flex-1 bg-border sm:block"
+                          aria-hidden
+                        />
                       )}
                     </div>
                     <div className="ml-3 min-w-0 pt-1.5 sm:ml-0 sm:pt-2">
-                      <p className="text-sm font-medium text-foreground">{prettify(step.status)}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {prettify(step.status)}
+                      </p>
                     </div>
                   </li>
-                )
+                );
               })}
             </ol>
           </FluentCard>
@@ -816,32 +1081,54 @@ export function ProbationManagementView({
         <div className="grid min-w-0 gap-3 border-b border-border/60 pb-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-tight">
-              {activeTab === "policies" ? "Probation policies" : activeTab === "team" ? "My team’s probation cases" : "Probation cases"}
+              {activeTab === "policies"
+                ? "Probation policies"
+                : activeTab === "team"
+                  ? "My team’s probation cases"
+                  : "Probation cases"}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               {activeTab === "policies"
                 ? "Duration, confirmation score, and review rules for each employment type."
                 : activeTab === "team"
                   ? "Cases for employees in your team. Open a case to review its progress and submit your recommendation."
-                : "Open a case to review evidence, submit a manager recommendation, or record the HR decision."}
+                  : "Open a case to review evidence, submit a manager recommendation, or record the HR decision."}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:justify-end">
             <FluentButton
               appearance="secondary"
-              icon={loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwise20Regular />}
+              icon={
+                loading ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  <ArrowClockwise20Regular />
+                )
+              }
               onClick={() => void load()}
               disabled={loading}
             >
               Refresh
             </FluentButton>
             {activeTab === "policies" && canCreatePolicy ? (
-              <FluentButton appearance="primary" icon={<Add20Regular />} onClick={() => openForm("policy")}>
+              <FluentButton
+                appearance="primary"
+                icon={<Add20Regular />}
+                onClick={() => openForm("policy")}
+              >
                 New policy
               </FluentButton>
             ) : null}
             {activeTab === "cases" && canCreateCase ? (
-              <FluentButton appearance="primary" icon={<Add20Regular />} onClick={() => openForm("case", { start_date: new Date().toISOString().slice(0, 10) })}>
+              <FluentButton
+                appearance="primary"
+                icon={<Add20Regular />}
+                onClick={() =>
+                  openForm("case", {
+                    start_date: new Date().toISOString().slice(0, 10),
+                  })
+                }
+              >
                 New case
               </FluentButton>
             ) : null}
@@ -852,7 +1139,11 @@ export function ProbationManagementView({
       {activeTab !== "overview" ? (
         <div className="space-y-3">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <SearchToggleField value={search} onChange={setSearch} placeholder="Search cases or policies" />
+            <SearchToggleField
+              value={search}
+              onChange={setSearch}
+              placeholder="Search cases or policies"
+            />
             <FluentSelect
               ariaLabel="Status"
               className="w-full sm:!w-56 sm:!shrink-0"
@@ -861,7 +1152,10 @@ export function ProbationManagementView({
               onChange={setStatusFilter}
               options={[
                 { value: "", label: "All statuses" },
-                ...CASE_CYCLE.map((status) => ({ value: status, label: prettify(status) })),
+                ...CASE_CYCLE.map((status) => ({
+                  value: status,
+                  label: prettify(status),
+                })),
               ]}
             />
           </div>
@@ -871,25 +1165,25 @@ export function ProbationManagementView({
             </div>
           ) : null}
           <ResizableTable
-              title="Probation records"
-              data={visibleRows}
-              columns={columns}
-              loading={loading}
-              itemsPerPage={20}
-              showExport={false}
-              fluent
-              frameClassName="!border-0 !bg-transparent !shadow-none"
-              storageKey={`probation-${activeTab}`}
-              onRowSelect={(_, row) => {
-                if (!row) return
-                if (activeTab === "policies") {
-                  setDetailRecord(row)
-                  setDetailOpen(true)
-                  return
-                }
-                void openCase(row)
-              }}
-            />
+            title="Probation records"
+            data={visibleRows}
+            columns={columns}
+            loading={loading}
+            itemsPerPage={20}
+            showExport={false}
+            fluent
+            frameClassName="!border-0 !bg-transparent !shadow-none"
+            storageKey={`probation-${activeTab}`}
+            onRowSelect={(_, row) => {
+              if (!row) return;
+              if (activeTab === "policies") {
+                setDetailRecord(row);
+                setDetailOpen(true);
+                return;
+              }
+              void openCase(row);
+            }}
+          />
         </div>
       ) : null}
 
@@ -914,40 +1208,90 @@ export function ProbationManagementView({
           ) : caseDetail ? (
             <div className="space-y-4 px-1 pb-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusChip value={readString(caseDetail, ["status"], "OPEN")} />
-                <StatusChip value={readString(caseDetail, ["finalDecision", "final_decision"], "Pending")} />
+                <StatusChip
+                  value={readString(caseDetail, ["status"], "OPEN")}
+                />
+                <StatusChip
+                  value={readString(
+                    caseDetail,
+                    ["finalDecision", "final_decision"],
+                    "Pending",
+                  )}
+                />
               </div>
               <TimelineRail
                 items={[
                   {
                     label: "Started",
-                    value: formatDate(caseDetail.currentStartDate ?? caseDetail.current_start_date ?? caseDetail.originalStartDate),
+                    value: formatDate(
+                      caseDetail.currentStartDate ??
+                        caseDetail.current_start_date ??
+                        caseDetail.originalStartDate,
+                    ),
                   },
                   {
                     label: "Due",
-                    value: formatDate(caseDetail.currentDueDate ?? caseDetail.current_due_date),
+                    value: formatDate(
+                      caseDetail.currentDueDate ?? caseDetail.current_due_date,
+                    ),
                     hint: `Cycle ${readString(caseDetail, ["currentCycleNumber", "current_cycle_number"], "1")}`,
                   },
                   {
                     label: "Decision",
-                    value: prettify(readString(caseDetail, ["finalDecision", "final_decision"], "Pending")),
-                    hint: formatDate(caseDetail.confirmationDate ?? caseDetail.confirmation_date),
+                    value: prettify(
+                      readString(
+                        caseDetail,
+                        ["finalDecision", "final_decision"],
+                        "Pending",
+                      ),
+                    ),
+                    hint: formatDate(
+                      caseDetail.confirmationDate ??
+                        caseDetail.confirmation_date,
+                    ),
                   },
                 ]}
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                <DetailField label="Policy" value={optionLabel(asRecord(caseDetail.policy))} />
-                <DetailField label="Extensions" value={readString(caseDetail, ["extensionCount", "extension_count"], "0")} />
+                <DetailField
+                  label="Policy"
+                  value={optionLabel(asRecord(caseDetail.policy))}
+                />
+                <DetailField
+                  label="Extensions"
+                  value={readString(
+                    caseDetail,
+                    ["extensionCount", "extension_count"],
+                    "0",
+                  )}
+                />
               </div>
               {asRecordArray(caseDetail.objectives).length > 0 ? (
                 <div className="rounded-xl border border-border bg-card p-3">
                   <h3 className="text-sm font-semibold">Objectives</h3>
                   <div className="mt-2 space-y-2">
                     {asRecordArray(caseDetail.objectives).map((objective) => (
-                      <div key={rowId(objective)} className="rounded-lg bg-muted/40 px-3 py-2">
-                        <p className="text-sm font-medium">{readString(objective, ["title", "name"])}</p>
+                      <div
+                        key={rowId(objective)}
+                        className="rounded-lg bg-muted/40 px-3 py-2"
+                      >
+                        <p className="text-sm font-medium">
+                          {readString(objective, ["title", "name"])}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {prettify(readString(objective, ["status"], "NOT_STARTED"))} · {readString(objective, ["employeeCompletionPercent", "employee_completion_percent"], "0")}%
+                          {prettify(
+                            readString(objective, ["status"], "NOT_STARTED"),
+                          )}{" "}
+                          ·{" "}
+                          {readString(
+                            objective,
+                            [
+                              "employeeCompletionPercent",
+                              "employee_completion_percent",
+                            ],
+                            "0",
+                          )}
+                          %
                         </p>
                       </div>
                     ))}
@@ -957,30 +1301,53 @@ export function ProbationManagementView({
             </div>
           ) : null}
           <SheetFooter className="gap-2">
-            {canUpdateCase && caseDetail && CASE_EDITABLE_STATUSES.includes(readString(caseDetail, ["status"]).toUpperCase()) ? (
+            {canUpdateCase &&
+            caseDetail &&
+            CASE_EDITABLE_STATUSES.includes(
+              readString(caseDetail, ["status"]).toUpperCase(),
+            ) ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
                 onClick={() =>
                   openForm("case-edit", {
                     case_id: rowId(caseDetail),
-                    start_date: String(caseDetail.currentStartDate ?? caseDetail.current_start_date ?? "").slice(0, 10),
-                    current_due_date: String(caseDetail.currentDueDate ?? caseDetail.current_due_date ?? "").slice(0, 10),
-                    policy_id: readString(caseDetail, ["policyId", "policy_id"]),
+                    start_date: String(
+                      caseDetail.currentStartDate ??
+                        caseDetail.current_start_date ??
+                        "",
+                    ).slice(0, 10),
+                    current_due_date: String(
+                      caseDetail.currentDueDate ??
+                        caseDetail.current_due_date ??
+                        "",
+                    ).slice(0, 10),
+                    policy_id: readString(caseDetail, [
+                      "policyId",
+                      "policy_id",
+                    ]),
                   })
                 }
               >
                 Edit case
               </button>
             ) : null}
-            {canCreateObjective && caseDetail && CASE_EDITABLE_STATUSES.includes(readString(caseDetail, ["status"]).toUpperCase()) ? (
+            {canCreateObjective &&
+            caseDetail &&
+            CASE_EDITABLE_STATUSES.includes(
+              readString(caseDetail, ["status"]).toUpperCase(),
+            ) ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
                 onClick={() =>
                   openForm("objective", {
                     case_id: rowId(caseDetail),
-                    due_date: String(caseDetail.currentDueDate ?? caseDetail.current_due_date ?? "").slice(0, 10),
+                    due_date: String(
+                      caseDetail.currentDueDate ??
+                        caseDetail.current_due_date ??
+                        "",
+                    ).slice(0, 10),
                   })
                 }
               >
@@ -989,7 +1356,8 @@ export function ProbationManagementView({
             ) : null}
             {canManagerReview &&
             caseDetail &&
-            readString(caseDetail, ["status"]).toUpperCase() === "MANAGER_REVIEW_PENDING" ? (
+            readString(caseDetail, ["status"]).toUpperCase() ===
+              "MANAGER_REVIEW_PENDING" ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
@@ -1005,7 +1373,8 @@ export function ProbationManagementView({
             ) : null}
             {canHrDecision &&
             caseDetail &&
-            readString(caseDetail, ["status"]).toUpperCase() === "HR_REVIEW_PENDING" ? (
+            readString(caseDetail, ["status"]).toUpperCase() ===
+              "HR_REVIEW_PENDING" ? (
               <button
                 type="button"
                 className={secondaryButtonClass}
@@ -1025,11 +1394,15 @@ export function ProbationManagementView({
                 className={cn(secondaryButtonClass, "text-rose-600")}
                 disabled={busyId === `case-${rowId(caseDetail)}`}
                 onClick={() => {
-                  if (!caseDetail) return
-                  void onDeleteCase(caseDetail)
+                  if (!caseDetail) return;
+                  void onDeleteCase(caseDetail);
                 }}
               >
-                {busyId === `case-${rowId(caseDetail)}` ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Delete case"}
+                {busyId === `case-${rowId(caseDetail)}` ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  "Delete case"
+                )}
               </button>
             ) : null}
             {canGenerateLetter ? (
@@ -1038,26 +1411,41 @@ export function ProbationManagementView({
                 className={primaryButtonClass}
                 disabled={busyId === "letter"}
                 onClick={() => {
-                  const token = readStoredToken()
-                  const id = rowId(caseDetail)
-                  if (!token || !id) return
-                  setBusyId("letter")
-                  void generateProbationLetter(token, id, probationLetterType(caseDetail))
+                  const token = readStoredToken();
+                  const id = rowId(caseDetail);
+                  if (!token || !id) return;
+                  setBusyId("letter");
+                  void generateProbationLetter(
+                    token,
+                    id,
+                    probationLetterType(caseDetail),
+                  )
                     .then(() => toast.success("Letter generated."))
                     .catch((errorObject) =>
-                      toast.error(errorObject instanceof Error ? errorObject.message : "Could not generate the letter."),
+                      toast.error(
+                        errorObject instanceof Error
+                          ? errorObject.message
+                          : "Could not generate the letter.",
+                      ),
                     )
-                    .finally(() => setBusyId(""))
+                    .finally(() => setBusyId(""));
                 }}
               >
-                {busyId === "letter" ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Generate letter"}
+                {busyId === "letter" ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  "Generate letter"
+                )}
               </button>
             ) : null}
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      <FluentDialog open={formOpen} onOpenChange={(_event, data) => setFormOpen(data.open)}>
+      <FluentDialog
+        open={formOpen}
+        onOpenChange={(_event, data) => setFormOpen(data.open)}
+      >
         <FluentDialogSurface className="w-[min(640px,96vw)]">
           <FluentDialogBody className="min-h-0">
             <FluentDialogTitle
@@ -1076,269 +1464,577 @@ export function ProbationManagementView({
                   : "New policy"
                 : formMode === "manager-review"
                   ? "Manager review"
-                : formMode === "hr-decision"
-                  ? "HR decision"
-                  : formMode === "objective"
-                    ? "New objective"
-                    : formMode === "case"
-                      ? "New probation case"
-                      : "Edit probation case"}
+                  : formMode === "hr-decision"
+                    ? "HR decision"
+                    : formMode === "objective"
+                      ? "New objective"
+                      : formMode === "case"
+                        ? "New probation case"
+                        : "Edit probation case"}
             </FluentDialogTitle>
             <FluentText as="p" size={300} className="text-muted-foreground">
               Save the details for this probation record.
             </FluentText>
             <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-3 overflow-y-auto pr-1">
-            {formMode === "policy" ? (
-              <>
-                <FluentField label="Code" required>
-                  <FluentInput value={form.code ?? ""} onChange={(_event, data) => setForm((current) => ({ ...current, code: data.value }))} className="!w-full" />
-                </FluentField>
-                <FluentField label="Name" required>
-                  <FluentInput value={form.name ?? ""} onChange={(_event, data) => setForm((current) => ({ ...current, name: data.value }))} className="!w-full" />
-                </FluentField>
-                <FluentField label="Description">
-                  <Textarea value={form.description ?? ""} onChange={(_event, data) => setForm((current) => ({ ...current, description: data.value }))} />
-                </FluentField>
-                <Field label="Employment type">
-                  <FluentSelect
-                    ariaLabel="Employment type"
-                    className="w-full"
-                    value={form.employment_type ?? ""}
-                    placeholder="Any"
-                    onChange={(value) => setForm((current) => ({ ...current, employment_type: value }))}
-                    options={[
-                      { value: "", label: "Any" },
-                      ...EMPLOYMENT_TYPES.map((item) => ({ value: item, label: prettify(item) })),
-                    ]}
-                  />
-                </Field>
-                <FluentField label="Probation days" required>
-                  <FluentInput type="number" min={1} step={1} value={form.probation_period_days ?? "90"} onChange={(_event, data) => setForm((current) => ({ ...current, probation_period_days: data.value }))} className="!w-full" />
-                </FluentField>
-                <FluentField label="Minimum score">
-                  <FluentInput type="number" min={0} value={form.minimum_confirmation_score ?? ""} onChange={(_event, data) => setForm((current) => ({ ...current, minimum_confirmation_score: data.value }))} className="!w-full" />
-                </FluentField>
-                <FluentField label="Effective from" required>
-                  <FluentInput type="date" value={form.effective_from ?? ""} onChange={(_event, data) => setForm((current) => ({ ...current, effective_from: data.value }))} className="!w-full" />
-                </FluentField>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">Criteria (weights must total 100)</span>
-                    <FluentButton
-                      type="button"
-                      appearance="secondary"
-                      size="small"
-                      icon={<Add20Regular />}
-                      onClick={openCriterionDialog}
-                    >
-                      Add criterion
-                    </FluentButton>
-                  </div>
-                  {criteriaRows.map((row, index) => (
-                    <div key={index} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_90px_auto]">
-                      <FluentInput
-                        aria-label={`Criterion ${index + 1} code`}
-                        placeholder="Code"
-                        value={row.code}
-                        onChange={(_event, data) =>
-                          setCriteriaRows((current) =>
-                            current.map((item, i) => (i === index ? { ...item, code: data.value } : item)),
-                          )
-                        }
-                      />
-                      <FluentInput
-                        aria-label={`Criterion ${index + 1} name`}
-                        placeholder="Name"
-                        value={row.name}
-                        onChange={(_event, data) =>
-                          setCriteriaRows((current) =>
-                            current.map((item, i) => (i === index ? { ...item, name: data.value } : item)),
-                          )
-                        }
-                      />
-                      <FluentInput
-                        aria-label={`Criterion ${index + 1} weight`}
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        placeholder="Weight"
-                        value={row.weight}
-                        onChange={(_event, data) =>
-                          setCriteriaRows((current) =>
-                            current.map((item, i) => (i === index ? { ...item, weight: data.value } : item)),
-                          )
-                        }
-                      />
+              {formMode === "policy" ? (
+                <>
+                  <FluentField label="Code" required>
+                    <FluentInput
+                      value={form.code ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({ ...current, code: data.value }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <FluentField label="Name" required>
+                    <FluentInput
+                      value={form.name ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({ ...current, name: data.value }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <FluentField label="Description">
+                    <Textarea
+                      value={form.description ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          description: data.value,
+                        }))
+                      }
+                    />
+                  </FluentField>
+                  <Field label="Employment type">
+                    <FluentSelect
+                      ariaLabel="Employment type"
+                      className="w-full"
+                      value={form.employment_type ?? ""}
+                      placeholder="Any"
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          employment_type: value,
+                        }))
+                      }
+                      options={[
+                        { value: "", label: "Any" },
+                        ...EMPLOYMENT_TYPES.map((item) => ({
+                          value: item,
+                          label: prettify(item),
+                        })),
+                      ]}
+                    />
+                  </Field>
+                  <FluentField label="Probation days" required>
+                    <FluentInput
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={form.probation_period_days ?? "90"}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          probation_period_days: data.value,
+                        }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <FluentField label="Minimum score">
+                    <FluentInput
+                      type="number"
+                      min={0}
+                      value={form.minimum_confirmation_score ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          minimum_confirmation_score: data.value,
+                        }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <FluentField label="Effective from" required>
+                    <FluentInput
+                      type="date"
+                      value={form.effective_from ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          effective_from: data.value,
+                        }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">
+                        Criteria (weights must total 100)
+                      </span>
                       <FluentButton
                         type="button"
-                        appearance="subtle"
+                        appearance="secondary"
                         size="small"
-                        icon={<Delete20Regular />}
-                        aria-label={`Remove criterion ${index + 1}`}
-                        onClick={() => setCriteriaRows((current) => current.filter((_, i) => i !== index))}
-                      />
-                      <FluentInput
-                        aria-label={`Criterion ${index + 1} description`}
-                        className="sm:col-span-4"
-                        placeholder="Description (optional)"
-                        value={row.description}
-                        onChange={(_event, data) =>
-                          setCriteriaRows((current) =>
-                            current.map((item, i) => (i === index ? { ...item, description: data.value } : item)),
-                          )
-                        }
-                      />
+                        icon={<Add20Regular />}
+                        onClick={openCriterionDialog}
+                      >
+                        Add criterion
+                      </FluentButton>
                     </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground">
-                    Current total: {criteriaRows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0)}
-                  </p>
-                </div>
-              </>
-            ) : null}
-            {formMode === "manager-review" ? (
-              <>
-                <Field label="Recommendation">
-                  <FluentSelect
-                    ariaLabel="Recommendation"
-                    className="w-full"
-                    value={form.recommendation ?? "CONFIRM"}
-                    onChange={(value) => setForm((current) => ({ ...current, recommendation: value }))}
-                    options={MANAGER_RECOMMENDATIONS.map((item) => ({ value: item, label: prettify(item) }))}
-                  />
-                </Field>
-                <Field label="Comments"><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
-                <Field label="Extension days"><input className={inputClass} value={form.recommended_extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, recommended_extension_days: event.target.value }))} /></Field>
-              </>
-            ) : null}
-            {formMode === "hr-decision" ? (
-              <>
-                <Field label="Decision">
-                  <FluentSelect
-                    ariaLabel="Decision"
-                    className="w-full"
-                    value={form.decision ?? "CONFIRMED"}
-                    onChange={(value) => setForm((current) => ({ ...current, decision: value }))}
-                    options={HR_DECISIONS.map((item) => ({ value: item, label: prettify(item) }))}
-                  />
-                </Field>
-                <Field label="Comments"><Textarea className={textareaClass} value={form.comments ?? ""} onChange={(event) => setForm((current) => ({ ...current, comments: event.target.value }))} /></Field>
-                <Field label="Confirmation date"><DateInput className={inputClass} value={form.confirmation_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, confirmation_date: event.target.value }))} /></Field>
-                <Field label="Extension days"><input className={inputClass} value={form.extension_days ?? ""} onChange={(event) => setForm((current) => ({ ...current, extension_days: event.target.value }))} /></Field>
-              </>
-            ) : null}
-            {formMode === "case" ? (
-              <>
-                <FluentField label="Employee number" required>
-                  <Combobox
-                    aria-label="Employee number"
-                    placeholder="Search by employee number or name"
-                    value={employeeQuery}
-                    selectedOptions={form.employee_id ? [form.employee_id] : []}
-                    onChange={(event) => {
-                      setEmployeeQuery(event.target.value)
-                      setForm((current) => ({ ...current, employee_id: "" }))
-                    }}
-                    onOptionSelect={(_event, data) => {
-                      const selectedId = data.optionValue
-                      if (!selectedId) return
-                      const selected = employeeOptions.find(
-                        (employee) => String(readNumber(employee, ["id", "employee_id", "employeeId"]) ?? rowId(employee)) === selectedId,
-                      )
-                      if (!selected) return
-                      const employeeNumber = readString(selected, ["employee_no", "employee_number", "employeeNumber", "employeeNo"])
-                      setForm((current) => ({ ...current, employee_id: selectedId }))
-                      setEmployeeQuery(`${employeeNumber || `Employee #${selectedId}`} · ${employeeLabel(selected)}`)
-                    }}
-                    className="!w-full"
-                  >
-                    {employeeLookupLoading ? (
-                      <Option value="searching" text="Searching employees…" disabled>
-                        Searching employees…
-                      </Option>
-                    ) : employeeOptions.length > 0 ? (
-                      employeeOptions.map((employee) => {
-                        const employeeId = String(readNumber(employee, ["id", "employee_id", "employeeId"]) ?? rowId(employee))
-                        const employeeNumber = readString(employee, ["employee_no", "employee_number", "employeeNumber", "employeeNo"])
-                        const name = employeeLabel(employee)
-                        return (
-                          <Option
-                            key={employeeId}
-                            value={employeeId}
-                            text={`${employeeNumber || `Employee #${employeeId}`} · ${name}`}
-                          >
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate font-medium">{employeeNumber || `Employee #${employeeId}`}</span>
-                              <span className="truncate text-xs text-muted-foreground">{name}</span>
-                            </span>
-                          </Option>
-                        )
-                      })
-                    ) : employeeQuery.trim() ? (
-                      <Option value="no-matches" text="No employees found" disabled>
-                        No employees found
-                      </Option>
-                    ) : null}
-                  </Combobox>
-                </FluentField>
-                <FluentField label="Start date" required>
-                  <FluentInput
-                    type="date"
-                    value={form.start_date ?? ""}
-                    onChange={(_event, data) => setForm((current) => ({ ...current, start_date: data.value }))}
-                    className="!w-full"
-                  />
-                </FluentField>
-                <Field label="Policy (optional)">
-                  <FluentSelect
-                    ariaLabel="Policy"
-                    className="w-full"
-                    value={form.policy_id ?? ""}
-                    placeholder="Auto-resolve"
-                    onChange={(value) => setForm((current) => ({ ...current, policy_id: value }))}
-                    options={[
-                      { value: "", label: "Auto-resolve" },
-                      ...policies.map((policy) => ({ value: rowId(policy), label: optionLabel(policy) })),
-                    ]}
-                  />
-                </Field>
-              </>
-            ) : null}
-            {formMode === "case-edit" ? (
-              <>
-                <Field label="Start date"><DateInput className={inputClass} value={form.start_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, start_date: event.target.value }))} /></Field>
-                <Field label="Due date"><DateInput className={inputClass} value={form.current_due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, current_due_date: event.target.value }))} /></Field>
-                <Field label="Policy">
-                  <FluentSelect
-                    ariaLabel="Policy"
-                    className="w-full"
-                    value={form.policy_id ?? ""}
-                    placeholder="Keep current"
-                    onChange={(value) => setForm((current) => ({ ...current, policy_id: value }))}
-                    options={[
-                      { value: "", label: "Keep current" },
-                      ...policies.map((policy) => ({ value: rowId(policy), label: optionLabel(policy) })),
-                    ]}
-                  />
-                </Field>
-              </>
-            ) : null}
-            {formMode === "objective" ? (
-              <>
-                <Field label="Title"><input className={inputClass} value={form.title ?? ""} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} /></Field>
-                <Field label="Expected result"><Textarea className={textareaClass} value={form.expected_result ?? ""} onChange={(event) => setForm((current) => ({ ...current, expected_result: event.target.value }))} /></Field>
-                <Field label="Weight"><input className={inputClass} value={form.weight ?? ""} onChange={(event) => setForm((current) => ({ ...current, weight: event.target.value }))} /></Field>
-                <Field label="Due date"><DateInput className={inputClass} value={form.due_date ?? ""} onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))} /></Field>
-                <Field label="Description"><Textarea className={textareaClass} value={form.description ?? ""} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></Field>
-              </>
-            ) : null}
-            {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+                    {criteriaRows.map((row, index) => (
+                      <div
+                        key={index}
+                        className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_90px_auto]"
+                      >
+                        <FluentInput
+                          aria-label={`Criterion ${index + 1} code`}
+                          placeholder="Code"
+                          value={row.code}
+                          onChange={(_event, data) =>
+                            setCriteriaRows((current) =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, code: data.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <FluentInput
+                          aria-label={`Criterion ${index + 1} name`}
+                          placeholder="Name"
+                          value={row.name}
+                          onChange={(_event, data) =>
+                            setCriteriaRows((current) =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, name: data.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <FluentInput
+                          aria-label={`Criterion ${index + 1} weight`}
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          placeholder="Weight"
+                          value={row.weight}
+                          onChange={(_event, data) =>
+                            setCriteriaRows((current) =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, weight: data.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <FluentButton
+                          type="button"
+                          appearance="subtle"
+                          size="small"
+                          icon={<Delete20Regular />}
+                          aria-label={`Remove criterion ${index + 1}`}
+                          onClick={() =>
+                            setCriteriaRows((current) =>
+                              current.filter((_, i) => i !== index),
+                            )
+                          }
+                        />
+                        <FluentInput
+                          aria-label={`Criterion ${index + 1} description`}
+                          className="sm:col-span-4"
+                          placeholder="Description (optional)"
+                          value={row.description}
+                          onChange={(_event, data) =>
+                            setCriteriaRows((current) =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, description: data.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground">
+                      Current total:{" "}
+                      {criteriaRows.reduce(
+                        (sum, row) => sum + (Number(row.weight) || 0),
+                        0,
+                      )}
+                    </p>
+                  </div>
+                </>
+              ) : null}
+              {formMode === "manager-review" ? (
+                <>
+                  <Field label="Recommendation">
+                    <FluentSelect
+                      ariaLabel="Recommendation"
+                      className="w-full"
+                      value={form.recommendation ?? "CONFIRM"}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          recommendation: value,
+                        }))
+                      }
+                      options={MANAGER_RECOMMENDATIONS.map((item) => ({
+                        value: item,
+                        label: prettify(item),
+                      }))}
+                    />
+                  </Field>
+                  <Field label="Comments">
+                    <Textarea
+                      className={textareaClass}
+                      value={form.comments ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          comments: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Extension days">
+                    <input
+                      className={inputClass}
+                      value={form.recommended_extension_days ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          recommended_extension_days: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </>
+              ) : null}
+              {formMode === "hr-decision" ? (
+                <>
+                  <Field label="Decision">
+                    <FluentSelect
+                      ariaLabel="Decision"
+                      className="w-full"
+                      value={form.decision ?? "CONFIRMED"}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, decision: value }))
+                      }
+                      options={HR_DECISIONS.map((item) => ({
+                        value: item,
+                        label: prettify(item),
+                      }))}
+                    />
+                  </Field>
+                  <Field label="Comments">
+                    <Textarea
+                      className={textareaClass}
+                      value={form.comments ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          comments: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Confirmation date">
+                    <DateInput
+                      className={inputClass}
+                      value={form.confirmation_date ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          confirmation_date: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Extension days">
+                    <input
+                      className={inputClass}
+                      value={form.extension_days ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          extension_days: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </>
+              ) : null}
+              {formMode === "case" ? (
+                <>
+                  <FluentField label="Employee number" required>
+                    <Combobox
+                      aria-label="Employee number"
+                      placeholder="Search by employee number or name"
+                      value={employeeQuery}
+                      selectedOptions={
+                        form.employee_id ? [form.employee_id] : []
+                      }
+                      onChange={(event) => {
+                        setEmployeeQuery(event.target.value);
+                        setForm((current) => ({ ...current, employee_id: "" }));
+                      }}
+                      onOptionSelect={(_event, data) => {
+                        const selectedId = data.optionValue;
+                        if (!selectedId) return;
+                        const selected = employeeOptions.find(
+                          (employee) =>
+                            String(
+                              readNumber(employee, [
+                                "id",
+                                "employee_id",
+                                "employeeId",
+                              ]) ?? rowId(employee),
+                            ) === selectedId,
+                        );
+                        if (!selected) return;
+                        const employeeNumber = readString(selected, [
+                          "employee_no",
+                          "employee_number",
+                          "employeeNumber",
+                          "employeeNo",
+                        ]);
+                        setForm((current) => ({
+                          ...current,
+                          employee_id: selectedId,
+                        }));
+                        setEmployeeQuery(
+                          `${employeeNumber || `Employee #${selectedId}`} · ${employeeLabel(selected)}`,
+                        );
+                      }}
+                      className="!w-full"
+                    >
+                      {employeeLookupLoading ? (
+                        <Option
+                          value="searching"
+                          text="Searching employees…"
+                          disabled
+                        >
+                          Searching employees…
+                        </Option>
+                      ) : employeeOptions.length > 0 ? (
+                        employeeOptions.map((employee) => {
+                          const employeeId = String(
+                            readNumber(employee, [
+                              "id",
+                              "employee_id",
+                              "employeeId",
+                            ]) ?? rowId(employee),
+                          );
+                          const employeeNumber = readString(employee, [
+                            "employee_no",
+                            "employee_number",
+                            "employeeNumber",
+                            "employeeNo",
+                          ]);
+                          const name = employeeLabel(employee);
+                          return (
+                            <Option
+                              key={employeeId}
+                              value={employeeId}
+                              text={`${employeeNumber || `Employee #${employeeId}`} · ${name}`}
+                            >
+                              <span className="flex min-w-0 flex-col">
+                                <span className="truncate font-medium">
+                                  {employeeNumber || `Employee #${employeeId}`}
+                                </span>
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {name}
+                                </span>
+                              </span>
+                            </Option>
+                          );
+                        })
+                      ) : employeeQuery.trim() ? (
+                        <Option
+                          value="no-matches"
+                          text="No employees found"
+                          disabled
+                        >
+                          No employees found
+                        </Option>
+                      ) : null}
+                    </Combobox>
+                  </FluentField>
+                  <FluentField label="Start date" required>
+                    <FluentInput
+                      type="date"
+                      value={form.start_date ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          start_date: data.value,
+                        }))
+                      }
+                      className="!w-full"
+                    />
+                  </FluentField>
+                  <Field label="Policy (optional)">
+                    <FluentSelect
+                      ariaLabel="Policy"
+                      className="w-full"
+                      value={form.policy_id ?? ""}
+                      placeholder="Auto-resolve"
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, policy_id: value }))
+                      }
+                      options={[
+                        { value: "", label: "Auto-resolve" },
+                        ...policies.map((policy) => ({
+                          value: rowId(policy),
+                          label: optionLabel(policy),
+                        })),
+                      ]}
+                    />
+                  </Field>
+                </>
+              ) : null}
+              {formMode === "case-edit" ? (
+                <>
+                  <Field label="Start date">
+                    <DateInput
+                      className={inputClass}
+                      value={form.start_date ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          start_date: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Due date">
+                    <DateInput
+                      className={inputClass}
+                      value={form.current_due_date ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          current_due_date: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Policy">
+                    <FluentSelect
+                      ariaLabel="Policy"
+                      className="w-full"
+                      value={form.policy_id ?? ""}
+                      placeholder="Keep current"
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, policy_id: value }))
+                      }
+                      options={[
+                        { value: "", label: "Keep current" },
+                        ...policies.map((policy) => ({
+                          value: rowId(policy),
+                          label: optionLabel(policy),
+                        })),
+                      ]}
+                    />
+                  </Field>
+                </>
+              ) : null}
+              {formMode === "objective" ? (
+                <>
+                  <Field label="Title">
+                    <input
+                      className={inputClass}
+                      value={form.title ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Expected result">
+                    <Textarea
+                      className={textareaClass}
+                      value={form.expected_result ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          expected_result: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Weight">
+                    <input
+                      className={inputClass}
+                      value={form.weight ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          weight: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Due date">
+                    <DateInput
+                      className={inputClass}
+                      value={form.due_date ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          due_date: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Description">
+                    <Textarea
+                      className={textareaClass}
+                      value={form.description ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </>
+              ) : null}
+              {formError ? (
+                <p className="text-sm text-rose-600">{formError}</p>
+              ) : null}
             </FluentDialogContent>
             <FluentDialogActions position="end">
-            <FluentButton appearance="secondary" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</FluentButton>
-            <FluentButton appearance="primary" onClick={() => void onSave()} disabled={saving}>
-              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Save"}
-            </FluentButton>
+              <FluentButton
+                appearance="secondary"
+                onClick={() => setFormOpen(false)}
+                disabled={saving}
+              >
+                Cancel
+              </FluentButton>
+              <FluentButton
+                appearance="primary"
+                onClick={() => void onSave()}
+                disabled={saving}
+              >
+                {saving ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : (
+                  "Save"
+                )}
+              </FluentButton>
             </FluentDialogActions>
           </FluentDialogBody>
         </FluentDialogSurface>
@@ -1369,14 +2065,24 @@ export function ProbationManagementView({
                 <FluentInput
                   autoFocus
                   value={criterionDraft.code}
-                  onChange={(_event, data) => setCriterionDraft((current) => ({ ...current, code: data.value }))}
+                  onChange={(_event, data) =>
+                    setCriterionDraft((current) => ({
+                      ...current,
+                      code: data.value,
+                    }))
+                  }
                   className="!w-full"
                 />
               </FluentField>
               <FluentField label="Name" required>
                 <FluentInput
                   value={criterionDraft.name}
-                  onChange={(_event, data) => setCriterionDraft((current) => ({ ...current, name: data.value }))}
+                  onChange={(_event, data) =>
+                    setCriterionDraft((current) => ({
+                      ...current,
+                      name: data.value,
+                    }))
+                  }
                   className="!w-full"
                 />
               </FluentField>
@@ -1387,24 +2093,45 @@ export function ProbationManagementView({
                   max={100}
                   step={0.01}
                   value={criterionDraft.weight}
-                  onChange={(_event, data) => setCriterionDraft((current) => ({ ...current, weight: data.value }))}
+                  onChange={(_event, data) =>
+                    setCriterionDraft((current) => ({
+                      ...current,
+                      weight: data.value,
+                    }))
+                  }
                   className="!w-full"
                 />
               </FluentField>
               <FluentField label="Description">
                 <FluentInput
                   value={criterionDraft.description}
-                  onChange={(_event, data) => setCriterionDraft((current) => ({ ...current, description: data.value }))}
+                  onChange={(_event, data) =>
+                    setCriterionDraft((current) => ({
+                      ...current,
+                      description: data.value,
+                    }))
+                  }
                   className="!w-full"
                 />
               </FluentField>
-              {criterionError ? <p role="alert" className="text-sm text-destructive">{criterionError}</p> : null}
+              {criterionError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {criterionError}
+                </p>
+              ) : null}
             </FluentDialogContent>
             <FluentDialogActions position="end">
-              <FluentButton appearance="secondary" onClick={() => setCriterionDialogOpen(false)}>
+              <FluentButton
+                appearance="secondary"
+                onClick={() => setCriterionDialogOpen(false)}
+              >
                 Cancel
               </FluentButton>
-              <FluentButton appearance="primary" icon={<Add20Regular />} onClick={addCriterion}>
+              <FluentButton
+                appearance="primary"
+                icon={<Add20Regular />}
+                onClick={addCriterion}
+              >
                 Add criterion
               </FluentButton>
             </FluentDialogActions>
@@ -1412,14 +2139,20 @@ export function ProbationManagementView({
         </FluentDialogSurface>
       </FluentDialog>
     </section>
-  )
+  );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="grid gap-1.5 text-sm">
       <span className="font-medium text-foreground">{label}</span>
       {children}
     </label>
-  )
+  );
 }

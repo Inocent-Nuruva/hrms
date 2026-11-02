@@ -1799,8 +1799,10 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
   if (params.search && params.search.trim()) {
     searchParams.set("search", params.search.trim());
   }
-  if (params.check_in_after) searchParams.set("check_in_after", params.check_in_after);
-  if (params.check_in_before) searchParams.set("check_in_before", params.check_in_before);
+  if (params.check_in_after)
+    searchParams.set("check_in_after", params.check_in_after);
+  if (params.check_in_before)
+    searchParams.set("check_in_before", params.check_in_before);
   if (typeof params.employee_id === "number" && params.employee_id > 0) {
     searchParams.set("employee_id", String(params.employee_id));
   }
@@ -1838,7 +1840,8 @@ function buildAttendanceReportQuery(params: AttendanceReportDownloadParams) {
     searchParams.set("status", params.status.trim());
   }
   if (params.late_only) searchParams.set("late_only", "true");
-  if (params.early_departure_only) searchParams.set("early_departure_only", "true");
+  if (params.early_departure_only)
+    searchParams.set("early_departure_only", "true");
   if (params.overtime_only) searchParams.set("overtime_only", "true");
   if (params.exception_type && params.exception_type.trim()) {
     searchParams.set("exception_type", params.exception_type.trim());
@@ -3073,10 +3076,17 @@ export async function adminRequest<T>(
       const response = await fetch(buildUrl(path), {
         method,
         headers: {
-          "Content-Type": "application/json",
+          ...(typeof FormData !== "undefined" && body instanceof FormData
+            ? {}
+            : { "Content-Type": "application/json" }),
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body:
+          body === undefined
+            ? undefined
+            : typeof FormData !== "undefined" && body instanceof FormData
+              ? body
+              : JSON.stringify(body),
         cache: "no-store",
         signal,
       });
@@ -6236,6 +6246,13 @@ export async function listAttendanceWorkFromHomeRequests(
   );
 }
 
+export async function listTeamAttendanceWorkFromHomeRequests(token: string) {
+  return adminRequest<unknown>(
+    "/api/attendance/work-from-home/requests/team",
+    { token },
+  );
+}
+
 export async function reviewAttendanceWorkFromHomeRequest(
   token: string,
   id: string | number,
@@ -6253,6 +6270,16 @@ export async function cancelAttendanceWorkFromHomeRequest(
 ) {
   return adminRequest<unknown>(
     `/api/attendance/work-from-home/requests/${id}/cancel`,
+    { method: "PATCH", token, body: {} },
+  );
+}
+
+export async function cancelManagedAttendanceWorkFromHomeRequest(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/attendance/work-from-home/requests/${id}/cancel-managed`,
     { method: "PATCH", token, body: {} },
   );
 }
@@ -9820,6 +9847,38 @@ export async function listMyLeaveEncashmentRequests(token: string) {
   );
 }
 
+export async function listLeaveEncashmentRequests(
+  token: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    from_date?: string;
+    to_date?: string;
+  },
+) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.from_date) query.set("from_date", params.from_date);
+  if (params?.to_date) query.set("to_date", params.to_date);
+  const payload = await adminRequest<unknown>(
+    `/api/leave/encashments${query.size ? `?${query.toString()}` : ""}`,
+    { token },
+  );
+  const rows = normalizeList(payload);
+  const pagination = extractUsersPagination(
+    payload,
+    params?.page ?? 1,
+    params?.limit ?? 20,
+  );
+  return {
+    rows,
+    ...pagination,
+    total: pagination.total ?? rows.length,
+    hasMore: rows.length === (params?.limit ?? 20),
+  };
+}
+
 export async function createMyLeaveEncashmentRequest(
   token: string,
   data: {
@@ -11285,7 +11344,11 @@ export async function listMyOnboardingRequests(
 export async function acknowledgeOnboardingRequest(
   token: string,
   id: string | number,
-  data: { accepted: boolean; acknowledgement_version: string; acknowledgement_document_id?: number },
+  data: {
+    accepted: boolean;
+    acknowledgement_version: string;
+    acknowledgement_document_id?: number;
+  },
 ) {
   const version = data.acknowledgement_version.trim();
   if (!version) {
@@ -13503,6 +13566,12 @@ export async function listEmploymentContracts(
   );
 }
 
+export async function listEmploymentContractSummary(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/employment-contracts/summary", { token }),
+  );
+}
+
 export async function listEmploymentLetterTemplates(token: string) {
   return normalizeList(
     await adminRequest<unknown>("/api/employment-letters/templates", { token }),
@@ -13549,7 +13618,12 @@ export async function generateEmployeeTemplateLetter(
   return normalizeSingle(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/generate`,
-      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+      {
+        method: "POST",
+        token,
+        body: { letter_type: letterType },
+        dedupe: false,
+      },
     ),
   );
 }
@@ -13562,12 +13636,20 @@ export async function previewEmployeeTemplateLetter(
   return normalizeSingle(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/preview`,
-      { method: "POST", token, body: { letter_type: letterType }, dedupe: false },
+      {
+        method: "POST",
+        token,
+        body: { letter_type: letterType },
+        dedupe: false,
+      },
     ),
   );
 }
 
-export async function listEmployeeLetterHistory(token: string, employeeId: number) {
+export async function listEmployeeLetterHistory(
+  token: string,
+  employeeId: number,
+) {
   return normalizeList(
     await adminRequest<unknown>(
       `/api/employment-letters/employees/${employeeId}/history`,
@@ -13598,14 +13680,19 @@ export async function downloadEmployeeLetterPreview(
     buildUrl(`/api/employment-letters/employees/${employeeId}/preview`),
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ letter_type: letterType }),
       cache: "no-store",
     },
   );
-  if (!response.ok) throw new Error(`Could not preview letter (${response.status})`);
+  if (!response.ok)
+    throw new Error(`Could not preview letter (${response.status})`);
   const payload = (await response.json()) as { content_base64?: string };
-  if (!payload.content_base64) throw new Error("Preview response did not include a PDF.");
+  if (!payload.content_base64)
+    throw new Error("Preview response did not include a PDF.");
   const binary = atob(payload.content_base64);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   return new Blob([bytes], { type: "application/pdf" });
@@ -13669,6 +13756,19 @@ export async function getEmployeeById(id: string | number, token: string) {
     return root;
   }
   return normalizeSingle(payload);
+}
+
+export async function verifyEmployeeBankAccount(
+  token: string,
+  employeeId: string | number,
+  bankAccountId: string | number,
+) {
+  return normalizeSingle(
+    await adminRequest<unknown>(
+      `/api/employees/${employeeId}/bank-accounts/${bankAccountId}/verify`,
+      { method: "POST", token, dedupe: false },
+    ),
+  );
 }
 
 function findPositionRecordById(
@@ -14646,13 +14746,30 @@ export async function listMyProfileUpdateRequests(
     `/api/me/profile-update-requests${query}`,
     { token },
   );
-  const rows = normalizeList(payload);
+  const legacyRows = normalizeList(payload);
+  // Keep legacy request history readable while new submissions use the
+  // field-policy workflow. The two histories have separate IDs and statuses.
+  const canonicalRows = await listMyProfileChangeRequests(token, {
+    page: fallbackPage,
+    limit: fallbackLimit,
+  }).catch(() => []);
+  const rows = [...legacyRows, ...canonicalRows]
+    .sort((left, right) => {
+      const leftDate = String(left.created_at ?? left.createdAt ?? "");
+      const rightDate = String(right.created_at ?? right.createdAt ?? "");
+      return rightDate.localeCompare(leftDate);
+    })
+    .slice(0, fallbackLimit);
   const pagination = extractUsersPagination(
     payload,
     fallbackPage,
     fallbackLimit,
   );
-  return { rows, ...pagination };
+  return {
+    rows,
+    ...pagination,
+    total: (pagination.total ?? 0) + canonicalRows.length,
+  };
 }
 
 export async function getMyProfileUpdateRequest(
@@ -15034,19 +15151,28 @@ export async function downloadHrAttendanceCorrectionEvidence(
   documentId: string | number,
 ): Promise<{ blob: Blob; filename: string }> {
   const response = await fetch(
-    buildUrl(`/api/hr/self-service/approvals/attendance-corrections/${requestId}/documents/${documentId}/download`),
-    { headers: { Authorization: `Bearer ${token}`, accept: "*/*" }, cache: "no-store" },
-  )
+    buildUrl(
+      `/api/hr/self-service/approvals/attendance-corrections/${requestId}/documents/${documentId}/download`,
+    ),
+    {
+      headers: { Authorization: `Bearer ${token}`, accept: "*/*" },
+      cache: "no-store",
+    },
+  );
   if (!response.ok) {
-    const payload = await response.json().catch(() => null)
-    throw new Error(extractMessage(payload, response.status))
+    const payload = await response.json().catch(() => null);
+    throw new Error(extractMessage(payload, response.status));
   }
-  const disposition = response.headers.get("content-disposition") ?? ""
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+  );
   return {
     blob: await response.blob(),
-    filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? `attendance-evidence-${documentId}`),
-  }
+    filename: decodeURIComponent(
+      match?.[1] ?? match?.[2] ?? `attendance-evidence-${documentId}`,
+    ),
+  };
 }
 
 export async function approveHrAttendanceCorrectionRequest(
@@ -16074,7 +16200,9 @@ export async function patchEmployeeStatus(
   };
 
   if (
-    ["resigned", "terminated", "retired", "deceased", "exited"].includes(normalizedStatus)
+    ["resigned", "terminated", "retired", "deceased", "exited"].includes(
+      normalizedStatus,
+    )
   ) {
     const trimmedExitDate =
       typeof data.exit_date === "string" ? data.exit_date.trim() : "";
@@ -16111,9 +16239,9 @@ export interface PermanentEmployeeDeletionResponse {
 }
 
 /**
- * Permanently delete an employee who is still onboarding, with their records.
- * The backend refuses (409) once the employee has working history, supervises
- * others, or has device access; the message explains why.
+ * Permanently delete an employee with their owned records. The backend refuses
+ * while the employee supervises other records or has provisioned physical
+ * access; the response explains the blocker.
  */
 export async function deleteEmployeePermanently(
   token: string,
@@ -16807,6 +16935,7 @@ export interface PayrollListParams {
   payroll_run_id?: number;
   year?: number;
   status?: string;
+  export_all?: boolean;
 }
 
 function buildPayrollQuery(params: PayrollListParams = {}) {
@@ -16816,6 +16945,9 @@ function buildPayrollQuery(params: PayrollListParams = {}) {
   }
   if (typeof params.limit === "number" && params.limit > 0) {
     searchParams.set("limit", String(params.limit));
+  }
+  if (params.export_all === true) {
+    searchParams.set("export_all", "true");
   }
   if (params.sortBy?.trim()) {
     searchParams.set("sortBy", params.sortBy.trim());
@@ -16961,6 +17093,23 @@ export async function runPayrollRunVariance(
   return adminRequest<unknown>(
     `/api/payroll/reports/runs/${runId}/variance?comparison_run_id=${encodeURIComponent(String(comparisonRunId))}`,
     { method: "POST", token },
+  );
+}
+
+export async function reviewPayrollVariance(
+  token: string,
+  runId: string | number,
+  varianceId: string | number,
+  employeeId: string | number,
+  explanation: string,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/reports/runs/${runId}/variance/${varianceId}/review`,
+    {
+      method: "POST",
+      token,
+      body: { employee_id: Number(employeeId), explanation },
+    },
   );
 }
 
@@ -17475,6 +17624,59 @@ export async function getEmployeePayrollSalary(
     },
   );
   return unwrapRootRecord(payload, "employee");
+}
+
+export async function listEligibleSalaryApprovers(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvers",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listSalaryApproverCandidates(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approver-candidates",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function assignEligibleSalaryApprovers(
+  token: string,
+  companyUserIds: Array<string | number>,
+) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvers/assign",
+    {
+      method: "POST",
+      token,
+      body: { company_user_ids: companyUserIds.map(Number) },
+      dedupe: false,
+    },
+  );
+  return normalizeList(payload);
+}
+
+export async function removeEligibleSalaryApprover(
+  token: string,
+  companyUserId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/payroll/employees/salary-approvers/${companyUserId}`,
+    {
+      method: "DELETE",
+      token,
+      dedupe: false,
+    },
+  );
+}
+export async function listSalaryApprovals(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/payroll/employees/salary-approvals",
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function assignEmployeePayrollSalary(
@@ -18001,6 +18203,60 @@ export async function calculatePerformanceAggregates(
       method: "POST",
       token,
       body: { period_type: periodType },
+    },
+  );
+}
+
+export async function publishPerformanceAggregates(
+  token: string,
+  yearId: string | number,
+  periodType: "QUARTERLY" | "ANNUAL",
+) {
+  return adminRequest<unknown>(
+    `/api/performance/financial-years/${yearId}/aggregates/publish`,
+    { method: "POST", token, body: { period_type: periodType } },
+  );
+}
+
+export async function previewKpiImport(token: string, file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return adminRequest<unknown>("/api/performance/kpi-imports/preview", {
+    method: "POST",
+    token,
+    body,
+  });
+}
+
+export async function listKpiImports(token: string) {
+  const payload = await adminRequest<unknown>("/api/performance/kpi-imports", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function getKpiImport(token: string, batchId: string | number) {
+  return adminRequest<unknown>(`/api/performance/kpi-imports/${batchId}`, {
+    token,
+  });
+}
+
+export async function approveKpiImport(
+  token: string,
+  batchId: string | number,
+) {
+  return adminRequest<unknown>(
+    `/api/performance/kpi-imports/${batchId}/approve`,
+    { method: "POST", token },
+  );
+}
+
+export async function applyKpiImport(token: string, batchId: string | number) {
+  return adminRequest<unknown>(
+    `/api/performance/kpi-imports/${batchId}/apply`,
+    {
+      method: "POST",
+      token,
     },
   );
 }
@@ -18665,6 +18921,14 @@ export async function listKpiCycleReviews(
 export async function listMyKpiCycleScores(token: string) {
   const payload = await adminRequest<unknown>(
     "/api/performance/me/kpi-scores",
+    { token },
+  );
+  return normalizeList(payload);
+}
+
+export async function listMyPerformanceAggregates(token: string) {
+  const payload = await adminRequest<unknown>(
+    "/api/performance/me/aggregates",
     { token },
   );
   return normalizeList(payload);
@@ -19343,8 +19607,13 @@ export async function downloadHrPlannedCompletedActivities(
   params: Record<string, string | number | undefined> = {},
 ) {
   const response = await fetch(
-    buildUrl(`/api/hr/activities/planned-completed/export.csv${buildRecordQuery(params)}`),
-    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+    buildUrl(
+      `/api/hr/activities/planned-completed/export.csv${buildRecordQuery(params)}`,
+    ),
+    {
+      headers: { accept: "text/csv", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
   );
   if (!response.ok) {
     const body = await response.text();
@@ -19359,8 +19628,13 @@ export async function downloadHrActivityReportExport(
   params: Record<string, string | number | undefined> = {},
 ) {
   const response = await fetch(
-    buildUrl(`/api/hr/activities/${kind}/export.csv${buildRecordQuery(params)}`),
-    { headers: { accept: "text/csv", Authorization: `Bearer ${token}` }, cache: "no-store" },
+    buildUrl(
+      `/api/hr/activities/${kind}/export.csv${buildRecordQuery(params)}`,
+    ),
+    {
+      headers: { accept: "text/csv", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    },
   );
   if (!response.ok) {
     const body = await response.text();
@@ -19370,10 +19644,9 @@ export async function downloadHrActivityReportExport(
 }
 
 export async function listHrActivityCategories(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/hr/activity-categories",
-    { token },
-  );
+  const payload = await adminRequest<unknown>("/api/hr/activity-categories", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -20273,6 +20546,17 @@ export async function addMyFinanceApplicationGuarantor(
       body: data,
     },
   );
+}
+
+export async function searchMyFinanceGuarantorCandidates(
+  token: string,
+  search: string,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/me/finance/guarantor-candidates?search=${encodeURIComponent(search)}`,
+    { token },
+  );
+  return normalizeList(payload);
 }
 
 export async function listMyFinanceApplicationGuarantors(
@@ -21265,6 +21549,16 @@ export async function getManagerDashboard(
   return getHrDashboard(token, "manager", params);
 }
 
+export async function getManagerActivitySummary(
+  token: string,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return adminRequest<AdminRecord>(
+    `/api/manager/activity-summary${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
 export async function listManagerActionItems(
   token: string,
   params: Record<string, string | number | undefined> = {},
@@ -21458,6 +21752,14 @@ export interface AnalyticsDashboardKindMap {
   "sales-field": "sales-field";
 }
 
+export type AnalyticsSalesFieldDetailMetric =
+  | "PLANNED_VISITS"
+  | "COMPLETED_PLANNED_VISITS"
+  | "UNPLANNED_COMPLETED_VISITS"
+  | "CUSTOMER_VISITS"
+  | "BROKER_INTERMEDIARY_VISITS"
+  | "OPPORTUNITIES";
+
 export type AnalyticsDashboardKind = keyof AnalyticsDashboardKindMap;
 
 export interface AnalyticsCustomReportPayload extends AnalyticsQueryParams {
@@ -21578,6 +21880,56 @@ export async function getHrDashboard(
   return unwrapRoleDashboardPayload(payload);
 }
 
+export async function createHrDocumentRequirement(
+  token: string,
+  payload: {
+    document_type_code: string;
+    label: string;
+    branch_ids?: number[];
+    department_ids?: number[];
+    employment_types?: string[];
+    effective_from?: string;
+    effective_to?: string;
+  },
+) {
+  const result = await adminRequest<unknown>(
+    "/api/dashboards/hr/document-requirements",
+    { token, method: "POST", body: payload },
+  );
+  return normalizeSingle(result) ?? asRecord(result);
+}
+
+export async function deleteHrDocumentRequirement(
+  token: string,
+  requirementId: number,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export async function getHrDocumentComplianceDetails(
+  token: string,
+  requirementId: number,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/hr/document-requirements/${requirementId}/details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
+export async function getManagementPublishedScoreDetails(
+  token: string,
+  params: Record<string, string | number | undefined>,
+) {
+  return adminRequest<AdminRecord>(
+    `/api/dashboards/management/performance-details${buildRecordQuery(params)}`,
+    { token },
+  );
+}
+
 export async function getSystemHealth(token?: string) {
   const payload = await adminRequest<unknown>("/api/health", {
     token: token ?? "",
@@ -21687,6 +22039,34 @@ export async function getAnalyticsDashboard(
     {
       token,
     },
+  );
+  return normalizeSingle(payload) ?? asRecord(payload);
+}
+
+export async function getAnalyticsSalesFieldDetails(
+  token: string,
+  params: AnalyticsQueryParams & {
+    metric: AnalyticsSalesFieldDetailMetric;
+    page?: number;
+    limit?: number;
+    currency?: string;
+  },
+) {
+  const searchParams = new URLSearchParams(
+    buildAnalyticsQuery(params).replace(/^\?/, ""),
+  );
+  searchParams.set("metric", params.metric);
+  if (params.page && Number.isInteger(params.page) && params.page > 0) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params.limit && Number.isInteger(params.limit) && params.limit > 0) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.currency?.trim())
+    searchParams.set("currency", params.currency.trim());
+  const payload = await adminRequest<unknown>(
+    `/api/analytics/dashboards/sales-field/details?${searchParams.toString()}`,
+    { token },
   );
   return normalizeSingle(payload) ?? asRecord(payload);
 }

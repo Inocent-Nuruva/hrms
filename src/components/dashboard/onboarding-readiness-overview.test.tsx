@@ -36,19 +36,22 @@ afterEach(async () => {
   container.remove()
   vi.unstubAllGlobals()
 })
-async function render(canActivate = true) {
-  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} saving={false} onActivate={activate} onNavigate={navigate} />))
+async function render(canActivate = true, canViewPayroll = false, canViewContracts = true) {
+  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} canViewPayroll={canViewPayroll} canViewContracts={canViewContracts} saving={false} onActivate={activate} onNavigate={navigate} />))
 }
 function button(label: string) {
   return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
+}
+function labelledButton(label: string) {
+  return [...document.querySelectorAll("button")].find((entry) => entry.getAttribute("aria-label") === label)!
 }
 describe("onboarding activation overview", () => {
   it("shows blockers and prevents activation until ready", async () => {
     await render()
     expect(container.textContent).toContain("1 activation requirements outstanding")
     expect(container.textContent).toContain("Responsible: HR / Employee")
-    expect(button("Activate employee").disabled).toBe(true)
-    await act(async () => button("Review Signed contract").click())
+    expect(button("Activate employee")).toBeUndefined()
+    await act(async () => button("Open requirement").click())
     expect(navigate).toHaveBeenCalledWith("contracts", "contract")
     expect(container.textContent).not.toContain("Provide laptop")
     await act(async () => button("Show completed requirements (1)").click())
@@ -67,12 +70,34 @@ describe("onboarding activation overview", () => {
     await render(false)
     expect(button("Activate employee")).toBeUndefined()
   })
+  it("hides payroll requirements unless payroll read access is granted", async () => {
+    const payrollRequirement = { id: "TIN", label: "Tax identification number", group: "Employment & payroll", owner: "Payroll", required: true, status: "pending", action: "payroll" }
+    getReadiness.mockResolvedValue({ ...data, blocker_count: 2, total_required: 3, next_action: payrollRequirement, requirements: [payrollRequirement, ...data.requirements] })
+    await render()
+    expect(container.textContent).not.toContain("Tax identification number")
+    expect(container.textContent).not.toContain("Payroll & salary")
+    expect(container.textContent).toContain("1 activation requirements outstanding")
+    await act(async () => root.unmount())
+    container.remove()
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await render(true, true)
+    expect(container.textContent).toContain("Tax identification number")
+    expect(container.textContent).toContain("Payroll & salary")
+    expect(container.textContent).toContain("2 activation requirements outstanding")
+  })
+  it("hides contract requirements without contract read access", async () => {
+    await render(true, false, false)
+    expect(container.textContent).not.toContain("Signed contract")
+    expect(container.textContent).not.toContain("Employment contract")
+  })
   it("fails closed and lets HR retry a failed readiness check", async () => {
     getReadiness.mockRejectedValueOnce(new Error("Unavailable"))
     await render()
     expect(container.textContent).toContain("Readiness unavailable")
     expect(button("Activate employee")).toBeUndefined()
-    await act(async () => button("Refresh readiness").click())
+    await act(async () => labelledButton("Refresh readiness").click())
     expect(getReadiness).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain("Signed contract")
   })

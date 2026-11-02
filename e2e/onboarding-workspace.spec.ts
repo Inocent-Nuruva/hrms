@@ -3,7 +3,7 @@ import { DASHBOARD_AUTH_COOKIE } from "../src/lib/dashboard-permissions"
 
 async function prepareWorkspace(page: Page, canActivate = true, extraPermissions: string[] = []) {
   await page.context().addCookies([{ name: DASHBOARD_AUTH_COOKIE, value: "1", url: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000" }])
-  const permissions = ["view_company_dashboard", "view_company_data", "data_scope:company", "employees:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
+  const permissions = ["view_company_dashboard", "view_company_data", "data_scope:company", "employees:read", "employment_contracts:read", "onboarding_requests:read", ...(canActivate ? ["onboarding_requests:complete"] : []), ...extraPermissions]
   const user = { id: 90, fullName: "Test HR", first_name: "Test", last_name: "HR", email: "phase4@example.test", roles: ["HR"], permissions, scope: "company", companyId: 10, company_id: 10, dashboardType: "admin", accessContextResolved: true }
   const token = `${Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify({ sub: 90, email: user.email, scope: "company", userType: "COMPANY_USER", companyId: 10, companyMembershipId: 90, roles: user.roles, permissions, exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.fixture`
   await page.addInitScript(({ token, user, permissions }) => {
@@ -105,8 +105,8 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       await expect(page.getByText("1 of 1 open requests", { exact: false })).toBeVisible()
       await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
       await expect(page.getByText("Activation overview · Amina Test")).toBeVisible()
-      await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
-      await expect(page.getByRole("button", { name: "Review Signed contract covering the start date", exact: true })).toBeVisible()
+      await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
+      await expect(page.getByRole("button", { name: "Manage contract for Signed contract covering the start date", exact: true })).toBeVisible()
       const dialog = page.getByRole("region", { name: "Employee onboarding workspace", exact: true })
       const sheet = page.getByRole("dialog", { name: "Employee onboarding workspace", exact: true })
       await expect(sheet).toBeVisible()
@@ -179,8 +179,8 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.goto("/dashboard/employees/onboarding")
     await page.getByRole("searchbox", { name: "Search onboarding overview" }).fill("Amina")
     await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
-    await page.getByRole("button", { name: "Review Signed contract covering the start date", exact: true }).click()
-    await expect(page.getByRole("tab", { name: "Payroll & contract", exact: true })).toHaveAttribute("aria-selected", "true")
+    await page.getByRole("button", { name: "Manage contract for Signed contract covering the start date", exact: true }).click()
+    await expect(page.getByRole("tab", { name: "Contract", exact: true })).toHaveAttribute("aria-selected", "true")
     await page.getByRole("button", { name: "← Back to onboarding", exact: true }).click()
     await expect(page.getByRole("searchbox", { name: "Search onboarding overview" })).toHaveValue("Amina")
     await expect(page).not.toHaveURL(/request_id=/)
@@ -191,8 +191,9 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     const approval = { id: "approval-3", label: "Starting salary review", group: "Approvals", owner: "Payroll approver", required: true, status: "pending", action: "approvals", actionable: false, waiting_reason: "Waiting for earlier required workflow steps to complete." }
     await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: approval, requirements: [approval] } }))
     await page.goto("/dashboard/employees/onboarding?request_id=55")
+    await page.getByRole("button", { name: "More information about Starting salary review", exact: true }).hover()
     await expect(page.getByText("Waiting on a prerequisite:", { exact: false })).toBeVisible()
-    await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toBeDisabled()
+    await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     await page.screenshot({ path: test.info().outputPath("waiting-on-approval.png"), fullPage: true })
   })
 
@@ -209,7 +210,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       return route.fulfill({ json: { data: [{ employeeId: 501, payrollNumber: "PAY-501", effectiveFrom: "2026-10-01", taxpayerIdentificationNumber: "*****6789", socialSecurityNumber: "*****3456", healthInsuranceNumber: "*****1234", version: 4 }] } })
     })
     await page.goto("/dashboard/employees/onboarding?request_id=55")
-    await page.getByRole("button", { name: "Review Tax identification number", exact: true }).click()
+    await page.getByRole("button", { name: "Open requirement for Tax identification number", exact: true }).click()
     const drawer = page.getByRole("dialog", { name: "Payroll setup", exact: true })
     await expect(drawer.getByLabel("Tax identification number", { exact: true })).toHaveValue("")
     await drawer.getByRole("textbox", { name: /^Payroll number/ }).fill("PAY-502")
@@ -219,7 +220,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     expect(submitted).not.toHaveProperty("taxpayer_identification_number")
     expect(submitted).not.toHaveProperty("social_security_number")
     expect(submitted).not.toHaveProperty("health_insurance_number")
-    await page.getByRole("button", { name: "Review salary setup", exact: true }).click()
+    await page.getByRole("button", { name: "Implement salary", exact: true }).click()
     await expect(page.getByRole("dialog", { name: "Joining salary & payroll", exact: true })).toBeVisible()
   })
 
@@ -227,7 +228,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     const state = await prepareWorkspace(page, true, ["onboarding_requests:update"])
     state.failNote = true
     await page.goto("/dashboard/employees/onboarding?request_id=55")
-    await page.getByRole("button", { name: "Notes & handoff", exact: true }).click()
+    await page.getByRole("button", { name: "Handoff", exact: true }).first().click()
     await page.getByLabel("Note visibility", { exact: true }).selectOption("employee")
     const note = page.getByLabel("Handoff note", { exact: true })
     await note.fill("Please review and sign the prepared contract.")

@@ -8,6 +8,7 @@ import { useWorkflowRequest } from "@/hooks/use-workflow-request";
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import * as React from "react";
 import Link from "next/link";
 import {
@@ -514,7 +515,9 @@ export function EmployeeKpiWorkspace({ mode }: { mode: WorkspaceMode }) {
       const id = rowId(row);
       if (
         !id ||
-        !window.confirm(`Delete KPI ${readString(row, ["title"], `#${id}`)}?`)
+        !(await fluentConfirm(
+          `Delete KPI ${readString(row, ["title"], `#${id}`)}?`,
+        ))
       )
         return;
       const accessToken = token();

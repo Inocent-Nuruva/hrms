@@ -4,6 +4,11 @@ import quickLinkStyles from "./performance-quick-links.module.css";
 import periodActionStyles from "./performance-period-actions.module.css";
 import { KpiCategoriesFlyout } from "./kpi-categories-flyout";
 import { KpiCategorySelect } from "./kpi-category-select";
+import { KpiImportPanel } from "./kpi-import-panel";
+import {
+  fluentConfirm,
+  fluentPrompt,
+} from "@/components/ui/fluent-dialog-service";
 import {
   cleanKpiCategory,
   collectKpiCategories,
@@ -105,6 +110,7 @@ import {
   activatePerformancePeriod,
   approvePerformanceReview,
   calculatePerformanceAggregates,
+  publishPerformanceAggregates,
   closePerformancePeriod,
   closePerformanceImprovementPlan,
   createPerformanceCompetencyTemplate,
@@ -213,13 +219,7 @@ type CreateMode =
   | "reopen"
   | "milestone";
 
-const AGGREGATION_METHODS = [
-  "SIMPLE_MONTHLY_AVERAGE",
-  "WEIGHTED_MONTHLY_AVERAGE",
-  "QUARTERLY_ROLLUP",
-  "ANNUAL_TARGET_ACHIEVEMENT",
-  "MONTHLY_AVERAGE_WITH_ADJUSTMENTS",
-] as const;
+const AGGREGATION_METHODS = ["SIMPLE_MONTHLY_AVERAGE"] as const;
 
 const AGGREGATION_HELP: Record<string, string> = {
   "": "Uses Simple Monthly Average. Only published monthly reviews with a score count; missing scores are excluded.",
@@ -282,8 +282,11 @@ const DATA_SOURCES = [
   "LEAVE",
   "DAILY_ACTIVITY",
   "FIELD_VISIT",
-  "EXTERNAL_API",
   "FILE_IMPORT",
+] as const;
+
+const UNAVAILABLE_DATA_SOURCES = [
+  "EXTERNAL_API",
   "SYSTEM_CALCULATION",
 ] as const;
 
@@ -733,6 +736,18 @@ export function PerformanceManagementView({
       "manage_performance",
     ],
     mode: "any",
+  });
+  const canManageKpiImports = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_kpi_imports:manage"],
+  });
+  const canPublishAggregates = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_aggregates:publish"],
+  });
+  const canApproveKpiImports = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_kpi_imports:approve"],
+  });
+  const canReadKpiImports = canPerformPermission(actor.permissionLabels, {
+    permissions: ["performance_kpi_imports:read"],
   });
   const canActivatePeriod = canPerformPermission(actor.permissionLabels, {
     permissions: [
@@ -1451,8 +1466,8 @@ export function PerformanceManagementView({
           readNumber(result, ["skipped_review_count"]) ?? 0;
         const summary =
           periodType === "QUARTERLY"
-            ? `${count} aggregate(s), ${skippedPeriods} quarter(s) without published source scores, ${skippedReviews} unpublished or unscored review(s) omitted.`
-            : `${count} annual aggregate(s) updated.`;
+            ? `${count} draft aggregate(s), ${skippedPeriods} quarter(s) without published source scores, ${skippedReviews} unpublished or unscored review(s) omitted.`
+            : `${count} draft annual aggregate(s) calculated.`;
         toast[count > 0 ? "success" : "info"](
           `${prettify(periodType)} calculation finished: ${summary}`,
         );
@@ -1462,6 +1477,33 @@ export function PerformanceManagementView({
           errorObject instanceof Error
             ? errorObject.message
             : "Could not calculate performance aggregates.",
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
+
+  const publishAggregatesForYear = React.useCallback(
+    async (yearId: string, periodType: "QUARTERLY" | "ANNUAL") => {
+      const token = readStoredToken();
+      if (!token) return;
+      const actionId = `publish-agg-${periodType}-${yearId}`;
+      setBusyId(actionId);
+      try {
+        const result = asRecord(
+          await publishPerformanceAggregates(token, yearId, periodType),
+        );
+        toast.success(
+          `${readNumber(result, ["published_count"]) ?? 0} ${prettify(periodType).toLowerCase()} aggregate(s) published to employee self-service.`,
+        );
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not publish performance aggregates.",
         );
       } finally {
         setBusyId("");
@@ -2187,9 +2229,9 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `goal-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          const raw = window.prompt(
+                          const raw = await fluentPrompt(
                             "Progress percentage (0–100)",
                             String(
                               readNumber(goal, [
@@ -2228,7 +2270,7 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `complete-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
                           void runAction(
                             `complete-${id}`,
@@ -2249,9 +2291,9 @@ export function PerformanceManagementView({
                         type="button"
                         appearance="secondary"
                         disabled={busyId === `carry-${id}`}
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.stopPropagation();
-                          const title = window.prompt(
+                          const title = await fluentPrompt(
                             "Title for the new development plan",
                             `${readString(row, ["title"], "Development plan")} — follow-up`,
                           );
@@ -2699,7 +2741,7 @@ export function PerformanceManagementView({
                 appearance="primary"
                 size="small"
                 icon={<Edit20Regular />}
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation();
                   openCreate("kpi-edit", seedKpiDefinitionForm(row));
                 }}
@@ -2725,12 +2767,12 @@ export function PerformanceManagementView({
                 data-action="lock"
                 type="button"
                 appearance="secondary"
-                onClick={(event) => {
+                onClick={async (event) => {
                   event.stopPropagation();
                   const id = rowId(row);
                   if (
                     !id ||
-                    !window.confirm(`Archive KPI ${optionLabel(row)}?`)
+                    !(await fluentConfirm(`Archive KPI ${optionLabel(row)}?`))
                   )
                     return;
                   void runAction(
@@ -2944,6 +2986,31 @@ export function PerformanceManagementView({
                     </FluentButton>
                   );
                 })}
+                {canPublishAggregates
+                  ? (["QUARTERLY", "ANNUAL"] as const).map((periodType) => {
+                      const actionId = `publish-agg-${periodType}-${id}`;
+                      return (
+                        <FluentButton
+                          key={`publish-${periodType}`}
+                          type="button"
+                          appearance="primary"
+                          size="small"
+                          icon={<CompletedIcon />}
+                          disabled={busyId === actionId}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void publishAggregatesForYear(id, periodType);
+                          }}
+                        >
+                          {busyId === actionId ? (
+                            <FluentLoadingIndicator className="size-3.5 animate-spin" />
+                          ) : (
+                            "Publish " + prettify(periodType) + " aggregates"
+                          )}
+                        </FluentButton>
+                      );
+                    })
+                  : null}
               </div>
             );
           },
@@ -3006,7 +3073,7 @@ export function PerformanceManagementView({
                     size="small"
                     type="button"
                     appearance="secondary"
-                    onClick={(event) => {
+                    onClick={async (event) => {
                       event.stopPropagation();
                       const value = (
                         camel: string,
@@ -3120,11 +3187,13 @@ export function PerformanceManagementView({
                     size="small"
                     appearance="secondary"
                     disabled={busyId === `reopen-period-${id}`}
-                    onClick={(event) => {
+                    onClick={async (event) => {
                       event.stopPropagation();
-                      const reason = window
-                        .prompt("Reason for reopening this KPI cycle")
-                        ?.trim();
+                      const reason = (
+                        await fluentPrompt(
+                          "Reason for reopening this KPI cycle",
+                        )
+                      )?.trim();
                       if (!reason) return;
                       void runAction(
                         `reopen-period-${id}`,
@@ -3311,12 +3380,14 @@ export function PerformanceManagementView({
     canCarryDevelopmentGoals,
     canClosePeriod,
     canCreatePerformance,
+    canPublishAggregates,
     canUpdateDevelopmentGoals,
     departments,
     employees,
     grades,
     kpis,
     positions,
+    publishAggregatesForYear,
     setupTab,
     years,
   ]);
@@ -4011,13 +4082,18 @@ export function PerformanceManagementView({
                 </div>
                 <div className={quickLinkStyles.links}>
                   {[
-                    ...(canCreatePerformance ? [{
-                      title: "Configure performance",
-                      description: "Set review dates, KPIs and review rules.",
-                      path: "setup",
-                      icon: <Settings20Regular />,
-                      tone: quickLinkStyles.blue,
-                    }] : []),
+                    ...(canCreatePerformance
+                      ? [
+                          {
+                            title: "Configure performance",
+                            description:
+                              "Set review dates, KPIs and review rules.",
+                            path: "setup",
+                            icon: <Settings20Regular />,
+                            tone: quickLinkStyles.blue,
+                          },
+                        ]
+                      : []),
                     {
                       title: "Manage employee plans",
                       description: "Organise employee goals, KPIs and targets.",
@@ -4037,14 +4113,28 @@ export function PerformanceManagementView({
                       key={link.path}
                       appearance="subtle"
                       className={quickLinkStyles.link}
-                      onClick={() => router.push(`/dashboard/performance/${link.path}`)}
+                      onClick={() =>
+                        router.push(`/dashboard/performance/${link.path}`)
+                      }
                     >
-                      <span className={`${quickLinkStyles.icon} ${link.tone}`} aria-hidden="true">{link.icon}</span>
-                      <span className={quickLinkStyles.copy}>
-                        <span className={quickLinkStyles.title}>{link.title}</span>
-                        <span className={quickLinkStyles.description}>{link.description}</span>
+                      <span
+                        className={`${quickLinkStyles.icon} ${link.tone}`}
+                        aria-hidden="true"
+                      >
+                        {link.icon}
                       </span>
-                      <ArrowRight20Regular className={quickLinkStyles.arrow} aria-hidden="true" />
+                      <span className={quickLinkStyles.copy}>
+                        <span className={quickLinkStyles.title}>
+                          {link.title}
+                        </span>
+                        <span className={quickLinkStyles.description}>
+                          {link.description}
+                        </span>
+                      </span>
+                      <ArrowRight20Regular
+                        className={quickLinkStyles.arrow}
+                        aria-hidden="true"
+                      />
                     </FluentButton>
                   ))}
                 </div>
@@ -4200,10 +4290,10 @@ export function PerformanceManagementView({
               <FluentButton
                 type="button"
                 appearance="secondary"
-                onClick={() => {
-                  const reviewId = window
-                    .prompt("Review ID to inspect")
-                    ?.trim();
+                onClick={async () => {
+                  const reviewId = (
+                    await fluentPrompt("Review ID to inspect")
+                  )?.trim();
                   if (!reviewId) return;
                   void runAction(
                     `workflow-${reviewId}`,
@@ -4263,9 +4353,7 @@ export function PerformanceManagementView({
             savedStep={savedSetupStep}
             error={error}
             onRetry={() => void load()}
-            createBlocked={
-              setupCreateBlocked(setupTab)
-            }
+            createBlocked={setupCreateBlocked(setupTab)}
             headerActions={
               <>
                 <FluentButton
@@ -4291,6 +4379,18 @@ export function PerformanceManagementView({
             onCreate={() => startSetupCreation(setupTab)}
             onSkip={skipSetupStep}
           >
+            {setupTab === "kpis" &&
+            (canManageKpiImports ||
+              canApproveKpiImports ||
+              canReadKpiImports) ? (
+              <div className="mb-4">
+                <KpiImportPanel
+                  canManage={canManageKpiImports}
+                  canApprove={canApproveKpiImports}
+                  canRead={canReadKpiImports}
+                />
+              </div>
+            ) : null}
             {recordsPanel}
           </PerformanceSetupWizard>
         ) : (
@@ -4352,7 +4452,9 @@ export function PerformanceManagementView({
         }
         row={detailRecord}
       >
-        {detailRecord && activeTab === "setup" && setupTab === "kpis" ? <KpiRecordDetails row={detailRecord} /> : undefined}
+        {detailRecord && activeTab === "setup" && setupTab === "kpis" ? (
+          <KpiRecordDetails row={detailRecord} />
+        ) : undefined}
       </RecordDetailsDialog>
 
       <Dialog
@@ -4506,7 +4608,8 @@ export function PerformanceManagementView({
                           onChange={(event) =>
                             setForm((current) => ({
                               ...current,
-                              aggregation_configuration_json: event.target.value,
+                              aggregation_configuration_json:
+                                event.target.value,
                             }))
                           }
                           placeholder='{"monthly_weights":{"1":1,"2":1.2}}'
@@ -4879,10 +4982,17 @@ export function PerformanceManagementView({
                               data_source_type: value,
                             }))
                           }
-                          options={DATA_SOURCES.map((item) => ({
-                            value: item,
-                            label: prettify(item),
-                          }))}
+                          options={[
+                            ...DATA_SOURCES.map((item) => ({
+                              value: item,
+                              label: prettify(item),
+                            })),
+                            ...UNAVAILABLE_DATA_SOURCES.map((item) => ({
+                              value: item,
+                              label: `${prettify(item)} (provider unavailable)`,
+                              disabled: true,
+                            })),
+                          ]}
                         />
                       </Field>
                       <Field

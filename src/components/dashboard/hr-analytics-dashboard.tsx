@@ -28,7 +28,6 @@ import {
 import {
   getAnalyticsDashboard,
   getHrDashboard,
-  listAllEmployees,
   listDepartments,
   listLeaveRequests,
   listAttendanceHolidays,
@@ -573,8 +572,8 @@ type WorkforceMetricTone = "emerald" | "amber" | "rose"
 
 interface WorkforceMetric {
   label: string
-  value: number
-  percentage: number
+  value: number | null
+  percentage: number | null
   description: React.ReactNode
   icon: React.ReactNode
   tone: WorkforceMetricTone
@@ -948,7 +947,8 @@ const workforceMetricTone = {
 
 function WorkforceMetricVisual({ metric }: { metric: WorkforceMetric }) {
   const tone = workforceMetricTone[metric.tone]
-  const percentage = Math.min(100, Math.max(0, metric.percentage))
+  const percentage = Math.min(100, Math.max(0, metric.percentage ?? 0))
+  if (metric.value === null) return null
 
   if (metric.visualization === "sparkline") {
     return (
@@ -1026,7 +1026,7 @@ function WorkforceMetricCard({
             <InfoIcon className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           </span>
         }
-        action={
+        action={metric.percentage !== null ? (
           <FluentBadge
             color={badgeColor}
             appearance="tint"
@@ -1036,7 +1036,7 @@ function WorkforceMetricCard({
             <ArrowUpRightIcon className="size-2.5" aria-hidden="true" />
             {metric.percentage}%
           </FluentBadge>
-        }
+        ) : null}
       />
 
       <div className="mt-3 flex items-center gap-2.5">
@@ -1044,7 +1044,7 @@ function WorkforceMetricCard({
           {metric.icon}
         </span>
         <div className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
-          <AnimatedMetricValue value={metric.value} />
+          {metric.value === null ? "Unavailable" : <AnimatedMetricValue value={metric.value} />}
         </div>
       </div>
 
@@ -1112,15 +1112,17 @@ function WorkforceInsightPanels({
   late,
   absent,
   attendanceDays,
+  attendanceUnavailable,
   performanceScore,
   performanceStats,
 }: {
   rangeLabel: string
-  attendanceRate: number
-  present: number
-  late: number
-  absent: number
+  attendanceRate: number | null
+  present: number | null
+  late: number | null
+  absent: number | null
   attendanceDays: AttendanceChartDay[]
+  attendanceUnavailable: boolean
   performanceScore: number
   performanceStats: PerformanceStat[]
 }) {
@@ -1133,7 +1135,9 @@ function WorkforceInsightPanels({
           <div>
             <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
             <div className="mt-3 flex items-end gap-2">
-              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">{attendanceRate}%</span>
+              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">
+                {attendanceRate === null ? "Unavailable" : `${attendanceRate}%`}
+              </span>
               <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
                 Attendance rate
               </span>
@@ -1149,7 +1153,9 @@ function WorkforceInsightPanels({
           ].map(([label, value, border]) => (
             <div key={String(label)} className={cn("border-l-2 pl-2", border)}>
               <p className="text-[10px] text-muted-foreground">{label}</p>
-              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">{value}</p>
+              <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
+                {value === null ? "Unavailable" : value}
+              </p>
             </div>
           ))}
         </div>
@@ -1168,6 +1174,10 @@ function WorkforceInsightPanels({
                 </div>
               )
             })}
+          </div>
+        ) : attendanceUnavailable ? (
+          <div className="mt-4 flex h-40 items-center justify-center rounded-xl bg-amber-50 text-center text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            Attendance history is unavailable.
           </div>
         ) : (
           <div className="mt-4 flex h-40 items-center justify-center rounded-xl bg-muted/20 text-xs text-muted-foreground">
@@ -1435,6 +1445,7 @@ export default function HrAnalyticsDashboard({
   /** Per-slice: true only until that slice has completed its first successful/failed load. */
   const [sliceReady, setSliceReady] = React.useState(warm ? readySliceState() : emptySliceState())
   const [error, setError] = React.useState<string | null>(null)
+  const [partialSourceErrors, setPartialSourceErrors] = React.useState<string[]>([])
 
   const [fromDate, setFromDate] = React.useState(
     warm?.fromDate ?? formatInputDate(shiftDays(new Date(), -30))
@@ -1464,6 +1475,7 @@ export default function HrAnalyticsDashboard({
   )
   const [payrollPayslips, setPayrollPayslips] = React.useState<AdminRecord[]>([])
   const [analyticsSummary, setAnalyticsSummary] = React.useState<AdminRecord | null>(null)
+  const [workforceSummary, setWorkforceSummary] = React.useState<AdminRecord | null>(null)
   const [upcomingHoliday, setUpcomingHoliday] = React.useState<AdminRecord | null>(null)
 
   const employeesRef = React.useRef(employees)
@@ -1554,11 +1566,18 @@ export default function HrAnalyticsDashboard({
     setSliceReady((prev) => (prev[slice] ? prev : { ...prev, [slice]: true }))
   }, [])
 
+  const recordPartialSourceError = React.useCallback((source: string) => {
+    setPartialSourceErrors((previous) =>
+      previous.includes(source) ? previous : [...previous, source],
+    )
+  }, [])
+
   const fetchAll = React.useCallback(async (options?: { silent?: boolean }) => {
     const silent = Boolean(options?.silent)
     const token = readStoredToken()
     if (!token) {
       setError("No active session. Please sign in again.")
+      setPartialSourceErrors([])
       setEmployees([])
       setDepartments([])
       setLeaveRequests([])
@@ -1566,6 +1585,8 @@ export default function HrAnalyticsDashboard({
       setTodayAttendanceSummaries([])
       setOnboardingRequests([])
       setOffboardingRequests([])
+      setWorkforceSummary(null)
+      setAnalyticsSummary(null)
       setUpcomingHoliday(null)
       setDepartmentHeadcounts([])
       setSliceReady(readySliceState())
@@ -1577,6 +1598,7 @@ export default function HrAnalyticsDashboard({
       setLoading(true)
     }
     setError(null)
+    setPartialSourceErrors([])
 
     const from_date = fromDate.trim() || undefined
     const to_date = toDate.trim() || undefined
@@ -1613,21 +1635,46 @@ export default function HrAnalyticsDashboard({
             date_to: to_date,
           }),
         )
-        .catch(() => null)
+        .catch(() => {
+          recordPartialSourceError("HR analytics summary")
+          return null
+        })
         .then((summary) => {
           setAnalyticsSummary(summary)
         }),
 
-      listAllEmployees(token, {}, listOpts)
-        .catch((): AdminRecord[] => [])
-        .then((empRows) => {
-          setEmployees(empRows)
-          setDepartmentHeadcounts(buildDepartmentHeadcounts(departmentsRef.current, empRows))
+      getHrDashboard(token, "hr", {
+        date_from: from_date,
+        date_to: to_date,
+      })
+        .catch(() => {
+          recordPartialSourceError("Workforce summary")
+          return null
+        })
+        .then((summary) => {
+          setWorkforceSummary(summary)
+          setEmployees([])
+          const manpower = Array.isArray(summary?.manpower)
+            ? summary.manpower
+            : []
+          setDepartmentHeadcounts(
+            manpower
+              .map((entry) => {
+                const row = asRecord(entry) ?? {}
+                const label = readString(row, ["department_name", "name"])
+                const count = readNumber(row, ["headcount", "count"])
+                return label && count !== null ? [label, count] as [string, number] : null
+              })
+              .filter((entry): entry is [string, number] => Boolean(entry)),
+          )
           markReady("employees")
         }),
 
       listDepartments(token, { page: 1, limit: 100 }, listOpts)
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Department list")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((deptRes) => {
           const deptRows = deptRes.rows ?? []
           setDepartments(deptRows)
@@ -1637,7 +1684,10 @@ export default function HrAnalyticsDashboard({
 
       showLeaveRequests
         ? listLeaveRequests(token, leaveParams)
-            .catch((): PagedRowsResult => ({ rows: [], total: null }))
+            .catch(() => {
+              recordPartialSourceError("Leave requests")
+              return { rows: [], total: null } as PagedRowsResult
+            })
             .then((leaveRes) => {
               setLeaveRequests(leaveRes.rows ?? [])
               markReady("leave")
@@ -1648,20 +1698,29 @@ export default function HrAnalyticsDashboard({
           }),
 
       listAttendanceDailySummariesPage(token, attParams, listOpts)
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Attendance history")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((attRes) => {
           setAttendanceSummaries(attRes.rows ?? [])
           markReady("attendance")
         }),
 
       listAttendanceDailySummariesPage(token, todayAttendanceParams, { cacheTtlMs: 0 })
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Today's attendance")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((attRes) => {
           setTodayAttendanceSummaries(attRes.rows ?? [])
         }),
 
       listAttendanceHolidays(token, { page: 1, limit: 100 })
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Attendance holidays")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((holidayResult) => {
           const today = formatLocalDateKey(new Date())
           const nextHoliday = [...(holidayResult.rows ?? [])]
@@ -1674,14 +1733,20 @@ export default function HrAnalyticsDashboard({
         }),
 
       listOnboardingRequests(token, { page: 1, limit: 50 })
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Onboarding requests")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((onboardRes) => {
           setOnboardingRequests(onboardRes.rows ?? [])
           markReady("onboarding")
         }),
 
       listOffboardingRequests(token, { page: 1, limit: 50 })
-        .catch((): PagedRowsResult => ({ rows: [], total: null }))
+        .catch(() => {
+          recordPartialSourceError("Offboarding requests")
+          return { rows: [], total: null } as PagedRowsResult
+        })
         .then((offboardRes) => {
           setOffboardingRequests(offboardRes.rows ?? [])
           markReady("offboarding")
@@ -1692,16 +1757,26 @@ export default function HrAnalyticsDashboard({
             .then(async (result) => {
               const run = result.rows[0]
               const runId = run ? readNumber(run, ["id", "payroll_run_id", "payrollRunId"]) : null
-              setPayrollPayslips(runId === null ? [] : await listPayrollPayslipsForRun(token, runId).catch(() => []))
+              setPayrollPayslips(
+                runId === null
+                  ? []
+                  : await listPayrollPayslipsForRun(token, runId).catch(() => {
+                      recordPartialSourceError("Payroll payslips")
+                      return []
+                    }),
+              )
             })
-            .catch(() => setPayrollPayslips([]))
+            .catch(() => {
+              recordPartialSourceError("Payroll payslips")
+              setPayrollPayslips([])
+            })
         : Promise.resolve().then(() => setPayrollPayslips([])),
     ]
 
     await Promise.allSettled(tasks)
     setLastUpdatedAt(new Date())
     setLoading(false)
-  }, [canOpenPayroll, fromDate, toDate, markReady, showLeaveRequests])
+  }, [canOpenPayroll, fromDate, toDate, markReady, recordPartialSourceError, showLeaveRequests])
 
   React.useEffect(() => {
     // First mount after login: revalidate quietly so we don't flash skeletons again.
@@ -1717,13 +1792,19 @@ export default function HrAnalyticsDashboard({
   }, [refreshKey, fetchAll])
 
   const statusCounts = React.useMemo(() => {
+    const summaryCounts = asRecord(asRecord(workforceSummary?.workforce_summary)?.status_counts)
+    if (summaryCounts) {
+      return Object.fromEntries(
+        Object.entries(summaryCounts).map(([status, count]) => [status.toLowerCase(), Number(count) || 0]),
+      )
+    }
     const counts: Record<string, number> = {}
     for (const e of employees) {
       const s = getEmploymentStatus(e).toLowerCase()
       counts[s] = (counts[s] || 0) + 1
     }
     return counts
-  }, [employees])
+  }, [employees, workforceSummary])
 
   const currentEmployees = React.useMemo(
     () =>
@@ -1734,17 +1815,23 @@ export default function HrAnalyticsDashboard({
   )
 
   // Derived metrics
-  const totalHeadcount = currentEmployees.length
+  const summaryHeadcount = readNumber(
+    asRecord(workforceSummary?.workforce_summary) ?? {},
+    ["current_count"],
+  )
+  const totalHeadcount = summaryHeadcount ?? currentEmployees.length
 
   const activeCount = statusCounts["active"] ?? 0
   // Always derive from latest employees + departments so the chart cannot go stale
   // when one list request finishes before the other.
   const resolvedDepartmentHeadcounts = React.useMemo(() => {
     const analyticsRows = extractDepartmentHeadcountsFromAnalytics(analyticsSummary)
+    const serverRows = departmentHeadcounts
+    if (serverRows.length > 0) return serverRows
     return analyticsRows.length > 0
       ? analyticsRows
       : buildDepartmentHeadcounts(departments, currentEmployees)
-  }, [analyticsSummary, currentEmployees, departments])
+  }, [analyticsSummary, currentEmployees, departments, departmentHeadcounts])
 
   const recentLeaves = React.useMemo(() => {
     return [...leaveRequests]
@@ -1756,7 +1843,7 @@ export default function HrAnalyticsDashboard({
       .slice(0, 6)
   }, [leaveRequests])
 
-  // Surface more: hires within the chosen date range (client-side on the loaded sample)
+  // Prefer the scoped server aggregate; retain legacy fallbacks for cached snapshots.
   const hiresInRange = React.useMemo(() => {
     const analyticsValue = readNumberDeep(analyticsSummary, [
       "new_hires",
@@ -1765,6 +1852,11 @@ export default function HrAnalyticsDashboard({
       "joiners",
     ])
     if (analyticsValue !== null) return analyticsValue
+    const serverJoiners = readNumber(
+      asRecord(workforceSummary?.movements) ?? {},
+      ["new_joiners"],
+    )
+    if (serverJoiners !== null) return serverJoiners
     if (!fromDate || !toDate) return 0
     const from = new Date(fromDate)
     const to = new Date(toDate)
@@ -1786,7 +1878,7 @@ export default function HrAnalyticsDashboard({
       if (d >= from && d <= to) c += 1
     }
     return c
-  }, [analyticsSummary, employees, fromDate, toDate])
+  }, [analyticsSummary, employees, fromDate, toDate, workforceSummary])
 
   const pendingOnboarding = React.useMemo(() => {
     const analyticsValue = readNumberDeep(analyticsSummary, [
@@ -2039,41 +2131,69 @@ export default function HrAnalyticsDashboard({
   const workforceMetrics: WorkforceMetric[] = [
     {
       label: "Total employees",
-      value: totalHeadcount,
-      percentage: totalHeadcount > 0 ? 100 : 0,
-      description: `${activeCount} active across ${departments.length || resolvedDepartmentHeadcounts.length} departments`,
+      value: partialSourceErrors.includes("Workforce summary") ? null : totalHeadcount,
+      percentage: partialSourceErrors.includes("Workforce summary") ? null : totalHeadcount > 0 ? 100 : 0,
+      description: partialSourceErrors.includes("Workforce summary")
+        ? "Workforce summary is unavailable"
+        : `${activeCount} active across ${departments.length || resolvedDepartmentHeadcounts.length} departments`,
       icon: <UsersIcon className="size-5" aria-hidden="true" />,
-      tone: toneForPercentage(totalHeadcount > 0 ? 100 : 0),
+      tone: partialSourceErrors.includes("Workforce summary")
+        ? "amber"
+        : toneForPercentage(totalHeadcount > 0 ? 100 : 0),
       visualization: "sparkline",
       href: canOpenEmployeeDirectory ? "/dashboard/employees/all" : undefined,
     },
     {
       label: "Today present",
-      value: todayPresent,
-      percentage: percentageOfHeadcount(todayPresent),
-      description: `${percentageOfHeadcount(todayPresent)}% of employees are present today (${todayPresent} of ${totalHeadcount})`,
+      value: partialSourceErrors.includes("Today's attendance") ? null : todayPresent,
+      percentage: partialSourceErrors.includes("Today's attendance") ? null : percentageOfHeadcount(todayPresent),
+      description: partialSourceErrors.includes("Today's attendance")
+        ? "Today's attendance is unavailable"
+        : `${percentageOfHeadcount(todayPresent)}% of employees are present today (${todayPresent} of ${totalHeadcount})`,
       icon: <UserCheckIcon className="size-5" aria-hidden="true" />,
-      tone: toneForPercentage(percentageOfHeadcount(todayPresent)),
+      tone: partialSourceErrors.includes("Today's attendance")
+        ? "amber"
+        : toneForPercentage(percentageOfHeadcount(todayPresent)),
       visualization: "bars",
       href: attendanceHref,
     },
     {
       label: "Today absent",
-      value: todayAbsent,
-      percentage: percentageOfHeadcount(todayAbsent),
-      description: `${percentageOfHeadcount(todayAbsent)}% of employees are absent today (${todayAbsent} of ${totalHeadcount})`,
+      value: partialSourceErrors.includes("Today's attendance") ? null : todayAbsent,
+      percentage: partialSourceErrors.includes("Today's attendance") ? null : percentageOfHeadcount(todayAbsent),
+      description: partialSourceErrors.includes("Today's attendance")
+        ? "Today's attendance is unavailable"
+        : `${percentageOfHeadcount(todayAbsent)}% of employees are absent today (${todayAbsent} of ${totalHeadcount})`,
       icon: <UserXIcon className="size-5" aria-hidden="true" />,
-      tone: toneForPercentage(percentageOfHeadcount(todayAbsent)),
+      tone: partialSourceErrors.includes("Today's attendance")
+        ? "amber"
+        : toneForPercentage(percentageOfHeadcount(todayAbsent)),
       visualization: "ticks",
       href: attendanceHref,
     },
     {
       label: "Today on leave",
-      value: todayLeave,
-      percentage: percentageOfHeadcount(todayLeave),
-      description: `${percentageOfHeadcount(todayLeave)}% of employees are on approved leave today (${todayLeave} of ${totalHeadcount})`,
+      value:
+        partialSourceErrors.includes("Today's attendance") ||
+        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+          ? null
+          : todayLeave,
+      percentage:
+        partialSourceErrors.includes("Today's attendance") ||
+        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+          ? null
+          : percentageOfHeadcount(todayLeave),
+      description:
+        partialSourceErrors.includes("Today's attendance") ||
+        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+          ? "Today's leave status is unavailable"
+          : `${percentageOfHeadcount(todayLeave)}% of employees are on approved leave today (${todayLeave} of ${totalHeadcount})`,
       icon: <UserMinusIcon className="size-5" aria-hidden="true" />,
-      tone: toneForPercentage(percentageOfHeadcount(todayLeave)),
+      tone:
+        partialSourceErrors.includes("Today's attendance") ||
+        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+          ? "amber"
+          : toneForPercentage(percentageOfHeadcount(todayLeave)),
       visualization: "progress",
       href: canOpenLeaveRequests ? "/dashboard/leave-management/requests" : undefined,
     },
@@ -2084,14 +2204,16 @@ export default function HrAnalyticsDashboard({
   const metrics: MetricWithReady[] = [
     {
       label: "Departments",
-      value: departments.length || departmentHeadcounts.length || "-",
+      value: partialSourceErrors.includes("Department list")
+        ? "Unavailable"
+        : departments.length || departmentHeadcounts.length || "-",
       sub: "Active structures",
       ready: sliceReady.departments,
       href: canOpenDepartments ? "/dashboard/departments" : undefined,
     },
     {
       label: "New hires",
-      value: hiresInRange,
+      value: partialSourceErrors.includes("Workforce summary") ? "Unavailable" : hiresInRange,
       sub: fromDate && toDate ? `${formatDateShort(fromDate)} - ${formatDateShort(toDate)}` : "Selected range",
       ready: sliceReady.employees,
       compact: true,
@@ -2099,7 +2221,7 @@ export default function HrAnalyticsDashboard({
     },
     {
       label: "Onboarding",
-      value: pendingOnboarding,
+      value: partialSourceErrors.includes("Onboarding requests") ? "Unavailable" : pendingOnboarding,
       sub: "open requests",
       ready: sliceReady.onboarding,
       compact: true,
@@ -2107,7 +2229,7 @@ export default function HrAnalyticsDashboard({
     },
     {
       label: "Offboarding",
-      value: pendingOffboarding,
+      value: partialSourceErrors.includes("Offboarding requests") ? "Unavailable" : pendingOffboarding,
       sub: "open requests",
       ready: sliceReady.offboarding,
       compact: true,
@@ -2692,11 +2814,12 @@ export default function HrAnalyticsDashboard({
         </motion.div>
         <WorkforceInsightPanels
           rangeLabel={activeDateRangeLabel}
-          attendanceRate={attendanceReport.rate}
-          present={attendanceReport.present}
-          late={attendanceReport.late}
-          absent={attendanceReport.absent}
+          attendanceRate={partialSourceErrors.includes("Attendance history") ? null : attendanceReport.rate}
+          present={partialSourceErrors.includes("Attendance history") ? null : attendanceReport.present}
+          late={partialSourceErrors.includes("Attendance history") ? null : attendanceReport.late}
+          absent={partialSourceErrors.includes("Attendance history") ? null : attendanceReport.absent}
           attendanceDays={attendanceReport.days}
+          attendanceUnavailable={partialSourceErrors.includes("Attendance history")}
           performanceScore={performanceScore}
           performanceStats={performanceStats}
         />
@@ -2715,6 +2838,20 @@ export default function HrAnalyticsDashboard({
         >
           <AlertCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
+        </motion.div>
+      ) : null}
+
+      {partialSourceErrors.length > 0 ? (
+        <motion.div
+          variants={motionPreset.item}
+          className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/35 dark:text-amber-100"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="font-semibold">Some dashboard sources are unavailable</p>
+          <p className="mt-1 text-xs">
+            Empty results for these sections are not confirmed zero counts: {partialSourceErrors.join(", ")}.
+          </p>
         </motion.div>
       ) : null}
 
@@ -2781,6 +2918,10 @@ export default function HrAnalyticsDashboard({
             <div className="mt-4">
               {!leaveSectionReady ? (
                 <SectionSkeleton rows={4} />
+              ) : partialSourceErrors.includes("Leave requests") ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-5 text-center text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  Leave request data is unavailable. No zero-count conclusion can be drawn.
+                </div>
               ) : recentLeaves.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-primary/10">
                   <table className="w-full text-xs">

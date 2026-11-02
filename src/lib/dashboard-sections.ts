@@ -37,6 +37,10 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Registration", url: "/dashboard/employees/registration" },
       { title: "Onboarding", url: "/dashboard/employees/onboarding" },
       { title: "Contracts", url: "/dashboard/employees/contracts" },
+      {
+        title: "Salary approvals",
+        url: "/dashboard/employees/salary-approvals",
+      },
     ],
   },
 ];
@@ -74,6 +78,15 @@ export const employeeSectionTabGroups: DashboardSectionTabGroup[] = [
 ];
 
 export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    title: "Biometric Access",
+    items: [
+      {
+        title: "Biometric Access",
+        url: "/dashboard/attendance/biometric-access",
+      },
+    ],
+  },
   {
     title: "Attendance Operations",
     items: [
@@ -510,6 +523,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/me/team/overview" },
       { title: "Members", url: "/dashboard/me/team/members" },
       { title: "Attendance", url: "/dashboard/me/team/attendance" },
+      { title: "Activity summary", url: "/dashboard/me/team/activity-summary" },
       { title: "Actions", url: "/dashboard/me/team/actions" },
     ],
   },

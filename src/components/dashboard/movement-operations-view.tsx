@@ -1,14 +1,22 @@
-"use client"
+"use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import { DateInput } from "@/components/ui/date-input"
-import { Textarea } from "@/components/ui/textarea"
-import * as React from "react"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import { DateInput } from "@/components/ui/date-input";
+import { Textarea } from "@/components/ui/textarea";
+import * as React from "react";
+import {
+  Button as FluentButton,
+  DialogActions as FluentDialogActions,
+  Field as FluentField,
+  Input as FluentInput,
+} from "@fluentui/react-components";
+import { useSearchParams } from "next/navigation";
 import { PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
-import { toast } from "@/components/ui/fluent-toast-store"
+import { toast } from "@/components/ui/fluent-toast-store";
+import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 
-import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared"
+import { SearchToggleField } from "@/components/common/search-toggle-field";
+import { RecordDetailsDialog } from "@/components/dashboard/admin-view-shared";
 import {
   HeroBand,
   StatusChip,
@@ -16,7 +24,6 @@ import {
   actionButtonClass,
   employeeLabel,
   formatDate,
-  inputClass,
   optionLabel,
   prettify,
   primaryButtonClass,
@@ -25,17 +32,16 @@ import {
   rowId,
   secondaryButtonClass,
   textareaClass,
-} from "@/components/dashboard/talent-visuals"
-import { cn } from "@/lib/utils"
+} from "@/components/dashboard/talent-visuals";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+} from "@/components/animate-ui/components/base/dialog";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   applyEmployeeMovement,
   approveEmployeeMovement,
@@ -59,23 +65,23 @@ import {
   submitEmployeeMovement,
   updateEmployeeMovement,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+} from "@/lib/admin-api";
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions";
 import {
   useForbiddenRouteGuard,
   useLeaveIfForbidden,
-} from "@/hooks/use-forbidden-route-guard"
-import { readStoredSessionTokens } from "@/lib/session-client"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
+} from "@/hooks/use-forbidden-route-guard";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import {
   MovementSalaryOverridesEditor,
   type SalaryOverridesState,
   type StoredSalaryOverrides,
-} from "@/components/dashboard/movement-salary-overrides-editor"
+} from "@/components/dashboard/movement-salary-overrides-editor";
 
-export type MovementOpsTab = "overview" | "cases" | "operations"
-type MovementWorkspace = "hr" | "team"
+export type MovementOpsTab = "overview" | "cases" | "operations";
+type MovementWorkspace = "hr" | "team";
 
 const MOVEMENT_TYPES = [
   "DEPARTMENT_TRANSFER",
@@ -89,7 +95,7 @@ const MOVEMENT_TYPES = [
   "EMPLOYMENT_TYPE_CHANGE",
   "SALARY_REVISION",
   "COMPOSITE",
-] as const
+] as const;
 
 const EMPLOYMENT_TYPES = [
   "full_time",
@@ -98,14 +104,14 @@ const EMPLOYMENT_TYPES = [
   "intern",
   "consultant",
   "temporary",
-] as const
+] as const;
 
 function readStoredToken() {
-  return readStoredSessionTokens().accessToken.trim()
+  return readStoredSessionTokens().accessToken.trim();
 }
 
 function statusOf(row: AdminRecord) {
-  return readString(row, ["status"], "DRAFT").toUpperCase()
+  return readString(row, ["status"], "DRAFT").toUpperCase();
 }
 
 function letterTypeForMovement(row: AdminRecord): string {
@@ -113,61 +119,61 @@ function letterTypeForMovement(row: AdminRecord): string {
     row,
     ["movementType", "movement_type"],
     "",
-  ).toUpperCase()
+  ).toUpperCase();
   switch (movementType) {
     case "BRANCH_TRANSFER":
     case "DEPARTMENT_TRANSFER":
-      return "TRANSFER"
+      return "TRANSFER";
     case "PROMOTION":
-      return "PROMOTION"
+      return "PROMOTION";
     case "DEMOTION":
-      return "DEMOTION"
+      return "DEMOTION";
     case "POSITION_CHANGE":
-      return "POSITION_CHANGE"
+      return "POSITION_CHANGE";
     case "SALARY_REVISION":
-      return "SALARY_REVISION"
+      return "SALARY_REVISION";
     default:
-      return "GENERIC"
+      return "GENERIC";
   }
 }
 
 function hasAnyPermission(permissionLabels: string[], permissions: string[]) {
   const normalized = permissionLabels.map((permission) =>
     permission.toLowerCase(),
-  )
+  );
   return permissions.some((permission) =>
     normalized.includes(permission.toLowerCase()),
-  )
+  );
 }
 
 function recordValue(row: AdminRecord | null | undefined, keys: string[]) {
-  if (!row) return undefined
+  if (!row) return undefined;
   for (const key of keys) {
-    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key]
+    if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
   }
-  return undefined
+  return undefined;
 }
 
 function asPlainRecord(value: unknown): AdminRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as AdminRecord)
-    : {}
+    : {};
 }
 
 function formValue(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return String(value)
-  if (typeof value === "string" && value.trim()) return value
-  return ""
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim()) return value;
+  return "";
 }
 
 function changedSnapshotValue(row: AdminRecord, key: string) {
   const current = asPlainRecord(
     recordValue(row, ["currentSnapshot", "current_snapshot"]),
-  )
+  );
   const proposed = asPlainRecord(
     recordValue(row, ["proposedSnapshot", "proposed_snapshot"]),
-  )
-  return proposed[key] !== current[key] ? proposed[key] : undefined
+  );
+  return proposed[key] !== current[key] ? proposed[key] : undefined;
 }
 
 /**
@@ -183,13 +189,13 @@ function movementSalaryOverrides(
           readString(asPlainRecord(entry), ["field"], "").toUpperCase() ===
           "BASE_SALARY",
       )
-    : undefined
+    : undefined;
   const newValue = asPlainRecord(
     recordValue(asPlainRecord(salaryChange), ["newValue", "new_value"]),
-  )
+  );
   if (!Object.prototype.hasOwnProperty.call(newValue, "component_overrides"))
-    return undefined
-  return asPlainRecord(newValue.component_overrides) as StoredSalaryOverrides
+    return undefined;
+  return asPlainRecord(newValue.component_overrides) as StoredSalaryOverrides;
 }
 
 function buildMovementForm(row: AdminRecord): Record<string, string> {
@@ -199,13 +205,13 @@ function buildMovementForm(row: AdminRecord): Record<string, string> {
           readString(asPlainRecord(entry), ["field"], "").toUpperCase() ===
           "BASE_SALARY",
       )
-    : undefined
+    : undefined;
   const salaryNewValue = asPlainRecord(
     recordValue(asPlainRecord(salaryChange), ["newValue", "new_value"]),
-  )
+  );
   const salaryChanged =
     Boolean(salaryChange) ||
-    changedSnapshotValue(row, "base_salary") !== undefined
+    changedSnapshotValue(row, "base_salary") !== undefined;
   return {
     id: rowId(row),
     employee_id: formValue(
@@ -249,126 +255,149 @@ function buildMovementForm(row: AdminRecord): Record<string, string> {
         )
       : "",
     justification: formValue(salaryNewValue.justification),
-  }
+  };
 }
 
 export function MovementOperationsView({
   activeTab,
   workspace = "hr",
 }: {
-  activeTab: MovementOpsTab
-  workspace?: MovementWorkspace
+  activeTab: MovementOpsTab;
+  workspace?: MovementWorkspace;
 }) {
-  const actor = useDashboardActor()
+  const actor = useDashboardActor();
   const accessRoute =
     workspace === "team"
       ? "/dashboard/team/movements"
-      : "/dashboard/movements/overview"
+      : "/dashboard/movements/overview";
   const canAccess =
     actor.ready &&
     canAccessDashboardRoute(
       accessRoute,
       actor.permissionLabels,
       actor.accessMode,
-    )
+    );
   const canCreateMovement =
     workspace === "hr" &&
     hasAnyPermission(actor.permissionLabels, [
       "employee_movements:create",
       "manage_employee_movements",
-    ])
+    ]);
   const canSubmitMovement =
     workspace === "hr" &&
     hasAnyPermission(actor.permissionLabels, [
       "employee_movements:submit",
       "manage_employee_movements",
-    ])
+    ]);
   const canCancelMovement =
     workspace === "hr" &&
     hasAnyPermission(actor.permissionLabels, [
       "employee_movements:cancel",
       "manage_employee_movements",
-    ])
+    ]);
   const canApplyMovement =
     workspace === "hr" &&
     hasAnyPermission(actor.permissionLabels, [
       "employee_movements:apply",
       "manage_employee_movements",
-    ])
+    ]);
   const canDecideMovement = hasAnyPermission(actor.permissionLabels, [
     "employee_movements:approve",
     "manage_employee_movements",
-  ])
+  ]);
   const canGenerateLetter =
     workspace === "hr" &&
     hasAnyPermission(actor.permissionLabels, [
       "employee_movements:generate-letter",
       "manage_employee_movements",
-    ])
-  const leaveIfForbidden = useLeaveIfForbidden()
-  useForbiddenRouteGuard(canAccess)
+    ]);
+  const leaveIfForbidden = useLeaveIfForbidden();
+  useForbiddenRouteGuard(canAccess);
 
-  const [rows, setRows] = React.useState<AdminRecord[]>([])
-  const [operations, setOperations] = React.useState<AdminRecord[]>([])
-  const [selected, setSelected] = React.useState<AdminRecord | null>(null)
-  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [branches, setBranches] = React.useState<AdminRecord[]>([])
-  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
-  const [positions, setPositions] = React.useState<AdminRecord[]>([])
-  const [grades, setGrades] = React.useState<AdminRecord[]>([])
-  const [costCenters, setCostCenters] = React.useState<AdminRecord[]>([])
-  const [salaryStructures, setSalaryStructures] = React.useState<
-    AdminRecord[]
-  >([])
+  const [rows, setRows] = React.useState<AdminRecord[]>([]);
+  const [operations, setOperations] = React.useState<AdminRecord[]>([]);
+  const [selected, setSelected] = React.useState<AdminRecord | null>(null);
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([]);
+  const [branches, setBranches] = React.useState<AdminRecord[]>([]);
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([]);
+  const [positions, setPositions] = React.useState<AdminRecord[]>([]);
+  const [grades, setGrades] = React.useState<AdminRecord[]>([]);
+  const [costCenters, setCostCenters] = React.useState<AdminRecord[]>([]);
+  const [salaryStructures, setSalaryStructures] = React.useState<AdminRecord[]>(
+    [],
+  );
   const salaryStructureCodes = React.useMemo(() => {
-    const byCode = new Map<string, string>()
+    const byCode = new Map<string, string>();
     for (const row of salaryStructures) {
-      if (String(row.status ?? "").toUpperCase() !== "ACTIVE") continue
-      byCode.set(String(row.code), String(row.name ?? row.code))
+      if (String(row.status ?? "").toUpperCase() !== "ACTIVE") continue;
+      byCode.set(String(row.code), String(row.name ?? row.code));
     }
-    return [...byCode].map(([code, name]) => ({ code, name }))
-  }, [salaryStructures])
+    return [...byCode].map(([code, name]) => ({ code, name }));
+  }, [salaryStructures]);
   // Overrides saved on the movement being edited, and whose they are.
   const [initialSalaryOverrides, setInitialSalaryOverrides] = React.useState<{
-    employeeId: string
-    overrides: StoredSalaryOverrides | undefined
-  } | null>(null)
+    employeeId: string;
+    overrides: StoredSalaryOverrides | undefined;
+  } | null>(null);
   const [salaryOverrides, setSalaryOverrides] =
     React.useState<SalaryOverridesState>({
       overrides: null,
       pending: false,
       error: null,
-    })
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [detail, setDetail] = React.useState<AdminRecord | null>(null)
-  const [createOpen, setCreateOpen] = React.useState(false)
+    });
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
+  const [detail, setDetail] = React.useState<AdminRecord | null>(null);
+  const [createOpen, setCreateOpen] = React.useState(false);
   const [createMode, setCreateMode] = React.useState<
     "create" | "edit" | "decide"
-  >("create")
-  const [form, setForm] = React.useState<Record<string, string>>({})
-  const [formError, setFormError] = React.useState<string | null>(null)
-  const [saving, setSaving] = React.useState(false)
-  const [busyId, setBusyId] = React.useState("")
+  >("create");
+  const [form, setForm] = React.useState<Record<string, string>>({});
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [busyId, setBusyId] = React.useState("");
+  const searchParams = useSearchParams();
+  const handledCreateIntent = React.useRef(false);
+
+  React.useEffect(() => {
+    if (
+      handledCreateIntent.current ||
+      activeTab !== "cases" ||
+      !canCreateMovement ||
+      searchParams?.get("create") !== "salary-revision"
+    )
+      return;
+
+    handledCreateIntent.current = true;
+    setCreateMode("create");
+    setInitialSalaryOverrides(null);
+    setForm({
+      employee_id: searchParams?.get("employee_id") ?? "",
+      movement_type: "SALARY_REVISION",
+      effective_date: new Date().toISOString().slice(0, 10),
+      title: "Salary revision",
+    });
+    setCreateOpen(true);
+  }, [activeTab, canCreateMovement, searchParams]);
 
   const load = React.useCallback(async () => {
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      setError("Authentication required. Please log in again.")
-      setLoading(false)
-      return
+      setError("Authentication required. Please log in again.");
+      setLoading(false);
+      return;
     }
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     const tasks: Array<Promise<unknown>> = [
       listEmployeeMovements(token)
         .then(setRows)
         .catch((errorObject) => {
-          setRows([])
-          throw errorObject
+          setRows([]);
+          throw errorObject;
         }),
-    ]
+    ];
     if (activeTab === "cases" && canCreateMovement) {
       tasks.push(
         listEmployees(token, { page: 1, limit: 50 })
@@ -393,143 +422,154 @@ export function MovementOperationsView({
         listPayrollSalaryStructures(token)
           .then(setSalaryStructures)
           .catch(() => setSalaryStructures([])),
-      )
+      );
     }
-    const results = await Promise.allSettled(tasks)
-    const first = results.find((result) => result.status === "rejected")
+    const results = await Promise.allSettled(tasks);
+    const first = results.find((result) => result.status === "rejected");
     if (first && first.status === "rejected") {
       if (leaveIfForbidden(first.reason)) {
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
       setError(
         first.reason instanceof Error
           ? first.reason.message
           : "Could not load movements.",
-      )
+      );
     }
-    setLoading(false)
-  }, [activeTab, canCreateMovement, leaveIfForbidden])
+    setLoading(false);
+  }, [activeTab, canCreateMovement, leaveIfForbidden]);
 
   React.useEffect(() => {
-    if (!canAccess) return
-    void load()
-  }, [canAccess, load])
+    if (!canAccess) return;
+    void load();
+  }, [canAccess, load]);
 
   async function loadOperations(row: AdminRecord) {
-    const token = readStoredToken()
-    const id = rowId(row)
-    setSelected(row)
+    const token = readStoredToken();
+    const id = rowId(row);
+    setSelected(row);
     if (!token || !id) {
-      setOperations([])
-      return
+      setOperations([]);
+      return;
     }
     try {
-      setOperations(await listEmployeeMovementOperations(token, id))
+      setOperations(await listEmployeeMovementOperations(token, id));
     } catch {
-      setOperations([])
+      setOperations([]);
     }
   }
 
-  const runAction = React.useCallback(async (
-    row: AdminRecord,
-    action: "submit" | "cancel" | "apply",
-  ) => {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    setBusyId(`${action}-${id}`)
-    try {
-      if (action === "submit") await submitEmployeeMovement(token, id)
-      if (action === "cancel") await cancelEmployeeMovement(token, id)
-      if (action === "apply") await applyEmployeeMovement(token, id)
-      toast.success(prettify(action))
-      await load()
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : `Could not ${action}.`,
-      )
-    } finally {
-      setBusyId("")
-    }
-  }, [load])
+  const runAction = React.useCallback(
+    async (row: AdminRecord, action: "submit" | "cancel" | "apply") => {
+      const token = readStoredToken();
+      const id = rowId(row);
+      if (!token || !id) return;
+      setBusyId(`${action}-${id}`);
+      try {
+        if (action === "submit") await submitEmployeeMovement(token, id);
+        if (action === "cancel") await cancelEmployeeMovement(token, id);
+        if (action === "apply") await applyEmployeeMovement(token, id);
+        toast.success(prettify(action));
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : `Could not ${action}.`,
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
 
   async function generateLetter(row: AdminRecord) {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    setBusyId(`letter-${id}`)
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setBusyId(`letter-${id}`);
     try {
-      await generateEmployeeMovementLetter(token, id, letterTypeForMovement(row))
-      toast.success("Letter generated.")
+      await generateEmployeeMovementLetter(
+        token,
+        id,
+        letterTypeForMovement(row),
+      );
+      toast.success("Letter generated.");
     } catch (errorObject) {
       toast.error(
         errorObject instanceof Error
           ? errorObject.message
           : "Could not generate the letter.",
-      )
+      );
     } finally {
-      setBusyId("")
+      setBusyId("");
     }
   }
 
   async function openEdit(row: AdminRecord) {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    setBusyId(`edit-${id}`)
+    const token = readStoredToken();
+    const id = rowId(row);
+    if (!token || !id) return;
+    setBusyId(`edit-${id}`);
     try {
-      const movement = await getEmployeeMovement(token, id)
-      if (!movement) throw new Error("Movement was not found.")
-      setCreateMode("edit")
-      const movementForm = buildMovementForm(movement)
-      setForm(movementForm)
+      const movement = await getEmployeeMovement(token, id);
+      if (!movement) throw new Error("Movement was not found.");
+      setCreateMode("edit");
+      const movementForm = buildMovementForm(movement);
+      setForm(movementForm);
       setInitialSalaryOverrides({
         employeeId: movementForm.employee_id,
         overrides: movementSalaryOverrides(movement),
-      })
-      setFormError(null)
-      setCreateOpen(true)
+      });
+      setFormError(null);
+      setCreateOpen(true);
     } catch (errorObject) {
       toast.error(
         errorObject instanceof Error
           ? errorObject.message
           : "Could not load movement.",
-      )
+      );
     } finally {
-      setBusyId("")
+      setBusyId("");
     }
   }
 
-  const deleteMovement = React.useCallback(async (row: AdminRecord) => {
-    const token = readStoredToken()
-    const id = rowId(row)
-    if (!token || !id) return
-    if (!window.confirm("Delete this draft movement? This cannot be undone."))
-      return
-    setBusyId(`delete-${id}`)
-    try {
-      await deleteEmployeeMovement(token, id)
-      toast.success("Movement deleted.")
-      await load()
-    } catch (errorObject) {
-      toast.error(
-        errorObject instanceof Error
-          ? errorObject.message
-          : "Could not delete movement.",
+  const deleteMovement = React.useCallback(
+    async (row: AdminRecord) => {
+      const token = readStoredToken();
+      const id = rowId(row);
+      if (!token || !id) return;
+      if (
+        !(await fluentConfirm(
+          "Delete this draft movement? This cannot be undone.",
+        ))
       )
-    } finally {
-      setBusyId("")
-    }
-  }, [load])
+        return;
+      setBusyId(`delete-${id}`);
+      try {
+        await deleteEmployeeMovement(token, id);
+        toast.success("Movement deleted.");
+        await load();
+      } catch (errorObject) {
+        toast.error(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not delete movement.",
+        );
+      } finally {
+        setBusyId("");
+      }
+    },
+    [load],
+  );
 
   async function onSave() {
-    const token = readStoredToken()
-    if (!token) return
-    setSaving(true)
-    setFormError(null)
+    const token = readStoredToken();
+    if (!token) return;
+    setSaving(true);
+    setFormError(null);
     try {
       if (createMode === "create" || createMode === "edit") {
         if (
@@ -541,7 +581,7 @@ export function MovementOperationsView({
         ) {
           throw new Error(
             "Employee, type, title, reason, and effective date are required.",
-          )
+          );
         }
         const payload: AdminRecord = {
           employee_id: Number(form.employee_id),
@@ -549,30 +589,32 @@ export function MovementOperationsView({
           title: form.title,
           reason: form.reason,
           effective_date: form.effective_date,
-        }
+        };
         if (form.new_branch_id)
-          payload.new_branch_id = Number(form.new_branch_id)
+          payload.new_branch_id = Number(form.new_branch_id);
         if (form.new_department_id)
-          payload.new_department_id = Number(form.new_department_id)
+          payload.new_department_id = Number(form.new_department_id);
         if (form.new_position_id)
-          payload.new_position_id = Number(form.new_position_id)
-        if (form.new_grade_id) payload.new_grade_id = Number(form.new_grade_id)
+          payload.new_position_id = Number(form.new_position_id);
+        if (form.new_grade_id) payload.new_grade_id = Number(form.new_grade_id);
         if (form.new_cost_center_id)
-          payload.new_cost_center_id = Number(form.new_cost_center_id)
+          payload.new_cost_center_id = Number(form.new_cost_center_id);
         if (form.new_manager_employee_id)
-          payload.new_manager_employee_id = Number(form.new_manager_employee_id)
+          payload.new_manager_employee_id = Number(
+            form.new_manager_employee_id,
+          );
         if (form.new_employment_type)
-          payload.new_employment_type = form.new_employment_type
+          payload.new_employment_type = form.new_employment_type;
         if (["SALARY_REVISION", "COMPOSITE"].includes(form.movement_type)) {
-          if (!form.base_salary || !form.currency || !form.justification) {
-            throw new Error("Salary, currency, and justification are required.")
+          if (!form.base_salary || !form.currency) {
+            throw new Error("Salary and currency are required.");
           }
           if (salaryOverrides.pending) {
             throw new Error(
               "Structure lines are still loading. Try again in a moment.",
-            )
+            );
           }
-          if (salaryOverrides.error) throw new Error(salaryOverrides.error)
+          if (salaryOverrides.error) throw new Error(salaryOverrides.error);
           payload.salary_revision = {
             base_salary: form.base_salary,
             currency: form.currency,
@@ -582,42 +624,42 @@ export function MovementOperationsView({
             ...(salaryOverrides.overrides !== null
               ? { component_overrides: salaryOverrides.overrides }
               : {}),
-            justification: form.justification,
-          }
+            justification: form.reason,
+          };
         }
         if (createMode === "edit") {
-          if (!form.id) throw new Error("Movement id is required.")
-          await updateEmployeeMovement(token, form.id, payload)
+          if (!form.id) throw new Error("Movement id is required.");
+          await updateEmployeeMovement(token, form.id, payload);
         } else {
-          await createEmployeeMovement(token, payload)
+          await createEmployeeMovement(token, payload);
         }
       } else {
         if (!form.id || !form.decision)
-          throw new Error("A decision is required.")
+          throw new Error("A decision is required.");
         if (form.decision !== "APPROVE" && !form.comments)
-          throw new Error("Comments are required.")
+          throw new Error("Comments are required.");
         if (form.decision === "APPROVE")
           await approveEmployeeMovement(token, form.id, {
             comments: form.comments || undefined,
-          })
+          });
         if (form.decision === "REJECT")
           await rejectEmployeeMovement(token, form.id, {
             comments: form.comments,
-          })
+          });
         if (form.decision === "RETURN")
           await returnEmployeeMovement(token, form.id, {
             comments: form.comments,
-          })
+          });
       }
-      toast.success("Saved.")
-      setCreateOpen(false)
-      await load()
+      toast.success("Saved.");
+      setCreateOpen(false);
+      await load();
     } catch (errorObject) {
       setFormError(
         errorObject instanceof Error ? errorObject.message : "Could not save.",
-      )
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -625,12 +667,12 @@ export function MovementOperationsView({
     (row) =>
       !search ||
       JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
-  )
+  );
   const awaiting = rows.filter((row) =>
     ["SUBMITTED", "PENDING_APPROVAL"].includes(statusOf(row)),
-  ).length
-  const approved = rows.filter((row) => statusOf(row) === "APPROVED").length
-  const applied = rows.filter((row) => statusOf(row) === "APPLIED").length
+  ).length;
+  const approved = rows.filter((row) => statusOf(row) === "APPROVED").length;
+  const applied = rows.filter((row) => statusOf(row) === "APPLIED").length;
   const cycleCounts = [
     {
       status: "DRAFT",
@@ -641,7 +683,7 @@ export function MovementOperationsView({
     { status: "AWAITING_DECISION", count: awaiting },
     { status: "APPROVED", count: approved },
     { status: "APPLIED", count: applied },
-  ]
+  ];
 
   const columns = React.useMemo<Column<AdminRecord>[]>(
     () => [
@@ -680,8 +722,8 @@ export function MovementOperationsView({
         key: "actions",
         label: "Actions",
         render: (row) => {
-          const id = rowId(row)
-          const status = statusOf(row)
+          const id = rowId(row);
+          const status = statusOf(row);
           return (
             <div className="flex flex-wrap gap-1">
               {["DRAFT", "RETURNED_FOR_CORRECTION"].includes(status) ? (
@@ -750,9 +792,9 @@ export function MovementOperationsView({
                   type="button"
                   className={actionButtonClass}
                   onClick={() => {
-                    setCreateMode("decide")
-                    setForm({ id, decision: "APPROVE", comments: "" })
-                    setCreateOpen(true)
+                    setCreateMode("decide");
+                    setForm({ id, decision: "APPROVE", comments: "" });
+                    setCreateOpen(true);
                   }}
                 >
                   Decide
@@ -783,7 +825,7 @@ export function MovementOperationsView({
                 </button>
               ) : null}
             </div>
-          )
+          );
         },
       },
     ],
@@ -798,7 +840,7 @@ export function MovementOperationsView({
       deleteMovement,
       runAction,
     ],
-  )
+  );
 
   const operationColumns = React.useMemo<Column<AdminRecord>[]>(
     () => [
@@ -826,25 +868,25 @@ export function MovementOperationsView({
         key: "actions",
         label: "Actions",
         render: (row) => {
-          const operationId = rowId(row)
-          const movementId = selected ? rowId(selected) : ""
+          const operationId = rowId(row);
+          const movementId = selected ? rowId(selected) : "";
           return (
             <button
               type="button"
               className={actionButtonClass}
               disabled={!movementId || busyId === `retry-${operationId}`}
               onClick={() => {
-                const token = readStoredToken()
-                if (!token || !movementId || !operationId) return
-                setBusyId(`retry-${operationId}`)
+                const token = readStoredToken();
+                if (!token || !movementId || !operationId) return;
+                setBusyId(`retry-${operationId}`);
                 void retryEmployeeMovementOperation(
                   token,
                   movementId,
                   operationId,
                 )
                   .then(() => {
-                    toast.success("Retry queued.")
-                    return loadOperations(selected!)
+                    toast.success("Retry queued.");
+                    return loadOperations(selected!);
                   })
                   .catch((errorObject) =>
                     toast.error(
@@ -853,19 +895,19 @@ export function MovementOperationsView({
                         : "Could not retry.",
                     ),
                   )
-                  .finally(() => setBusyId(""))
+                  .finally(() => setBusyId(""));
               }}
             >
               Retry
             </button>
-          )
+          );
         },
       },
     ],
     [busyId, selected],
-  )
+  );
 
-  if (!canAccess) return null
+  if (!canAccess) return null;
 
   const showTarget =
     form.movement_type === "COMPOSITE" ||
@@ -879,7 +921,7 @@ export function MovementOperationsView({
       "COST_CENTER_CHANGE",
       "REPORTING_MANAGER_CHANGE",
       "EMPLOYMENT_TYPE_CHANGE",
-    ].includes(form.movement_type ?? "")
+    ].includes(form.movement_type ?? "");
 
   return (
     <section className="space-y-4">
@@ -965,7 +1007,7 @@ export function MovementOperationsView({
             </div>
             <ol className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start">
               {cycleCounts.map((step, index) => {
-                const last = index === cycleCounts.length - 1
+                const last = index === cycleCounts.length - 1;
                 return (
                   <li
                     key={step.status}
@@ -1003,7 +1045,7 @@ export function MovementOperationsView({
                       </p>
                     </div>
                   </li>
-                )
+                );
               })}
             </ol>
           </div>
@@ -1045,13 +1087,13 @@ export function MovementOperationsView({
                 type="button"
                 className={primaryButtonClass}
                 onClick={() => {
-                  setCreateMode("create")
-                  setInitialSalaryOverrides(null)
+                  setCreateMode("create");
+                  setInitialSalaryOverrides(null);
                   setForm({
                     movement_type: "DEPARTMENT_TRANSFER",
                     effective_date: new Date().toISOString().slice(0, 10),
-                  })
-                  setCreateOpen(true)
+                  });
+                  setCreateOpen(true);
                 }}
               >
                 <PlusIcon className="size-4" /> New movement
@@ -1083,9 +1125,9 @@ export function MovementOperationsView({
               showExport={false}
               storageKey={`movements-${activeTab}`}
               onRowSelect={(_, row) => {
-                if (!row) return
-                setDetail(row)
-                if (activeTab === "operations") void loadOperations(row)
+                if (!row) return;
+                setDetail(row);
+                if (activeTab === "operations") void loadOperations(row);
               }}
             />
           </div>
@@ -1118,8 +1160,11 @@ export function MovementOperationsView({
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogPopup className="max-w-xl">
-          <DialogHeader>
+        <DialogPopup
+          className="!w-[min(94vw,64rem)] !max-w-5xl"
+          bodyClassName="!h-full !max-h-none !overflow-hidden !gap-0"
+        >
+          <DialogHeader className="shrink-0 border-b border-border pb-4">
             <DialogTitle>
               {createMode === "create"
                 ? "New movement"
@@ -1133,420 +1178,415 @@ export function MovementOperationsView({
                 : "Record the employee, effective date, and proposed changes."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            {createMode === "create" || createMode === "edit" ? (
-              <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Employee</span>
-                  <FluentSelect
-                    ariaLabel="Employee"
-                    className="w-full"
-                    value={form.employee_id ?? ""}
-                    placeholder="Select employee"
-                    onChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        employee_id: value,
-                      }))
+          <div className="min-h-0 flex-1 overflow-y-auto py-5 pr-2">
+            <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-2">
+              {createMode === "create" || createMode === "edit" ? (
+                <>
+                  <FluentField label="Employee">
+                    <FluentSelect
+                      ariaLabel="Employee"
+                      className="w-full"
+                      value={form.employee_id ?? ""}
+                      placeholder="Select employee"
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          employee_id: value,
+                        }))
+                      }
+                      options={[
+                        { value: "", label: "Select employee" },
+                        ...employees.map((employee) => ({
+                          value: rowId(employee),
+                          label: employeeLabel(employee),
+                        })),
+                      ]}
+                    />
+                  </FluentField>
+                  <FluentField label="Type">
+                    <FluentSelect
+                      ariaLabel="Type"
+                      className="w-full"
+                      value={form.movement_type ?? "DEPARTMENT_TRANSFER"}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          movement_type: value,
+                        }))
+                      }
+                      options={MOVEMENT_TYPES.map((type) => ({
+                        value: type,
+                        label: prettify(type),
+                      }))}
+                    />
+                  </FluentField>
+                  <FluentField label="Title" className="md:col-span-2">
+                    <FluentInput
+                      className="w-full"
+                      value={form.title ?? ""}
+                      onChange={(_event, data) =>
+                        setForm((current) => ({
+                          ...current,
+                          title: data.value,
+                        }))
+                      }
+                    />
+                  </FluentField>
+                  <FluentField
+                    label="Reason"
+                    hint={
+                      ["SALARY_REVISION", "COMPOSITE"].includes(
+                        form.movement_type,
+                      )
+                        ? "This is also used as the salary revision justification."
+                        : undefined
                     }
-                    options={[
-                      { value: "", label: "Select employee" },
-                      ...employees.map((employee) => ({
-                        value: rowId(employee),
-                        label: employeeLabel(employee),
-                      })),
-                    ]}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Type</span>
-                  <FluentSelect
-                    ariaLabel="Type"
-                    className="w-full"
-                    value={form.movement_type ?? "DEPARTMENT_TRANSFER"}
-                    onChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        movement_type: value,
-                      }))
-                    }
-                    options={MOVEMENT_TYPES.map((type) => ({
-                      value: type,
-                      label: prettify(type),
-                    }))}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Title</span>
-                  <input
-                    className={inputClass}
-                    value={form.title ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Reason</span>
-                  <Textarea
-                    className={textareaClass}
-                    value={form.reason ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        reason: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Effective date</span>
-                  <DateInput
-
-                    className={inputClass}
-                    value={form.effective_date ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        effective_date: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                {showTarget &&
-                (form.movement_type === "BRANCH_TRANSFER" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New branch</span>
-                    <FluentSelect
-                      ariaLabel="New branch"
-                      className="w-full"
-                      value={form.new_branch_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
+                    className="md:col-span-2"
+                  >
+                    <Textarea
+                      formatting
+                      formattingHint
+                      className="min-h-28"
+                      containerClassName="w-full"
+                      value={form.reason ?? ""}
+                      onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          new_branch_id: value,
+                          reason: event.target.value,
                         }))
                       }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...branches.map((row) => ({
-                          value: rowId(row),
-                          label: optionLabel(row),
-                        })),
-                      ]}
                     />
-                  </label>
-                ) : null}
-                {showTarget &&
-                (form.movement_type === "DEPARTMENT_TRANSFER" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New department</span>
-                    <FluentSelect
-                      ariaLabel="New department"
-                      className="w-full"
-                      value={form.new_department_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
+                  </FluentField>
+                  <FluentField label="Effective date">
+                    <DateInput
+                      className="max-w-none"
+                      value={form.effective_date ?? ""}
+                      onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          new_department_id: value,
+                          effective_date: event.target.value,
                         }))
                       }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...departments.map((row) => ({
-                          value: rowId(row),
-                          label: optionLabel(row),
-                        })),
-                      ]}
                     />
-                  </label>
-                ) : null}
-                {showTarget &&
-                [
-                  "POSITION_CHANGE",
-                  "PROMOTION",
-                  "DEMOTION",
-                  "COMPOSITE",
-                ].includes(form.movement_type ?? "") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New position</span>
-                    <FluentSelect
-                      ariaLabel="New position"
-                      className="w-full"
-                      value={form.new_position_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          new_position_id: value,
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...positions.map((row) => ({
-                          value: rowId(row),
-                          label: optionLabel(row),
-                        })),
-                      ]}
-                    />
-                  </label>
-                ) : null}
-                {showTarget &&
-                (form.movement_type === "GRADE_CHANGE" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New grade</span>
-                    <FluentSelect
-                      ariaLabel="New grade"
-                      className="w-full"
-                      value={form.new_grade_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          new_grade_id: value,
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...grades.map((row) => ({
-                          value: rowId(row),
-                          label: optionLabel(row),
-                        })),
-                      ]}
-                    />
-                  </label>
-                ) : null}
-                {showTarget &&
-                (form.movement_type === "COST_CENTER_CHANGE" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New cost center</span>
-                    <FluentSelect
-                      ariaLabel="New cost center"
-                      className="w-full"
-                      value={form.new_cost_center_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          new_cost_center_id: value,
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...costCenters.map((row) => ({
-                          value: rowId(row),
-                          label: optionLabel(row),
-                        })),
-                      ]}
-                    />
-                  </label>
-                ) : null}
-                {showTarget &&
-                (form.movement_type === "REPORTING_MANAGER_CHANGE" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New manager</span>
-                    <FluentSelect
-                      ariaLabel="New manager"
-                      className="w-full"
-                      value={form.new_manager_employee_id ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          new_manager_employee_id: value,
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...employees.map((row) => ({
-                          value: rowId(row),
-                          label: employeeLabel(row),
-                        })),
-                      ]}
-                    />
-                  </label>
-                ) : null}
-                {showTarget &&
-                (form.movement_type === "EMPLOYMENT_TYPE_CHANGE" ||
-                  form.movement_type === "COMPOSITE") ? (
-                  <label className="grid gap-1.5 text-sm">
-                    <span className="font-medium">New employment type</span>
-                    <FluentSelect
-                      ariaLabel="New employment type"
-                      className="w-full"
-                      value={form.new_employment_type ?? ""}
-                      placeholder="Select"
-                      onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          new_employment_type: value,
-                        }))
-                      }
-                      options={[
-                        { value: "", label: "Select" },
-                        ...EMPLOYMENT_TYPES.map((type) => ({
-                          value: type,
-                          label: prettify(type),
-                        })),
-                      ]}
-                    />
-                  </label>
-                ) : null}
-                {["SALARY_REVISION", "COMPOSITE"].includes(
-                  form.movement_type,
-                ) ? (
-                  <>
+                  </FluentField>
+                  {showTarget &&
+                  (form.movement_type === "BRANCH_TRANSFER" ||
+                    form.movement_type === "COMPOSITE") ? (
                     <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Base salary</span>
-                      <input
-                        className={inputClass}
-                        value={form.base_salary ?? ""}
-                        onChange={(event) =>
+                      <span className="font-medium">New branch</span>
+                      <FluentSelect
+                        ariaLabel="New branch"
+                        className="w-full"
+                        value={form.new_branch_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
                           setForm((current) => ({
                             ...current,
-                            base_salary: event.target.value,
+                            new_branch_id: value,
                           }))
                         }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...branches.map((row) => ({
+                            value: rowId(row),
+                            label: optionLabel(row),
+                          })),
+                        ]}
                       />
                     </label>
+                  ) : null}
+                  {showTarget &&
+                  (form.movement_type === "DEPARTMENT_TRANSFER" ||
+                    form.movement_type === "COMPOSITE") ? (
                     <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Currency</span>
-                      <input
-                        className={inputClass}
-                        value={form.currency ?? "TZS"}
-                        onChange={(event) =>
+                      <span className="font-medium">New department</span>
+                      <FluentSelect
+                        ariaLabel="New department"
+                        className="w-full"
+                        value={form.new_department_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
                           setForm((current) => ({
                             ...current,
-                            currency: event.target.value,
+                            new_department_id: value,
                           }))
                         }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...departments.map((row) => ({
+                            value: rowId(row),
+                            label: optionLabel(row),
+                          })),
+                        ]}
                       />
                     </label>
+                  ) : null}
+                  {showTarget &&
+                  [
+                    "POSITION_CHANGE",
+                    "PROMOTION",
+                    "DEMOTION",
+                    "COMPOSITE",
+                  ].includes(form.movement_type ?? "") ? (
                     <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Salary structure</span>
-                      {salaryStructureCodes.length > 0 ? (
-                        <FluentSelect
-                          ariaLabel="Salary structure"
+                      <span className="font-medium">New position</span>
+                      <FluentSelect
+                        ariaLabel="New position"
+                        className="w-full"
+                        value={form.new_position_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            new_position_id: value,
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...positions.map((row) => ({
+                            value: rowId(row),
+                            label: optionLabel(row),
+                          })),
+                        ]}
+                      />
+                    </label>
+                  ) : null}
+                  {showTarget &&
+                  (form.movement_type === "GRADE_CHANGE" ||
+                    form.movement_type === "COMPOSITE") ? (
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">New grade</span>
+                      <FluentSelect
+                        ariaLabel="New grade"
+                        className="w-full"
+                        value={form.new_grade_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            new_grade_id: value,
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...grades.map((row) => ({
+                            value: rowId(row),
+                            label: optionLabel(row),
+                          })),
+                        ]}
+                      />
+                    </label>
+                  ) : null}
+                  {showTarget &&
+                  (form.movement_type === "COST_CENTER_CHANGE" ||
+                    form.movement_type === "COMPOSITE") ? (
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">New cost center</span>
+                      <FluentSelect
+                        ariaLabel="New cost center"
+                        className="w-full"
+                        value={form.new_cost_center_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            new_cost_center_id: value,
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...costCenters.map((row) => ({
+                            value: rowId(row),
+                            label: optionLabel(row),
+                          })),
+                        ]}
+                      />
+                    </label>
+                  ) : null}
+                  {showTarget &&
+                  (form.movement_type === "REPORTING_MANAGER_CHANGE" ||
+                    form.movement_type === "COMPOSITE") ? (
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">New manager</span>
+                      <FluentSelect
+                        ariaLabel="New manager"
+                        className="w-full"
+                        value={form.new_manager_employee_id ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            new_manager_employee_id: value,
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...employees.map((row) => ({
+                            value: rowId(row),
+                            label: employeeLabel(row),
+                          })),
+                        ]}
+                      />
+                    </label>
+                  ) : null}
+                  {showTarget &&
+                  (form.movement_type === "EMPLOYMENT_TYPE_CHANGE" ||
+                    form.movement_type === "COMPOSITE") ? (
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">New employment type</span>
+                      <FluentSelect
+                        ariaLabel="New employment type"
+                        className="w-full"
+                        value={form.new_employment_type ?? ""}
+                        placeholder="Select"
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            new_employment_type: value,
+                          }))
+                        }
+                        options={[
+                          { value: "", label: "Select" },
+                          ...EMPLOYMENT_TYPES.map((type) => ({
+                            value: type,
+                            label: prettify(type),
+                          })),
+                        ]}
+                      />
+                    </label>
+                  ) : null}
+                  {["SALARY_REVISION", "COMPOSITE"].includes(
+                    form.movement_type,
+                  ) ? (
+                    <>
+                      <FluentField label="Base salary">
+                        <FluentInput
                           className="w-full"
-                          value={form.salary_structure_code ?? ""}
-                          placeholder="Keep current structure"
-                          onChange={(value) =>
+                          inputMode="decimal"
+                          value={form.base_salary ?? ""}
+                          onChange={(_event, data) =>
                             setForm((current) => ({
                               ...current,
-                              salary_structure_code: value,
-                            }))
-                          }
-                          options={[
-                            { value: "", label: "Keep current structure" },
-                            ...salaryStructureCodes.map((item) => ({
-                              value: item.code,
-                              label: `${item.code} · ${item.name}`,
-                            })),
-                          ]}
-                        />
-                      ) : (
-                        <input
-                          className={inputClass}
-                          placeholder="Leave blank to keep current structure"
-                          value={form.salary_structure_code ?? ""}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              salary_structure_code: event.target.value,
+                              base_salary: data.value,
                             }))
                           }
                         />
-                      )}
-                    </label>
-                    <MovementSalaryOverridesEditor
-                      employeeId={form.employee_id ?? ""}
-                      targetStructureCode={form.salary_structure_code ?? ""}
-                      effectiveDate={form.effective_date ?? ""}
-                      structures={salaryStructures}
-                      initialOverrides={
-                        initialSalaryOverrides?.employeeId === form.employee_id
-                          ? initialSalaryOverrides.overrides
-                          : undefined
-                      }
-                      onChange={setSalaryOverrides}
-                    />
-                    <label className="grid gap-1.5 text-sm">
-                      <span className="font-medium">Justification</span>
-                      <Textarea
-                        className={textareaClass}
-                        value={form.justification ?? ""}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            justification: event.target.value,
-                          }))
+                      </FluentField>
+                      <FluentField label="Currency">
+                        <FluentInput
+                          className="w-full"
+                          value={form.currency ?? "TZS"}
+                          onChange={(_event, data) =>
+                            setForm((current) => ({
+                              ...current,
+                              currency: data.value,
+                            }))
+                          }
+                        />
+                      </FluentField>
+                      <FluentField label="Salary structure">
+                        {salaryStructureCodes.length > 0 ? (
+                          <FluentSelect
+                            ariaLabel="Salary structure"
+                            className="w-full"
+                            value={form.salary_structure_code ?? ""}
+                            placeholder="Keep current structure"
+                            onChange={(value) =>
+                              setForm((current) => ({
+                                ...current,
+                                salary_structure_code: value,
+                              }))
+                            }
+                            options={[
+                              { value: "", label: "Keep current structure" },
+                              ...salaryStructureCodes.map((item) => ({
+                                value: item.code,
+                                label: `${item.code} · ${item.name}`,
+                              })),
+                            ]}
+                          />
+                        ) : (
+                          <FluentInput
+                            className="w-full"
+                            placeholder="Leave blank to keep current structure"
+                            value={form.salary_structure_code ?? ""}
+                            onChange={(_event, data) =>
+                              setForm((current) => ({
+                                ...current,
+                                salary_structure_code: data.value,
+                              }))
+                            }
+                          />
+                        )}
+                      </FluentField>
+                      <MovementSalaryOverridesEditor
+                        employeeId={form.employee_id ?? ""}
+                        targetStructureCode={form.salary_structure_code ?? ""}
+                        effectiveDate={form.effective_date ?? ""}
+                        structures={salaryStructures}
+                        initialOverrides={
+                          initialSalaryOverrides?.employeeId ===
+                          form.employee_id
+                            ? initialSalaryOverrides.overrides
+                            : undefined
                         }
+                        onChange={setSalaryOverrides}
                       />
-                    </label>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Decision</span>
-                  <FluentSelect
-                    ariaLabel="Decision"
-                    className="w-full"
-                    value={form.decision ?? "APPROVE"}
-                    onChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        decision: value,
-                      }))
-                    }
-                    options={[
-                      { value: "APPROVE", label: "Approve" },
-                      { value: "RETURN", label: "Return" },
-                      { value: "REJECT", label: "Reject" },
-                    ]}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Comments</span>
-                  <Textarea
-                    className={textareaClass}
-                    value={form.comments ?? ""}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        comments: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-              </>
-            )}
-            {formError ? (
-              <p className="text-sm text-rose-600">{formError}</p>
-            ) : null}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Decision</span>
+                    <FluentSelect
+                      ariaLabel="Decision"
+                      className="w-full"
+                      value={form.decision ?? "APPROVE"}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          decision: value,
+                        }))
+                      }
+                      options={[
+                        { value: "APPROVE", label: "Approve" },
+                        { value: "RETURN", label: "Return" },
+                        { value: "REJECT", label: "Reject" },
+                      ]}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Comments</span>
+                    <Textarea
+                      className={textareaClass}
+                      value={form.comments ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          comments: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </>
+              )}
+              {formError ? (
+                <p className="text-sm text-rose-600 md:col-span-2">
+                  {formError}
+                </p>
+              ) : null}
+            </div>
           </div>
-          <DialogFooter>
-            <button
-              type="button"
-              className={secondaryButtonClass}
+          <FluentDialogActions className="mt-0 shrink-0 border-t border-border bg-background pt-4">
+            <FluentButton
+              appearance="secondary"
               onClick={() => setCreateOpen(false)}
             >
               Cancel
-            </button>
-            <button
-              type="button"
-              className={primaryButtonClass}
+            </FluentButton>
+            <FluentButton
+              appearance="primary"
               onClick={() => void onSave()}
               disabled={saving}
             >
@@ -1555,10 +1595,10 @@ export function MovementOperationsView({
               ) : (
                 "Save"
               )}
-            </button>
-          </DialogFooter>
+            </FluentButton>
+          </FluentDialogActions>
         </DialogPopup>
       </Dialog>
     </section>
-  )
+  );
 }

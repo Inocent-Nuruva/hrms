@@ -43,6 +43,7 @@ import {
   Delete16Regular as FluentDeleteIcon,
   Edit16Regular as FluentEditIcon,
 } from "@fluentui/react-icons"
+import { Tab, TabList } from "@fluentui/react-components"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePublishedCompanyModules } from "@/hooks/use-company-modules";
@@ -681,29 +682,19 @@ function DetailTabs({
   onChange: (next: DetailSheetTab) => void;
 }) {
   return (
-    <div className="flex gap-5 border-b border-border/70 px-1">
-      {tabs.map((tab) => {
-        const active = value === tab.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onChange(tab.id)}
-            className={cn(
-              "relative -mb-px pb-2.5 text-sm transition-colors",
-              active
-                ? "font-semibold text-foreground"
-                : "font-medium text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab.label}
-            {active ? (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <TabList
+      selectedValue={value}
+      onTabSelect={(_event, data) => onChange(data.value as DetailSheetTab)}
+      appearance="subtle"
+      size="medium"
+      className="border-b border-border/70"
+    >
+      {tabs.map((tab) => (
+        <Tab key={tab.id} value={tab.id}>
+          {tab.label}
+        </Tab>
+      ))}
+    </TabList>
   );
 }
 
@@ -2568,7 +2559,7 @@ export function DataTable({
         >
           <DialogPopup
             from="right"
-            className="flex max-h-[min(92dvh,42rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+            className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
           >
             <DialogHeader className="shrink-0 space-y-1 border-b border-slate-200 px-4 py-3 pr-10 text-left dark:border-border">
               <DialogTitle className="text-base">
@@ -3869,7 +3860,14 @@ export function DataTable({
             />
           </DialogHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-3 sm:px-6 sm:py-4">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-hidden",
+              roleSheetTab === "permissions" && editingEntity?.resource === "roles"
+                ? "p-0"
+                : "px-5 py-3 sm:px-6 sm:py-4",
+            )}
+          >
             {roleSheetTab === "general" ? (
               <div className="space-y-4 overflow-y-auto">
                 {canUpdateResource ? (
@@ -4125,10 +4123,8 @@ export function DataTable({
                     options={permissionOptions}
                     selectedNames={displayedRolePermissionNames}
                     onChange={handleRolePermissionsChange}
-                    className={cn(
-                      "min-h-0 flex-1",
-                      membersBusy ? "pointer-events-none opacity-70" : "",
-                    )}
+                    selectionDisabled={membersBusy}
+                    className="min-h-0 flex-1"
                   />
                 ) : (
                   <div className="min-h-0 flex-1 overflow-y-auto">

@@ -1,15 +1,16 @@
-"use client"
+"use client";
 
-import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
-import * as React from "react"
-import Link from "next/link"
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
+import * as React from "react";
+import Link from "next/link";
 import { InfoIcon, RefreshCwIcon } from "lucide-react";
-import { toast } from "@/components/ui/fluent-toast-store"
+import { toast } from "@/components/ui/fluent-toast-store";
 
-import { SearchToggleField } from "@/components/common/search-toggle-field"
-import { DatePickerPresets } from "@/components/ui/date-picker-presets"
-import { FluentSelect } from "@/components/ui/fluent-select"
-import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity"
+import { SearchToggleField } from "@/components/common/search-toggle-field";
+import { DatePickerPresets } from "@/components/ui/date-picker-presets";
+import { FluentSelect } from "@/components/ui/fluent-select";
+import { Input } from "@/components/ui/input";
+import { DashboardIdentitySummary } from "@/components/dashboard/dashboard-identity";
 import {
   HeroBand,
   MetricTile,
@@ -29,41 +30,58 @@ import {
   readString,
   rowId,
   secondaryButtonClass,
-} from "@/components/dashboard/talent-visuals"
-import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+} from "@/components/dashboard/talent-visuals";
+import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
   getHrAttendanceSchedulePreview,
   getHrAttendanceSetupStatus,
   exportAnalyticsReport,
   getAnalyticsDashboard,
+  getAnalyticsSalesFieldDetails,
+  createHrDocumentRequirement,
+  deleteHrDocumentRequirement,
+  getHrDocumentComplianceDetails,
   getHrDashboard,
   getManagerDashboard,
+  getManagementPublishedScoreDetails,
   getHrLaunchReadiness,
   getHrLaunchReadinessEmployees,
   getSystemHealth,
   getSystemHealthLive,
   getSystemHealthReady,
   listCurrentCompanyUsers,
+  listEmployees,
   listSecurityEvents,
   runHrAttendanceSetupWizard,
   type AdminRecord,
-} from "@/lib/admin-api"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
-import { motion } from "framer-motion"
-import { useDashboardMotion } from "@/lib/dashboard-motion"
-import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
-import { readStoredSessionTokens } from "@/lib/session-client"
-import { ResizableTable, type Column } from "@/components/ui/resizable-table"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { describeSecurityEvent } from "@/lib/security-event-plain"
-import { cn } from "@/lib/utils"
+  type AnalyticsSalesFieldDetailMetric,
+} from "@/lib/admin-api";
+import {
+  canAccessDashboardRoute,
+  canPerformPermission,
+} from "@/lib/dashboard-permissions";
+import { motion } from "framer-motion";
+import { useDashboardMotion } from "@/lib/dashboard-motion";
+import {
+  useForbiddenRouteGuard,
+  useLeaveIfForbidden,
+} from "@/hooks/use-forbidden-route-guard";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { ResizableTable, type Column } from "@/components/ui/resizable-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { describeSecurityEvent } from "@/lib/security-event-plain";
+import { cn } from "@/lib/utils";
 import {
   isEmployeeReady,
   parseReadinessChecks,
   readinessCheckItems,
   readinessIssueText,
   readinessPersonName,
-} from "@/lib/employee-readiness-plain"
+} from "@/lib/employee-readiness-plain";
 
 import {
   AlertDialog,
@@ -73,7 +91,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogDescription,
@@ -81,47 +99,51 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
-} from "@/components/animate-ui/components/base/dialog"
+} from "@/components/animate-ui/components/base/dialog";
 
-export type InsightsOpsTab = "hr" | "management" | "manager" | "sales-field" | "readiness"
+export type InsightsOpsTab =
+  "hr" | "management" | "manager" | "sales-field" | "readiness";
 
 function readStoredToken() {
-  return readStoredSessionTokens().accessToken.trim()
+  return readStoredSessionTokens().accessToken.trim();
 }
 
 function localDateString(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function defaultScheduleRange() {
-  const start = new Date()
-  const end = new Date()
-  end.setDate(end.getDate() + 6)
-  return { from: localDateString(start), to: localDateString(end) }
+  const start = new Date();
+  const end = new Date();
+  end.setDate(end.getDate() + 6);
+  return { from: localDateString(start), to: localDateString(end) };
 }
 
 function schedulePreviewDays(record: AdminRecord | null) {
-  if (!record) return []
+  if (!record) return [];
   for (const key of ["days", "items", "rows", "schedule", "preview"]) {
-    const value = record[key]
+    const value = record[key];
     if (Array.isArray(value)) {
-      return value.filter((entry): entry is AdminRecord => typeof entry === "object" && entry !== null)
+      return value.filter(
+        (entry): entry is AdminRecord =>
+          typeof entry === "object" && entry !== null,
+      );
     }
   }
-  return []
+  return [];
 }
 
 function TipIcon({
   text,
   variant = "default",
 }: {
-  text: string
-  variant?: "default" | "onPrimary"
+  text: string;
+  variant?: "default" | "onPrimary";
 }) {
-  const motionPreset = useDashboardMotion()
+  const motionPreset = useDashboardMotion();
   return (
     <Tooltip>
       <TooltipTrigger
@@ -149,60 +171,1669 @@ function TipIcon({
           <InfoIcon className="h-3.5 w-3.5" />
         </motion.span>
       </TooltipTrigger>
-      <TooltipContent side="top" align="start" className="max-w-72 text-left leading-relaxed">
+      <TooltipContent
+        side="top"
+        align="start"
+        className="max-w-72 text-left leading-relaxed"
+      >
         {text}
       </TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
 function friendlyStatus(value: string) {
-  const normalized = value.trim().toLowerCase()
-  if (!normalized || normalized === "—") return "—"
-  if (["ok", "up", "healthy", "ready", "live", "true", "yes"].includes(normalized)) {
-    return "Working"
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "—") return "—";
+  if (
+    ["ok", "up", "healthy", "ready", "live", "true", "yes"].includes(normalized)
+  ) {
+    return "Working";
   }
-  if (["down", "fail", "failed", "unhealthy", "error", "false", "no"].includes(normalized)) {
-    return "Needs attention"
+  if (
+    ["down", "fail", "failed", "unhealthy", "error", "false", "no"].includes(
+      normalized,
+    )
+  ) {
+    return "Needs attention";
   }
-  return value
+  return value;
 }
 
 function metricEntries(record: AdminRecord | null) {
-  if (!record) return []
-  const skip = new Set(["id", "companyId", "company_id", "generatedAt", "generated_at", "asOf", "as_of"])
-  const entries: Array<{ label: string; value: string | number }> = []
+  if (!record) return [];
+  const skip = new Set([
+    "id",
+    "companyId",
+    "company_id",
+    "generatedAt",
+    "generated_at",
+    "asOf",
+    "as_of",
+  ]);
+  const entries: Array<{ label: string; value: string | number }> = [];
   for (const [key, value] of Object.entries(record)) {
-    if (skip.has(key)) continue
+    if (skip.has(key)) continue;
     if (typeof value === "number" && Number.isFinite(value)) {
-      entries.push({ label: prettify(key), value })
-      continue
+      entries.push({ label: prettify(key), value });
+      continue;
     }
     if (typeof value === "string" && value.trim() && value.length < 40) {
-      entries.push({ label: prettify(key), value })
+      entries.push({ label: prettify(key), value });
     }
   }
-  return entries.slice(0, 8)
+  return entries.slice(0, 8);
+}
+
+function dashboardScalarEntries(record: AdminRecord | null, prefix = "") {
+  if (!record) return [] as Array<{ label: string; value: string | number }>;
+  const skip = new Set([
+    "id",
+    "companyId",
+    "company_id",
+    "employee_id",
+    "employee_no",
+    "generated_at",
+    "generatedAt",
+    "source_updated_at",
+  ]);
+  const entries: Array<{ label: string; value: string | number }> = [];
+  for (const [key, value] of Object.entries(record)) {
+    if (skip.has(key) || value === null || value === undefined) continue;
+    const label = prefix ? `${prefix} · ${prettify(key)}` : prettify(key);
+    if (typeof value === "number" && Number.isFinite(value))
+      entries.push({ label, value });
+    else if (typeof value === "boolean")
+      entries.push({ label, value: value ? "Yes" : "No" });
+    else if (typeof value === "string" && value.trim() && value.length < 64)
+      entries.push({ label, value });
+    else if (typeof value === "object" && !Array.isArray(value)) {
+      entries.push(
+        ...dashboardScalarEntries(
+          value as AdminRecord,
+          prefix ? `${prefix} · ${prettify(key)}` : prettify(key),
+        ),
+      );
+    }
+  }
+  return entries;
+}
+
+function DashboardMetricSection({
+  title,
+  record,
+}: {
+  title: string;
+  record: AdminRecord | null;
+}) {
+  const entries = dashboardScalarEntries(record);
+  if (!record || entries.length === 0) return null;
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <dl className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+        {entries.map((item) => (
+          <div
+            key={item.label}
+            className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/50 py-1.5"
+          >
+            <dt className="truncate text-xs text-muted-foreground">
+              {item.label}
+            </dt>
+            <dd className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function DashboardRowsSection({
+  title,
+  rows,
+  labelKeys,
+  valueKeys,
+  secondaryValueKeys,
+  secondaryValueLabel,
+}: {
+  title: string;
+  rows: AdminRecord[];
+  labelKeys: string[];
+  valueKeys: string[];
+  secondaryValueKeys?: string[];
+  secondaryValueLabel?: string;
+}) {
+  if (!rows.length) return null;
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <div className="mt-3 divide-y divide-border/60">
+        {rows.map((row, index) => (
+          <div
+            key={`${readString(row, labelKeys, String(index))}-${index}`}
+            className="flex items-center justify-between gap-4 py-2 text-sm"
+          >
+            <span className="truncate text-foreground">
+              {readString(row, labelKeys, "Unassigned")}
+            </span>
+            <span className="flex shrink-0 items-baseline gap-3 tabular-nums">
+              <span className="font-semibold text-foreground">
+                {readNumber(row, valueKeys) ?? "—"}
+              </span>
+              {secondaryValueKeys?.length ? (
+                <span className="text-xs text-muted-foreground">
+                  {readNumber(row, secondaryValueKeys) ?? "—"} {secondaryValueLabel}
+                </span>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HrDocumentComplianceSection({
+  inventory,
+  canManage,
+  filters,
+  onRefresh,
+}: {
+  inventory: AdminRecord | null;
+  canManage: boolean;
+  filters: Record<string, string | number | undefined>;
+  onRefresh: () => void;
+}) {
+  const [code, setCode] = React.useState("");
+  const [label, setLabel] = React.useState("");
+  const [branchIds, setBranchIds] = React.useState("");
+  const [departmentIds, setDepartmentIds] = React.useState("");
+  const [employmentTypes, setEmploymentTypes] = React.useState("");
+  const [effectiveFrom, setEffectiveFrom] = React.useState("");
+  const [effectiveTo, setEffectiveTo] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [detailSelection, setDetailSelection] = React.useState<{
+    requirementId: number;
+    label: string;
+    state: "COMPLIANT" | "MISSING" | "EXPIRED" | "UNVERIFIED";
+  } | null>(null);
+  const [detailPage, setDetailPage] = React.useState(1);
+  const [detailData, setDetailData] = React.useState<AdminRecord | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [detailSearch, setDetailSearch] = React.useState("");
+  const detailRequestRef = React.useRef(0);
+  const requirementRows = asRecordArray(inventory?.configured_requirements);
+  const compliance = asRecord(inventory?.compliance) ?? {};
+  const scopeKey = [
+    filters.date_from,
+    filters.date_to,
+    filters.employee_id,
+  ].join(":");
+
+  async function loadComplianceDetails(
+    selection: NonNullable<typeof detailSelection>,
+    page: number,
+    search = detailSearch,
+  ) {
+    const requestId = ++detailRequestRef.current;
+    const token = readStoredToken();
+    if (!token) {
+      setDetailError("Authentication required. Please log in again.");
+      return;
+    }
+    setDetailSelection(selection);
+    setDetailPage(page);
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const result = await getHrDocumentComplianceDetails(
+        token,
+        selection.requirementId,
+        {
+          ...filters,
+          state: selection.state,
+          ...(search.trim() ? { search: search.trim() } : {}),
+          page,
+          limit: 20,
+        },
+      );
+      if (detailRequestRef.current === requestId) setDetailData(result);
+    } catch (errorObject) {
+      if (detailRequestRef.current === requestId) {
+        setDetailData(null);
+        setDetailError(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Could not load employee compliance details.",
+        );
+      }
+    } finally {
+      if (detailRequestRef.current === requestId) setDetailLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    detailRequestRef.current += 1;
+    setDetailSelection(null);
+    setDetailData(null);
+    setDetailLoading(false);
+    setDetailPage(1);
+    setDetailError(null);
+    setDetailSearch("");
+    return () => {
+      detailRequestRef.current += 1;
+    };
+  }, [scopeKey]);
+
+  async function onAddRequirement(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = readStoredToken();
+    if (!token) {
+      toast.error("Authentication required. Please log in again.");
+      return;
+    }
+    const parseIds = (value: string) =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map(Number);
+    const branches = parseIds(branchIds);
+    const departments = parseIds(departmentIds);
+    if (
+      [...branches, ...departments].some(
+        (id) => !Number.isInteger(id) || id < 1,
+      )
+    ) {
+      toast.error(
+        "Branch and department filters must contain positive numeric IDs.",
+      );
+      return;
+    }
+    setSaving(true);
+    try {
+      await createHrDocumentRequirement(token, {
+        document_type_code: code.trim().toUpperCase(),
+        label: label.trim(),
+        ...(branches.length ? { branch_ids: branches } : {}),
+        ...(departments.length ? { department_ids: departments } : {}),
+        ...(employmentTypes.trim()
+          ? {
+              employment_types: employmentTypes
+                .split(",")
+                .map((item) => item.trim().toUpperCase())
+                .filter(Boolean),
+            }
+          : {}),
+        ...(effectiveFrom ? { effective_from: effectiveFrom } : {}),
+        ...(effectiveTo ? { effective_to: effectiveTo } : {}),
+      });
+      setCode("");
+      setLabel("");
+      setBranchIds("");
+      setDepartmentIds("");
+      setEmploymentTypes("");
+      setEffectiveFrom("");
+      setEffectiveTo("");
+      toast.success("Required document type added.");
+      onRefresh();
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not add the document requirement.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onRemoveRequirement(requirementId: number) {
+    const token = readStoredToken();
+    if (!token) return;
+    try {
+      await deleteHrDocumentRequirement(token, requirementId);
+      toast.success("Document requirement removed.");
+      onRefresh();
+    } catch (errorObject) {
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not remove that requirement.",
+      );
+    }
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-border bg-card p-4"
+      aria-label="Employee document compliance"
+    >
+      <h2 className="text-sm font-semibold text-foreground">
+        Required employee documents
+      </h2>
+      {readBoolean(compliance, ["available"]) ? (
+        <>
+          <p className="mt-2 text-sm text-foreground">
+            {readNumber(compliance, ["compliant_requirement_count"]) ?? 0} of{" "}
+            {readNumber(compliance, ["applicable_requirement_count"]) ?? 0}{" "}
+            applicable employee-document requirements are satisfied
+            {readNumber(compliance, ["compliance_rate"]) === null
+              ? "."
+              : ` (${readNumber(compliance, ["compliance_rate"])}%).`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            As of {readString(compliance, ["as_of_date"], "the dashboard date")}
+            . A document must be verified and unexpired to satisfy a
+            requirement.
+          </p>
+          {asRecordArray(compliance.requirements).length ? (
+            <ul className="mt-3 divide-y divide-border/60">
+              {asRecordArray(compliance.requirements).map((row) => (
+                <li
+                  key={String(row.requirement_id)}
+                  className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-foreground">
+                    {readString(
+                      row,
+                      ["label"],
+                      readString(
+                        row,
+                        ["document_type_code"],
+                        "Required document",
+                      ),
+                    )}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {readNumber(row, ["compliant_employee_count"]) ?? 0}/
+                    {readNumber(row, ["applicable_employee_count"]) ?? 0}{" "}
+                    compliant ·{" "}
+                    {readNumber(row, ["missing_document_employee_count"]) ?? 0}{" "}
+                    missing ·{" "}
+                    {readNumber(row, ["expired_document_employee_count"]) ?? 0}{" "}
+                    expired ·{" "}
+                    {readNumber(row, ["unverified_document_employee_count"]) ??
+                      0}{" "}
+                    unverified
+                  </span>
+                  <div className="flex w-full flex-wrap gap-x-3 gap-y-1 pl-0 text-xs">
+                    {(
+                      [
+                        ["COMPLIANT", "compliant", "compliant_employee_count"],
+                        ["MISSING", "missing", "missing_document_employee_count"],
+                        ["EXPIRED", "expired", "expired_document_employee_count"],
+                        ["UNVERIFIED", "unverified", "unverified_document_employee_count"],
+                      ] as const
+                    ).map(([state, label, countKey]) => {
+                      const count = readNumber(row, [countKey]) ?? 0;
+                      const requirementId = readNumber(row, ["requirement_id"]);
+                      return (
+                        <button
+                          key={state}
+                          type="button"
+                          className="rounded-sm text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:text-muted-foreground disabled:no-underline"
+                          disabled={!requirementId || count === 0}
+                          aria-label={`View ${count} ${label} employees for ${readString(row, ["label"], "document requirement")}`}
+                          onClick={() => {
+                            if (!requirementId) return;
+                            void loadComplianceDetails(
+                              {
+                                requirementId,
+                                label: readString(row, ["label"], "Document requirement"),
+                                state,
+                              },
+                              1,
+                              "",
+                            );
+                          }}
+                        >
+                          {count} {label} details
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              No active employees match the configured requirement
+              applicability.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {readString(compliance, ["reason"]) === "NO_EFFECTIVE_REQUIREMENTS"
+            ? "No active document requirement is effective for the dashboard as-of date."
+            : "Compliance is unavailable until the company configures at least one active required document type."}
+        </p>
+      )}
+      {detailSelection ? (
+        <section
+          className="mt-4 rounded-lg border border-border p-3"
+          aria-label={`${detailSelection.label} ${detailSelection.state.toLowerCase()} employees`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">
+              {detailSelection.label}: {detailSelection.state.toLowerCase()} employees
+            </h3>
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => {
+                detailRequestRef.current += 1;
+                setDetailSelection(null);
+                setDetailData(null);
+                setDetailLoading(false);
+                setDetailError(null);
+              }}
+            >
+              Close details
+            </button>
+          </div>
+          <form
+            className="mt-3 flex flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadComplianceDetails(detailSelection, 1, detailSearch);
+            }}
+          >
+            <Input
+              value={detailSearch}
+              onChange={(event) => setDetailSearch(event.currentTarget.value)}
+              placeholder="Search employee name or number"
+              aria-label="Search compliance detail employees"
+              className="h-9 min-w-48 flex-1"
+            />
+            <button
+              type="submit"
+              className={secondaryButtonClass}
+              disabled={detailLoading}
+            >
+              Search
+            </button>
+          </form>
+          {detailLoading ? (
+            <p className="mt-3 text-sm text-muted-foreground" role="status">
+              Loading employeesâ€¦
+            </p>
+          ) : null}
+          {detailError ? (
+            <p className="mt-3 text-sm text-destructive" role="alert">
+              {detailError}
+            </p>
+          ) : null}
+          {detailData ? (
+            <>
+              <ul className="mt-3 divide-y divide-border/60">
+                {asRecordArray(detailData.items).map((item) => {
+                  const document = asRecord(item.document);
+                  return (
+                    <li
+                      key={String(item.employee_id)}
+                      className="flex flex-wrap items-start justify-between gap-3 py-2 text-sm"
+                    >
+                      <span>
+                        <span className="font-medium text-foreground">
+                          {readString(item, ["employee_name"], "Employee")}
+                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {readString(item, ["employee_no"], "")}
+                        </span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {document
+                          ? `${readString(document, ["title"], "Document")} Â· ${readBoolean(document, ["is_verified"]) ? "Verified" : "Unverified"} Â· expiry ${readString(document, ["expiry_date"], "not set")}`
+                          : "No matching document uploaded"}
+                      </span>
+                    </li>
+                  );
+                })}
+                {!asRecordArray(detailData.items).length && !detailLoading ? (
+                  <li className="py-3 text-sm text-muted-foreground">
+                    No employees match this status and dashboard scope.
+                  </li>
+                ) : null}
+              </ul>
+              {(() => {
+                const pagination = asRecord(detailData.pagination) ?? {};
+                const totalPages = readNumber(pagination, ["total_pages"]) ?? 0;
+                const total = readNumber(pagination, ["total"]) ?? 0;
+                return (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+                    <span>
+                      {total} employees Â· page {detailPage} of {Math.max(1, totalPages)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        disabled={detailLoading || detailPage <= 1}
+                        onClick={() =>
+                          void loadComplianceDetails(detailSelection, detailPage - 1, detailSearch)
+                        }
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        disabled={detailLoading || detailPage >= totalPages}
+                        onClick={() =>
+                          void loadComplianceDetails(detailSelection, detailPage + 1, detailSearch)
+                        }
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          ) : null}
+        </section>
+      ) : null}
+      {canManage ? (
+        <>
+          {requirementRows.length ? (
+            <div className="mt-3 border-t border-border pt-3">
+              <h3 className="text-xs font-semibold text-foreground">
+                Configured requirements
+              </h3>
+              <ul className="mt-2 space-y-2">
+                {requirementRows.map((row) => {
+                  const id = readNumber(row, ["id"]);
+                  const applicability = asRecord(row.applicability);
+                  const scopeLabel =
+                    [
+                      ...(Array.isArray(applicability?.branch_ids)
+                        ? [`branches ${applicability.branch_ids.join(", ")}`]
+                        : []),
+                      ...(Array.isArray(applicability?.department_ids)
+                        ? [
+                            `departments ${applicability.department_ids.join(", ")}`,
+                          ]
+                        : []),
+                      ...(Array.isArray(applicability?.employment_types)
+                        ? [`types ${applicability.employment_types.join(", ")}`]
+                        : []),
+                    ].join(" · ") || "All active employees";
+                  return (
+                    <li
+                      key={id ?? readString(row, ["document_type_code"])}
+                      className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <span>
+                        {readString(
+                          row,
+                          ["label"],
+                          readString(row, ["document_type_code"], "Document"),
+                        )}{" "}
+                        · {scopeLabel}
+                      </span>
+                      {id ? (
+                        <button
+                          type="button"
+                          className="text-destructive underline"
+                          onClick={() => void onRemoveRequirement(id)}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+          <form
+            className="mt-4 grid gap-2 border-t border-border pt-3 sm:grid-cols-2"
+            onSubmit={(event) => void onAddRequirement(event)}
+          >
+            <h3 className="sm:col-span-2 text-xs font-semibold text-foreground">
+              Add a required document type
+            </h3>
+            <Input
+              className={inputClass}
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="Document type code"
+              aria-label="Document type code"
+              required
+              maxLength={100}
+            />
+            <Input
+              className={inputClass}
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder="Display name"
+              aria-label="Document display name"
+              required
+              maxLength={160}
+            />
+            <Input
+              className={inputClass}
+              value={branchIds}
+              onChange={(event) => setBranchIds(event.target.value)}
+              placeholder="Branch IDs (optional, comma-separated)"
+              aria-label="Applicable branch IDs"
+            />
+            <Input
+              className={inputClass}
+              value={departmentIds}
+              onChange={(event) => setDepartmentIds(event.target.value)}
+              placeholder="Department IDs (optional)"
+              aria-label="Applicable department IDs"
+            />
+            <Input
+              className={inputClass}
+              value={employmentTypes}
+              onChange={(event) => setEmploymentTypes(event.target.value)}
+              placeholder="Employment types (optional)"
+              aria-label="Applicable employment types"
+            />
+            <div className="flex gap-2">
+              <Input
+                className={inputClass}
+                type="date"
+                value={effectiveFrom}
+                onChange={(event) => setEffectiveFrom(event.target.value)}
+                aria-label="Requirement effective from"
+              />
+              <Input
+                className={inputClass}
+                type="date"
+                value={effectiveTo}
+                onChange={(event) => setEffectiveTo(event.target.value)}
+                aria-label="Requirement effective to"
+              />
+            </div>
+            <p className="sm:col-span-2 text-xs text-muted-foreground">
+              Leave applicability fields empty to apply the requirement to all
+              active employees. Compliance counts verified, unexpired matching
+              employee documents.
+            </p>
+            <button
+              className={`${primaryButtonClass} sm:col-span-2`}
+              type="submit"
+              disabled={saving}
+            >
+              {saving ? "Adding…" : "Add requirement"}
+            </button>
+          </form>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function ManagementFieldProductivityPanel({
+  record,
+}: {
+  record: AdminRecord | null;
+}) {
+  if (!record) return null;
+  const metrics = [
+    ["Approved activity reports", "approved_reports"],
+    ["Reviewed visits", "reviewed_visits"],
+    ["Customer visits", "customer_visits"],
+    ["Broker/intermediary visits", "broker_intermediary_visits"],
+    ["Planned visit items", "planned_visit_items"],
+    ["Completed planned items", "completed_planned_visit_items"],
+    ["Unplanned completed visits", "unplanned_completed_visits"],
+  ] as const;
+  return (
+    <section
+      className="rounded-xl border border-border bg-card p-4"
+      aria-label="Management field productivity summary"
+    >
+      <h2 className="text-sm font-semibold text-foreground">
+        Field activity productivity
+      </h2>
+      <dl className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map(([label, key]) => (
+          <div key={key} className="rounded-lg bg-muted/40 p-3">
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+              {readNumber(record, [key]) ?? "—"}
+            </dd>
+          </div>
+        ))}
+        <div className="rounded-lg bg-muted/40 p-3">
+          <dt className="text-xs text-muted-foreground">
+            Planned completion rate
+          </dt>
+          <dd className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+            {readNumber(record, ["planned_visit_completion_rate"]) === null
+              ? "Unavailable"
+              : `${readNumber(record, ["planned_visit_completion_rate"])}%`}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Activity and visit counts do not measure CRM leads, quotations, closed
+        business, renewals, or collections.
+      </p>
+    </section>
+  );
+}
+
+function DashboardMetricPanels({
+  dashboard,
+  activeTab,
+  dateFrom,
+  dateTo,
+  employeeIdFilter,
+  onLoadSalesFieldDetails,
+  onCloseSalesFieldDetails,
+  salesFieldDetailMetric,
+  salesFieldDetails,
+  salesFieldDetailsLoading,
+  salesFieldDetailsError,
+  salesFieldDetailsPage,
+  salesFieldDetailCurrency,
+  canManageDocumentRequirements,
+  onRefreshDashboard,
+}: {
+  dashboard: AdminRecord | null;
+  activeTab: InsightsOpsTab;
+  dateFrom: string;
+  dateTo: string;
+  employeeIdFilter: string;
+  onLoadSalesFieldDetails: (
+    metric: AnalyticsSalesFieldDetailMetric,
+    page?: number,
+    currency?: string,
+  ) => void;
+  onCloseSalesFieldDetails: () => void;
+  salesFieldDetailMetric: AnalyticsSalesFieldDetailMetric | null;
+  salesFieldDetails: AdminRecord | null;
+  salesFieldDetailsLoading: boolean;
+  salesFieldDetailsError: string | null;
+  salesFieldDetailsPage: number;
+  salesFieldDetailCurrency: string;
+  canManageDocumentRequirements: boolean;
+  onRefreshDashboard: () => void;
+}) {
+  const [scoreDetails, setScoreDetails] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [scoreDetailsLoading, setScoreDetailsLoading] = React.useState(false);
+  const [scoreDetailsPage, setScoreDetailsPage] = React.useState(1);
+  const [scoreDetailsFilters, setScoreDetailsFilters] = React.useState<
+    Record<string, string | number>
+  >({});
+  const scoreDetailRecord = asRecord(scoreDetails);
+  const scoreDetailItems = asRecordArray(scoreDetailRecord?.items);
+  const scoreDetailPagination = asRecord(scoreDetailRecord?.pagination);
+  const loadScoreDetails = async (
+    page: number,
+    filters: Record<string, string | number> = scoreDetailsFilters,
+  ) => {
+    const token = readStoredToken();
+    if (!token || !dateFrom || !dateTo) return;
+    setScoreDetailsLoading(true);
+    try {
+      const result = await getManagementPublishedScoreDetails(token, {
+        date_from: dateFrom,
+        date_to: dateTo,
+        period_type: "MONTHLY",
+        page,
+        limit: 20,
+        ...filters,
+        ...(employeeIdFilter ? { employee_id: Number(employeeIdFilter) } : {}),
+      });
+      setScoreDetails(result);
+      setScoreDetailsPage(page);
+      setScoreDetailsFilters(filters);
+    } catch (detailsError) {
+      toast.error(
+        detailsError instanceof Error
+          ? detailsError.message
+          : "Could not load published score details.",
+      );
+    } finally {
+      setScoreDetailsLoading(false);
+    }
+  };
+  React.useEffect(() => {
+    setScoreDetails(null);
+    setScoreDetailsPage(1);
+    setScoreDetailsFilters({});
+  }, [dateFrom, dateTo, employeeIdFilter]);
+  if (!dashboard) return null;
+  const sections =
+    activeTab === "hr"
+      ? ([
+          [
+            "Workforce",
+            dashboard.workforce ?? { active_employees: dashboard.headcount },
+          ],
+          ["Employee movements", dashboard.movements],
+          ["Probation and confirmation", dashboard.probation],
+          ["Attendance", dashboard.attendance],
+          ["Leave", dashboard.leave],
+          ["Workflow pipeline", dashboard.workflow_pipeline],
+          ["Action inbox assigned to you", dashboard.action_inbox],
+          ["Payroll", dashboard.payroll],
+          ["Work activity", dashboard.work_activities],
+        ] as Array<[string, unknown]>)
+      : activeTab === "management"
+        ? ([
+            ["Workforce and attrition", dashboard.workforce],
+            ["Attendance discipline", dashboard.attendance],
+            ["Leave", dashboard.leave],
+            ["Workflow pipeline", dashboard.workflow_pipeline],
+            ["Action inbox assigned to you", dashboard.action_inbox],
+            ["Performance summary", dashboard.performance],
+            ["Field and work activity", dashboard.work_activities],
+            ["Payroll", dashboard.payroll],
+            ["Staff loans", dashboard.employee_finance],
+          ] as Array<[string, unknown]>)
+        : activeTab === "sales-field"
+          ? ([
+              ["Workforce", dashboard.workforce],
+              ["Attendance", dashboard.attendance],
+              ["Leave", dashboard.leave],
+              ["Activity and field productivity", dashboard.activities],
+              ["Performance and KPI", dashboard.performance],
+              ["Actionable approvals", dashboard.approvals],
+              ["Risk indicators", dashboard.risk_indicators],
+            ] as Array<[string, unknown]>)
+          : [];
+  const unavailable = asRecordArray(dashboard.unavailable_widgets);
+  const topPerformers = asRecordArray(dashboard.top_performers);
+  const scoreDistribution = asRecord(dashboard.monthly_score_distribution);
+  const scorePeriods = asRecordArray(scoreDistribution?.periods);
+  const scoresUnavailable = unavailable.some(
+    (item) => readString(item, ["code"]) === "PERFORMANCE_SCORES",
+  );
+  const fieldUnavailable = unavailable.filter(
+    (item) => readBoolean(item, ["available"]) === false,
+  );
+
+  return (
+    <div className="space-y-3">
+      {fieldUnavailable.length ? (
+        <section
+          className="rounded-xl border border-amber-300/70 bg-amber-50/60 p-4 dark:bg-amber-950/20"
+          aria-label="Unavailable dashboard metrics"
+        >
+          <h2 className="text-sm font-semibold text-foreground">
+            Some metrics are unavailable
+          </h2>
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+            {fieldUnavailable.map((item, index) => (
+              <li key={`${readString(item, ["code"], "metric")}-${index}`}>
+                {prettify(readString(item, ["code"], "Metric"))}:{" "}
+                {prettify(readString(item, ["reason"], "Unavailable"))}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {sections.map(([title, value]) => (
+          <DashboardMetricSection
+            key={title}
+            title={title}
+            record={asRecord(value)}
+          />
+        ))}
+      </div>
+      {activeTab === "hr" || activeTab === "management" ? (
+        <DashboardRowsSection
+          title="Approved leave by month and type"
+          rows={asRecordArray(
+            asRecord(asRecord(dashboard.leave)?.approved_days_by_type)?.items,
+          )}
+          labelKeys={["label"]}
+          valueKeys={["approved_days"]}
+          secondaryValueKeys={["approved_request_count"]}
+          secondaryValueLabel="requests"
+        />
+      ) : null}
+      {activeTab === "hr" ? (
+        <>
+          <HrDocumentComplianceSection
+            inventory={asRecord(dashboard.employee_document_inventory)}
+            canManage={canManageDocumentRequirements}
+            filters={{
+              ...(dateFrom ? { date_from: dateFrom } : {}),
+              ...(dateTo ? { date_to: dateTo } : {}),
+              ...(employeeIdFilter
+                ? { employee_id: Number(employeeIdFilter) }
+                : {}),
+            }}
+            onRefresh={onRefreshDashboard}
+          />
+          <DashboardRowsSection
+            title="Department manpower"
+            rows={asRecordArray(dashboard.manpower)}
+            labelKeys={["department_name", "name"]}
+            valueKeys={["headcount", "employee_count"]}
+          />
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Assigned action inbox
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Open items assigned to your active company membership.
+            </p>
+            <Link
+              className={`${secondaryButtonClass} mt-3 inline-flex`}
+              href="/dashboard/me/requests/actions"
+            >
+              Open action inbox
+            </Link>
+          </section>
+        </>
+      ) : null}
+      {activeTab === "management" ? (
+        <>
+          <ManagementFieldProductivityPanel
+            record={asRecord(dashboard.work_activities)}
+          />
+          <DashboardRowsSection
+            title="Headcount by department"
+            rows={asRecordArray(
+              asRecord(dashboard.workforce)?.department_headcount,
+            )}
+            labelKeys={["department_name"]}
+            valueKeys={["headcount"]}
+          />
+          <DashboardRowsSection
+            title="Headcount by branch"
+            rows={asRecordArray(
+              asRecord(dashboard.workforce)?.branch_headcount,
+            )}
+            labelKeys={["branch_name"]}
+            valueKeys={["headcount"]}
+          />
+        </>
+      ) : null}
+      {topPerformers.length ? (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            Published top performers
+          </h2>
+          <div className="mt-3 divide-y divide-border/60">
+            {topPerformers.map((row, index) => (
+              <div
+                key={`${readString(row, ["employee_id"], String(index))}-${index}`}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2 text-sm"
+              >
+                <span className="text-xs text-muted-foreground">
+                  #{readNumber(row, ["rank"]) ?? index + 1}
+                </span>
+                <span className="truncate text-foreground">
+                  {readString(row, ["full_name", "employee_name"], "Employee")}
+                </span>
+                <span className="tabular-nums font-semibold text-foreground">
+                  {readNumber(row, ["final_score", "score"]) ?? "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {activeTab === "management" ? (
+        <section
+          className="rounded-xl border border-border bg-card p-4"
+          aria-label="Published monthly score distribution"
+        >
+          <h2 className="text-sm font-semibold text-foreground">
+            Published monthly score distribution
+          </h2>
+          {scoresUnavailable ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              You do not have permission to view published performance scores.
+            </p>
+          ) : scorePeriods.length ? (
+            <div className="mt-3 space-y-4">
+              <button
+                className={`${secondaryButtonClass} text-xs`}
+                type="button"
+                disabled={scoreDetailsLoading}
+                onClick={() => void loadScoreDetails(1, {})}
+              >
+                {scoreDetailsLoading
+                  ? "Loading score details…"
+                  : "View published score records"}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                {readNumber(scoreDistribution, [
+                  "low_performer_employee_count",
+                ]) ?? 0}{" "}
+                distinct employees fall in configured improvement-plan bands.
+              </p>
+              {scorePeriods.map((period, index) => {
+                const bands = asRecordArray(period.bands);
+                return (
+                  <div
+                    key={`${readString(period, ["period_id"], String(index))}`}
+                    className="rounded-lg border border-border/60 p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h3 className="text-sm font-medium text-foreground">
+                        {readString(period, ["period_name"], "Monthly period")}
+                      </h3>
+                      <span className="text-xs text-muted-foreground">
+                        {readNumber(period, ["published_review_count"]) ?? 0}{" "}
+                        published ·{" "}
+                        {readNumber(period, ["scored_review_count"]) ?? 0}{" "}
+                        scored ·{" "}
+                        {readNumber(period, ["unscored_review_count"]) ?? 0}{" "}
+                        unscored
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {bands.map((band) => (
+                        <div
+                          key={`${readString(band, ["band_id"])}-${readString(period, ["period_id"])}`}
+                          className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-3 py-2 text-xs"
+                        >
+                          <span className="truncate text-foreground">
+                            {readString(
+                              band,
+                              ["label"],
+                              readString(band, ["code"], "Configured band"),
+                            )}
+                            {readBoolean(band, ["requires_improvement_plan"])
+                              ? " · improvement plan"
+                              : ""}
+                          </span>
+                          <span className="shrink-0 tabular-nums font-semibold text-foreground">
+                            {readNumber(band, ["scored_review_count"]) ?? 0}
+                          </span>
+                          <button
+                            className="underline underline-offset-2"
+                            type="button"
+                            disabled={scoreDetailsLoading}
+                            onClick={() =>
+                              void loadScoreDetails(1, {
+                                period_id:
+                                  readNumber(period, ["period_id"]) ?? 0,
+                                rating_band_id:
+                                  readNumber(band, ["band_id"]) ?? 0,
+                                score_state: "scored",
+                              })
+                            }
+                          >
+                            View
+                          </button>
+                        </div>
+                      ))}
+                      {(readNumber(period, ["unbanded_scored_review_count"]) ??
+                        0) > 0 ? (
+                        <div className="flex justify-between gap-3 rounded-md bg-amber-50/70 px-3 py-2 text-xs dark:bg-amber-950/20">
+                          <span className="text-foreground">
+                            Scored without a configured band
+                          </span>
+                          <span className="shrink-0 tabular-nums font-semibold text-foreground">
+                            {readNumber(period, [
+                              "unbanded_scored_review_count",
+                            ])}
+                          </span>
+                          <button
+                            className="underline underline-offset-2"
+                            type="button"
+                            disabled={scoreDetailsLoading}
+                            onClick={() =>
+                              void loadScoreDetails(1, {
+                                period_id:
+                                  readNumber(period, ["period_id"]) ?? 0,
+                                rating_band_id: 0,
+                                score_state: "scored",
+                              })
+                            }
+                          >
+                            View
+                          </button>
+                        </div>
+                      ) : null}
+                      {(readNumber(period, ["unscored_review_count"]) ?? 0) >
+                      0 ? (
+                        <div className="flex justify-between gap-3 rounded-md bg-muted/30 px-3 py-2 text-xs">
+                          <span>Unscored published reviews</span>
+                          <span className="tabular-nums font-semibold">
+                            {readNumber(period, ["unscored_review_count"])}
+                          </span>
+                          <button
+                            className="underline underline-offset-2"
+                            type="button"
+                            disabled={scoreDetailsLoading}
+                            onClick={() =>
+                              void loadScoreDetails(1, {
+                                period_id:
+                                  readNumber(period, ["period_id"]) ?? 0,
+                                score_state: "unscored",
+                              })
+                            }
+                          >
+                            View
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No published monthly scores are available for this period.
+            </p>
+          )}
+          {scoreDetails ? (
+            <div className="mt-4 border-t border-border/60 pt-3">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Published monthly records for {dateFrom} to {dateTo}, using the
+                same company, employee, branch and department scope as the
+                summary.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border/60 text-muted-foreground">
+                      <th className="px-2 py-2">Employee</th>
+                      <th className="px-2 py-2">Period</th>
+                      <th className="px-2 py-2">Score</th>
+                      <th className="px-2 py-2">Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scoreDetailItems.map((row, index) => (
+                      <tr
+                        className="border-b border-border/40"
+                        key={readString(row, ["review_id"], String(index))}
+                      >
+                        <td className="px-2 py-2">
+                          {readString(row, ["employee_name"], "Employee")}
+                          <span className="ml-1 text-muted-foreground">
+                            {readString(row, ["employee_no"])}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2">
+                          {readString(row, ["period_name"])}
+                        </td>
+                        <td className="px-2 py-2 tabular-nums">
+                          {readNumber(row, ["final_score"]) ?? "—"}
+                        </td>
+                        <td className="px-2 py-2">
+                          {readString(row, ["rating_code"], "Unrated")}
+                        </td>
+                      </tr>
+                    ))}
+                    {scoreDetailItems.length === 0 ? (
+                      <tr>
+                        <td
+                          className="px-2 py-3 text-muted-foreground"
+                          colSpan={4}
+                        >
+                          No matching published score records.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">
+                  Page {scoreDetailsPage} of{" "}
+                  {readNumber(scoreDetailPagination, ["total_pages"]) ?? 0} ·{" "}
+                  {readNumber(scoreDetailPagination, ["total"]) ?? 0} records
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    className={secondaryButtonClass}
+                    type="button"
+                    disabled={scoreDetailsLoading || scoreDetailsPage <= 1}
+                    onClick={() => void loadScoreDetails(scoreDetailsPage - 1)}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    className={secondaryButtonClass}
+                    type="button"
+                    disabled={
+                      scoreDetailsLoading ||
+                      scoreDetailsPage >=
+                        (readNumber(scoreDetailPagination, ["total_pages"]) ??
+                          0)
+                    }
+                    onClick={() => void loadScoreDetails(scoreDetailsPage + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {activeTab === "sales-field" ? (
+        <>
+          {(() => {
+            const commercial = asRecord(dashboard?.sales_field);
+            const currencyRows = Array.isArray(
+              commercial?.reported_potential_value_by_currency,
+            )
+              ? commercial.reported_potential_value_by_currency
+              : [];
+            const fieldMetrics = [
+              [
+                "Reviewed visits",
+                managerMetric(commercial, ["reviewed_visits"]),
+              ],
+              [
+                "Customer visits",
+                managerMetric(commercial, ["customer_visits"]),
+              ],
+              [
+                "Broker/intermediary visits",
+                managerMetric(commercial, ["broker_intermediary_visits"]),
+              ],
+              [
+                "Approved activity reports",
+                managerMetric(commercial, ["approved_reports"]),
+              ],
+              [
+                "Open follow-ups",
+                managerMetric(commercial, ["open_follow_ups"]),
+              ],
+              [
+                "Open exceptions",
+                managerMetric(commercial, ["open_exceptions"]),
+              ],
+              [
+                "Eligible planned visits",
+                managerMetric(commercial, ["planned_visit_items"]),
+              ],
+              [
+                "Completed planned visits",
+                managerMetric(commercial, ["completed_planned_visit_items"]),
+              ],
+              [
+                "Planned completion rate",
+                managerMetric(commercial, ["planned_visit_completion_rate"]) ===
+                "—"
+                  ? "Unavailable"
+                  : `${managerMetric(commercial, ["planned_visit_completion_rate"])}%`,
+              ],
+              [
+                "Unplanned completed visits",
+                managerMetric(commercial, ["unplanned_completed_visits"]),
+              ],
+            ];
+            return (
+              <section
+                className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                aria-label="Field commercial summary"
+              >
+                {fieldMetrics.map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-border bg-card p-4"
+                  >
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+                      {value}
+                    </p>
+                    {label === "Eligible planned visits" ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-primary underline"
+                        onClick={() =>
+                          onLoadSalesFieldDetails("PLANNED_VISITS")
+                        }
+                      >
+                        View records
+                      </button>
+                    ) : null}
+                    {label === "Completed planned visits" ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-primary underline"
+                        onClick={() =>
+                          onLoadSalesFieldDetails("COMPLETED_PLANNED_VISITS")
+                        }
+                      >
+                        View records
+                      </button>
+                    ) : null}
+                    {label === "Unplanned completed visits" ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-primary underline"
+                        onClick={() =>
+                          onLoadSalesFieldDetails("UNPLANNED_COMPLETED_VISITS")
+                        }
+                      >
+                        View records
+                      </button>
+                    ) : null}
+                    {label === "Customer visits" ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-primary underline"
+                        onClick={() =>
+                          onLoadSalesFieldDetails("CUSTOMER_VISITS")
+                        }
+                      >
+                        View records
+                      </button>
+                    ) : null}
+                    {label === "Broker/intermediary visits" ? (
+                      <button
+                        type="button"
+                        className="mt-2 text-xs text-primary underline"
+                        onClick={() =>
+                          onLoadSalesFieldDetails("BROKER_INTERMEDIARY_VISITS")
+                        }
+                      >
+                        View records
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+                <p className="sm:col-span-2 xl:col-span-4 text-xs text-muted-foreground">
+                  Planned completion uses the plan date. Eligible submitted,
+                  approved, in-progress, completed, and locked plan items form
+                  the denominator; linked visits count as complete after manager
+                  approval. Cancelled visits and plans are excluded from the
+                  denominator; unplanned completed visits are shown separately.
+                </p>
+                <div className="sm:col-span-2 xl:col-span-4 rounded-xl border border-border bg-card p-4">
+                  <h2 className="text-sm font-semibold text-foreground">
+                    Reported opportunity pipeline
+                  </h2>
+                  {currencyRows.length ? (
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      {currencyRows.map((item, index) => {
+                        const row = asRecord(item);
+                        return (
+                          <li
+                            key={`${readString(row, ["currency"]) ?? "currency"}-${index}`}
+                            className="rounded-lg bg-muted/50 p-3 text-sm"
+                          >
+                            <span className="font-medium">
+                              {readString(row, ["currency"]) ??
+                                "Unknown currency"}
+                            </span>
+                            <p className="mt-1 text-muted-foreground">
+                              Potential:{" "}
+                              {managerMetric(row, ["potential_value"])}
+                            </p>
+                            <p className="text-muted-foreground">
+                              Manager validated:{" "}
+                              {managerMetric(row, ["validated_actual_value"])}
+                            </p>
+                            <button
+                              type="button"
+                              className="mt-2 text-xs text-primary underline"
+                              onClick={() =>
+                                onLoadSalesFieldDetails(
+                                  "OPPORTUNITIES",
+                                  1,
+                                  readString(row, ["currency"]) ?? "TZS",
+                                )
+                              }
+                            >
+                              View opportunity records
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      No opportunity values are available for this period and
+                      scope.
+                    </p>
+                  )}
+                </div>
+              </section>
+            );
+          })()}
+          {salesFieldDetailMetric ? (
+            <section
+              className="rounded-xl border border-border bg-card p-4"
+              aria-label="Sales-field detail records"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-foreground">
+                  {salesFieldDetailMetric.replaceAll("_", " ").toLowerCase()}{" "}
+                  detail
+                </h2>
+                <button
+                  type="button"
+                  className="text-xs text-primary underline"
+                  onClick={onCloseSalesFieldDetails}
+                >
+                  Close details
+                </button>
+              </div>
+              {salesFieldDetailsLoading ? (
+                <p className="mt-3 text-sm text-muted-foreground" role="status">
+                  Loading detail records…
+                </p>
+              ) : null}
+              {salesFieldDetailsError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                  {salesFieldDetailsError}
+                </p>
+              ) : null}
+              {!salesFieldDetailsLoading &&
+              !salesFieldDetailsError &&
+              salesFieldDetails
+                ? (() => {
+                    const detailRows = asRecordArray(salesFieldDetails.rows);
+                    const pagination = asRecord(salesFieldDetails.pagination);
+                    const totalPages =
+                      readNumber(pagination, ["total_pages"]) ?? 0;
+                    const columns =
+                      salesFieldDetailMetric === "PLANNED_VISITS" ||
+                      salesFieldDetailMetric === "COMPLETED_PLANNED_VISITS"
+                        ? [
+                            ["plan_date", "Plan date"],
+                            ["employee_name", "Employee"],
+                            ["employee_no", "Employee no."],
+                            ["plan_status", "Plan status"],
+                            ["visit_type", "Visit type"],
+                            ["purpose", "Purpose"],
+                            ["linked_visit_count", "Linked visits"],
+                            ["qualifying_completed_visit_count", "Completed"],
+                            ["cancelled_visit_count", "Cancelled"],
+                          ]
+                        : [
+                              "UNPLANNED_COMPLETED_VISITS",
+                              "CUSTOMER_VISITS",
+                              "BROKER_INTERMEDIARY_VISITS",
+                            ].includes(salesFieldDetailMetric)
+                          ? [
+                              ["visit_date", "Visit date"],
+                              ["employee_name", "Employee"],
+                              ["employee_no", "Employee no."],
+                              ["visit_no", "Visit no."],
+                              ["visit_type", "Visit type"],
+                              ["party_type", "Party type"],
+                              ["purpose", "Purpose"],
+                            ]
+                          : [
+                              ["visit_date", "Visit date"],
+                              ["employee_name", "Employee"],
+                              ["employee_no", "Employee no."],
+                              ["opportunity_type", "Type"],
+                              ["title", "Opportunity"],
+                              ["status", "Status"],
+                              ["currency", "Currency"],
+                              ["potential_value", "Potential"],
+                              ["actual_value", "Actual"],
+                              ["validated_by_manager", "Validated"],
+                            ];
+                    return (
+                      <>
+                        {detailRows.length ? (
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-border">
+                                  {columns.map(([key, label]) => (
+                                    <th
+                                      key={key}
+                                      className="px-2 py-2 font-semibold"
+                                    >
+                                      {label}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detailRows.map((row, index) => (
+                                  <tr
+                                    key={String(
+                                      row.plan_item_id ??
+                                        row.visit_id ??
+                                        row.opportunity_id ??
+                                        index,
+                                    )}
+                                    className="border-b border-border/60"
+                                  >
+                                    {columns.map(([key]) => (
+                                      <td
+                                        key={key}
+                                        className="max-w-64 px-2 py-2 text-muted-foreground"
+                                      >
+                                        {typeof row[key] === "boolean"
+                                          ? row[key]
+                                            ? "Yes"
+                                            : "No"
+                                          : row[key] == null
+                                            ? "—"
+                                            : String(row[key])}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            No detail records match this period and scope.
+                          </p>
+                        )}
+                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {readNumber(pagination, ["total"]) ?? 0} records ·
+                            Page {salesFieldDetailsPage} of {totalPages}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="rounded border border-border px-2 py-1 disabled:opacity-50"
+                              disabled={
+                                salesFieldDetailsLoading ||
+                                salesFieldDetailsPage <= 1
+                              }
+                              onClick={() =>
+                                void onLoadSalesFieldDetails(
+                                  salesFieldDetailMetric,
+                                  salesFieldDetailsPage - 1,
+                                  salesFieldDetailCurrency,
+                                )
+                              }
+                            >
+                              Previous
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-border px-2 py-1 disabled:opacity-50"
+                              disabled={
+                                salesFieldDetailsLoading ||
+                                salesFieldDetailsPage >= totalPages
+                              }
+                              onClick={() =>
+                                void onLoadSalesFieldDetails(
+                                  salesFieldDetailMetric,
+                                  salesFieldDetailsPage + 1,
+                                  salesFieldDetailCurrency,
+                                )
+                              }
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()
+                : null}
+            </section>
+          ) : null}
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Field operations
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Open the scoped visit workspace for plans, visit records,
+              commercial statuses and authorized map events.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                className={secondaryButtonClass}
+                href="/dashboard/field/visits"
+              >
+                Open visits
+              </Link>
+              <Link
+                className={secondaryButtonClass}
+                href="/dashboard/field/map"
+              >
+                Open visit map
+              </Link>
+            </div>
+          </section>
+          <section className="rounded-xl border border-amber-300/70 bg-amber-50/60 p-4 dark:bg-amber-950/20">
+            <h2 className="text-sm font-semibold text-foreground">
+              Commercial source coverage
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This summary does not establish authoritative quotation issuance,
+              closed business, completed renewals, or cash collections. Visit
+              and follow-up activity must not be read as those outcomes.
+            </p>
+          </section>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function managerMetric(record: AdminRecord | null, keys: string[]) {
-  return readNumber(record, keys) ?? "—"
+  return readNumber(record, keys) ?? "—";
 }
 
 function managerAttentionClass(value: string | number) {
-  const numericValue = typeof value === "number" ? value : Number(value)
-  if (!Number.isFinite(numericValue)) return "text-muted-foreground"
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return "text-muted-foreground";
   return numericValue === 0
     ? "text-emerald-600 dark:text-emerald-400"
-    : "text-primary"
+    : "text-primary";
 }
 
 function ManagerStatList({
   title,
   items,
 }: {
-  title: string
-  items: Array<{ label: string; value: string | number }>
+  title: string;
+  items: Array<{ label: string; value: string | number }>;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -214,63 +1845,112 @@ function ManagerStatList({
             className="flex items-center justify-between gap-4 py-2 first:pt-0 last:pb-0"
           >
             <dt className="text-sm text-muted-foreground">{item.label}</dt>
-            <dd className="text-sm font-semibold tabular-nums text-foreground">{item.value}</dd>
+            <dd className="text-sm font-semibold tabular-nums text-foreground">
+              {item.value}
+            </dd>
           </div>
         ))}
       </dl>
     </div>
-  )
+  );
 }
 
 function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
-  const attendance = asRecord(dashboard?.attendance) ?? dashboard
-  const performance = asRecord(dashboard?.performance) ?? dashboard
-  const present = readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0
-  const late = readNumber(attendance, ["late", "late_arrivals", "lateArrivals"]) ?? 0
-  const absent = readNumber(attendance, ["absent", "absent_today", "absentToday"]) ?? 0
-  const attendanceTotal = Math.max(1, present + late + absent)
-  const attendanceRate = Math.round(((present + late) / attendanceTotal) * 1000) / 10
-  const published = readNumber(performance, ["published_team_reviews", "publishedTeamReviews", "published_reviews"]) ?? 0
-  const pending = readNumber(performance, ["pending_team_validations", "pendingTeamValidations", "pending_validations"]) ?? 0
-  const approved = readNumber(performance, ["approved_reports", "approvedReports", "approved_daily_reports"]) ?? 0
-  const rawScore = readNumber(performance, ["average_score", "averageScore", "performance_score", "performanceScore"])
-  const performanceScore = rawScore !== null
-    ? Math.min(100, Math.round((rawScore <= 5 ? rawScore * 20 : rawScore) * 10) / 10)
-    : published + pending > 0
-      ? Math.round((published / (published + pending)) * 1000) / 10
-      : 0
+  const attendance = asRecord(dashboard?.attendance) ?? dashboard;
+  const performance = asRecord(dashboard?.performance) ?? dashboard;
+  const present =
+    readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0;
+  const late =
+    readNumber(attendance, ["late", "late_arrivals", "lateArrivals"]) ?? 0;
+  const absent =
+    readNumber(attendance, ["absent", "absent_today", "absentToday"]) ?? 0;
+  const attendanceTotal = Math.max(1, present + late + absent);
+  const attendanceRate =
+    Math.round(((present + late) / attendanceTotal) * 1000) / 10;
+  const published =
+    readNumber(performance, [
+      "published_team_reviews",
+      "publishedTeamReviews",
+      "published_reviews",
+    ]) ?? 0;
+  const pending =
+    readNumber(performance, [
+      "pending_team_validations",
+      "pendingTeamValidations",
+      "pending_validations",
+    ]) ?? 0;
+  const approved =
+    readNumber(performance, [
+      "approved_reports",
+      "approvedReports",
+      "approved_daily_reports",
+    ]) ?? 0;
+  const rawScore = readNumber(performance, [
+    "average_score",
+    "averageScore",
+    "performance_score",
+    "performanceScore",
+  ]);
+  const performanceScore =
+    rawScore !== null ? Math.round(rawScore * 10) / 10 : null;
   const attendanceBars = [
     { label: "On time", value: present, color: "bg-emerald-500" },
     { label: "Late", value: late, color: "bg-amber-300" },
     { label: "Absent", value: absent, color: "bg-rose-300" },
-  ]
+  ];
   const performanceBars = [
     { label: "Reviews", value: published },
     { label: "Pending", value: pending },
     { label: "Approved", value: approved },
-  ]
-  const attendanceMax = Math.max(1, ...attendanceBars.map((item) => item.value))
-  const performanceMax = Math.max(1, ...performanceBars.map((item) => item.value))
+  ];
+  const attendanceMax = Math.max(
+    1,
+    ...attendanceBars.map((item) => item.value),
+  );
+  const performanceMax = Math.max(
+    1,
+    ...performanceBars.map((item) => item.value),
+  );
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
       <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
+            <h2 className="text-sm font-semibold text-foreground">
+              Attendance report
+            </h2>
             <div className="mt-3 flex items-end gap-2">
-              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">{attendanceRate}%</span>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">Attendance rate</span>
+              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">
+                {attendanceRate}%
+              </span>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                Attendance rate
+              </span>
             </div>
           </div>
-          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">Selected period</span>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">
+            Selected period
+          </span>
         </div>
         <div className="mt-6 flex h-40 items-end justify-around gap-6 border-b border-border/60 px-4 pb-2">
           {attendanceBars.map((item) => (
-            <div key={item.label} className="flex h-full min-w-16 flex-1 flex-col items-center justify-end gap-2">
-              <span className="text-xs font-semibold tabular-nums text-foreground">{item.value}</span>
-              <span className={cn("w-full max-w-16 rounded-t-md", item.color)} style={{ height: `${Math.max(8, (item.value / attendanceMax) * 75)}%` }} />
-              <span className="text-[10px] text-muted-foreground">{item.label}</span>
+            <div
+              key={item.label}
+              className="flex h-full min-w-16 flex-1 flex-col items-center justify-end gap-2"
+            >
+              <span className="text-xs font-semibold tabular-nums text-foreground">
+                {item.value}
+              </span>
+              <span
+                className={cn("w-full max-w-16 rounded-t-md", item.color)}
+                style={{
+                  height: `${Math.max(8, (item.value / attendanceMax) * 75)}%`,
+                }}
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {item.label}
+              </span>
             </div>
           ))}
         </div>
@@ -279,40 +1959,196 @@ function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
       <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Team performance</h2>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">Reviews and approved work</p>
+            <h2 className="text-sm font-semibold text-foreground">
+              Team performance
+            </h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Reviews and approved work
+            </p>
           </div>
-          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">This period</span>
+          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">
+            This period
+          </span>
         </div>
-        <p className="mt-5 text-3xl font-semibold leading-none tabular-nums text-foreground">{performanceScore}%</p>
-        <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">Current performance score</p>
+        <p className="mt-5 text-3xl font-semibold leading-none tabular-nums text-foreground">
+          {performanceScore === null ? "—" : performanceScore}
+        </p>
+        <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">
+          Published score average
+        </p>
         <div className="mt-5 flex h-28 items-end justify-around gap-3 border-b border-border/60 pb-2">
           {performanceBars.map((item) => (
-            <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
+            <div
+              key={item.label}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
+            >
               <div className="flex h-20 items-end gap-1">
-                <span className="w-3 rounded-t bg-emerald-500/20" style={{ height: `${Math.max(10, (item.value / performanceMax) * 65)}%` }} />
-                <span className="w-3 rounded-t bg-emerald-500" style={{ height: `${Math.max(14, (item.value / performanceMax) * 100)}%` }} />
+                <span
+                  className="w-3 rounded-t bg-emerald-500/20"
+                  style={{
+                    height: `${Math.max(10, (item.value / performanceMax) * 65)}%`,
+                  }}
+                />
+                <span
+                  className="w-3 rounded-t bg-emerald-500"
+                  style={{
+                    height: `${Math.max(14, (item.value / performanceMax) * 100)}%`,
+                  }}
+                />
               </div>
-              <span className="truncate text-[9px] text-muted-foreground">{item.label}</span>
+              <span className="truncate text-[9px] text-muted-foreground">
+                {item.label}
+              </span>
             </div>
           ))}
         </div>
       </section>
     </div>
-  )
+  );
 }
 
-function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }) {
-  const team = asRecord(dashboard?.team)
-  const attendance = asRecord(dashboard?.attendance)
-  const approvals = asRecord(dashboard?.approvals)
-  const performance = asRecord(dashboard?.performance)
-  const activities = asRecord(dashboard?.work_activities ?? dashboard?.workActivities)
-  const capabilities = asRecord(dashboard?.capabilities)
+function PublishedPerformanceAggregatePanels({
+  dashboard,
+}: {
+  dashboard: AdminRecord | null;
+}) {
+  const aggregates = asRecord(dashboard?.published_performance_aggregates);
+  const quarterly = asRecordArray(aggregates?.quarterly_trend);
+  const annual = asRecordArray(aggregates?.annual_average_by_year);
+  const quarterlyPublishedAt = readString(aggregates, [
+    "quarterly_latest_published_at",
+  ]);
+  const annualPublishedAt = readString(aggregates, [
+    "annual_latest_published_at",
+  ]);
+  const unavailable = asRecordArray(dashboard?.unavailable_widgets).some(
+    (item) => readString(item, ["code"]) === "PERFORMANCE_TRENDS",
+  );
+
+  const renderRows = (rows: AdminRecord[]) => {
+    const maxScore = Math.max(
+      0,
+      ...rows.map((row) => readNumber(row, ["average_score"]) ?? 0),
+    );
+    return rows.map((row, index) => {
+      const score = readNumber(row, ["average_score"]);
+      const count = readNumber(row, ["published_employee_count"]);
+      const relativeWidth =
+        score !== null && maxScore > 0
+          ? Math.max(0, Math.min(100, (score / maxScore) * 100))
+          : 0;
+      return (
+        <div
+          key={`${readString(row, ["financial_year_id"])}-${readString(row, ["sequence_number"])}-${index}`}
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-border/60 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+        >
+          <span className="min-w-0 truncate text-foreground">
+            {readString(row, ["period_name"], "Published period")}
+          </span>
+          <span className="whitespace-nowrap tabular-nums font-semibold text-foreground">
+            {score === null ? "—" : score.toFixed(1)}
+          </span>
+          <span className="col-span-2 text-right text-xs text-muted-foreground sm:col-span-1">
+            {count ?? 0} scored
+          </span>
+          <div
+            className="col-span-2 h-1.5 overflow-hidden rounded-full bg-muted sm:col-span-3"
+            aria-hidden="true"
+          >
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none"
+              style={{ width: `${relativeWidth}%` }}
+            />
+          </div>
+        </div>
+      );
+    });
+  };
+
+  return (
+    <section
+      className="grid gap-3 lg:grid-cols-2"
+      aria-label="Published performance aggregates"
+    >
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-sm font-semibold text-foreground">
+          Quarterly performance trend
+        </h2>
+        {unavailable ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            You do not have permission to view published performance aggregates.
+          </p>
+        ) : quarterly.length ? (
+          <>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bars compare scores within this panel; values remain on the
+              configured score scale.
+            </p>
+            <div className="mt-3">{renderRows(quarterly)}</div>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">
+            No published quarterly aggregates are available.
+          </p>
+        )}
+        {quarterlyPublishedAt ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Latest publication (UTC):{" "}
+            <time dateTime={quarterlyPublishedAt}>{quarterlyPublishedAt}</time>
+          </p>
+        ) : null}
+      </div>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-sm font-semibold text-foreground">
+          Annual average
+        </h2>
+        {unavailable ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            You do not have permission to view published performance aggregates.
+          </p>
+        ) : annual.length ? (
+          <>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bars compare scores within this panel; values remain on the
+              configured score scale.
+            </p>
+            <div className="mt-3">{renderRows(annual)}</div>
+          </>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">
+            No published annual aggregates are available.
+          </p>
+        )}
+        {annualPublishedAt ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Latest publication (UTC):{" "}
+            <time dateTime={annualPublishedAt}>{annualPublishedAt}</time>
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ManagerDashboardPanels({
+  dashboard,
+}: {
+  dashboard: AdminRecord | null;
+}) {
+  const team = asRecord(dashboard?.team);
+  const attendance = asRecord(dashboard?.attendance);
+  const approvals = asRecord(dashboard?.approvals);
+  const performance = asRecord(dashboard?.performance);
+  const activities = asRecord(
+    dashboard?.work_activities ?? dashboard?.workActivities,
+  );
+  const capabilities = asRecord(dashboard?.capabilities);
   const capabilityItems = [
     {
       label: "Activity report reviews",
-      record: asRecord(capabilities?.activity_review ?? capabilities?.activityReview),
+      record: asRecord(
+        capabilities?.activity_review ?? capabilities?.activityReview,
+      ),
       href: "/dashboard/activities/reviews",
       linkLabel: "Open activity reviews",
       stats: [
@@ -341,19 +2177,25 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
     {
       label: "Probation recommendations",
       record: asRecord(
-        capabilities?.probation_recommendation ?? capabilities?.probationRecommendation,
+        capabilities?.probation_recommendation ??
+          capabilities?.probationRecommendation,
       ),
       href: "/dashboard/probation/team",
       linkLabel: "Open team probation",
       stats: [],
     },
-  ]
-  const availableCapabilityItems = capabilityItems.filter((item) => Boolean(item.record))
+  ];
+  const availableCapabilityItems = capabilityItems.filter((item) =>
+    Boolean(item.record),
+  );
   const summaryItems = [
     {
       label: "Team members",
       value: managerMetric(team, ["total_members", "totalMembers"]),
-      hintValue: managerMetric(team, ["employees_on_leave", "employeesOnLeave"]),
+      hintValue: managerMetric(team, [
+        "employees_on_leave",
+        "employeesOnLeave",
+      ]),
       hintLabel: "currently on leave",
     },
     {
@@ -365,16 +2207,25 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
     {
       label: "Open action items",
       value: managerMetric(approvals, ["open_action_items", "openActionItems"]),
-      hintValue: managerMetric(approvals, ["pending_attendance_corrections", "pendingAttendanceCorrections"]),
+      hintValue: managerMetric(approvals, [
+        "pending_attendance_corrections",
+        "pendingAttendanceCorrections",
+      ]),
       hintLabel: "attendance corrections",
     },
     {
       label: "Activity reviews",
-      value: managerMetric(activities, ["pending_activity_reviews", "pendingActivityReviews"]),
-      hintValue: managerMetric(activities, ["approved_reports", "approvedReports"]),
+      value: managerMetric(activities, [
+        "pending_activity_reviews",
+        "pendingActivityReviews",
+      ]),
+      hintValue: managerMetric(activities, [
+        "approved_reports",
+        "approvedReports",
+      ]),
       hintLabel: "approved reports",
     },
-  ]
+  ];
 
   return (
     <>
@@ -389,11 +2240,15 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
               <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {item.label}
               </dt>
-              <dd className={`mt-1 text-2xl font-semibold tracking-tight ${managerAttentionClass(item.value)}`}>
+              <dd
+                className={`mt-1 text-2xl font-semibold tracking-tight ${managerAttentionClass(item.value)}`}
+              >
                 {item.value}
               </dd>
               <p className="mt-1 text-xs text-muted-foreground">
-                <span className={`font-semibold tabular-nums ${managerAttentionClass(item.hintValue)}`}>
+                <span
+                  className={`font-semibold tabular-nums ${managerAttentionClass(item.hintValue)}`}
+                >
                   {item.hintValue}
                 </span>{" "}
                 {item.hintLabel}
@@ -412,7 +2267,10 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
             { label: "Late", value: managerMetric(attendance, ["late"]) },
             {
               label: "Early departure",
-              value: managerMetric(attendance, ["early_departure", "earlyDeparture"]),
+              value: managerMetric(attendance, [
+                "early_departure",
+                "earlyDeparture",
+              ]),
             },
           ]}
         />
@@ -421,19 +2279,31 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
           items={[
             {
               label: "Pending report reviews",
-              value: managerMetric(activities, ["pending_activity_reviews", "pendingActivityReviews"]),
+              value: managerMetric(activities, [
+                "pending_activity_reviews",
+                "pendingActivityReviews",
+              ]),
             },
             {
               label: "Pending visit reviews",
-              value: managerMetric(activities, ["pending_visit_reviews", "pendingVisitReviews"]),
+              value: managerMetric(activities, [
+                "pending_visit_reviews",
+                "pendingVisitReviews",
+              ]),
             },
             {
               label: "Approved reports",
-              value: managerMetric(activities, ["approved_reports", "approvedReports"]),
+              value: managerMetric(activities, [
+                "approved_reports",
+                "approvedReports",
+              ]),
             },
             {
               label: "Reviewed visits",
-              value: managerMetric(activities, ["reviewed_visits", "reviewedVisits"]),
+              value: managerMetric(activities, [
+                "reviewed_visits",
+                "reviewedVisits",
+              ]),
             },
           ]}
         />
@@ -442,19 +2312,31 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
           items={[
             {
               label: "Team validations",
-              value: managerMetric(performance, ["pending_team_validations", "pendingTeamValidations"]),
+              value: managerMetric(performance, [
+                "pending_team_validations",
+                "pendingTeamValidations",
+              ]),
             },
             {
               label: "Published reviews",
-              value: managerMetric(performance, ["published_team_reviews", "publishedTeamReviews"]),
+              value: managerMetric(performance, [
+                "published_team_reviews",
+                "publishedTeamReviews",
+              ]),
             },
             {
               label: "Open action items",
-              value: managerMetric(approvals, ["open_action_items", "openActionItems"]),
+              value: managerMetric(approvals, [
+                "open_action_items",
+                "openActionItems",
+              ]),
             },
             {
               label: "Attendance corrections",
-              value: managerMetric(approvals, ["pending_attendance_corrections", "pendingAttendanceCorrections"]),
+              value: managerMetric(approvals, [
+                "pending_attendance_corrections",
+                "pendingAttendanceCorrections",
+              ]),
             },
           ]}
         />
@@ -462,69 +2344,86 @@ function ManagerDashboardPanels({ dashboard }: { dashboard: AdminRecord | null }
 
       {availableCapabilityItems.length > 0 ? (
         <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">Available manager actions</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Available manager actions
+          </h2>
           <div className="mt-3 grid gap-4 md:grid-cols-3 md:gap-0">
-            {availableCapabilityItems.map(({ label, record: candidate, href, linkLabel, stats }, index) => {
-              const record = candidate as AdminRecord
-              const available = readBoolean(record, ["available"])
-              const reason = readString(record, ["reason"])
-              return (
-                <Link
-                  key={label}
-                  href={href}
-                  className={`relative flex min-h-36 flex-col py-1 !no-underline transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.025] hover:!no-underline focus:!no-underline focus-visible:!no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50 motion-reduce:transform-none md:px-4 ${index > 0 ? "md:border-l md:border-border/70" : ""}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground">{label}</p>
-                    <span
-                      className={
-                        available
-                          ? "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                          : "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                      }
-                    >
-                      {available ? "Available" : "Unavailable"}
+            {availableCapabilityItems.map(
+              ({ label, record: candidate, href, linkLabel, stats }, index) => {
+                const record = candidate as AdminRecord;
+                const available = readBoolean(record, ["available"]);
+                const reason = readString(record, ["reason"]);
+                return (
+                  <Link
+                    key={label}
+                    href={href}
+                    className={`relative flex min-h-36 flex-col py-1 !no-underline transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.025] hover:!no-underline focus:!no-underline focus-visible:!no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50 motion-reduce:transform-none md:px-4 ${index > 0 ? "md:border-l md:border-border/70" : ""}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {label}
+                      </p>
+                      <span
+                        className={
+                          available
+                            ? "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            : "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        }
+                      >
+                        {available ? "Available" : "Unavailable"}
+                      </span>
+                    </div>
+                    {stats.length > 0 ? (
+                      <dl className="mt-3 flex divide-x divide-border/70">
+                        {stats.map((stat, statIndex) => (
+                          <div
+                            key={stat.label}
+                            className={
+                              statIndex > 0
+                                ? "min-w-0 flex-1 pl-3"
+                                : "min-w-0 flex-1 pr-3"
+                            }
+                          >
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {stat.label}
+                            </dt>
+                            <dd
+                              className={`mt-0.5 text-lg font-semibold tabular-nums ${managerAttentionClass(managerMetric(record, stat.keys))}`}
+                            >
+                              {managerMetric(record, stat.keys)}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                    {reason ? (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {reason}
+                      </p>
+                    ) : null}
+                    <span className="mt-auto pt-3 text-xs font-semibold text-primary">
+                      {linkLabel} →
                     </span>
-                  </div>
-                  {stats.length > 0 ? (
-                    <dl className="mt-3 flex divide-x divide-border/70">
-                      {stats.map((stat, statIndex) => (
-                        <div key={stat.label} className={statIndex > 0 ? "min-w-0 flex-1 pl-3" : "min-w-0 flex-1 pr-3"}>
-                          <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {stat.label}
-                          </dt>
-                          <dd className={`mt-0.5 text-lg font-semibold tabular-nums ${managerAttentionClass(managerMetric(record, stat.keys))}`}>
-                            {managerMetric(record, stat.keys)}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                  {reason ? (
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{reason}</p>
-                  ) : null}
-                  <span className="mt-auto pt-3 text-xs font-semibold text-primary">
-                    {linkLabel} →
-                  </span>
-                </Link>
-              )
-            })}
+                  </Link>
+                );
+              },
+            )}
           </div>
         </div>
       ) : null}
     </>
-  )
+  );
 }
 
 export function InsightsOperationsView({
   activeTab,
   embedded = false,
 }: {
-  activeTab: InsightsOpsTab
-  embedded?: boolean
+  activeTab: InsightsOpsTab;
+  embedded?: boolean;
 }) {
-  const actor = useDashboardActor()
-  const motionPreset = useDashboardMotion()
+  const actor = useDashboardActor();
+  const motionPreset = useDashboardMotion();
   const canAccess =
     embedded ||
     (actor.ready &&
@@ -532,218 +2431,415 @@ export function InsightsOperationsView({
         `/dashboard/insights/${activeTab}`,
         actor.permissionLabels,
         actor.accessMode,
-      ))
-  const leaveIfForbidden = useLeaveIfForbidden()
-  useForbiddenRouteGuard(canAccess)
+      ));
+  const leaveIfForbidden = useLeaveIfForbidden();
+  useForbiddenRouteGuard(canAccess);
 
-  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null)
-  const [health, setHealth] = React.useState<AdminRecord | null>(null)
-  const [live, setLive] = React.useState<AdminRecord | null>(null)
-  const [ready, setReady] = React.useState<AdminRecord | null>(null)
-  const [readiness, setReadiness] = React.useState<AdminRecord | null>(null)
-  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
-  const [events, setEvents] = React.useState<AdminRecord[]>([])
-  const [companyUsers, setCompanyUsers] = React.useState<AdminRecord[]>([])
-  const [setup, setSetup] = React.useState<AdminRecord | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [search, setSearch] = React.useState("")
-  const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(null)
-  const [readinessDetail, setReadinessDetail] = React.useState<AdminRecord | null>(null)
-  const [dateFrom, setDateFrom] = React.useState(() => defaultScheduleRange().from)
+  const [dashboard, setDashboard] = React.useState<AdminRecord | null>(null);
+  const [health, setHealth] = React.useState<AdminRecord | null>(null);
+  const [live, setLive] = React.useState<AdminRecord | null>(null);
+  const [ready, setReady] = React.useState<AdminRecord | null>(null);
+  const [readiness, setReadiness] = React.useState<AdminRecord | null>(null);
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([]);
+  const [events, setEvents] = React.useState<AdminRecord[]>([]);
+  const [companyUsers, setCompanyUsers] = React.useState<AdminRecord[]>([]);
+  const [setup, setSetup] = React.useState<AdminRecord | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
+  const [eventDetail, setEventDetail] = React.useState<AdminRecord | null>(
+    null,
+  );
+  const [readinessDetail, setReadinessDetail] =
+    React.useState<AdminRecord | null>(null);
+  const [dateFrom, setDateFrom] = React.useState(
+    () => defaultScheduleRange().from,
+  );
   const [dateTo, setDateTo] = React.useState(() =>
-    activeTab === "manager" ? localDateString(new Date()) : defaultScheduleRange().to,
-  )
-  const [policyName, setPolicyName] = React.useState("")
-  const [clockInDialogOpen, setClockInDialogOpen] = React.useState(false)
-  const [saving, setSaving] = React.useState(false)
-  const [exporting, setExporting] = React.useState(false)
-  const [previewEmployeeId, setPreviewEmployeeId] = React.useState("")
-  const [schedulePreview, setSchedulePreview] = React.useState<AdminRecord | null>(null)
+    activeTab === "manager"
+      ? localDateString(new Date())
+      : defaultScheduleRange().to,
+  );
+  const [employeeIdFilter, setEmployeeIdFilter] = React.useState("");
+  const [employeeIdDraft, setEmployeeIdDraft] = React.useState("");
+  const [employeeLookupQuery, setEmployeeLookupQuery] = React.useState("");
+  const [employeeLookupResults, setEmployeeLookupResults] = React.useState<
+    AdminRecord[]
+  >([]);
+  const [employeeLookupLoading, setEmployeeLookupLoading] =
+    React.useState(false);
+  const [salesFieldDetailMetric, setSalesFieldDetailMetric] =
+    React.useState<AnalyticsSalesFieldDetailMetric | null>(null);
+  const [salesFieldDetails, setSalesFieldDetails] =
+    React.useState<AdminRecord | null>(null);
+  const [salesFieldDetailsLoading, setSalesFieldDetailsLoading] =
+    React.useState(false);
+  const [salesFieldDetailsError, setSalesFieldDetailsError] = React.useState<
+    string | null
+  >(null);
+  const [salesFieldDetailsPage, setSalesFieldDetailsPage] = React.useState(1);
+  const [salesFieldDetailCurrency, setSalesFieldDetailCurrency] =
+    React.useState("");
+  const canLookupEmployees = canPerformPermission(
+    actor.permissionLabels,
+    "employees:read",
+  );
+  const [policyName, setPolicyName] = React.useState("");
+  const [clockInDialogOpen, setClockInDialogOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
+  const [previewEmployeeId, setPreviewEmployeeId] = React.useState("");
+  const [schedulePreview, setSchedulePreview] =
+    React.useState<AdminRecord | null>(null);
 
   const load = React.useCallback(async () => {
-    const token = readStoredToken()
+    const token = readStoredToken();
     if (!token) {
-      setError("Authentication required. Please log in again.")
-      setLoading(false)
-      return
+      setError("Authentication required. Please log in again.");
+      setLoading(false);
+      return;
     }
-    setLoading(true)
-    setError(null)
-    const tasks: Array<Promise<unknown>> = []
+    const trimmedEmployeeId = employeeIdFilter.trim();
+    const parsedEmployeeId = trimmedEmployeeId
+      ? Number(trimmedEmployeeId)
+      : undefined;
+    if (
+      activeTab !== "readiness" &&
+      activeTab !== "manager" &&
+      trimmedEmployeeId &&
+      (!Number.isSafeInteger(parsedEmployeeId) || (parsedEmployeeId ?? 0) < 1)
+    ) {
+      setDashboard(null);
+      setError("Enter a positive whole employee ID to filter this dashboard.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const tasks: Array<Promise<unknown>> = [];
     if (activeTab !== "readiness") {
       const query = {
         ...(dateFrom ? { date_from: dateFrom } : {}),
         ...(dateTo ? { date_to: dateTo } : {}),
-      }
+        ...(activeTab !== "manager" && parsedEmployeeId
+          ? { employee_id: parsedEmployeeId }
+          : {}),
+      };
       tasks.push(
         (activeTab === "sales-field"
           ? getAnalyticsDashboard(token, "sales-field", query)
           : activeTab === "manager"
             ? getManagerDashboard(token, query)
             : getHrDashboard(token, activeTab, query)
-        ).then(setDashboard).catch((errorObject) => {
-          setDashboard(null)
-          throw errorObject
-        }),
-      )
+        )
+          .then(setDashboard)
+          .catch((errorObject) => {
+            setDashboard(null);
+            throw errorObject;
+          }),
+      );
     } else {
       tasks.push(
-        getHrLaunchReadiness(token).then(setReadiness).catch((errorObject) => {
-          setReadiness(null)
-          throw errorObject
-        }),
+        getHrLaunchReadiness(token)
+          .then(setReadiness)
+          .catch((errorObject) => {
+            setReadiness(null);
+            throw errorObject;
+          }),
         getHrLaunchReadinessEmployees(token)
           .then((report) => {
-            const record = report && typeof report === "object" && !Array.isArray(report) ? report : null
+            const record =
+              report && typeof report === "object" && !Array.isArray(report)
+                ? report
+                : null;
             const readinessRows = [
               ...asRecordArray(record?.ready),
               ...asRecordArray(record?.notReady),
-            ]
+            ];
             setEmployees(
               readinessRows.length > 0
                 ? readinessRows
                 : asRecordArray(record?.items ?? record?.employees ?? report),
-            )
+            );
           })
           .catch(() => setEmployees([])),
-        getSystemHealth(token).then(setHealth).catch(() => setHealth(null)),
-        getSystemHealthLive(token).then(setLive).catch(() => setLive(null)),
-        getSystemHealthReady(token).then(setReady).catch(() => setReady(null)),
-        listSecurityEvents(token, { page: 1, limit: 20 }).then(setEvents).catch(() => setEvents([])),
+        getSystemHealth(token)
+          .then(setHealth)
+          .catch(() => setHealth(null)),
+        getSystemHealthLive(token)
+          .then(setLive)
+          .catch(() => setLive(null)),
+        getSystemHealthReady(token)
+          .then(setReady)
+          .catch(() => setReady(null)),
+        listSecurityEvents(token, { page: 1, limit: 20 })
+          .then(setEvents)
+          .catch(() => setEvents([])),
         listCurrentCompanyUsers(token, { page: 1, limit: 100 })
           .then((result) => setCompanyUsers(result.rows))
           .catch(() => setCompanyUsers([])),
-        getHrAttendanceSetupStatus(token).then(setSetup).catch(() => setSetup(null)),
-      )
+        getHrAttendanceSetupStatus(token)
+          .then(setSetup)
+          .catch(() => setSetup(null)),
+      );
     }
-    const results = await Promise.allSettled(tasks)
-    const first = results.find((result) => result.status === "rejected")
+    const results = await Promise.allSettled(tasks);
+    const first = results.find((result) => result.status === "rejected");
     if (first && first.status === "rejected") {
       if (leaveIfForbidden(first.reason)) {
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
-      setError(first.reason instanceof Error ? first.reason.message : "Could not load insights.")
+      setError(
+        first.reason instanceof Error
+          ? first.reason.message
+          : "Could not load insights.",
+      );
     }
-    setLoading(false)
-  }, [activeTab, dateFrom, dateTo, leaveIfForbidden])
+    setLoading(false);
+  }, [activeTab, dateFrom, dateTo, employeeIdFilter, leaveIfForbidden]);
 
   React.useEffect(() => {
-    if (!canAccess) return
-    void load()
-  }, [canAccess, load])
+    if (!canAccess) return;
+    void load();
+  }, [canAccess, load]);
 
-  const metrics = metricEntries(dashboard)
-  const blockers = asRecordArray(readiness?.blockers ?? readiness?.items)
-  const visibleEmployees = employees.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
-  const visibleEvents = events.filter((row) => !search || JSON.stringify(row).toLowerCase().includes(search.toLowerCase()))
+  React.useEffect(() => {
+    const query = employeeLookupQuery.trim();
+    if (
+      activeTab === "readiness" ||
+      activeTab === "manager" ||
+      !canLookupEmployees ||
+      !query ||
+      employeeIdDraft
+    ) {
+      setEmployeeLookupResults([]);
+      setEmployeeLookupLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      const token = readStoredToken();
+      if (!token) return;
+      setEmployeeLookupLoading(true);
+      void listEmployees(
+        token,
+        { page: 1, limit: 20, search: query },
+        { signal: controller.signal },
+      )
+        .then((result) => setEmployeeLookupResults(result.rows))
+        .catch(() => {
+          if (!controller.signal.aborted) setEmployeeLookupResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setEmployeeLookupLoading(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [activeTab, canLookupEmployees, employeeIdDraft, employeeLookupQuery]);
+
+  React.useEffect(() => {
+    setSalesFieldDetails(null);
+    setSalesFieldDetailsError(null);
+    setSalesFieldDetailMetric(null);
+    setSalesFieldDetailsPage(1);
+    setSalesFieldDetailCurrency("");
+  }, [activeTab, dateFrom, dateTo, employeeIdFilter]);
+
+  const metrics = metricEntries(dashboard);
+  const dashboardGeneratedAt = readString(dashboard, [
+    "generated_at",
+    "generatedAt",
+  ]);
+  const dashboardTimezone = readString(asRecord(dashboard?.period), [
+    "timezone",
+  ]);
+  const generatedAtDate = dashboardGeneratedAt
+    ? new Date(dashboardGeneratedAt)
+    : null;
+  const blockers = asRecordArray(readiness?.blockers ?? readiness?.items);
+  const visibleEmployees = employees.filter(
+    (row) =>
+      !search ||
+      JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
+  );
+  const visibleEvents = events.filter(
+    (row) =>
+      !search ||
+      JSON.stringify(row).toLowerCase().includes(search.toLowerCase()),
+  );
   const actorNames = React.useMemo(() => {
-    const byCompanyUserId = new Map<number, string>()
-    const byUserId = new Map<number, string>()
+    const byCompanyUserId = new Map<number, string>();
+    const byUserId = new Map<number, string>();
     companyUsers.forEach((row) => {
-      const nestedUser = row.user && typeof row.user === "object" ? (row.user as AdminRecord) : null
+      const nestedUser =
+        row.user && typeof row.user === "object"
+          ? (row.user as AdminRecord)
+          : null;
       const first =
         readString(row, ["first_name", "firstName"]) ||
-        (nestedUser ? readString(nestedUser, ["first_name", "firstName"]) : "")
+        (nestedUser ? readString(nestedUser, ["first_name", "firstName"]) : "");
       const last =
         readString(row, ["last_name", "lastName"]) ||
-        (nestedUser ? readString(nestedUser, ["last_name", "lastName"]) : "")
+        (nestedUser ? readString(nestedUser, ["last_name", "lastName"]) : "");
       const label =
         [first, last].filter(Boolean).join(" ").trim() ||
         readString(row, ["email", "full_name", "fullName"]) ||
-        (nestedUser ? readString(nestedUser, ["email", "full_name", "fullName"]) : "")
+        (nestedUser
+          ? readString(nestedUser, ["email", "full_name", "fullName"])
+          : "");
       if (!label) {
-        return
+        return;
       }
       const companyUserId = readNumber(row, [
         "company_user_id",
         "companyUserId",
         "membership_id",
         "membershipId",
-      ])
+      ]);
       if (companyUserId !== null) {
-        byCompanyUserId.set(companyUserId, label)
+        byCompanyUserId.set(companyUserId, label);
       }
       const userId =
-        readNumber(row, ["user_id", "userId", "platform_user_id", "platformUserId", "id"]) ??
-        (nestedUser ? readNumber(nestedUser, ["id", "user_id", "userId"]) : null)
+        readNumber(row, [
+          "user_id",
+          "userId",
+          "platform_user_id",
+          "platformUserId",
+          "id",
+        ]) ??
+        (nestedUser
+          ? readNumber(nestedUser, ["id", "user_id", "userId"])
+          : null);
       if (userId !== null) {
-        byUserId.set(userId, label)
+        byUserId.set(userId, label);
       }
-    })
-    return { byCompanyUserId, byUserId }
-  }, [companyUsers])
+    });
+    return { byCompanyUserId, byUserId };
+  }, [companyUsers]);
 
   async function onWizard() {
-    const token = readStoredToken()
-    if (!token) return
+    const token = readStoredToken();
+    if (!token) return;
     if (!policyName.trim()) {
-      toast.error("Type a short name for these clock-in rules, for example Office clock-in.")
-      return
+      toast.error(
+        "Type a short name for these clock-in rules, for example Office clock-in.",
+      );
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
       const result = await runHrAttendanceSetupWizard(token, {
         policy: { name: policyName.trim() },
-      })
-      const payload = asRecord(result)
-      const details = asRecord(payload?.data) ?? payload
-      const policyId = readNumber(details, ["policyId", "policy_id", "id"])
-      const apiMessage = readString(payload, ["message"])
+      });
+      const payload = asRecord(result);
+      const details = asRecord(payload?.data) ?? payload;
+      const policyId = readNumber(details, ["policyId", "policy_id", "id"]);
+      const apiMessage = readString(payload, ["message"]);
       toast.success(
         policyId || /created successfully/i.test(apiMessage)
           ? `Clock-in rules “${policyName.trim()}” are saved. This is a starter set — refine it later under Attendance.`
           : apiMessage || `Clock-in rules “${policyName.trim()}” are saved.`,
-      )
-      setClockInDialogOpen(false)
-      setPolicyName("")
-      await load()
+      );
+      setClockInDialogOpen(false);
+      setPolicyName("");
+      await load();
     } catch (errorObject) {
       const message =
-        errorObject instanceof Error ? errorObject.message : "Could not create clock-in rules."
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not create clock-in rules.";
       toast.error(
         /already exists/i.test(message)
           ? `Clock-in rules named "${policyName.trim()}" already exist. Use a different name only if you want a new set.`
           : message,
-      )
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function onPreview() {
-    const token = readStoredToken()
-    if (!token) return
+    const token = readStoredToken();
+    if (!token) return;
     if (!previewEmployeeId) {
-      toast.error("Choose an employee to preview their schedule.")
-      return
+      toast.error("Choose an employee to preview their schedule.");
+      return;
     }
     if (!dateFrom || !dateTo) {
-      toast.error("Pick a start and end date.")
-      return
+      toast.error("Pick a start and end date.");
+      return;
     }
     if (dateTo < dateFrom) {
-      toast.error("End date must be on or after the start date.")
-      return
+      toast.error("End date must be on or after the start date.");
+      return;
     }
     try {
       const record = await getHrAttendanceSchedulePreview(token, {
         employee_id: Number(previewEmployeeId),
         from_date: dateFrom,
         to_date: dateTo,
-      })
-      setSchedulePreview(record)
+      });
+      setSchedulePreview(record);
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not load that schedule.")
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load that schedule.",
+      );
+    }
+  }
+
+  async function loadSalesFieldDetails(
+    metric: AnalyticsSalesFieldDetailMetric,
+    page = 1,
+    currency = "",
+  ) {
+    const token = readStoredToken();
+    if (!token) {
+      setSalesFieldDetailsError(
+        "Authentication required. Please log in again.",
+      );
+      return;
+    }
+    setSalesFieldDetailMetric(metric);
+    const detailCurrency = metric === "OPPORTUNITIES" ? currency : "";
+    setSalesFieldDetailCurrency(detailCurrency);
+    setSalesFieldDetailsPage(page);
+    setSalesFieldDetailsLoading(true);
+    setSalesFieldDetailsError(null);
+    try {
+      const result = await getAnalyticsSalesFieldDetails(token, {
+        metric,
+        ...(dateFrom ? { date_from: dateFrom } : {}),
+        ...(dateTo ? { date_to: dateTo } : {}),
+        ...(employeeIdFilter ? { employee_id: Number(employeeIdFilter) } : {}),
+        ...(detailCurrency ? { currency: detailCurrency } : {}),
+        page,
+        limit: 10,
+      });
+      setSalesFieldDetails(asRecord(result));
+    } catch (errorObject) {
+      setSalesFieldDetails(null);
+      setSalesFieldDetailsError(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not load sales-field detail rows.",
+      );
+    } finally {
+      setSalesFieldDetailsLoading(false);
     }
   }
 
   async function onExport() {
-    const token = readStoredToken()
-    if (!token) return
-    const datasetCode = activeTab === "sales-field" ? "sales_field" : "hr_headcount"
-    setExporting(true)
+    const token = readStoredToken();
+    if (!token) return;
+    const datasetCode =
+      activeTab === "sales-field" ? "sales_field" : "hr_headcount";
+    setExporting(true);
     try {
       await exportAnalyticsReport(token, {
         dataset_code: datasetCode,
@@ -753,65 +2849,84 @@ export function InsightsOperationsView({
         ...(dateTo ? { date_to: dateTo } : {}),
         output_format: "CSV",
         idempotency_key: `insights-${activeTab}-${Date.now()}`,
-      })
-      toast.success("Analytics export queued.")
+      });
+      toast.success("Analytics export queued.");
     } catch (errorObject) {
-      toast.error(errorObject instanceof Error ? errorObject.message : "Could not export this dashboard.")
+      toast.error(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not export this dashboard.",
+      );
     } finally {
-      setExporting(false)
+      setExporting(false);
     }
   }
 
-  const employeeColumns = React.useMemo<Column<AdminRecord>[]>(() => [
-    { key: "employee", label: "Employee", render: (row) => readinessPersonName(row) },
-    {
-      key: "shift",
-      label: "Has a shift",
-      render: (row) => (parseReadinessChecks(row).hasShift ? "Yes" : "Not yet"),
-    },
-    {
-      key: "clockin",
-      label: "How they clock in",
-      render: (row) => {
-        const checks = parseReadinessChecks(row)
-        const methods = [
-          checks.hasFingerprint ? "Fingerprint" : null,
-          checks.hasCardOrPin ? "Card or PIN" : null,
-        ].filter(Boolean)
-        return methods.length > 0 ? methods.join(", ") : "Not set up"
+  const employeeColumns = React.useMemo<Column<AdminRecord>[]>(
+    () => [
+      {
+        key: "employee",
+        label: "Employee",
+        render: (row) => readinessPersonName(row),
       },
-    },
-    {
-      key: "status",
-      label: "Can clock in",
-      render: (row) => (isEmployeeReady(row) ? "Ready" : "Not ready"),
-    },
-  ], [])
-
-  const eventColumns = React.useMemo<Column<AdminRecord>[]>(() => [
-    {
-      key: "what",
-      label: "What they tried",
-      render: (row) => describeSecurityEvent(row, actorNames).what,
-    },
-    {
-      key: "who",
-      label: "Who",
-      render: (row) => describeSecurityEvent(row, actorNames).who,
-    },
-    {
-      key: "when",
-      label: "When",
-      render: (row) => {
-        const when = formatDateTime(
-          row.occurred_at ?? row.occurredAt ?? row.createdAt ?? row.created_at ?? row.timestamp,
-        )
-        return when === "—" ? "Time not recorded" : when
+      {
+        key: "shift",
+        label: "Has a shift",
+        render: (row) =>
+          parseReadinessChecks(row).hasShift ? "Yes" : "Not yet",
       },
-    },
-  ], [actorNames])
+      {
+        key: "clockin",
+        label: "How they clock in",
+        render: (row) => {
+          const checks = parseReadinessChecks(row);
+          const methods = [
+            checks.hasFingerprint ? "Fingerprint" : null,
+            checks.hasCardOrPin ? "Card or PIN" : null,
+          ].filter(Boolean);
+          return methods.length > 0 ? methods.join(", ") : "Not set up";
+        },
+      },
+      {
+        key: "status",
+        label: "Can clock in",
+        render: (row) => (isEmployeeReady(row) ? "Ready" : "Not ready"),
+      },
+    ],
+    [],
+  );
 
-  if (!canAccess) return null
+  const eventColumns = React.useMemo<Column<AdminRecord>[]>(
+    () => [
+      {
+        key: "what",
+        label: "What they tried",
+        render: (row) => describeSecurityEvent(row, actorNames).what,
+      },
+      {
+        key: "who",
+        label: "Who",
+        render: (row) => describeSecurityEvent(row, actorNames).who,
+      },
+      {
+        key: "when",
+        label: "When",
+        render: (row) => {
+          const when = formatDateTime(
+            row.occurred_at ??
+              row.occurredAt ??
+              row.createdAt ??
+              row.created_at ??
+              row.timestamp,
+          );
+          return when === "—" ? "Time not recorded" : when;
+        },
+      },
+    ],
+    [actorNames],
+  );
+
+  if (!canAccess) return null;
 
   return (
     <motion.section
@@ -875,32 +2990,274 @@ export function InsightsOperationsView({
               </div>
             ) : null}
             {activeTab !== "readiness" && activeTab !== "manager" ? (
-              <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void onExport()} disabled={exporting}>
-                {exporting ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null}
+              <div className="relative w-full space-y-1 sm:w-64">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                  {canLookupEmployees ? "Find employee" : "Employee ID"}
+                </span>
+                <Input
+                  type={canLookupEmployees ? "text" : "number"}
+                  min={canLookupEmployees ? undefined : 1}
+                  step={canLookupEmployees ? undefined : 1}
+                  inputMode={canLookupEmployees ? "search" : "numeric"}
+                  value={
+                    canLookupEmployees ? employeeLookupQuery : employeeIdDraft
+                  }
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    if (canLookupEmployees) {
+                      setEmployeeLookupQuery(value);
+                      setEmployeeIdDraft("");
+                    } else {
+                      setEmployeeIdDraft(value);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      if (employeeIdDraft) {
+                        setEmployeeIdFilter(employeeIdDraft);
+                      }
+                    }
+                  }}
+                  placeholder={
+                    canLookupEmployees
+                      ? "Name or employee number"
+                      : "All in your scope"
+                  }
+                  aria-label={
+                    canLookupEmployees
+                      ? "Search employees within your access scope"
+                      : "Filter dashboard by employee ID"
+                  }
+                  aria-autocomplete={canLookupEmployees ? "list" : undefined}
+                  aria-expanded={
+                    canLookupEmployees && employeeLookupResults.length > 0
+                  }
+                  className="h-10 bg-white/95 text-foreground"
+                />
+                <span className="block text-[10px] text-white/70">
+                  {employeeIdFilter
+                    ? `Filtered to employee ID ${employeeIdFilter}.`
+                    : "Search is access-scoped; the dashboard also enforces scope."}
+                </span>
+                {canLookupEmployees && employeeLookupLoading ? (
+                  <span
+                    className="block text-[10px] text-white/75"
+                    role="status"
+                  >
+                    Searching employees…
+                  </span>
+                ) : null}
+                {canLookupEmployees && employeeLookupResults.length > 0 ? (
+                  <ul
+                    className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+                    role="listbox"
+                    aria-label="Employee search results"
+                  >
+                    {employeeLookupResults.map((employee) => {
+                      const id = readNumber(employee, [
+                        "id",
+                        "employee_id",
+                        "employeeId",
+                      ]);
+                      if (id === null) return null;
+                      const name =
+                        readString(employee, [
+                          "full_name",
+                          "fullName",
+                          "employee_name",
+                          "employeeName",
+                          "name",
+                        ]) ||
+                        [
+                          readString(employee, ["first_name", "firstName"]),
+                          readString(employee, ["middle_name", "middleName"]),
+                          readString(employee, ["last_name", "lastName"]),
+                        ]
+                          .filter(Boolean)
+                          .join(" ") ||
+                        `Employee #${id}`;
+                      const number = readString(employee, [
+                        "employee_no",
+                        "employeeNumber",
+                      ]);
+                      return (
+                        <li key={id} role="option" aria-selected="false">
+                          <button
+                            type="button"
+                            className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                            onClick={() => {
+                              setEmployeeIdDraft(String(id));
+                              setEmployeeLookupQuery(
+                                `${name}${number ? ` (${number})` : ""}`,
+                              );
+                              setEmployeeLookupResults([]);
+                            }}
+                          >
+                            <span className="block font-medium">{name}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {number || `Employee ID ${id}`}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+                {canLookupEmployees &&
+                employeeLookupQuery.trim() &&
+                !employeeLookupLoading &&
+                employeeLookupResults.length === 0 &&
+                !employeeIdDraft ? (
+                  <span className="block text-xs text-white/75" role="status">
+                    No accessible employees matched that search.
+                  </span>
+                ) : null}
+                <span className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    className={`${heroGhostButtonClass} h-8 px-2 text-xs`}
+                    onClick={() => setEmployeeIdFilter(employeeIdDraft)}
+                    disabled={!employeeIdDraft}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className={`${heroGhostButtonClass} h-8 px-2 text-xs`}
+                    disabled={
+                      !employeeIdFilter &&
+                      !employeeIdDraft &&
+                      !employeeLookupQuery
+                    }
+                    onClick={() => {
+                      setEmployeeIdDraft("");
+                      setEmployeeLookupQuery("");
+                      setEmployeeLookupResults([]);
+                      setEmployeeIdFilter("");
+                    }}
+                  >
+                    Clear
+                  </button>
+                </span>
+              </div>
+            ) : null}
+            {activeTab !== "readiness" && activeTab !== "manager" ? (
+              <button
+                type="button"
+                className={`${heroGhostButtonClass} h-10`}
+                onClick={() => void onExport()}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <FluentLoadingIndicator className="size-4 animate-spin" />
+                ) : null}
                 Export CSV
               </button>
             ) : null}
-            <button type="button" className={`${heroGhostButtonClass} h-10`} onClick={() => void load()} disabled={loading}>
-              {loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <RefreshCwIcon className="size-4" />}
+            <button
+              type="button"
+              className={`${heroGhostButtonClass} h-10`}
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              {loading ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : (
+                <RefreshCwIcon className="size-4" />
+              )}
               Refresh
             </button>
           </div>
         }
       />
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
+      {generatedAtDate && Number.isFinite(generatedAtDate.getTime()) ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          Dashboard generated {generatedAtDate.toLocaleString()}
+          {dashboardTimezone !== "-"
+            ? ` · Date boundaries: ${dashboardTimezone}`
+            : ""}
+        </p>
+      ) : null}
 
       {activeTab !== "readiness" ? (
         <>
+          {loading && !dashboard ? (
+            <div
+              className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground"
+              role="status"
+            >
+              <FluentLoadingIndicator className="mr-2 inline-flex size-4 animate-spin" />
+              Loading dashboard data…
+            </div>
+          ) : null}
+          {!loading && !error && !dashboard ? (
+            <div
+              className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground"
+              role="status"
+            >
+              No dashboard data is available for this view.
+            </div>
+          ) : null}
           {activeTab === "manager" ? (
             <ManagerDashboardPanels dashboard={dashboard} />
           ) : (
             <>
-              {activeTab === "management" ? <ScopedInsightPanels dashboard={dashboard} /> : null}
-              <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
-                {metrics.length > 0 ? metrics.map((item) => (
-                  <MetricTile key={item.label} label={item.label} value={item.value} />
-                )) : (
-                  <MetricTile label="Records" value={dashboard ? "Loaded" : "—"} hint="No numeric tiles in this payload." />
+              <DashboardMetricPanels
+                dashboard={dashboard}
+                activeTab={activeTab}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                employeeIdFilter={employeeIdFilter}
+                onLoadSalesFieldDetails={loadSalesFieldDetails}
+                onCloseSalesFieldDetails={() => {
+                  setSalesFieldDetailMetric(null);
+                  setSalesFieldDetails(null);
+                  setSalesFieldDetailCurrency("");
+                }}
+                salesFieldDetailMetric={salesFieldDetailMetric}
+                salesFieldDetails={salesFieldDetails}
+                salesFieldDetailsLoading={salesFieldDetailsLoading}
+                salesFieldDetailsError={salesFieldDetailsError}
+                salesFieldDetailsPage={salesFieldDetailsPage}
+                salesFieldDetailCurrency={salesFieldDetailCurrency}
+                canManageDocumentRequirements={canPerformPermission(
+                  actor.permissionLabels,
+                  "employees:update",
+                )}
+                onRefreshDashboard={() => {
+                  void load();
+                }}
+              />
+              {activeTab === "management" ? (
+                <>
+                  <ScopedInsightPanels dashboard={dashboard} />
+                  <PublishedPerformanceAggregatePanels dashboard={dashboard} />
+                </>
+              ) : null}
+              <motion.div
+                className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                variants={motionPreset.fast}
+              >
+                {metrics.length > 0 ? (
+                  metrics.map((item) => (
+                    <MetricTile
+                      key={item.label}
+                      label={item.label}
+                      value={item.value}
+                    />
+                  ))
+                ) : (
+                  <MetricTile
+                    label="Records"
+                    value={dashboard ? "Loaded" : "—"}
+                    hint="No numeric tiles in this payload."
+                  />
                 )}
               </motion.div>
             </>
@@ -908,12 +3265,21 @@ export function InsightsOperationsView({
         </>
       ) : (
         <>
-          <motion.div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" variants={motionPreset.fast}>
+          <motion.div
+            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            variants={motionPreset.fast}
+          >
             <MetricTile
               label="System"
               value={
                 <span className="text-primary">
-                  {friendlyStatus(readString(health, ["status", "state"], health ? "OK" : "—"))}
+                  {friendlyStatus(
+                    readString(
+                      health,
+                      ["status", "state"],
+                      health ? "OK" : "—",
+                    ),
+                  )}
                 </span>
               }
             />
@@ -921,7 +3287,9 @@ export function InsightsOperationsView({
               label="Online"
               value={
                 <span className="text-primary">
-                  {friendlyStatus(readString(live, ["status", "state"], live ? "OK" : "—"))}
+                  {friendlyStatus(
+                    readString(live, ["status", "state"], live ? "OK" : "—"),
+                  )}
                 </span>
               }
             />
@@ -929,7 +3297,9 @@ export function InsightsOperationsView({
               label="Ready to use"
               value={
                 <span className="text-primary">
-                  {friendlyStatus(readString(ready, ["status", "state"], ready ? "OK" : "—"))}
+                  {friendlyStatus(
+                    readString(ready, ["status", "state"], ready ? "OK" : "—"),
+                  )}
                 </span>
               }
             />
@@ -937,7 +3307,11 @@ export function InsightsOperationsView({
               label="Issues to fix"
               value={
                 <span className="text-primary">
-                  {readNumber(readiness, ["blockerCount", "blocker_count", "blockers"]) ?? blockers.length}
+                  {readNumber(readiness, [
+                    "blockerCount",
+                    "blocker_count",
+                    "blockers",
+                  ]) ?? blockers.length}
                 </span>
               }
             />
@@ -969,11 +3343,14 @@ export function InsightsOperationsView({
             <div className="rounded-xl border border-border bg-card p-4">
               <h2 className="text-sm font-semibold">Preview a work schedule</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Choose a person and dates to see planned start and end times. This does not clock them in.
+                Choose a person and dates to see planned start and end times.
+                This does not clock them in.
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <label className="space-y-1 sm:col-span-2">
-                  <span className="text-xs font-medium text-muted-foreground">Employee</span>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Employee
+                  </span>
                   <FluentSelect
                     ariaLabel="Employee"
                     className="w-full"
@@ -983,20 +3360,38 @@ export function InsightsOperationsView({
                     options={[
                       { value: "", label: "Select an employee" },
                       ...employees.flatMap((row) => {
-                        const id = readNumber(row, ["id", "employee_id", "employeeId"])
-                        if (id === null) return []
-                        return [{ value: String(id), label: employeeLabel(row) }]
+                        const id = readNumber(row, [
+                          "id",
+                          "employee_id",
+                          "employeeId",
+                        ]);
+                        if (id === null) return [];
+                        return [
+                          { value: String(id), label: employeeLabel(row) },
+                        ];
                       }),
                     ]}
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">From</span>
-                  <DatePickerPresets value={dateFrom} onChange={setDateFrom} placeholder="Start date" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    From
+                  </span>
+                  <DatePickerPresets
+                    value={dateFrom}
+                    onChange={setDateFrom}
+                    placeholder="Start date"
+                  />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">To</span>
-                  <DatePickerPresets value={dateTo} onChange={setDateTo} placeholder="End date" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    To
+                  </span>
+                  <DatePickerPresets
+                    value={dateTo}
+                    onChange={setDateTo}
+                    placeholder="End date"
+                  />
                 </label>
                 <button
                   type="button"
@@ -1016,12 +3411,20 @@ export function InsightsOperationsView({
                   variants={motionPreset.item}
                   className="border-l-2 border-amber-400 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"
                 >
-                  {readString(item, ["message", "title", "code"], optionLabel(item))}
+                  {readString(
+                    item,
+                    ["message", "title", "code"],
+                    optionLabel(item),
+                  )}
                 </motion.li>
               ))}
             </motion.ul>
           ) : null}
-          <SearchToggleField value={search} onChange={setSearch} placeholder="Search people or activity" />
+          <SearchToggleField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search people or activity"
+          />
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <ResizableTable
               title="Employee"
@@ -1060,14 +3463,19 @@ export function InsightsOperationsView({
           <AlertDialogHeader>
             <AlertDialogTitle>Set up clock-in</AlertDialogTitle>
             <AlertDialogDescription>
-              Give this starter set a simple label, then create it. Example: “Office clock-in”. This is not a person or a time — just a name so you can find the rules later.
+              Give this starter set a simple label, then create it. Example:
+              “Office clock-in”. This is not a person or a time — just a name so
+              you can find the rules later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
-            No clock-in rules yet. People cannot punch in until you create this set.
+            No clock-in rules yet. People cannot punch in until you create this
+            set.
           </p>
           <label className="mt-3 block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Name for these clock-in rules</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Name for these clock-in rules
+            </span>
             <input
               className={inputClass}
               value={policyName}
@@ -1077,48 +3485,97 @@ export function InsightsOperationsView({
           </label>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
-            <button type="button" className={primaryButtonClass} disabled={saving} onClick={() => void onWizard()}>
-              {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Create clock-in rules"}
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={saving}
+              onClick={() => void onWizard()}
+            >
+              {saving ? (
+                <FluentLoadingIndicator className="size-4 animate-spin" />
+              ) : (
+                "Create clock-in rules"
+              )}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={Boolean(schedulePreview)} onOpenChange={(open) => !open && setSchedulePreview(null)}>
+      <Dialog
+        open={Boolean(schedulePreview)}
+        onOpenChange={(open) => !open && setSchedulePreview(null)}
+      >
         <DialogPopup from="bottom" className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Schedule</DialogTitle>
             <DialogDescription>
-              {employees.find((row) => String(readNumber(row, ["id", "employee_id", "employeeId"])) === previewEmployeeId)
+              {employees.find(
+                (row) =>
+                  String(
+                    readNumber(row, ["id", "employee_id", "employeeId"]),
+                  ) === previewEmployeeId,
+              )
                 ? readinessPersonName(
-                    employees.find((row) => String(readNumber(row, ["id", "employee_id", "employeeId"])) === previewEmployeeId) as AdminRecord,
+                    employees.find(
+                      (row) =>
+                        String(
+                          readNumber(row, ["id", "employee_id", "employeeId"]),
+                        ) === previewEmployeeId,
+                    ) as AdminRecord,
                   )
                 : "Selected employee"}{" "}
               · {formatDate(dateFrom)} to {formatDate(dateTo)}
             </DialogDescription>
           </DialogHeader>
           {schedulePreviewDays(schedulePreview).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No scheduled days in this range.</p>
+            <p className="text-sm text-muted-foreground">
+              No scheduled days in this range.
+            </p>
           ) : (
             <ul className="max-h-72 space-y-1.5 overflow-y-auto text-sm">
               {schedulePreviewDays(schedulePreview).map((day, index) => {
-                const dateLabel = formatDate(day.date ?? day.work_date ?? day.workDate ?? day.day)
-                const shift =
-                  readString(day, ["shift_name", "shiftName", "shift", "status", "kind", "type"], "")
-                const start = readString(day, ["start_time", "startTime", "in", "planned_in"], "")
-                const end = readString(day, ["end_time", "endTime", "out", "planned_out"], "")
+                const dateLabel = formatDate(
+                  day.date ?? day.work_date ?? day.workDate ?? day.day,
+                );
+                const shift = readString(
+                  day,
+                  [
+                    "shift_name",
+                    "shiftName",
+                    "shift",
+                    "status",
+                    "kind",
+                    "type",
+                  ],
+                  "",
+                );
+                const start = readString(
+                  day,
+                  ["start_time", "startTime", "in", "planned_in"],
+                  "",
+                );
+                const end = readString(
+                  day,
+                  ["end_time", "endTime", "out", "planned_out"],
+                  "",
+                );
                 const hours =
                   start && end && start !== "-" && end !== "-"
                     ? `${start} – ${end}`
                     : shift && shift !== "-"
                       ? shift
-                      : "Off"
+                      : "Off";
                 return (
-                  <li key={`${dateLabel}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5">
-                    <span>{dateLabel === "—" ? `Day ${index + 1}` : dateLabel}</span>
+                  <li
+                    key={`${dateLabel}-${index}`}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5"
+                  >
+                    <span>
+                      {dateLabel === "—" ? `Day ${index + 1}` : dateLabel}
+                    </span>
                     <span className="font-medium">{hours}</span>
                   </li>
-                )
+                );
               })}
             </ul>
           )}
@@ -1134,23 +3591,38 @@ export function InsightsOperationsView({
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={Boolean(readinessDetail)} onOpenChange={(open) => !open && setReadinessDetail(null)}>
+      <Dialog
+        open={Boolean(readinessDetail)}
+        onOpenChange={(open) => !open && setReadinessDetail(null)}
+      >
         <DialogPopup from="bottom" className="sm:max-w-md">
           {readinessDetail ? (
             <>
               <DialogHeader>
-                <DialogTitle>{readinessPersonName(readinessDetail)}</DialogTitle>
+                <DialogTitle>
+                  {readinessPersonName(readinessDetail)}
+                </DialogTitle>
                 <DialogDescription>
                   {isEmployeeReady(readinessDetail)
                     ? "Ready to clock in."
-                    : readinessIssueText(readinessDetail) || "Not ready to clock in yet."}
+                    : readinessIssueText(readinessDetail) ||
+                      "Not ready to clock in yet."}
                 </DialogDescription>
               </DialogHeader>
               <ul className="space-y-1.5 text-sm">
                 {readinessCheckItems(readinessDetail).map((item) => (
-                  <li key={item.key} className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5">
+                  <li
+                    key={item.key}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-2.5 py-1.5"
+                  >
                     <span>{item.label}</span>
-                    <span className={item.done ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
+                    <span
+                      className={
+                        item.done
+                          ? "font-medium text-emerald-700"
+                          : "font-medium text-amber-700"
+                      }
+                    >
                       {item.done ? "Done" : "Missing"}
                     </span>
                   </li>
@@ -1170,31 +3642,50 @@ export function InsightsOperationsView({
         </DialogPopup>
       </Dialog>
 
-      <Dialog open={Boolean(eventDetail)} onOpenChange={(open) => !open && setEventDetail(null)}>
+      <Dialog
+        open={Boolean(eventDetail)}
+        onOpenChange={(open) => !open && setEventDetail(null)}
+      >
         <DialogPopup from="bottom" className="sm:max-w-md">
           {eventDetail ? (
             <>
               <DialogHeader>
                 <DialogTitle>Access was blocked</DialogTitle>
                 <DialogDescription>
-                  {describeSecurityEvent(eventDetail, actorNames).who} was stopped from opening something they cannot use.
+                  {describeSecurityEvent(eventDetail, actorNames).who} was
+                  stopped from opening something they cannot use.
                 </DialogDescription>
               </DialogHeader>
               <dl className="grid gap-2 text-sm">
                 <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">What they tried</dt>
-                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNames).what}</dd>
-                </div>
-                <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Why</dt>
-                  <dd className="mt-0.5 font-medium">{describeSecurityEvent(eventDetail, actorNames).why}</dd>
-                </div>
-                <div className="rounded-md border border-border/60 px-2.5 py-2">
-                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">When</dt>
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    What they tried
+                  </dt>
                   <dd className="mt-0.5 font-medium">
-                    {formatDateTime(describeSecurityEvent(eventDetail, actorNames).whenRaw) === "—"
+                    {describeSecurityEvent(eventDetail, actorNames).what}
+                  </dd>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Why
+                  </dt>
+                  <dd className="mt-0.5 font-medium">
+                    {describeSecurityEvent(eventDetail, actorNames).why}
+                  </dd>
+                </div>
+                <div className="rounded-md border border-border/60 px-2.5 py-2">
+                  <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    When
+                  </dt>
+                  <dd className="mt-0.5 font-medium">
+                    {formatDateTime(
+                      describeSecurityEvent(eventDetail, actorNames).whenRaw,
+                    ) === "—"
                       ? "Time not recorded"
-                      : formatDateTime(describeSecurityEvent(eventDetail, actorNames).whenRaw)}
+                      : formatDateTime(
+                          describeSecurityEvent(eventDetail, actorNames)
+                            .whenRaw,
+                        )}
                   </dd>
                 </div>
               </dl>
@@ -1212,5 +3703,5 @@ export function InsightsOperationsView({
         </DialogPopup>
       </Dialog>
     </motion.section>
-  )
+  );
 }

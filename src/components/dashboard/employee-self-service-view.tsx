@@ -7,6 +7,10 @@ import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-pr
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
   Badge as FluentBadge,
   Button as FluentButton,
   Card as FluentCard,
@@ -24,6 +28,7 @@ import {
   Textarea as FluentTextarea,
   makeStyles,
   Persona,
+  ProgressBar,
   Tab,
   TabList,
   Table as FluentTable,
@@ -35,6 +40,15 @@ import {
   Text as FluentText,
 } from "@fluentui/react-components"
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
+import {
   Briefcase20Color,
   Building20Color,
   CalendarClock20Color,
@@ -44,7 +58,6 @@ import {
   CalendarLtrRegular as PayrollCalendarIcon,
   DocumentRegular as PayrollDocumentIcon,
   EyeRegular as PayrollDetailsIcon,
-  MoneyRegular as PayrollMoneyIcon,
   WalletRegular as PayrollWalletIcon,
   Camera20Color,
   ContactCard20Color,
@@ -54,7 +67,6 @@ import {
   PeopleAdd20Regular,
   PeopleTeam20Color,
   Person20Color,
-  PersonKey20Color,
   ArrowSync20Regular,
   DocumentPdf20Regular,
   Eye20Regular,
@@ -95,7 +107,10 @@ import {
   listLeavePolicies,
   listMyLeaveRequests,
   listLeaveTypes,
-  createMyProfileUpdateRequest,
+  createMyProfileChangeRequest,
+  getMyProfileChangeRequest,
+  submitMyProfileChangeRequest,
+  cancelMyProfileChangeRequest,
   getMyProfileUpdateRequest,
   listMyProfileUpdateRequests,
   listMyTeamAttendance,
@@ -138,7 +153,6 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
-import { OvertimeRequestsPanel } from "@/components/dashboard/overtime-requests-panel"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -3158,8 +3172,8 @@ function ProfileUpdatesTab({
 }: {
   profileUpdateRequests: AdminRecord[]
   openSectionEditor: (key: string, title: string, fields: EditableUserField[]) => void
-  onSubmitRequest: (id: number | string) => Promise<void>
-  onCancelRequest: (id: number | string) => Promise<void>
+  onSubmitRequest: (id: number | string, requestType?: string) => Promise<void>
+  onCancelRequest: (id: number | string, requestType?: string) => Promise<void>
   loading: boolean
 }) {
   const statusCounts = React.useMemo(() => {
@@ -3207,14 +3221,6 @@ function ProfileUpdatesTab({
       fields: ["profile_photo_url"] as EditableUserField[],
       label: "Profile Picture",
       icon: Camera20Color,
-    },
-    {
-      key: "password",
-      title: "Password",
-      description: "Update sign-in password",
-      fields: ["password"] as EditableUserField[],
-      label: "Password",
-      icon: PersonKey20Color,
     },
   ]
 
@@ -3403,7 +3409,7 @@ function ProfileUpdatesTab({
                             size="sm"
                             className="h-7 bg-primary px-2 text-[10px] font-semibold uppercase tracking-wide !text-white"
                             disabled={loading}
-                            onClick={() => void onSubmitRequest(requestId)}
+                            onClick={() => void onSubmitRequest(requestId, readString(row, ["request_type"], ""))}
                           >
                             Submit
                           </Button>
@@ -3415,7 +3421,7 @@ function ProfileUpdatesTab({
                             variant="outline"
                             className="h-7 border-rose-300 px-2 text-[10px] font-semibold uppercase tracking-wide text-rose-700 hover:bg-rose-50 hover:text-rose-700"
                             disabled={loading}
-                            onClick={() => void onCancelRequest(requestId)}
+                            onClick={() => void onCancelRequest(requestId, readString(row, ["request_type"], ""))}
                           >
                             Cancel
                           </Button>
@@ -3828,14 +3834,6 @@ function ProfileSummaryTab({
           <ProfileSummaryFieldRow label="Phone" value={phone} />
           <ProfileSummaryFieldRow label="Employee ID" value={empId} />
           <FluentCardFooter className="mt-2 flex flex-wrap items-center gap-1 !px-0 !py-0">
-            <FluentButton
-              type="button"
-              appearance="subtle"
-              size="small"
-              onClick={() => openSectionEditor("password", "Password", ["password"])}
-            >
-              Change Password
-            </FluentButton>
             <FluentButton
               type="button"
               appearance="subtle"
@@ -4262,11 +4260,15 @@ export function EmployeeSelfServiceProfileView() {
         continue
       }
       if (nextValue === baseEditorValues[field].trim()) continue
-      const apiField = field === "phone" ? "phone_number" : field
-      requestedChanges[apiField] = nextValue
+      requestedChanges[field] = nextValue
     }
     if (!Object.keys(requestedChanges).length) {
       setSectionError("Nothing to update for this section.")
+      setSectionErrorLines([])
+      return
+    }
+    if ("password" in requestedChanges) {
+      setSectionError("Password changes must use the account password-change flow, not an HR profile-change request.")
       setSectionErrorLines([])
       return
     }
@@ -4274,37 +4276,43 @@ export function EmployeeSelfServiceProfileView() {
     setSectionError(null)
     setSectionErrorLines([])
     try {
-      const requestPayload: AdminRecord = {
-        requested_changes: requestedChanges,
-        reason: `Requested changes to ${sectionEditor.title.toLowerCase()}.`,
+      const groups: Array<{ request_type: string; changes: AdminRecord }> = []
+      const fieldGroups: Array<[string, string[]]> = [
+        ["PERSONAL_INFORMATION", ["first_name", "last_name"]],
+        ["CONTACT_INFORMATION", ["email", "phone"]],
+        ["ADDRESS_INFORMATION", ["city"]],
+      ]
+      for (const [request_type, fields] of fieldGroups) {
+        const changes = Object.fromEntries(
+          fields
+            .filter((field) => field in requestedChanges)
+            .map((field) => [field, requestedChanges[field]]),
+        )
+        if (Object.keys(changes).length) groups.push({ request_type, changes })
       }
+      if (!groups.length) throw new Error("No supported personal profile changes were selected.")
 
-      const createdRequest = asRecord(await createMyProfileUpdateRequest(token, requestPayload))
-      const requestId = readProfileUpdateRequestId(createdRequest)
-      if (requestId !== null) {
-        try {
-          const submittedRequest = await submitMyProfileUpdateRequest(token, requestId)
-          void notifySubmittedRequestApprovers({
-            kind: "profile_update_request",
-            token,
-            request: submittedRequest ?? createdRequest,
-            loadRequest: () => getMyProfileUpdateRequest(token, requestId),
-          })
-          setMessage(`${sectionEditor.title} update submitted for HR approval.`)
-        } catch (errorObject) {
-          const status =
-            typeof errorObject === "object" && errorObject !== null && "status" in errorObject
-              ? Number((errorObject as { status?: number }).status)
-              : null
-          if (status === 404) {
-            setMessage(`${sectionEditor.title} update saved as a draft. Submit it from Update Requests.`)
-          } else {
-            throw errorObject
-          }
-        }
-      } else {
-        setMessage(`${sectionEditor.title} update saved as a draft.`)
+      // Create all typed drafts before submitting any. If draft creation fails,
+      // any created drafts remain editable and visible in request history.
+      const drafts: AdminRecord[] = []
+      for (const group of groups) {
+        drafts.push(asRecord(await createMyProfileChangeRequest(token, {
+          ...group,
+          reason: `Requested changes to ${sectionEditor.title.toLowerCase()}.`,
+        })) ?? {})
       }
+      for (const draft of drafts) {
+        const requestId = readProfileUpdateRequestId(draft)
+        if (requestId === null) throw new Error("The profile change draft did not return a request ID.")
+        const submittedRequest = asRecord(await submitMyProfileChangeRequest(token, requestId))
+        void notifySubmittedRequestApprovers({
+          kind: "profile_update_request",
+          token,
+          request: submittedRequest,
+          loadRequest: () => getMyProfileChangeRequest(token, requestId),
+        })
+      }
+      setMessage(`${sectionEditor.title} update submitted for HR approval.`)
       setSectionEditor(null)
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, {
         page: 1,
@@ -4343,7 +4351,7 @@ export function EmployeeSelfServiceProfileView() {
     openSectionEditor("profile-photo", "Profile Picture", ["profile_photo_url"])
   }, [activeTab, editTarget, openSectionEditor, sectionEditor])
 
-  const handleSubmitProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+  const handleSubmitProfileUpdateRequest = React.useCallback(async (id: number | string, requestType = "") => {
     if (!token) {
       setMessage("Session expired. Please sign in again.")
       return
@@ -4352,12 +4360,17 @@ export function EmployeeSelfServiceProfileView() {
     setSectionSaving(true)
     setMessage(null)
     try {
-      const request = await submitMyProfileUpdateRequest(token, id)
+      const canonical = Boolean(requestType)
+      const request = canonical
+        ? await submitMyProfileChangeRequest(token, id)
+        : await submitMyProfileUpdateRequest(token, id)
       void notifySubmittedRequestApprovers({
         kind: "profile_update_request",
         token,
         request: asRecord(request) ?? {},
-        loadRequest: () => getMyProfileUpdateRequest(token, id),
+        loadRequest: () => canonical
+          ? getMyProfileChangeRequest(token, id)
+          : getMyProfileUpdateRequest(token, id),
       })
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
       setProfileUpdateRequests(profileUpdatesResult.rows)
@@ -4370,7 +4383,7 @@ export function EmployeeSelfServiceProfileView() {
     }
   }, [token])
 
-  const handleCancelProfileUpdateRequest = React.useCallback(async (id: number | string) => {
+  const handleCancelProfileUpdateRequest = React.useCallback(async (id: number | string, requestType = "") => {
     if (!token) {
       setMessage("Session expired. Please sign in again.")
       return
@@ -4379,7 +4392,8 @@ export function EmployeeSelfServiceProfileView() {
     setSectionSaving(true)
     setMessage(null)
     try {
-      await cancelMyProfileUpdateRequest(token, id)
+      if (requestType) await cancelMyProfileChangeRequest(token, id)
+      else await cancelMyProfileUpdateRequest(token, id)
       const profileUpdatesResult = await listMyProfileUpdateRequests(token, { page: 1, limit: 20 })
       setProfileUpdateRequests(profileUpdatesResult.rows)
       setMessage("Profile update request cancelled.")
@@ -5228,7 +5242,6 @@ export function EmployeePromotionView() {
 }
 
 export function EmployeePayrollView() {
-  type PayrollSummaryTab = "year" | "payment" | "salary" | "documents"
   const { loading, error, token, employee } = useSelfEmployeeData()
   const [payslipsLoading, setPayslipsLoading] = React.useState(false)
   const [payslipsError, setPayslipsError] = React.useState<string | null>(null)
@@ -5239,7 +5252,8 @@ export function EmployeePayrollView() {
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [selectedPayslip, setSelectedPayslip] = React.useState<AdminRecord | null>(null)
   const [downloadingId, setDownloadingId] = React.useState<number | null>(null)
-  const [summaryTab, setSummaryTab] = React.useState<PayrollSummaryTab>("year")
+  const [historyPage, setHistoryPage] = React.useState(1)
+  const historyPageSize = 5
 
   const loadPayslips = React.useCallback(async () => {
     if (!token) {
@@ -5324,16 +5338,6 @@ export function EmployeePayrollView() {
     }
   }, [token])
 
-  const payslipSummary = React.useMemo(() => {
-    const latest = payslips[0] ?? null
-    const currency = readPayslipCurrency(latest)
-    return {
-      total: payslips.length,
-      latestNet: latest ? formatPayslipMoney(latest.net_pay ?? latest.netPay, currency) : "—",
-      latestGross: latest ? formatPayslipMoney(latest.gross_pay ?? latest.grossPay, currency) : "—",
-    }
-  }, [payslips])
-
   const employeeName = readString(employee, ["full_name", "name", "first_name"], "You")
   const selectedCurrency = readPayslipCurrency(selectedPayslip)
   const earningsRows = readPayslipLineItems(selectedPayslip, ["earnings", "earning_lines", "earningLines"])
@@ -5342,7 +5346,6 @@ export function EmployeePayrollView() {
   const taxSummaryRows = asRecordArray(payrollSummaryDetails?.tax_summary)
   const pensionSummaryRows = asRecordArray(payrollSummaryDetails?.pension_summary)
   const salaryHistoryRows = asRecordArray(payrollSummaryDetails?.salary_history)
-  const payrollDocuments = asRecordArray(payrollSummaryDetails?.payroll_documents)
   const bankDetails = asRecord(payrollSummaryDetails?.bank_details)
   const summaryCurrency =
     readString(salaryHistoryRows[0] ?? null, ["currency"], "") ||
@@ -5367,13 +5370,42 @@ export function EmployeePayrollView() {
       ? "warning"
       : "informative"
 
+  const latestCurrency = readPayslipCurrency(latestPayslip)
+  const latestGross = readNumberish(latestPayslip?.gross_pay ?? latestPayslip?.grossPay) ?? 0
+  const latestNet = readNumberish(latestPayslip?.net_pay ?? latestPayslip?.netPay) ?? 0
+  const latestTax = readNumberish(latestPayslip?.tax_amount ?? latestPayslip?.taxAmount) ?? 0
+  const latestDeductions = readNumberish(
+    latestPayslip?.total_deductions ?? latestPayslip?.totalDeductions,
+  ) ?? Math.max(0, latestGross - latestNet)
+  const otherDeductions = Math.max(0, latestDeductions - latestTax)
+  const ytdGross = readNumberish(ytdSummary?.gross_pay) ?? 0
+  const ytdNet = readNumberish(ytdSummary?.net_pay) ?? 0
+  const ytdDeductions = readNumberish(ytdSummary?.deductions) ?? 0
+  const ytdMaximum = Math.max(ytdGross, ytdNet + ytdDeductions, 1)
+  const historyPageCount = Math.max(1, Math.ceil(payslips.length / historyPageSize))
+  const visiblePayslips = payslips.slice(
+    (historyPage - 1) * historyPageSize,
+    historyPage * historyPageSize,
+  )
+  const trendData = [...payslips].reverse().slice(-8).map((payslip) => ({
+    period: readPayslipPeriodLabel(payslip),
+    gross: readNumberish(payslip.gross_pay ?? payslip.grossPay) ?? 0,
+    net: readNumberish(payslip.net_pay ?? payslip.netPay) ?? 0,
+  }))
+
+  React.useEffect(() => {
+    setHistoryPage((page) => Math.min(page, historyPageCount))
+  }, [historyPageCount])
+
   return (
-    <section className="space-y-6 pb-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <section className="space-y-5 pb-8">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">My finance</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">My payroll</h1>
-          <p className="mt-1 text-sm text-muted-foreground">View your payslips, yearly pay summary, and payment details.</p>
+          <p className="text-sm font-medium text-muted-foreground">My payroll</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Welcome back, {employeeName}!</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Current pay period: {latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Not published yet"}
+          </p>
         </div>
         <FluentButton
           appearance="subtle"
@@ -5392,123 +5424,65 @@ export function EmployeePayrollView() {
         </div>
       ) : null}
 
-      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-5 border-b border-border px-5 py-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest payslip</p>
-            {latestPayslip ? (
-              <>
-                <h2 className="mt-1 text-lg font-semibold text-foreground">{readPayslipPeriodLabel(latestPayslip)}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span>{readString(latestPayslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${latestPayslipId ?? "—"}`)}</span>
-                  <span aria-hidden="true">·</span>
-                  <FluentBadge appearance="tint" color={latestBadgeColor}>{latestStatus ? formatMovementLabel(latestStatus) : "Available"}</FluentBadge>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 className="mt-1 text-lg font-semibold text-foreground">No payslip available</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Published payslips will appear here.</p>
-              </>
-            )}
-          </div>
-          {latestPayslip ? (
-            <div className="flex flex-wrap gap-2">
-              <FluentButton appearance="secondary" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(latestPayslip)}>
-                Details
-              </FluentButton>
-              <FluentButton
-                appearance="primary"
-                icon={downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />}
-                disabled={downloadingId === latestPayslipId}
-                onClick={() => void handleDownloadPayslip(latestPayslip)}
-              >
-                Download payslip
-              </FluentButton>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,1fr)]">
+        <div className="space-y-5">
+          <FluentCard className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.045] shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4 p-6">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Net take-home pay</p>
+                <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums text-foreground">{latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—"}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Your latest published pay will appear here."}</p>
+              </div>
+              <FluentBadge appearance="tint" color={latestBadgeColor}>{latestStatus ? formatMovementLabel(latestStatus) : "Not published"}</FluentBadge>
             </div>
-          ) : null}
-        </div>
-        {latestPayslip ? (
-          <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-            <div className="px-5 py-4">
-              <p className="text-sm text-muted-foreground">Net pay</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
-                {formatPayslipMoney(latestPayslip.net_pay ?? latestPayslip.netPay, readPayslipCurrency(latestPayslip))}
-              </p>
+            <div className="grid border-t border-border/80 sm:grid-cols-2 sm:divide-x sm:divide-border/80">
+              <div className="px-6 py-4"><p className="text-xs text-muted-foreground">Gross earnings</p><p className="mt-1 font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestGross, latestCurrency) : "—"}</p></div>
+              <div className="border-t border-border/80 px-6 py-4 sm:border-t-0"><p className="text-xs text-muted-foreground">Total deductions</p><p className="mt-1 font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestDeductions, latestCurrency) : "—"}</p></div>
             </div>
-            <div className="px-5 py-4">
-              <p className="text-sm text-muted-foreground">Gross pay</p>
-              <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
-                {formatPayslipMoney(latestPayslip.gross_pay ?? latestPayslip.grossPay, readPayslipCurrency(latestPayslip))}
-              </p>
-            </div>
-          </div>
-        ) : null}
-      </FluentCard>
+          </FluentCard>
 
-      {payrollSummaryDetails ? (
-        <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border px-5 pt-4">
-            <h2 className="text-base font-semibold text-foreground">Pay details</h2>
-            <p className="mt-1 pb-3 text-sm text-muted-foreground">Year-to-date totals and the account information used for payroll.</p>
-            <div className="overflow-x-auto">
-              <TabList size="small" selectedValue={summaryTab} onTabSelect={(_, data) => setSummaryTab(data.value as PayrollSummaryTab)} className="min-w-max">
-                <Tab value="year">Year to date</Tab>
-                <Tab value="payment">Payment details</Tab>
-                <Tab value="salary">Salary history</Tab>
-                <Tab value="documents">Documents</Tab>
-              </TabList>
-            </div>
-          </div>
-          <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-4">
-            {summaryTab === "year" ? (
-              <>
-                <AssignmentField label="Gross pay" value={formatPayslipMoney(ytdSummary?.gross_pay, summaryCurrency)} />
-                <AssignmentField label="Taxable pay" value={formatPayslipMoney(ytdSummary?.taxable_pay, summaryCurrency)} />
-                <AssignmentField label="Deductions" value={formatPayslipMoney(ytdSummary?.deductions, summaryCurrency)} />
-                <AssignmentField label="Net pay" value={formatPayslipMoney(ytdSummary?.net_pay, summaryCurrency)} />
-                <AssignmentField label="Tax paid" value={formatPayslipMoney(taxTotal, summaryCurrency)} />
-                <AssignmentField label="Pension contributions" value={formatPayslipMoney(pensionTotal, summaryCurrency)} />
-                <AssignmentField label="Tax records" value={String(taxSummaryRows.length)} />
-                <AssignmentField label="Pension records" value={String(pensionSummaryRows.length)} />
-              </>
-            ) : summaryTab === "payment" ? (
-              <>
-                <AssignmentField label="Bank" value={readString(bankDetails, ["bank_name"], "—")} />
-                <AssignmentField label="Branch" value={readString(bankDetails, ["bank_branch_code"], "—")} />
-                <AssignmentField label="Account" value={readString(bankDetails, ["account_number_masked"], "—")} />
-                <AssignmentField label="Verification" value={readString(bankDetails, ["verification_status"], "—")} />
-              </>
-            ) : summaryTab === "salary" ? (
-              salaryHistoryRows.length > 0 ? (
-                <div className="-mx-5 -my-5 divide-y divide-border sm:col-span-2 xl:col-span-4">
-                  {salaryHistoryRows.slice(0, 6).map((row, index) => (
-                    <div key={`salary-history-${readString(row, ["id"], String(index))}`} className="grid gap-2 px-5 py-3 text-sm sm:grid-cols-4">
-                      <span className="font-semibold text-foreground">{formatPayslipMoney(row.base_salary, readString(row, ["currency"], summaryCurrency))}</span>
-                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["pay_frequency"], "—"))}</span>
-                      <span className="text-muted-foreground">Effective {formatDate(row.effective_from)}</span>
-                      <span className="text-muted-foreground">{formatMovementLabel(readString(row, ["status"], "—"))}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-sm text-muted-foreground">No salary history is available.</p>
-            ) : (
-              <>
-                <AssignmentField label="Published payslips" value={String(payrollDocuments.length)} />
-                <AssignmentField label="Salary records" value={String(salaryHistoryRows.length)} />
-                <AssignmentField label="Latest salary" value={formatPayslipMoney(salaryHistoryRows[0]?.base_salary, readString(salaryHistoryRows[0] ?? null, ["currency"], summaryCurrency))} />
-                <AssignmentField label="Effective from" value={formatDate(salaryHistoryRows[0]?.effective_from)} />
-              </>
-            )}
-          </div>
-        </FluentCard>
-      ) : null}
+          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
+            <h2 className="text-base font-semibold">How your pay is calculated</h2>
+            <p className="mt-1 text-sm text-muted-foreground">A transparent gross-to-net breakdown for your latest payslip.</p>
+            <Accordion collapsible defaultOpenItems={["breakdown"]} className="mt-3">
+              <AccordionItem value="breakdown">
+                <AccordionHeader>Gross earnings to take-home pay</AccordionHeader>
+                <AccordionPanel>
+                  <div className="space-y-3 border-t border-border pt-3 text-sm">
+                    {[["Gross earnings", latestGross], ["Tax", -latestTax], ["Other deductions", -otherDeductions]].map(([label, value]) => (
+                      <div key={String(label)} className="flex justify-between gap-4"><span className="text-muted-foreground">{label}</span><span className="font-medium tabular-nums">{latestPayslip ? formatPayslipMoney(value, latestCurrency) : "—"}</span></div>
+                    ))}
+                    <div className="flex justify-between gap-4 border-t border-border pt-3"><span className="font-semibold">Net take-home</span><span className="font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—"}</span></div>
+                  </div>
+                </AccordionPanel>
+              </AccordionItem>
+            </Accordion>
+          </FluentCard>
 
-      <FluentCard className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
+            <h2 className="text-base font-semibold">Pay trend</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Gross and net pay across your latest published periods.</p>
+            {trendData.length > 0 ? (
+              <div className="mt-4 h-64 w-full" aria-label="Historical gross and net pay chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="period" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                    <YAxis tickLine={false} axisLine={false} width={55} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => formatPayslipMoney(value, latestCurrency)} />
+                    <Area type="monotone" dataKey="gross" stroke="var(--color-primary)" fill="var(--color-primary)" fillOpacity={0.08} strokeWidth={2} />
+                    <Area type="monotone" dataKey="net" stroke="#107c10" fill="#107c10" fillOpacity={0.08} strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : <p className="mt-6 text-sm text-muted-foreground">A trend will appear after your first payslip is published.</p>}
+          </FluentCard>
+
+          <FluentCard className="overflow-hidden rounded-2xl border border-border shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Payslip history</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{payslipSummary.total} {payslipSummary.total === 1 ? "payslip" : "payslips"} available</p>
+            <h2 className="text-base font-semibold text-foreground">Earnings history</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{payslips.length} published {payslips.length === 1 ? "payslip" : "payslips"}</p>
           </div>
           <PayrollCalendarIcon className="text-xl text-muted-foreground" />
         </div>
@@ -5523,8 +5497,11 @@ export function EmployeePayrollView() {
             <p className="mt-1 text-sm text-muted-foreground">When a payslip is published to your account, it will appear here.</p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {payslips.map((payslip) => {
+          <div className="overflow-x-auto">
+            <FluentTable className="min-w-[760px]">
+              <FluentTableHeader><FluentTableRow><FluentTableHeaderCell>Pay period</FluentTableHeaderCell><FluentTableHeaderCell>Gross</FluentTableHeaderCell><FluentTableHeaderCell>Deductions</FluentTableHeaderCell><FluentTableHeaderCell>Net pay</FluentTableHeaderCell><FluentTableHeaderCell>Status</FluentTableHeaderCell><FluentTableHeaderCell>Actions</FluentTableHeaderCell></FluentTableRow></FluentTableHeader>
+              <FluentTableBody>
+            {visiblePayslips.map((payslip) => {
               const id = readPayslipId(payslip) ?? 0
               const currency = readPayslipCurrency(payslip)
               const status = readPayslipStatus(payslip)
@@ -5532,20 +5509,13 @@ export function EmployeePayrollView() {
               const badgeColor = statusKey.includes("paid") || statusKey.includes("publish") ? "success" : statusKey.includes("pending") || statusKey.includes("process") ? "warning" : "informative"
               const isDownloading = downloadingId === id
               return (
-                <div key={id} className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-foreground">{readPayslipPeriodLabel(payslip)}</p>
-                      <FluentBadge appearance="tint" color={badgeColor}>{status ? formatMovementLabel(status) : "Available"}</FluentBadge>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}</p>
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-1.5"><PayrollCalendarIcon /> Issued {formatDate(payslip.issued_at ?? payslip.issuedAt ?? payslip.created_at ?? payslip.createdAt)}</span>
-                      <span className="inline-flex items-center gap-1.5"><PayrollMoneyIcon /> Gross {formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</span>
-                      <span className="inline-flex items-center gap-1.5"><PayrollWalletIcon /> Net {formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
+                <FluentTableRow key={id}>
+                  <FluentTableCell><div className="font-medium">{readPayslipPeriodLabel(payslip)}</div><div className="text-xs text-muted-foreground">{readString(payslip, ["payslip_number", "payslipNo", "payslip_no"], `Payslip #${id}`)}</div></FluentTableCell>
+                  <FluentTableCell>{formatPayslipMoney(payslip.gross_pay ?? payslip.grossPay, currency)}</FluentTableCell>
+                  <FluentTableCell>{formatPayslipMoney(payslip.total_deductions ?? payslip.totalDeductions ?? Math.max(0, (readNumberish(payslip.gross_pay ?? payslip.grossPay) ?? 0) - (readNumberish(payslip.net_pay ?? payslip.netPay) ?? 0)), currency)}</FluentTableCell>
+                  <FluentTableCell><span className="font-semibold">{formatPayslipMoney(payslip.net_pay ?? payslip.netPay, currency)}</span></FluentTableCell>
+                  <FluentTableCell><FluentBadge appearance="tint" color={badgeColor}>{status ? formatMovementLabel(status) : "Available"}</FluentBadge></FluentTableCell>
+                  <FluentTableCell><div className="flex items-center gap-1">
                     <FluentButton appearance="subtle" icon={<PayrollDetailsIcon />} onClick={() => void openPayslipDetail(payslip)}>Details</FluentButton>
                     <FluentButton
                       appearance="secondary"
@@ -5554,30 +5524,58 @@ export function EmployeePayrollView() {
                       disabled={isDownloading}
                       onClick={() => void handleDownloadPayslip(payslip)}
                     />
-                  </div>
-                </div>
+                  </div></FluentTableCell>
+                </FluentTableRow>
               )
             })}
+              </FluentTableBody>
+            </FluentTable>
           </div>
         )}
-      </FluentCard>
+        {payslips.length > historyPageSize ? <div className="flex items-center justify-between border-t border-border px-5 py-3"><span className="text-sm text-muted-foreground">Page {historyPage} of {historyPageCount}</span><div className="flex gap-2"><FluentButton appearance="subtle" disabled={historyPage === 1} onClick={() => setHistoryPage((page) => page - 1)}>Previous</FluentButton><FluentButton appearance="subtle" disabled={historyPage === historyPageCount} onClick={() => setHistoryPage((page) => page + 1)}>Next</FluentButton></div></div> : null}
+          </FluentCard>
+        </div>
 
-      <OvertimeRequestsPanel token={token} />
+        <aside className="space-y-5 xl:sticky xl:top-4">
+          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
+            <h2 className="text-base font-semibold">Quick actions</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Your most-used payroll tasks.</p>
+            <div className="mt-4 grid gap-2">
+              <FluentButton appearance="primary" icon={latestPayslip && downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />} disabled={!latestPayslip || downloadingId === latestPayslipId} onClick={() => latestPayslip && void handleDownloadPayslip(latestPayslip)}>Download latest payslip</FluentButton>
+              <FluentButton as="a" href="/dashboard/me/profile" appearance="secondary" icon={<PayrollWalletIcon />}>Manage bank account</FluentButton>
+              <FluentButton appearance="secondary" icon={<PayrollDocumentIcon />} disabled={!latestPayslip} onClick={() => latestPayslip && void openPayslipDetail(latestPayslip)}>View tax documents</FluentButton>
+            </div>
+            <div className="mt-5 border-t border-border pt-4 text-sm">
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Bank</span><span className="font-medium text-right">{readString(bankDetails, ["bank_name"], "Not provided")}</span></div>
+              <div className="mt-2 flex justify-between gap-3"><span className="text-muted-foreground">Account</span><span className="font-medium text-right">{readString(bankDetails, ["account_number_masked"], "—")}</span></div>
+            </div>
+          </FluentCard>
 
-      <Dialog
+          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">Year-to-date summary</h2><FluentBadge appearance="tint">{new Date().getFullYear()}</FluentBadge></div>
+            <p className="mt-1 text-sm text-muted-foreground">Published payroll totals for the current year.</p>
+            <div className="mt-5 space-y-5">
+              {[["Gross pay", ytdGross, "brand"], ["Net pay", ytdNet, "success"], ["Deductions", ytdDeductions, "warning"], ["Tax paid", taxTotal, "error"], ["Pension", pensionTotal, "brand"]].map(([label, value, color]) => (
+                <div key={String(label)}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="text-muted-foreground">{label}</span><span className="font-semibold tabular-nums">{formatPayslipMoney(value, summaryCurrency)}</span></div><ProgressBar value={Number(value) / ytdMaximum} color={color as "brand" | "success" | "warning" | "error"} /></div>
+              ))}
+            </div>
+          </FluentCard>
+        </aside>
+      </div>
+
+      <FluentDialog
         open={detailOpen}
-        onOpenChange={(open) => {
-          setDetailOpen(open)
-          if (!open) setDetailLoading(false)
+        onOpenChange={(_, data) => {
+          setDetailOpen(data.open)
+          if (!data.open) setDetailLoading(false)
         }}
       >
-        <DialogPopup className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
+        <FluentDialogSurface className="!max-w-3xl">
+          <FluentDialogBody>
+            <FluentDialogTitle>
               {selectedPayslip ? readString(selectedPayslip, ["payslip_number", "payslipNo", "payslip_no"], "Payslip details") : "Payslip details"}
-            </DialogTitle>
-            <DialogDescription>Review your pay breakdown for {selectedPayslip ? readPayslipPeriodLabel(selectedPayslip) : "this period"}.</DialogDescription>
-          </DialogHeader>
+            </FluentDialogTitle>
+            <FluentDialogContent className="space-y-4">
           {detailLoading ? (
             <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
               <FluentLoadingIndicator className="size-4 animate-spin" /> Loading payslip details…
@@ -5625,7 +5623,8 @@ export function EmployeePayrollView() {
               ) : null}
             </div>
           ) : null}
-          <DialogFooter>
+            </FluentDialogContent>
+          <FluentDialogActions>
             <FluentButton appearance="secondary" onClick={() => setDetailOpen(false)}>Close</FluentButton>
             {selectedPayslip ? (
               <FluentButton
@@ -5637,9 +5636,10 @@ export function EmployeePayrollView() {
                 Download payslip
               </FluentButton>
             ) : null}
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
+          </FluentDialogActions>
+          </FluentDialogBody>
+        </FluentDialogSurface>
+      </FluentDialog>
     </section>
   )
 }

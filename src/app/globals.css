@@ -1472,6 +1472,69 @@ main.relative.flex table:not(.fui-Table):not([role="grid"]) > tbody > tr > td {
   }
 }
 
+/* Finance hero doodles: slow ambient motion that remains comfortable and
+   automatically follows the selected system accent colors. */
+.finance-hero-drift {
+  animation: finance-hero-drift 18s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.finance-hero-orbit {
+  animation: finance-hero-orbit 22s linear infinite;
+  transform-origin: center;
+}
+
+.finance-hero-band {
+  animation: finance-hero-band 12s ease-in-out infinite alternate;
+}
+
+.finance-hero-line {
+  animation: finance-hero-line 10s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.finance-hero-dot {
+  animation: finance-hero-dot 4.5s ease-in-out infinite alternate;
+}
+
+.finance-hero-dot-delayed {
+  animation-delay: -2.25s;
+}
+
+@keyframes finance-hero-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-12px, 7px, 0) scale(1.035); }
+}
+
+@keyframes finance-hero-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes finance-hero-band {
+  from { transform: skewX(-24deg) translateX(0); }
+  to { transform: skewX(-24deg) translateX(16px); }
+}
+
+@keyframes finance-hero-line {
+  from { transform: translateY(0) rotate(32deg); }
+  to { transform: translateY(-10px) rotate(38deg); }
+}
+
+@keyframes finance-hero-dot {
+  from { transform: translateY(0) scale(0.9); opacity: 0.65; }
+  to { transform: translateY(-8px) scale(1.15); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finance-hero-drift,
+  .finance-hero-orbit,
+  .finance-hero-band,
+  .finance-hero-line,
+  .finance-hero-dot {
+    animation: none;
+  }
+}
+
 .dark .fixed.inset-0.z-50 table.min-w-full > thead.bg-slate-50 {
   background-color: rgba(48, 49, 148, 0.22) !important;
 }

@@ -122,6 +122,13 @@ export const PAYROLL_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+export const EMPLOYMENT_CONTRACT_READ_PERMISSION: PermissionRequirement = {
+  permissions: ["employment_contracts:read", "employment_contracts:manage"],
+  mode: "any",
+}
+
+export const EMPLOYMENT_CONTRACT_MANAGE_PERMISSION = "employment_contracts:manage"
+
 /**
  * HR Performance (`/dashboard/performance/*`).
  * Company dashboard actors can see the HR performance overview/setup shell; deeper
@@ -960,6 +967,10 @@ const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
     "timetable_rotation_rules:read",
     "employee_timetables:read",
     "self_service_requests:approve",
+    "access_credentials:read",
+    "access_credentials:update",
+    "employee_access_credentials:read",
+    "attendance_devices:update",
   ],
   mode: "any",
 }
@@ -998,6 +1009,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/team/overview": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/members": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/attendance": MANAGER_ROUTE_PERMISSION,
+  "/dashboard/me/team/activity-summary": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/actions": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/insights": null,
   "/dashboard/me/requests": null,
@@ -1042,7 +1054,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/inactive": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/registration": EMPLOYEE_REGISTRATION_PERMISSION,
   "/dashboard/employees/invite": "employees:create",
-  "/dashboard/employees/contracts": EMPLOYEE_DIRECTORY_MANAGE_PERMISSIONS,
+  "/dashboard/employees/contracts": EMPLOYMENT_CONTRACT_READ_PERMISSION,
+  "/dashboard/employees/salary-approvals": {
+    permissions: ["payroll:salary:approve", "payroll:profiles:read"],
+    mode: "any",
+  },
   "/dashboard/employees/offboarding": {
     permissions: ["offboarding_requests:read", "offboarding_workflows:read"],
     mode: "any",
@@ -1057,6 +1073,15 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
   "/dashboard/employees/profile-change-requests": "self_service_requests:approve",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
+  "/dashboard/attendance/biometric-access": {
+    permissions: [
+      "access_credentials:read",
+      "access_credentials:update",
+      "employee_access_credentials:read",
+      "attendance_devices:update",
+    ],
+    mode: "any",
+  },
   "/dashboard/attendance/settings": "attendance_policies:read",
   "/dashboard/attendance/policies": "attendance_policies:read",
   "/dashboard/attendance/devices": "attendance_devices:read",

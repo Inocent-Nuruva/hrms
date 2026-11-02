@@ -78,6 +78,7 @@ import {
   listManagerActivityAssignees,
   listManagerTeamAchievements,
   listMyPerformanceAchievements,
+  listMyPerformanceAggregates,
   listMyPerformanceAssignments,
   listMyPerformanceDevelopmentPlans,
   listMyPerformanceFeedback360,
@@ -175,13 +176,21 @@ function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
     const y = height - inset - (point.score / ceiling) * (height - inset * 2);
     return { ...point, x, y };
   });
-  const linePoints = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  const linePoints = coordinates
+    .map((point) => `${point.x},${point.y}`)
+    .join(" ");
 
   return (
-    <section className="border-y border-border px-4 py-4" aria-labelledby="my-performance-trend-title">
+    <section
+      className="border-y border-border px-4 py-4"
+      aria-labelledby="my-performance-trend-title"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="my-performance-trend-title" className="text-base font-semibold text-foreground">
+          <h2
+            id="my-performance-trend-title"
+            className="text-base font-semibold text-foreground"
+          >
             Monthly performance trend
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -190,7 +199,9 @@ function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
         </div>
         {latest ? (
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Previous-month comparison</p>
+            <p className="text-xs text-muted-foreground">
+              Previous-month comparison
+            </p>
             <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
               {delta === null
                 ? "No earlier published month"
@@ -209,10 +220,36 @@ function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
               aria-labelledby="my-performance-trend-title"
               preserveAspectRatio="none"
             >
-              <line x1={inset} x2={width - inset} y1={height - inset} y2={height - inset} stroke="currentColor" className="text-border" />
-              <line x1={inset} x2={inset} y1={inset} y2={height - inset} stroke="currentColor" className="text-border" />
-              <text x={4} y={inset + 4} className="fill-muted-foreground text-[11px]">{ceiling}</text>
-              <text x={16} y={height - inset + 4} className="fill-muted-foreground text-[11px]">0</text>
+              <line
+                x1={inset}
+                x2={width - inset}
+                y1={height - inset}
+                y2={height - inset}
+                stroke="currentColor"
+                className="text-border"
+              />
+              <line
+                x1={inset}
+                x2={inset}
+                y1={inset}
+                y2={height - inset}
+                stroke="currentColor"
+                className="text-border"
+              />
+              <text
+                x={4}
+                y={inset + 4}
+                className="fill-muted-foreground text-[11px]"
+              >
+                {ceiling}
+              </text>
+              <text
+                x={16}
+                y={height - inset + 4}
+                className="fill-muted-foreground text-[11px]"
+              >
+                0
+              </text>
               {coordinates.length > 1 ? (
                 <polyline
                   points={linePoints}
@@ -226,11 +263,27 @@ function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
               ) : null}
               {coordinates.map((point) => (
                 <g key={point.reviewId}>
-                  <circle cx={point.x} cy={point.y} r="5" fill="currentColor" className="text-primary" />
-                  <text x={point.x} y={point.y - 10} textAnchor="middle" className="fill-foreground text-[11px]">
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="5"
+                    fill="currentColor"
+                    className="text-primary"
+                  />
+                  <text
+                    x={point.x}
+                    y={point.y - 10}
+                    textAnchor="middle"
+                    className="fill-foreground text-[11px]"
+                  >
                     {point.score.toFixed(1)}
                   </text>
-                  <text x={point.x} y={height - 8} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+                  <text
+                    x={point.x}
+                    y={height - 8}
+                    textAnchor="middle"
+                    className="fill-muted-foreground text-[10px]"
+                  >
                     {point.periodName}
                   </text>
                 </g>
@@ -239,13 +292,91 @@ function PerformanceScoreTrend({ reviews }: { reviews: AdminRecord[] }) {
           </div>
           <ul className="sr-only" aria-label="Monthly performance scores">
             {points.map((point) => (
-              <li key={point.reviewId}>{point.periodName}: {point.score.toFixed(2)}</li>
+              <li key={point.reviewId}>
+                {point.periodName}: {point.score.toFixed(2)}
+              </li>
             ))}
           </ul>
         </>
       ) : (
         <p className="mt-4 rounded-md bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
           Your monthly trend will appear after a monthly review is published.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function PublishedPerformanceAggregates({ rows }: { rows: AdminRecord[] }) {
+  const visible = rows.filter((row) => {
+    const type = readString(row, ["periodType", "period_type"]).toUpperCase();
+    return type === "QUARTERLY" || type === "ANNUAL";
+  });
+
+  return (
+    <section
+      className="border-b border-border px-4 py-4"
+      aria-labelledby="my-performance-aggregates-title"
+    >
+      <h2
+        id="my-performance-aggregates-title"
+        className="text-base font-semibold text-foreground"
+      >
+        Published quarterly and annual scores
+      </h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Aggregates calculated from published monthly reviews.
+      </p>
+      {visible.length ? (
+        <ul
+          className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+          aria-label="Published quarterly and annual performance scores"
+        >
+          {visible.map((row) => {
+            const id = rowId(row);
+            const type = readString(row, [
+              "periodType",
+              "period_type",
+            ]).toUpperCase();
+            const score = readNumber(row, [
+              "aggregateScore",
+              "aggregate_score",
+            ]);
+            return (
+              <li
+                key={id}
+                className="rounded-md border border-border bg-background px-3 py-2"
+              >
+                <p className="text-xs text-muted-foreground">
+                  {readString(
+                    row,
+                    ["name"],
+                    type === "ANNUAL" ? "Annual" : "Quarter",
+                  )}
+                </p>
+                {readString(row, ["financialYearName", "financial_year_name"]) ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {readString(row, ["financialYearName", "financial_year_name"])}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">
+                  {score === null ? "—" : score.toFixed(2)}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {type === "ANNUAL" ? "Annual score" : "Quarterly score"}
+                  </span>
+                </p>
+                {readString(row, ["ratingCode", "rating_code"]) ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Rating: {readString(row, ["ratingCode", "rating_code"])}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="mt-3 rounded-md bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+          Published quarterly and annual scores will appear here when available.
         </p>
       )}
     </section>
@@ -273,6 +404,9 @@ export function PerformanceSelfView({
   const [activityTasks, setActivityTasks] = React.useState<AdminRecord[]>([]);
   const [myKpis, setMyKpis] = React.useState<AdminRecord[]>([]);
   const [kpiCycleScores, setKpiCycleScores] = React.useState<AdminRecord[]>([]);
+  const [performanceAggregates, setPerformanceAggregates] = React.useState<
+    AdminRecord[]
+  >([]);
   const [reviews, setReviews] = React.useState<AdminRecord[]>([]);
   const [feedback360, setFeedback360] = React.useState<AdminRecord[]>([]);
   const [developmentPlans, setDevelopmentPlans] = React.useState<AdminRecord[]>(
@@ -355,6 +489,9 @@ export function PerformanceSelfView({
           ),
           listMyKpiCycleScores(token).then((value) =>
             commit(() => setKpiCycleScores(value)),
+          ),
+          listMyPerformanceAggregates(token).then((value) =>
+            commit(() => setPerformanceAggregates(value)),
           ),
           listMyActivityTasks(token, { limit: 100 }).then((value) =>
             commit(() => setActivityTasks(value)),
@@ -1279,6 +1416,7 @@ export function PerformanceSelfView({
           </div>
 
           <PerformanceScoreTrend reviews={reviews} />
+          <PublishedPerformanceAggregates rows={performanceAggregates} />
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
             <section className="min-w-0 border-t border-border pt-2">

@@ -2403,7 +2403,7 @@ function Section({
             <AlertDialogTitle>{isContactsSection ? "Remove contact" : "Confirm Delete"}</AlertDialogTitle>
             <AlertDialogDescription>
               {isContactsSection
-                ? "This contact will be removed from the active employee profile. It will remain in historical records for audit purposes."
+                ? "The contact row will remain for audit history, but its email and phone values will be cleared. For an exited employee, matching login contact values will also be released for reuse."
                 : `Are you sure you want to delete this ${title.toLowerCase()} record? This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -5215,9 +5215,8 @@ export function EmployeeProfilePage({
             </Popover>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center bg-primary px-3 text-sm font-semibold text-white transition hover:brightness-95"
+            <FluentButton
+              appearance="primary"
               onClick={() => {
                 const companyUser = resolveCompanyUserRecord(employee)
                 const currentBranchId = String(
@@ -5286,10 +5285,9 @@ export function EmployeeProfilePage({
               }}
             >
               Update Profile
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 items-center border border-border bg-card px-3 text-sm font-medium text-foreground transition hover:bg-muted"
+            </FluentButton>
+            <FluentButton
+              appearance="secondary"
               onClick={() => {
                 setStatusForm(readEmployeeStatusForm(employee))
                 setStatusError(null)
@@ -5311,7 +5309,7 @@ export function EmployeeProfilePage({
               }}
             >
               Update Status
-            </button>
+            </FluentButton>
           </div>
         </div>
       </div>
