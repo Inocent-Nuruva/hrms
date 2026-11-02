@@ -4,7 +4,7 @@ import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 import * as React from "react"
 import { Avatar, Badge as FluentBadge, Field, Tab, TabList } from "@fluentui/react-components"
 import { Search, ChevronRight, X } from "lucide-react"
-import { CalendarLtrRegular, FilterRegular, FlagRegular, OpenRegular, PersonRegular } from "@fluentui/react-icons"
+import { CheckmarkCircle20Regular, DismissCircle20Regular, Circle20Regular, CalendarLtrRegular, FilterRegular, FlagRegular, OpenRegular, PersonRegular } from "@fluentui/react-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,6 +19,7 @@ import {
 } from "@/lib/admin-api"
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { formatDate, prettify, readString, rowId, StatusChip } from "./talent-visuals"
+import { useActionInboxLiveRefresh } from "@/hooks/use-action-inbox-live-refresh"
 import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +42,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [comment, setComment] = React.useState("")
   const [evidenceId, setEvidenceId] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  useActionInboxLiveRefresh(onRefresh, busy)
   const [error, setError] = React.useState("")
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [documentsLoading, setDocumentsLoading] = React.useState(false)
@@ -50,7 +52,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [reviewDetailsError, setReviewDetailsError] = React.useState("")
   const [groupPage, setGroupPage] = React.useState(1)
   const [filtersOpen, setFiltersOpen] = React.useState(false)
-  const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(() => new Set())
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
   const groups = React.useMemo(() => filterAndGroupActions(actions, filters), [actions, filters])
   const selected = groups.flatMap((group) => group.items).find((row) => rowId(row) === selectedId)
   const statusTabs = [
@@ -100,7 +102,11 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const dueDate = formatDate(selected?.dueAt ?? selected?.due_at)
   const selectedStatus = readString(selected, ["status"], "OPEN")
   const displayStatus = requiresDetailedReview && selected && isOpenAction(selected) ? "Awaiting review" : selectedStatus
-  const decisionHelp = requiresDetailedReview
+  const decisionHelp = selected && !isOpenAction(selected)
+    ? selectedStatus.toUpperCase() === "COMPLETED"
+      ? "This item has been completed. No further action is needed."
+      : "This item is closed and no longer needs action."
+    : requiresDetailedReview
     ? "Open the onboarding workspace and review every submitted section. Approve complete sections or return individual sections with clear correction notes."
     : isReminder
       ? "This reminder stays open until the required report is submitted. Review the details below and report a blocker to HR when follow-up is required."
@@ -162,12 +168,10 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     setError("")
   }
   function toggleGroup(groupKey: string) {
-    setExpandedGroups((current) => {
-      const next = new Set(current)
-      if (next.has(groupKey)) next.delete(groupKey)
-      else next.add(groupKey)
-      return next
-    })
+    setExpandedGroups((current) => ({
+      ...current,
+      [groupKey]: !(current[groupKey] ?? filters.status === "open"),
+    }))
   }
   async function submit(mode: "approve" | "reject" | "complete" | "issue") {
     if (!selected || !reference || busy) return
@@ -280,40 +284,42 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
         <div className="flex flex-col divide-y divide-border/80">
           {visibleGroups.map((group) => {
             const active = group.items.some((item) => rowId(item) === selectedId)
-            const unattended = group.items.some(isOpenAction)
-            const expanded = expandedGroups.has(group.subject.key)
+            const pendingCount = group.items.filter(isOpenAction).length
+            const completedCount = group.items.filter((item) => readString(item, ["status"]).toUpperCase() === "COMPLETED").length
+            const unattended = pendingCount > 0
+            const expanded = expandedGroups[group.subject.key] ?? filters.status === "open"
             return <div key={group.subject.key} className={cn("relative before:absolute before:inset-y-0 before:left-0 before:w-1", active ? "bg-primary/10 before:bg-primary" : "before:bg-transparent")}>
               <div className="flex items-center transition hover:bg-muted/60">
-                {group.items.length > 1 ? (
                   <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key)}>
                     <ChevronRight className={cn("size-4 transition-transform", expanded && "rotate-90", active && "text-primary")} aria-hidden />
                   </button>
-                ) : <span className="ml-2 size-8 shrink-0" aria-hidden />}
                 <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-1 pr-3 text-left" onClick={() => select(group.items[0])}>
                   <Avatar name={group.subject.name} image={group.subject.photoUrl ? { src: group.subject.photoUrl } : undefined} color="brand" size={48} />
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-base font-semibold text-foreground">{group.subject.name}</h2>
                     <p className="mt-1 truncate text-sm text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee profile"}</p>
-                    <p className="mt-1 truncate text-sm text-foreground/80">{readString(group.items[0], ["description"]) || readString(group.items[0], ["title"], "Review the assigned request")}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{pendingCount} pending · {completedCount} completed{group.items.length > pendingCount + completedCount ? ` · ${group.items.length - pendingCount - completedCount} closed` : ""}</p>
                   </div>
                   <FluentBadge appearance="tint" color={unattended ? "warning" : "success"} size="small" className="shrink-0">
-                    {unattended ? "Not attended" : "Attended"}
+                    {unattended ? `${pendingCount} to complete` : completedCount === group.items.length ? "Completed" : "Closed"}
                   </FluentBadge>
                 </button>
               </div>
-              {expanded ? <div className="divide-y border-t bg-background/80 pl-12">
-                {group.items.map((item) => {
+              {expanded ? <div className="divide-y border-t bg-background/80 pl-5 sm:pl-12">
+                <p className="px-3 py-2 text-xs font-semibold text-muted-foreground">{unattended ? "Items to complete" : "Request history"}</p>
+                {[...group.items].sort((a, b) => Number(isOpenAction(b)) - Number(isOpenAction(a))).map((item) => {
                   const itemActive = rowId(item) === selectedId
                   const itemUnattended = isOpenAction(item)
                   return <button key={rowId(item)} type="button" aria-label={`Review ${readString(item, ["title"], "request")}`} aria-current={itemActive ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/60", itemActive && "bg-primary/5")} onClick={() => select(item)}>
+                    {itemUnattended ? <Circle20Regular aria-hidden className="shrink-0 text-primary" /> : readString(item, ["status"]).toUpperCase() === "COMPLETED" ? <CheckmarkCircle20Regular aria-hidden className="shrink-0 text-muted-foreground" /> : <DismissCircle20Regular aria-hidden className="shrink-0 text-muted-foreground" />}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{readString(item, ["title"], "Assigned request")}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{readString(item, ["description"]) || prettify(readString(item, ["sourceModule", "source_module"], "Request"))}</p>
+                      <p className="whitespace-normal break-words text-sm font-medium text-foreground">{readString(item, ["title"], "Assigned request")}</p>
+                      <p className="mt-0.5 whitespace-normal break-words text-xs text-muted-foreground">{readString(item, ["description"]) || prettify(readString(item, ["sourceModule", "source_module"], "Request"))}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <span className="text-[11px] text-muted-foreground">{formatDate(item.dueAt ?? item.due_at)}</span>
                       <FluentBadge appearance="tint" color={itemUnattended ? "warning" : "success"} size="small">
-                        {itemUnattended ? "Not attended" : "Attended"}
+                        {itemUnattended ? item.is_actionable === false ? "Waiting" : "To complete" : prettify(readString(item, ["status"], "Closed"))}
                       </FluentBadge>
                     </div>
                   </button>
@@ -360,8 +366,10 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
               {!requiresDetailedReview ? <section className="rounded-xl border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-semibold">What you are reviewing</h4>
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{readString(selected, ["description"]) || readString(selected, ["title"]) || "Review this assigned request and record your decision."}</p>
+                    <h4 className="text-xs font-semibold text-primary">{isOpenAction(selected) ? "Required action" : "Completed / closed action"}</h4>
+                    <p className="mt-2 whitespace-pre-wrap text-sm font-semibold">{readString(selected, ["title"], "Review this assigned request")}</p>
+                    {readString(selected, ["description"]) ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{readString(selected, ["description"])}</p> : null}
+                    {isOpenAction(selected) && evidenceRequired ? <p className="mt-3 text-xs font-medium text-primary">Supporting evidence is required before completing this item.</p> : null}
                   </div>
                 </div>
                 {context.reason || context.start_date ? <dl className="mt-4 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2">

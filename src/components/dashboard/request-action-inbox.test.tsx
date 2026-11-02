@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   getOnboardingRequest: vi.fn(),
 }))
 vi.mock("@/lib/admin-api", () => api)
+vi.mock("@/lib/notifications-store", () => ({ useNotifications: () => ({}) }))
 vi.mock("@/lib/session-client", () => ({ readStoredSessionTokens: () => ({ accessToken: "session-token" }) }))
 vi.mock("@/components/ui/fluent-toast-store", () => ({ toast: { success: vi.fn() } }))
 vi.mock("@/components/animate-ui/components/base/dialog", () => {
@@ -79,6 +80,17 @@ async function writeComment(value: string) {
   })
 }
 describe("grouped request review", () => {
+  it("shows pending task names by default and keeps a single task expandable", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Collapse requests for Amina John"]')!
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    expect(container.textContent).toContain("1 to complete")
+    expect(container.querySelector('button[aria-label="Review Provide laptop"]')).not.toBeNull()
+    await act(async () => toggle.click())
+    expect(container.querySelector('button[aria-label="Review Provide laptop"]')).toBeNull()
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+  })
+
   it("shows the intended employee and reports a reason without completing work", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
     await selectRequest()

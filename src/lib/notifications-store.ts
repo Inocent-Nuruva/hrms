@@ -1,5 +1,6 @@
 "use client"
 
+import { ACTION_INBOX_CHANGED } from "@/lib/employee-lifecycle-events"
 import * as React from "react"
 import { io, type Socket } from "socket.io-client"
 
@@ -1180,6 +1181,7 @@ function connectSocket(token: string) {
       socketConfigured: true,
     })
     void reloadCurrentQueryAndUnreadCount(token)
+    window.dispatchEvent(new Event(ACTION_INBOX_CHANGED))
   })
 
   nextSocket.io.on("reconnect", () => {
@@ -1192,6 +1194,10 @@ function connectSocket(token: string) {
       quietWarning: null,
       socketConfigured: true,
     })
+  })
+
+  nextSocket.on("action-inbox:changed", () => {
+    if (token === state.token) window.dispatchEvent(new Event(ACTION_INBOX_CHANGED))
   })
 
   nextSocket.on("notification:new", (payload: unknown) => {
