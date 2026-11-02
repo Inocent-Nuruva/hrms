@@ -80,6 +80,25 @@ async function writeComment(value: string) {
   })
 }
 describe("grouped request review", () => {
+  it("keeps the expand arrow and every request when Pending still has open work for that person", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[
+      task,
+      { ...task, id: 2, status: "COMPLETED", title: "Create email" },
+    ]} loading={false} onRefresh={refresh} />))
+    expect(container.querySelector('button[aria-label="Collapse requests for Amina John"]')).not.toBeNull()
+    expect(container.textContent).toContain("Provide laptop")
+    expect(container.textContent).toContain("Create email")
+    expect(container.textContent).toContain("1 pending · 1 completed")
+  })
+  it("replaces the confirmation prompt after the assigned work is marked complete", async () => {
+    api.completeOnboardingTask.mockResolvedValueOnce({})
+    await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    expect(container.textContent).toContain("Confirm that the assigned work has actually been completed")
+    await click("Mark item complete")
+    expect(container.textContent).not.toContain("Confirm that the assigned work has actually been completed")
+    expect(container.textContent).toContain("This item has been completed. No further action is needed.")
+  })
   it("shows pending task names by default and keeps a single task expandable", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
     const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Collapse requests for Amina John"]')!

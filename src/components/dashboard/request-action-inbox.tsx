@@ -20,7 +20,7 @@ import {
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { formatDate, prettify, readString, rowId, StatusChip } from "./talent-visuals"
 import { useActionInboxLiveRefresh } from "@/hooks/use-action-inbox-live-refresh"
-import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
+import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, groupsForInboxTab, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
 import { cn } from "@/lib/utils"
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -53,7 +53,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [groupPage, setGroupPage] = React.useState(1)
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
-  const groups = React.useMemo(() => filterAndGroupActions(actions, filters), [actions, filters])
+  const [settledId, setSettledId] = React.useState("")
+  const groups = React.useMemo(() => groupsForInboxTab(actions, filters), [actions, filters])
   const selected = groups.flatMap((group) => group.items).find((row) => rowId(row) === selectedId)
   const statusTabs = [
     { value: "open", label: "Pending" },
@@ -102,10 +103,11 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const dueDate = formatDate(selected?.dueAt ?? selected?.due_at)
   const selectedStatus = readString(selected, ["status"], "OPEN")
   const displayStatus = requiresDetailedReview && selected && isOpenAction(selected) ? "Awaiting review" : selectedStatus
-  const decisionHelp = selected && !isOpenAction(selected)
-    ? selectedStatus.toUpperCase() === "COMPLETED"
-      ? "This item has been completed. No further action is needed."
-      : "This item is closed and no longer needs action."
+  const justSettled = settledId !== "" && (!selected || settledId === selectedId)
+  const decisionHelp = justSettled || (selected && !isOpenAction(selected))
+    ? selectedStatus.toUpperCase() === "CANCELLED"
+      ? "This item is closed and no longer needs action."
+      : "This item has been completed. No further action is needed."
     : requiresDetailedReview
     ? "Open the onboarding workspace and review every submitted section. Approve complete sections or return individual sections with clear correction notes."
     : isReminder
@@ -118,10 +120,9 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
 
   React.useEffect(() => {
     const selectionIsVisible = visibleGroups.some((group) => group.items.some((item) => rowId(item) === selectedId))
-    if (!selectionIsVisible && visibleGroups[0]?.items[0] && !busy) {
-      select(visibleGroups[0].items[0])
-    }
-  }, [busy, selectedId, visibleGroups])
+    const next = visibleGroups.flatMap((group) => group.items).find(isOpenAction) ?? visibleGroups[0]?.items[0]
+    if (!selectionIsVisible && next && !busy && !settledId) select(next)
+  }, [busy, selectedId, settledId, visibleGroups])
 
   React.useEffect(() => {
     if (!evidenceRequired || !requestId || !sourceType) return
@@ -163,6 +164,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   }
   function select(row: AdminRecord) {
     setSelectedId(rowId(row))
+    setSettledId("")
     setComment("")
     setEvidenceId("")
     setError("")
@@ -170,7 +172,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   function toggleGroup(groupKey: string) {
     setExpandedGroups((current) => ({
       ...current,
-      [groupKey]: !(current[groupKey] ?? filters.status === "open"),
+      [groupKey]: !(current[groupKey] ?? true),
     }))
   }
   async function submit(mode: "approve" | "reject" | "complete" | "issue") {
@@ -213,6 +215,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       toast.success(onboardingActionMessage(onboardingResult, mode === "issue" ? "Issue saved and sent to HR. The item remains open." : mode === "complete" ? "Checklist item completed." : mode === "approve" ? "Request approved." : "Request declined."))
       setComment("")
       setEvidenceId("")
+      if (mode !== "issue") setSettledId(selectedId)
       await onRefresh()
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not save. Please try again.")
@@ -287,13 +290,13 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
             const pendingCount = group.items.filter(isOpenAction).length
             const completedCount = group.items.filter((item) => readString(item, ["status"]).toUpperCase() === "COMPLETED").length
             const unattended = pendingCount > 0
-            const expanded = expandedGroups[group.subject.key] ?? filters.status === "open"
+            const expanded = expandedGroups[group.subject.key] ?? true
             return <div key={group.subject.key} className={cn("relative before:absolute before:inset-y-0 before:left-0 before:w-1", active ? "bg-primary/10 before:bg-primary" : "before:bg-transparent")}>
               <div className="flex items-center transition hover:bg-muted/60">
-                  <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key)}>
+                  <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded text-foreground hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key)}>
                     <ChevronRight className={cn("size-4 transition-transform", expanded && "rotate-90", active && "text-primary")} aria-hidden />
                   </button>
-                <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-1 pr-3 text-left" onClick={() => select(group.items[0])}>
+                <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-1 pr-3 text-left" onClick={() => select(group.items.find(isOpenAction) ?? group.items[0])}>
                   <Avatar name={group.subject.name} image={group.subject.photoUrl ? { src: group.subject.photoUrl } : undefined} color="brand" size={48} />
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-base font-semibold text-foreground">{group.subject.name}</h2>
@@ -408,7 +411,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
               </section> : null}
               {selected.is_actionable === false && isOpenAction(selected) ? <Alert><AlertDescription>This item is waiting for an earlier workflow step. You can still report an issue to HR.</AlertDescription></Alert> : null}
               {comments.length ? <section className="flex flex-col gap-2"><h4 className="text-sm font-medium">Reported issues</h4>{comments.map((entry, index) => <div key={readString(entry, ["id"], String(index))} className="rounded-lg border p-3"><p className="whitespace-pre-wrap text-sm">{readString(entry, ["comment"])}</p><p className="mt-1 text-xs text-muted-foreground">{readString(entry, ["author"])} · {formatDate(entry.created_at)}</p></div>)}</section> : null}
-              {isOpenAction(selected) ? <>
+              {isOpenAction(selected) && !justSettled ? <>
                 {isTask && evidenceRequired ? <div className="flex flex-col gap-2">
                   <FluentSelect label="Supporting document" value={evidenceId} onChange={setEvidenceId} disabled={busy || documentsLoading} placeholder={documentsLoading ? "Loading documents…" : "Select an attached document"} options={documents.map((document) => ({ value: rowId(document), label: readString(document, ["title", "name", "file_name", "document_type"], "Supporting document") }))} />
                   {documentsError || (!documentsLoading && documents.length === 0) ? <p className="text-sm text-muted-foreground">{documentsError || "No supporting documents are attached. Open the full request or ask HR to attach the required evidence."}</p> : null}
@@ -423,7 +426,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   {!requiresDetailedReview ? <Button variant="outline" disabled={busy || loading} onClick={() => void submit("issue")}>{busy ? "Saving…" : "Report issue to HR"}</Button> : null}
                 </div>
               </> : null}
-          </div></div> : <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">Select a request to review its details.</div>}
+          </div></div> : <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">{justSettled ? "This item has been completed. No further action is needed." : "Select a request to review its details."}</div>}
         </section>
       </div>
     </div>
