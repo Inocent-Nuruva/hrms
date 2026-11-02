@@ -63,7 +63,6 @@ import {
   attendanceWorkspaceSectionTabGroups,
   employeeSectionTabGroups,
   fieldSectionTabGroups,
-  financeSectionTabGroups,
   insightsSectionTabGroups,
   leaveManagementSectionTabGroups,
   movementSectionTabGroups,
@@ -369,8 +368,46 @@ const adminData: SidebarData = {
       icon: FinanceIcon,
       activeIcon: ActiveFinanceIcon,
       items: [
-        { title: "Payroll", url: "/dashboard/operations/payroll" },
-        ...sidebarWorkspacesFromSections(financeSectionTabGroups),
+        {
+          title: "Payroll",
+          url: "/dashboard/operations/payroll",
+          matchUrls: [
+            "/dashboard/operations/payroll",
+            "/dashboard/finance/payroll",
+          ],
+          items: [
+            {
+              title: "Payroll setup & operations",
+              url: "/dashboard/operations/payroll",
+            },
+            {
+              title: "Loan payroll deductions",
+              url: "/dashboard/finance/payroll",
+            },
+          ],
+        },
+        {
+          title: "My finance",
+          url: "/dashboard/me/finance/payroll",
+          matchUrls: [
+            "/dashboard/me/finance/payroll",
+            "/dashboard/me/finance/applications",
+          ],
+        },
+        {
+          title: "Finance management",
+          url: "/dashboard/finance/overview",
+          matchUrls: [
+            "/dashboard/finance/overview",
+            "/dashboard/finance/products",
+            "/dashboard/finance/applications",
+            "/dashboard/finance/accounts",
+            "/dashboard/finance/servicing",
+            "/dashboard/finance/reports",
+            "/dashboard/finance/settings",
+            "/dashboard/finance/integrations",
+          ],
+        },
       ],
     },
     {
@@ -553,7 +590,7 @@ const adminSearchIndex = [
   { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
   { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
   { title: "Finance / Servicing", url: "/dashboard/finance/servicing", section: "Finance", keywords: ["deferment", "reschedule", "penalty", "waiver", "write-off", "exit recovery"] },
-  { title: "Finance / Payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
+  { title: "Payroll / Loan payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
   { title: "Finance / Bank, ERP & migration", url: "/dashboard/finance/integrations", section: "Finance", keywords: ["bank", "erp", "journal", "payment file", "statement", "migration"] },
   { title: "Finance / Settings", url: "/dashboard/finance/settings", section: "Finance", keywords: ["sanction letter", "template", "delegation"] },
   { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
@@ -579,7 +616,7 @@ const adminSearchIndex = [
   { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
   { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
-  { title: "Finance / Payroll", url: "/dashboard/operations/payroll", section: "Finance", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
+  { title: "Payroll / Setup & operations", url: "/dashboard/operations/payroll", section: "Finance", keywords: ["payroll", "setup", "runs", "payslips", "salary", "banking"] },
   { title: "Reports & Analytics", url: "/dashboard/operations/reports", section: "Operations", keywords: ["reports", "analytics", "attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },

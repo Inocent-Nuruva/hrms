@@ -1290,6 +1290,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/roles": "roles:read",
   "/dashboard/permissions": "permissions:read",
   "/dashboard/settings": null,
+  "/dashboard/settings/banks": "employees:update",
   "/dashboard/settings/default-avatars": {
     permissions: [
       "view_company_data",

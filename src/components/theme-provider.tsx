@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useAccountAppearance } from "@/hooks/use-account-appearance"
 
 type ThemeMode = "light" | "dark" | "system"
 
@@ -57,12 +58,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => media.removeEventListener("change", onChange)
   }, [theme])
 
-  const setTheme = React.useCallback((nextTheme: ThemeMode) => {
+  const applySavedTheme = React.useCallback((nextTheme: ThemeMode) => {
     setThemeState(nextTheme)
     window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme)
     const resolved = applyThemeClass(nextTheme)
     setResolvedTheme(resolved)
   }, [])
+
+  const setTheme = useAccountAppearance("theme", "system", applySavedTheme)
 
   const value = React.useMemo(
     () => ({ theme, resolvedTheme, setTheme }),

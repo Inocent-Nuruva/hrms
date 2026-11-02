@@ -2,7 +2,7 @@
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 
 import * as React from "react"
-import { Avatar, Badge as FluentBadge, Field } from "@fluentui/react-components"
+import { Avatar, Badge as FluentBadge, Field, Tab, TabList } from "@fluentui/react-components"
 import { Search, ChevronRight, X } from "lucide-react"
 import { CalendarLtrRegular, FilterRegular, FlagRegular, OpenRegular, PersonRegular } from "@fluentui/react-icons"
 import { Button } from "@/components/ui/button"
@@ -52,7 +52,16 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [filtersOpen, setFiltersOpen] = React.useState(false)
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(() => new Set())
   const groups = React.useMemo(() => filterAndGroupActions(actions, filters), [actions, filters])
-  const selected = actions.find((row) => rowId(row) === selectedId)
+  const selected = groups.flatMap((group) => group.items).find((row) => rowId(row) === selectedId)
+  const statusTabs = [
+    { value: "open", label: "Pending" },
+    { value: "completed", label: "Completed" },
+    { value: "all", label: "All" },
+  ].map((tab) => ({
+    ...tab,
+    count: filterAndGroupActions(actions, { ...defaultInboxFilters, status: tab.value })
+      .reduce((total, group) => total + group.items.length, 0),
+  }))
   const subject = selected ? actionSubject(selected) : null
   const reference = selected ? actionReference(selected) : null
   const context = recordValue(selected?.request_context)
@@ -208,6 +217,24 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <TabList
+        aria-label="Request status"
+        selectedValue={filters.status === "cancelled" ? "all" : filters.status}
+        onTabSelect={(_event, data) => {
+          updateFilter("status", String(data.value))
+          setSelectedId("")
+          setComment("")
+          setEvidenceId("")
+          setError("")
+        }}
+        className="shrink-0 border-b bg-card px-2"
+      >
+        {statusTabs.map((tab) => (
+          <Tab key={tab.value} value={tab.value} disabled={busy}>
+            {tab.label} <span className="ml-1 text-xs tabular-nums text-muted-foreground">{tab.count}</span>
+          </Tab>
+        ))}
+      </TabList>
       <div className="grid min-h-0 flex-1 overflow-hidden border-b bg-card lg:grid-cols-[minmax(300px,36%)_1fr]">
         <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b lg:border-b-0 lg:border-r">
           <div className="relative z-20 shrink-0 border-b bg-card px-2 py-2">
@@ -246,8 +273,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {loading ? <p role="status" className="py-10 text-center text-muted-foreground">Loading assigned requests…</p> : groups.length === 0 ? (
         <div className="p-10 text-center">
-          <h2 className="font-semibold">{hasActiveFilters ? "No results" : "You’re all caught up"}</h2>
-          {hasActiveFilters ? <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setFilters(defaultInboxFilters); setGroupPage(1); setFiltersOpen(false) }}>Clear filters</Button> : null}
+          <h2 className="font-semibold">{hasSearchOrAdvancedFilters ? "No results" : filters.status === "open" ? "You’re all caught up" : filters.status === "completed" ? "No completed requests yet" : "No requests yet"}</h2>
+          {hasSearchOrAdvancedFilters ? <Button variant="ghost" size="sm" className="mt-2" onClick={() => { setFilters({ ...defaultInboxFilters, status: filters.status }); setGroupPage(1); setFiltersOpen(false) }}>Clear filters</Button> : null}
         </div>
       ) : (
         <div className="flex flex-col divide-y divide-border/80">

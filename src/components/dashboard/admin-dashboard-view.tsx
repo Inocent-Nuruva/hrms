@@ -12,7 +12,6 @@ import {
   subscribeSession,
 } from "@/lib/auth-session-store";
 import { usePathname, useRouter } from "next/navigation";
-import { LockKeyhole, ShieldCheck } from "lucide-react";
 
 import {
   AppSidebar,
@@ -980,8 +979,11 @@ export default function AdminDashboardView({
     }
 
     const syncFromStoredUser = () => {
-      setForcePasswordResetOpen(
+      // Focus refreshes must not clear a requirement raised by the API guard.
+      // Only a successful password change or signing out dismisses it.
+      setForcePasswordResetOpen((alreadyRequired) =>
         Boolean(token) && (
+          alreadyRequired ||
           authSession.user?.requiresPasswordChange === true ||
           readStoredUserPasswordChangeRequirement()
         ),
@@ -1356,7 +1358,10 @@ export default function AdminDashboardView({
           aria-label="Toggle navigation"
           title="Navigation"
         />
-        <SidebarInset className="min-w-0 overflow-hidden">
+        <SidebarInset
+          className="min-w-0 overflow-hidden"
+          data-welcome-dashboard={resolvedShowOverview ? "true" : undefined}
+        >
           {/* Header stays pinned; only this page body scrolls (single scrollbar). */}
           <SiteHeader
             onRefresh={handleHeaderRefresh}
@@ -1474,6 +1479,7 @@ export default function AdminDashboardView({
             className="!h-dvh !w-screen !max-w-none !max-h-none !rounded-none !border-0 !p-0"
             bodyClassName="!h-full !max-h-none !gap-0 !overflow-y-auto !p-0"
             showCloseButton={false}
+            disableEscapeClose
           >
             <div className="relative flex min-h-full w-full items-center justify-center bg-background p-3 text-card-foreground sm:p-5 lg:p-8">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
@@ -1485,52 +1491,13 @@ export default function AdminDashboardView({
                   className="!border-0 !bg-transparent text-foreground !shadow-none hover:!bg-transparent"
                 />
               </div>
-              <div className="relative z-10 w-full max-w-[860px] py-8 sm:py-10">
-                <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl md:grid md:min-h-[min(640px,calc(100dvh-4rem))] md:grid-cols-2">
-                  <section
-                    className="relative hidden flex-col justify-between overflow-hidden p-8 text-white md:flex lg:p-10"
-                    style={{ backgroundColor: "var(--colorBrandBackground)" }}
-                    aria-label="Alliance HRMS account security"
-                  >
-                    <div className="relative z-10">
-                      <span className="text-sm font-semibold tracking-tight">
-                        Alliance HRMS
-                      </span>
-                      <div className="mt-16 max-w-sm">
-                        <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25">
-                          <ShieldCheck className="size-6" />
-                        </div>
-                        <h1 className="text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">
-                          A fresh start for your account.
-                        </h1>
-                        <p className="mt-4 text-sm leading-6 text-white/80">
-                          Choose a personal password to keep your HRMS account
-                          secure.
-                        </p>
-                      </div>
-                    </div>
-                    <p className="relative z-10 text-xs text-white/60">
-                      © {new Date().getFullYear()} Alliance Insurance
-                      Corporation Ltd
-                    </p>
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#fff_0.9px,transparent_1px)] bg-[length:5px_5px] opacity-20" />
-                  </section>
-
-                  <section className="flex min-w-0 items-center bg-background px-5 py-7 sm:px-8 sm:py-9 md:bg-card lg:px-10">
-                    <div className="mx-auto w-full max-w-[360px]">
-                      <div className="mb-6 text-center md:hidden">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src="/assets/alliance-logo.png"
-                          alt="Alliance Insurance"
-                          className="mx-auto mb-4 h-8 w-auto dark:brightness-0 dark:invert"
-                        />
-                        <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <LockKeyhole className="size-5" />
-                        </div>
-                      </div>
-                      <DialogHeader className="mb-5">
-                        <DialogTitle className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+              <div className="relative z-10 w-full max-w-[460px] py-4">
+                <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
+                  <section className="flex min-w-0 items-center bg-card p-5 sm:p-6">
+                    <div className="mx-auto w-full">
+                      <div className="mb-4 text-sm font-semibold text-primary">Alliance HRMS</div>
+                      <DialogHeader className="mb-4">
+                        <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
                           Change your temporary password
                         </DialogTitle>
                         <DialogDescription className="text-sm leading-5 text-muted-foreground">
@@ -1543,6 +1510,7 @@ export default function AdminDashboardView({
                         loading={forcePasswordResetBusy}
                         error={forcePasswordResetError}
                         requiredMode
+                        compact
                         onUseDifferentAccount={
                           handleUseDifferentAccountForForcedReset
                         }
@@ -1550,7 +1518,7 @@ export default function AdminDashboardView({
                     </div>
                   </section>
                 </div>
-                <p className="mt-4 text-center text-[10px] text-muted-foreground md:hidden">
+                <p className="mt-3 text-center text-[10px] text-muted-foreground">
                   © {new Date().getFullYear()} Alliance Insurance Corporation
                   Ltd
                 </p>

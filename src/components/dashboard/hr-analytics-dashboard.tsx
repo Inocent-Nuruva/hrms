@@ -1,19 +1,20 @@
 "use client"
 
+import { useAccountAppearance } from "@/hooks/use-account-appearance"
+
 import * as React from "react"
+import { WelcomeCardBackground } from "./welcome-card-background"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   UsersIcon,
   CalendarIcon,
-  RefreshCwIcon,
   AlertCircleIcon,
   ArrowUpRightIcon,
   InfoIcon,
   UserCheckIcon,
   UserMinusIcon,
   UserXIcon,
-  FilterIcon,
   MoreHorizontalIcon,
   FileTextIcon,
   BellRingIcon,
@@ -68,7 +69,13 @@ import {
 } from "@/components/ui/sheet"
 import {
   Badge as FluentBadge,
+  Button as FluentButton,
+  Popover as FluentPopover,
+  PopoverTrigger as FluentPopoverTrigger,
+  PopoverSurface,
+  PresenceBadge,
   Caption1,
+  Link as FluentLink,
   Card as FluentCard,
   CardHeader as FluentCardHeader,
   Persona,
@@ -78,6 +85,10 @@ import {
 } from "@fluentui/react-components"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 import {
+  CalendarLtr20Regular,
+  PaintBrush20Regular,
+  Filter20Regular,
+  ArrowClockwise20Regular,
   CheckmarkCircleColor,
   ClipboardTaskColor,
   MoreHorizontal20Regular,
@@ -85,7 +96,6 @@ import {
   PersonAvailableColor,
   PersonWarningColor,
 } from "@fluentui/react-icons"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1452,6 +1462,11 @@ export default function HrAnalyticsDashboard({
   )
   const [toDate, setToDate] = React.useState(warm?.toDate ?? formatInputDate(new Date()))
   const [dateFilterOpen, setDateFilterOpen] = React.useState(false)
+  const [welcomeBackground, setWelcomeBackground] = React.useState<"aurora" | "geometric" | "glow">("aurora")
+  const nextWelcomeBackground = welcomeBackground === "aurora" ? "geometric" : welcomeBackground === "geometric" ? "glow" : "aurora"
+
+  const saveWelcomeBackground = useAccountAppearance("managerBackground", "aurora", setWelcomeBackground)
+  const toggleWelcomeBackground = () => saveWelcomeBackground(nextWelcomeBackground)
   const [reviewOpen, setReviewOpen] = React.useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = React.useState<Date | null>(null)
 
@@ -2501,164 +2516,180 @@ export default function HrAnalyticsDashboard({
       initial="hidden"
       animate="show"
     >
-      <motion.header
-        className="relative mx-1 mt-2 border-b border-border/70 px-2 py-3 sm:mx-2 sm:px-3 lg:mx-3 lg:px-2"
-        variants={motionPreset.rise}
-      >
-        <div className="grid gap-4 md:grid-cols-[minmax(18rem,1fr)_auto] md:items-center">
-          <div className="flex min-w-0 items-center gap-3">
-            <Persona
-              name={userName || "Company user"}
-              primaryText=""
-              secondaryText=""
-              presence={{ status: "available" }}
-              avatar={{
-                color: "brand",
-                image: profilePhotoUrl
-                  ? { src: profilePhotoUrl, alt: userName || "HR profile" }
-                  : undefined,
-              }}
-              size="huge"
-              className="shrink-0"
-            />
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Welcome back
-              </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2.5">
-                <h1
-                  className="relative truncate pb-1 text-2xl font-semibold tracking-tight text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary/45 sm:text-3xl"
-                  aria-label={`Welcome back, ${firstName}`}
+      <header>
+        <FluentCard
+          appearance="filled"
+          className="relative isolate z-10 w-full !rounded-none !border !border-border !bg-card !px-5 !pb-5 !pt-2 !shadow-md sm:!px-6 sm:!pb-6"
+        >
+          <WelcomeCardBackground background={welcomeBackground} />
+          <div className="relative z-10 grid gap-4 md:grid-cols-[minmax(18rem,1fr)_auto] md:items-center">
+            <div className="flex min-w-0 items-center gap-3">
+              <Persona
+                name={userName || "Company user"}
+                primaryText=""
+                secondaryText=""
+                presence={{ status: "available" }}
+                avatar={{
+                  color: "brand",
+                  image: profilePhotoUrl
+                    ? { src: profilePhotoUrl, alt: userName || "HR profile" }
+                    : undefined,
+                }}
+                size="huge"
+                className="shrink-0"
+              />
+              <div className="min-w-0">
+                <FluentText as="p" className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Welcome back
+                </FluentText>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2.5">
+                  <FluentText as="h1" size={800} weight="semibold"
+                    className="relative truncate pb-1 text-2xl font-semibold tracking-tight text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary/45 sm:text-3xl"
+                    aria-label={`Welcome back, ${firstName}`}
+                  >
+                    {firstName}
+                  </FluentText>
+                  <FluentBadge appearance="tint" color="success" icon={<PresenceBadge status="available" />}>
+                    Available
+                  </FluentBadge>
+                </div>
+                <FluentText as="p" className="mt-0.5 text-sm text-muted-foreground">
+                  {priorities.length > 0
+                    ? `${priorities.length} areas need attention.`
+                    : "No urgent items."}
+                </FluentText>
+                <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Assigned roles">
+                  {primaryRole && secondaryRoleCount === 0 ? <FluentBadge appearance="outline">{primaryRole}</FluentBadge> : null}
+                  {secondaryRoleCount > 0 ? (
+                    <FluentPopover positioning="below-start">
+                      <FluentPopoverTrigger disableButtonEnhancement>
+                        <FluentButton
+                          appearance="outline"
+                          shape="circular"
+                          size="small"
+                          type="button"
+                          aria-label={`${primaryRole}, view ${secondaryRoleCount} additional role${secondaryRoleCount === 1 ? "" : "s"}`}
+                        >
+                          {primaryRole}
+                          <FluentBadge appearance="tint" size="small" className="ml-1.5">
+                            +{secondaryRoleCount}
+                          </FluentBadge>
+                        </FluentButton>
+                      </FluentPopoverTrigger>
+                      <PopoverSurface className="w-56 p-3">
+                        <FluentText as="p" className="text-xs font-semibold text-foreground">Additional roles</FluentText>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {secondaryRoleNames.map((roleName) => (
+                            <FluentBadge key={roleName} appearance="tint">
+                              {roleName}
+                            </FluentBadge>
+                          ))}
+                        </div>
+                      </PopoverSurface>
+                    </FluentPopover>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-start gap-2 md:items-end">
+              {upcomingHoliday && upcomingHolidayDate ? (
+                <FluentLink
+                  href="/dashboard/attendance/holidays"
+                  className="!inline-flex max-w-full items-center gap-2"
+                  aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
                 >
-                  {firstName}
-                </h1>
-                <Badge variant="secondary" className="gap-1.5">
-                  <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                  Available
-                </Badge>
-              </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {priorities.length > 0
-                  ? `${priorities.length} areas need attention.`
-                  : "No urgent items."}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2" aria-label="Assigned roles">
-                {primaryRole ? <Badge variant="outline">{primaryRole}</Badge> : null}
-                {secondaryRoleCount > 0 ? (
-                  <Popover>
-                    <PopoverTrigger
-                      type="button"
-                      className="rounded-md px-1.5 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                      aria-label={`View ${secondaryRoleCount} additional role${secondaryRoleCount === 1 ? "" : "s"}`}
-                    >
-                      +{secondaryRoleCount} additional role{secondaryRoleCount === 1 ? "" : "s"}
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-56 p-3">
-                      <p className="text-xs font-semibold text-foreground">Additional roles</p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {secondaryRoleNames.map((roleName) => (
-                          <Badge key={roleName} variant="secondary">
-                            {roleName}
-                          </Badge>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col items-start gap-2 md:items-end">
-            {upcomingHoliday && upcomingHolidayDate ? (
-              <Link
-                href="/dashboard/attendance/holidays"
-                className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border/70 bg-muted/25 px-3 text-xs text-foreground transition hover:bg-muted/45"
-                aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
-              >
-                <CalendarIcon className="size-4 text-primary" aria-hidden="true" />
-                <span className="text-muted-foreground">Upcoming</span>
-                <span className="max-w-36 truncate font-medium">
-                  {upcomingHolidayName || "Holiday"}
-                </span>
-                <span className="text-muted-foreground">{formatDateShort(upcomingHolidayDate)}</span>
-              </Link>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
-              <PopoverTrigger
+                  <CalendarLtr20Regular className="shrink-0" aria-hidden="true" />
+                  <Caption1 className="min-w-0">
+                    {upcomingHolidayName || "Holiday"}
+                  </Caption1>
+                  <Caption1 className="shrink-0 whitespace-nowrap text-muted-foreground">
+                    {formatDateShort(upcomingHolidayDate)}
+                  </Caption1>
+                </FluentLink>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <FluentButton
+                appearance="subtle"
+                size="small"
+                icon={<PaintBrush20Regular style={{ color: "var(--primary)" }} />}
                 type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-3 text-xs font-medium text-foreground transition hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                aria-label="Filter dashboard date range"
-              >
-                <FilterIcon className="size-3.5" aria-hidden="true" />
-                <span>{activeDateRangeLabel}</span>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-[min(19rem,calc(100vw-1.5rem))] p-2.5">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">Dashboard period</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {formatDateShort(fromDate)} – {formatDateShort(toDate)}
-                  </p>
-                </div>
-                <div className="mt-2.5 grid grid-cols-2 gap-1.5">
-                  {dateRangePresets.map((preset) => {
-                    const active = activeDateRangeLabel === preset.label
-                    return (
-                      <button
-                        key={preset.days}
-                        type="button"
-                        className={cn(
-                          "h-7 rounded-md px-2 text-left text-[10px] font-medium transition",
-                          active
-                            ? "bg-primary !text-primary-foreground"
-                            : "bg-muted/50 text-foreground hover:bg-muted"
-                        )}
-                        onClick={() => applyDateRangePreset(preset.days)}
-                      >
-                        {preset.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="mt-2.5 border-t border-border pt-2.5">
-                  <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Custom range
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <DatePickerPresets
-                      value={fromDate}
-                      onChange={setFromDate}
-                      placeholder="From date"
-                      className="h-7 px-2 text-[10px]"
-                    />
-                    <DatePickerPresets
-                      value={toDate}
-                      onChange={setToDate}
-                      placeholder="To date"
-                      className="h-7 px-2 text-[10px]"
-                    />
+                aria-label={`Background: ${welcomeBackground}. Switch to ${nextWelcomeBackground}`}
+                title={`Background: ${welcomeBackground}. Switch to ${nextWelcomeBackground}`}
+                onClick={toggleWelcomeBackground}
+              />
+              <FluentPopover positioning="below-end" open={dateFilterOpen} onOpenChange={(_, data) => setDateFilterOpen(data.open)}>
+                <FluentPopoverTrigger disableButtonEnhancement>
+                  <FluentButton
+                    appearance="subtle"
+                    size="small"
+                    icon={<Filter20Regular style={{ color: "var(--primary)" }} />}
+                    type="button"
+                    aria-label="Filter dashboard date range"
+                    title={`Filter date range: ${activeDateRangeLabel}`}
+                  />
+                </FluentPopoverTrigger>
+                <PopoverSurface className="w-[min(19rem,calc(100vw-1.5rem))] p-2.5">
+                  <div>
+                    <FluentText as="p" className="text-xs font-semibold text-foreground">Dashboard period</FluentText>
+                    <FluentText as="p" className="mt-0.5 text-[10px] text-muted-foreground">
+                      {formatDateShort(fromDate)} – {formatDateShort(toDate)}
+                    </FluentText>
                   </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void fetchAll()}
-              disabled={loading}
-              aria-label="Refresh dashboard"
-              title={`Last updated ${lastUpdatedLabel}`}
-            >
-              <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
-            </Button>
+                  <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                    {dateRangePresets.map((preset) => {
+                      const active = activeDateRangeLabel === preset.label
+                      return (
+                        <FluentButton
+                          appearance={active ? "primary" : "secondary"}
+                          size="small"
+                          aria-pressed={active}
+                          key={preset.days}
+                          type="button"
+                          onClick={() => applyDateRangePreset(preset.days)}
+                        >
+                          {preset.label}
+                        </FluentButton>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-2.5 border-t border-border pt-2.5">
+                    <FluentText as="p" className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Custom range
+                    </FluentText>
+                    <div className="grid grid-cols-2 gap-2">
+                      <DatePickerPresets
+                        value={fromDate}
+                        onChange={setFromDate}
+                        placeholder="From date"
+                        className="h-7 px-2 text-[10px]"
+                      />
+                      <DatePickerPresets
+                        value={toDate}
+                        onChange={setToDate}
+                        placeholder="To date"
+                        className="h-7 px-2 text-[10px]"
+                      />
+                    </div>
+                  </div>
+                </PopoverSurface>
+              </FluentPopover>
+              <FluentButton
+                appearance="subtle"
+                size="small"
+                icon={<ArrowClockwise20Regular style={{ color: "var(--primary)" }} className={cn(loading && "animate-spin")} />}
+                onClick={() => void fetchAll()}
+                disabled={loading}
+                aria-label="Refresh dashboard"
+                title={`Last updated ${lastUpdatedLabel}`}
+              />
+              </div>
+              <Caption1 className="tabular-nums text-muted-foreground">
+                Updated {lastUpdatedLabel}
+              </Caption1>
             </div>
-            <span className="text-[10px] tabular-nums text-muted-foreground">
-              Updated {lastUpdatedLabel}
-            </span>
           </div>
-        </div>
-      </motion.header>
-
+        </FluentCard>
+      </header>
       <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
         <SheetContent side="right" className="w-full gap-0 sm:max-w-lg">
           <SheetHeader className="gap-0.5 p-3 pr-12">
@@ -2745,7 +2776,16 @@ export default function HrAnalyticsDashboard({
                   Approvals and workforce exceptions.
                 </p>
               </div>
-              <Button size="sm" onClick={() => setReviewOpen(true)} className="gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => setReviewOpen(true)}
+                className="gap-1.5"
+                style={{
+                  backgroundColor: "var(--primary)",
+                  borderColor: "var(--primary)",
+                  color: "var(--primary-foreground)",
+                }}
+              >
                 <ListChecksIcon data-icon="inline-start" aria-hidden="true" />
                 Review all
               </Button>

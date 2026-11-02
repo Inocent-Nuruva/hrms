@@ -8,8 +8,14 @@ import {
   Add20Regular,
   ArrowClockwise20Regular,
   CheckmarkCircle20Filled,
+  Send20Regular,
+  PersonFeedback20Regular,
+  Briefcase20Regular,
 } from "@fluentui/react-icons"
 import {
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   Badge as FluentBadge,
   Button as FluentButton,
   Field as FluentField,
@@ -27,7 +33,6 @@ import {
   optionLabel,
   pageBleedClass,
   prettify,
-  primaryButtonClass,
   readString,
   rowId,
   secondaryButtonClass,
@@ -53,6 +58,7 @@ import {
   listMyProfileChangeRequestHistory,
   listMyProfileChangeRequests,
   listMyRequests,
+  listMyOffboardingRequests,
   previewMyProfileChangeRequestFile,
   submitMyProfileChangeRequest,
   submitMyResignation,
@@ -67,7 +73,9 @@ import { cn } from "@/lib/utils"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import { RequestActionInbox } from "./request-action-inbox"
+import { EMPLOYEE_LIFECYCLE_REQUESTS_CHANGED } from "@/lib/employee-lifecycle-events"
 import { listAllMyActionItems } from "@/lib/admin-api"
+import { resignationStage } from "./resignation-progress"
 import { isEmployeeRequestAction, isOpenAction } from "./request-inbox-utils"
 
 export type RequestsSelfTab = "actions" | "timeline" | "documents" | "profile-changes" | "resignation"
@@ -290,6 +298,16 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
   const leaveIfForbidden = useLeaveIfForbidden()
   const copy = TAB_COPY[activeTab]
   const [actions, setActions] = React.useState<AdminRecord[]>([])
+  const [resignations, setResignations] = React.useState<AdminRecord[]>([])
+  const resignation = resignations.find((request) => {
+    const type = readString(request, ["offboarding_type", "offboardingType"]).toLowerCase()
+    const status = readString(request, ["status", "request_status", "state"]).toLowerCase()
+    const submittedAt = request.submitted_at ?? request.submittedAt
+    return type === "resignation" && (Boolean(submittedAt) || status !== "draft")
+  })
+  const resignationStatus = readString(resignation, ["status", "request_status", "state"]).toLowerCase()
+  const stage = resignationStage(resignationStatus)
+  const stopped = ["rejected", "cancelled"].includes(resignationStatus)
   const [timeline, setTimeline] = React.useState<AdminRecord[]>([])
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [changes, setChanges] = React.useState<AdminRecord[]>([])
@@ -328,6 +346,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
             throw errorObject
           }),
       )
+    }
+    if (activeTab === "resignation") {
+      tasks.push(listMyOffboardingRequests(token, { strict: true }).then(setResignations))
     }
     if (activeTab === "timeline") {
       tasks.push(
@@ -376,6 +397,14 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     void load()
   }, [load])
 
+  React.useEffect(() => {
+    if (activeTab !== "resignation") return
+    const refresh = () => { if (document.visibilityState === "visible") void load() }
+    const timer = window.setInterval(refresh, 30000)
+    window.addEventListener("focus", refresh)
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh) }
+  }, [activeTab, load])
+
   function openCreate(mode: "document" | "change" | "resign") {
     setCreateMode(mode)
     setForm(mode === "change" ? { request_type: "CONTACT_INFORMATION" } : {})
@@ -384,13 +413,13 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     setCreateOpen(true)
   }
 
-  async function onSave() {
+  async function onSave(mode: "document" | "change" | "resign" = createMode) {
     const token = readStoredToken()
     if (!token) return
     setSaving(true)
     setFormError(null)
     try {
-      if (createMode === "document") {
+      if (mode === "document") {
         if (!form.title || !file) throw new Error("Add a title and choose a file.")
         await uploadMyDocument(token, {
           title: form.title,
@@ -400,7 +429,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           file: await fileToBase64UploadDto(file),
         })
         toast.success("Document uploaded.")
-      } else if (createMode === "change") {
+      } else if (mode === "change") {
         const requestType = form.request_type || "CONTACT_INFORMATION"
         if (requestType === "PROFILE_PHOTO") {
           if (!file) throw new Error("Choose a photo to send for HR approval.")
@@ -429,6 +458,9 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           reason: form.reason,
           notice_date: form.notice_date || undefined,
         })
+        window.dispatchEvent(
+          new Event(EMPLOYEE_LIFECYCLE_REQUESTS_CHANGED),
+        )
         toast.success("Resignation sent to HR.")
       }
       setCreateOpen(false)
@@ -696,7 +728,7 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         render: (row) => formatDate(row.dueAt ?? row.due_at ?? row.updatedAt ?? row.updated_at),
       },
     ]
-  }, [activeTab, busyId, load])
+  }, [activeTab, busyId, load, setHistoryOpen, setHistoryLoading, setHistoryRows])
 
   const changeFields = PROFILE_CHANGE_FIELDS[form.request_type || "CONTACT_INFORMATION"] ?? []
   const waitingProfileChanges = changes.filter((row) => {
@@ -757,7 +789,8 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
     <section className={cn("w-full min-w-0", activeTab === "actions" ? "flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden" : "space-y-4")}>
       <header
         className={cn(
-          "flex min-w-0 flex-col gap-3 border-b border-border bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
+          "flex min-w-0 flex-col gap-3 bg-background px-3 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-4",
+          activeTab !== "resignation" && "border-b border-border",
           activeTab !== "actions" && pageBleedClass,
         )}
       >
@@ -776,6 +809,14 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
               </span>
             ) : null}
           </div>
+          {activeTab === "resignation" ? (
+            <MessageBar intent="info" className="mt-3">
+              <MessageBarBody>
+                <MessageBarTitle>About resignation</MessageBarTitle>{" "}
+                Sending a resignation notifies HR. Your employment continues until HR completes offboarding.
+              </MessageBarBody>
+            </MessageBar>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <FluentButton
@@ -814,6 +855,11 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
           {activeTab === "profile-changes" ? (
             <FluentButton
               appearance="primary"
+              style={{
+                backgroundColor: "var(--primary)",
+                borderColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
               icon={<Add20Regular />}
               onClick={() => openCreate("change")}
             >
@@ -828,59 +874,121 @@ export function EmployeeRequestsView({ activeTab }: { activeTab: RequestsSelfTab
         </div>
       ) : null}
 
-      {activeTab !== "actions" && activeTab !== "timeline" ? (
+      {activeTab !== "actions" && activeTab !== "timeline" && activeTab !== "resignation" ? (
         <CompactStatStrip items={summaryItems} />
       ) : null}
 
       {activeTab === "actions" ? (
         <RequestActionInbox actions={actions} loading={loading} onRefresh={load} />
       ) : activeTab === "resignation" ? (
-        <div className={cn("space-y-4 border-y border-border bg-card px-4 py-5 sm:border-x sm:px-5", pageBleedClass)}>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Send a resignation</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              This notifies HR. It does not end your employment until they complete offboarding.
-            </p>
-          </div>
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Last working day</span>
-            <DateInput
-
-              className={inputClass}
-              value={form.last_working_date ?? ""}
-              onChange={(event) => setForm((current) => ({ ...current, last_working_date: event.target.value }))}
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Notice date (optional)</span>
-            <DateInput
-
-              className={inputClass}
-              value={form.notice_date ?? ""}
-              onChange={(event) => setForm((current) => ({ ...current, notice_date: event.target.value }))}
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Reason</span>
-            <Textarea
-              className={textareaClass}
-              value={form.reason ?? ""}
-              onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
-              placeholder="A short note for HR"
-            />
-          </label>
-          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => {
-              setCreateMode("resign")
-              void onSave()
+        <div className={cn("grid gap-6 px-4 py-5 md:grid-cols-[minmax(13rem,0.65fr)_minmax(0,1.35fr)] md:gap-8 sm:px-5", pageBleedClass)}>
+          <aside className="border-b border-border pb-5 md:border-b-0 md:border-r md:pb-0 md:pr-8">
+          <ol aria-label="Resignation process" className="flex flex-col">
+            {[
+              { title: "Send to HR", description: "Submit your dates and reason", icon: Send20Regular },
+              { title: "HR review", description: "HR reviews your notice", icon: PersonFeedback20Regular },
+              { title: "Offboarding", description: "Employment ends after completion", icon: Briefcase20Regular },
+            ].map(({ title, description, icon: Icon }, index) => (
+              <li key={title} aria-current={!error && !stopped && index === stage ? "step" : undefined} className="relative pb-8 pl-12 last:pb-0">
+                {index < 2 ? <span aria-hidden="true" className="absolute bottom-0 left-4 top-8 w-px bg-primary/20" /> : null}
+                <span className={cn("absolute left-0 top-0 flex size-8 items-center justify-center rounded-full border text-xs font-semibold", index < stage ? "border-primary bg-primary text-primary-foreground" : index === stage && !stopped ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground")}>
+                  {index < stage ? <CheckmarkCircle20Filled aria-label="Completed" /> : index + 1}
+                </span>
+                <div className="pt-1">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <Icon aria-hidden="true" className="shrink-0 text-primary" />
+                    {title}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>
+                  {index === stage && !stopped && !error ? <span className="mt-2 inline-block text-[11px] font-semibold text-primary">{loading ? "Checking status…" : "You are here"}</span> : null}
+                </div>
+              </li>
+            ))}
+          </ol>
+          </aside>
+          <div className="min-w-0">
+          {resignation ? (
+            <div className="space-y-3" aria-live="polite">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Submitted resignation</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Track HR review and your final offboarding progress.</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold">{String(resignation.offboarding_code ?? "Your resignation")}</span>
+                  <StatusChip value={resignationStatus} />
+                </div>
+                <span className="text-xs text-muted-foreground">Updated {formatDate(resignation.updated_at)}</span>
+              </div>
+              {stopped ? <MessageBar intent="warning"><MessageBarBody>This request was {resignationStatus}. Contact HR if you need clarification.</MessageBarBody></MessageBar> : null}
+              <div className="flex flex-wrap gap-x-8 gap-y-2 text-xs text-muted-foreground">
+                <span>Sent to HR · {formatDate(resignation.submitted_at)}</span>
+                <span>Last working day · {formatDate(resignation.last_working_date)}</span>
+                {resignation.completed_at ? <span>Completed · {formatDate(resignation.completed_at)}</span> : null}
+              </div>
+              {stage >= 2 && !stopped ? <div className="max-w-md space-y-2">
+                <p className="text-xs text-muted-foreground">Offboarding checklist · {Math.min(100, Math.max(0, Number(resignation.progress_percentage) || 0))}%</p>
+                <progress aria-label="Offboarding checklist progress" className="h-1.5 w-full accent-primary" max={100} value={Math.min(100, Math.max(0, Number(resignation.progress_percentage) || 0))} />
+                {stage !== 3 ? <p className="text-xs text-muted-foreground">Employment continues until HR finalizes offboarding.</p> : null}
+              </div> : null}
+            </div>
+          ) : null}
+          {!resignation && !loading && !error ? <form
+            className="flex min-w-0 flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void onSave("resign")
             }}
-            disabled={saving}
           >
-            {saving ? <FluentLoadingIndicator className="size-4 animate-spin" /> : "Send to HR"}
-          </button>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Submit your resignation</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Provide your dates and a short explanation for HR.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FluentField label="Last working day" required>
+                <DateInput
+                  id="resignation-last-working-date"
+                  className="!max-w-none"
+                  value={form.last_working_date ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, last_working_date: event.target.value }))}
+                  disabled={saving}
+                />
+              </FluentField>
+              <FluentField label="Notice date (optional)">
+                <DateInput
+                  id="resignation-notice-date"
+                  className="!max-w-none"
+                  value={form.notice_date ?? ""}
+                  onChange={(event) => setForm((current) => ({ ...current, notice_date: event.target.value }))}
+                  disabled={saving}
+                />
+              </FluentField>
+            </div>
+            <FluentField label="Reason" required hint="Share a short explanation for HR.">
+              <FluentTextarea
+                value={form.reason ?? ""}
+                onChange={(_event, data) => setForm((current) => ({ ...current, reason: data.value }))}
+                placeholder="Enter your reason for resigning"
+                rows={4}
+                resize="vertical"
+                disabled={saving}
+              />
+            </FluentField>
+            {formError ? <MessageBar intent="error"><MessageBarBody>{formError}</MessageBarBody></MessageBar> : null}
+            <div className="flex justify-end border-t border-border pt-3">
+              <FluentButton
+                type="submit"
+                appearance="primary"
+                icon={saving ? <FluentLoadingIndicator /> : <Send20Regular />}
+                className="!px-4 !py-2"
+                style={{ backgroundColor: "var(--primary)", borderColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                disabled={saving}
+              >
+                {saving ? "Sending…" : "Send to HR"}
+              </FluentButton>
+            </div>
+          </form> : null}
+          </div>
         </div>
       ) : (
         <div className={cn("overflow-hidden border-y border-border bg-card sm:border-x", pageBleedClass)}>

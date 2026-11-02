@@ -11877,6 +11877,7 @@ function isForbiddenOrMissingError(error: unknown): boolean {
 /** GET /api/me/offboarding — current employee's offboarding requests. */
 export async function listMyOffboardingRequests(
   token: string,
+  options: { strict?: boolean } = {},
 ): Promise<AdminRecord[]> {
   try {
     const payload = await adminRequest<unknown>("/api/me/offboarding", {
@@ -11884,7 +11885,7 @@ export async function listMyOffboardingRequests(
     });
     return normalizeList(payload);
   } catch (error) {
-    if (isForbiddenOrMissingError(error)) return [];
+    if (!options.strict && isForbiddenOrMissingError(error)) return [];
     throw error;
   }
 }
@@ -16145,6 +16146,29 @@ export async function createMyEmployeeSectionItem(
     method: "POST",
     token,
     body: data,
+  });
+}
+
+export async function listCompanyBanks(token: string) {
+  const payload = await adminRequest<unknown>("/api/employees/bank-directory", { token });
+  return normalizeList(payload);
+}
+
+export async function createCompanyBank(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employees/bank-directory", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function uploadCompanyBankLogo(token: string, bankId: string | number, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return adminRequest<unknown>(`/api/employees/bank-directory/${bankId}/logo`, {
+    method: "POST",
+    token,
+    body: form,
   });
 }
 

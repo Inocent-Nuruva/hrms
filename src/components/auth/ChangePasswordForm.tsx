@@ -17,6 +17,7 @@ interface ChangePasswordFormProps {
   }) => Promise<void>
   loading?: boolean
   error?: string | null
+  compact?: boolean
   requiredMode?: boolean
   /** Sign out and return to login (forced password-change flow). */
   onUseDifferentAccount?: () => void
@@ -60,6 +61,7 @@ export function ChangePasswordForm({
   loading = false,
   error,
   requiredMode = false,
+  compact = false,
   onUseDifferentAccount,
 }: ChangePasswordFormProps) {
   const [currentPassword, setCurrentPassword] = React.useState("")
@@ -105,8 +107,8 @@ export function ChangePasswordForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit} noValidate>
-      {requiredMode ? (
+    <form className={cn("flex flex-col", compact ? "gap-3" : "gap-4")} onSubmit={handleSubmit} noValidate>
+      {requiredMode && !compact ? (
         <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-snug text-amber-900 dark:text-amber-100">
           <ShieldCheckIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
           <p>
@@ -187,7 +189,7 @@ export function ChangePasswordForm({
               />
             ))}
           </div>
-          <ul className="grid gap-1 sm:grid-cols-2">
+          <ul className="grid grid-cols-2 gap-1">
             {POLICY_CHECKS.map((check) => {
               const passed = check.test(newPassword)
               return (

@@ -8,7 +8,7 @@ export default function FinanceLayout({
 }) {
   return (
     <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={financeSectionTabGroups} />
+      <DashboardSectionTabs groups={financeSectionTabGroups} hideOnPaths={["/dashboard/finance/payroll"]} />
       <div className="min-w-0">{children}</div>
     </div>
   )

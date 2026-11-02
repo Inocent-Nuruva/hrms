@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 @import "@heroui/styles";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -263,6 +264,8 @@ input:focus {
  * Non-dashboard workspace pages use the same compact type scale as the
  * selected Fluent navigation child. The root analytics dashboard keeps its
  * richer card hierarchy through the route-aware body attribute.
+ * Switch indicators use font-size for thumb geometry and line-height: 0
+ * for alignment; keep Fluent UI in control of those non-text dimensions.
  */
 body[data-app-text-scale="compact"]
   :where(
@@ -277,7 +280,7 @@ body[data-app-text-scale="compact"]
     [role="tooltip"],
     [role="status"]
   )
-  :where(*:not(svg):not(path)) {
+  :where(*:not(svg):not(path):not(.fui-Switch__indicator)) {
   font-size: 11px !important;
   line-height: 16px !important;
 }
@@ -1574,6 +1577,10 @@ main.relative.flex table:not(.fui-Table):not([role="grid"]) > tbody > tr > td {
     0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
+[data-welcome-dashboard="true"] > [data-slot="site-header"] {
+  box-shadow: none !important;
+}
+
 .dark .site-header::before,
 .dark [data-slot="site-header"]::before {
   display: none !important;
@@ -1809,5 +1816,119 @@ html {
     mix-blend-mode: normal;
     z-index: 2147483646;
     display: block;
+  }
+}
+
+[data-dashboard-action="true"] {
+  text-decoration: none !important;
+  transition:
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms ease,
+    color 220ms ease;
+  transform-origin: center;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  [data-dashboard-action="true"]:not(:disabled):not([aria-disabled="true"]):hover {
+    transform: translateY(-1px);
+  }
+
+  [data-dashboard-action="true"]:not(:disabled):not([aria-disabled="true"]):hover .fui-Button__icon svg {
+    animation: dashboard-icon-greet 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  [data-dashboard-action="true"] > svg:last-child {
+    transition: transform 420ms cubic-bezier(0.22, 1.4, 0.36, 1);
+  }
+
+  [data-dashboard-action="true"]:hover > svg:last-child {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes dashboard-icon-greet {
+  0% { transform: translateY(0) rotate(0) scale(1); }
+  35% { transform: translateY(-2px) rotate(-10deg) scale(1.15); }
+  65% { transform: translateY(0) rotate(4deg) scale(1.08); }
+  100% { transform: translateY(-1px) rotate(0) scale(1.06); }
+}
+
+[data-dashboard-action="true"]:hover,
+[data-dashboard-action="true"]:focus,
+[data-dashboard-action="true"] * {
+  text-decoration: none !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-dashboard-action="true"]:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(0) scale(0.99);
+    transition-duration: 140ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dashboard-action="true"] {
+    transition: none;
+  }
+}
+
+/* Theme-aware scrollbars for the workspace, tables, and drawers. */
+:where(html, body, body *) {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 45%, var(--background)) transparent;
+}
+
+:where(html, body, body *):hover {
+  scrollbar-color: color-mix(in srgb, var(--primary) 70%, var(--background)) transparent;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  :where(html, body, body *),
+  :where(html, body, body *):hover {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar-thumb {
+    min-height: 36px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 32%, var(--background)),
+      color-mix(in srgb, var(--primary) 60%, var(--background))
+    ) padding-box;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar-thumb:hover {
+    border-width: 2px;
+    background: color-mix(in srgb, var(--primary) 80%, var(--background)) padding-box;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar-thumb:active {
+    background: var(--primary) padding-box;
+  }
+
+  :where(html, body, body *)::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(html, body, body *) {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+  :where(html, body, body *)::-webkit-scrollbar-thumb {
+    background: ButtonText;
   }
 }

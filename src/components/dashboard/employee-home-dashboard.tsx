@@ -1,16 +1,20 @@
 "use client"
 
+import { useAccountAppearance } from "@/hooks/use-account-appearance"
+
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
+import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Dropdown as FluentDropdown, Option as FluentOption } from "@fluentui/react-components"
+import { PaintBrush20Regular, Clock20Regular, CalendarClock20Regular, Wallet20Regular, Target20Regular, PersonInfo20Regular, Dismiss16Regular, CalendarAdd20Regular, AppsList20Regular, ChevronRight16Regular, Receipt32Regular, Mail20Regular, Call20Regular, Briefcase20Regular, CalendarCheckmark20Regular, PersonAvailable20Regular, PersonProhibited20Regular } from "@fluentui/react-icons"
+import { WelcomeCardBackground, type WelcomeBackground } from "./welcome-card-background"
 import { DateInput } from "@/components/ui/date-input"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import {
-  CalendarIcon, CalendarClockIcon, ClockIcon, MailIcon, PhoneIcon, Sparkles, Users, MapPin, User, CreditCard, Landmark, Target, BadgeCheck, Building2, GraduationCap, Briefcase, Award, FileText, CheckCircle, UserCheck, Globe2, ShieldCheck, ShieldAlert, MailCheck, MailWarning, LogIn, LogOut, Network, Wifi } from "lucide-react";
+  Sparkles, Users, MapPin, User, CreditCard, Landmark, BadgeCheck, Building2, GraduationCap, Briefcase, Award, FileText, CheckCircle, UserCheck, MailCheck } from "lucide-react";
 import { countries as countryCodes } from "country-flag-icons"
 
 import { CountryFlag } from "@/components/country-flag"
-import { useFluentToastResultState } from "@/components/ui/use-fluent-toast-state"
 
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -51,8 +55,7 @@ import {
   patchEmployeeStatus,
   listMyOnboardingRequests,
   submitMyOnboardingDetails,
-  createMyAttendanceCheckIn,
-  createMyAttendanceCheckOut,
+  listCompanyBanks,
   type AdminRecord,
   type EmployeeProfileSection,
 } from "@/lib/admin-api"
@@ -277,7 +280,6 @@ type EmployeeDashboardViewProps = {
   leaveBalanceTotals?: Record<string, number>
   leaveTypes?: AdminRecord[]
   payslips?: AdminRecord[]
-  onAttendanceChanged?: () => Promise<void>
 }
 
 type LeaveBalanceSummary = {
@@ -440,13 +442,6 @@ function resolveManagerDetails(manager: DashboardManager | null | undefined) {
     phone,
     profilePhotoUrl: resolveManagerProfilePhotoUrl(manager),
   }
-}
-
-function greetingForNow() {
-  const hour = new Date().getHours()
-  if (hour < 12) return "Good morning"
-  if (hour < 17) return "Good afternoon"
-  return "Good evening"
 }
 
 const dashboardStagger = {
@@ -632,6 +627,21 @@ const ONBOARDING_FORM_SCHEMAS: Record<string, OnboardingFormField[]> = {
   ],
   departments: [], // special cased - not user editable via section
 }
+
+const TANZANIA_ONBOARDING_BANKS = [
+  "Absa Bank Tanzania Limited", "Access Bank Tanzania Limited", "Akiba Commercial Bank Plc",
+  "Amana Bank Limited", "Azania Bank Limited", "Bank of Africa Tanzania Limited",
+  "Bank of Baroda Tanzania Limited", "Bank of India Tanzania Limited", "China Dasheng Bank Limited",
+  "Citibank Tanzania Limited", "Cooperative Bank of Tanzania Limited", "CRDB Bank Plc",
+  "DCB Commercial Bank Plc", "Diamond Trust Bank Tanzania Plc", "Ecobank Tanzania Limited",
+  "Equity Bank Tanzania Limited", "Exim Bank Tanzania Limited", "Guaranty Trust Bank Tanzania Limited",
+  "Habib African Bank Limited", "I&M Bank Tanzania Limited", "International Commercial Bank Tanzania Limited",
+  "KCB Bank Tanzania Limited", "Letshego Faidika Bank Tanzania Limited", "Mkombozi Commercial Bank Plc",
+  "Mwalimu Commercial Bank Plc", "Mwanga Hakika Bank Limited", "National Bank of Commerce Limited",
+  "NMB Bank Plc", "NCBA Bank Tanzania Limited", "People's Bank of Zanzibar Limited",
+  "Stanbic Bank Tanzania Limited", "Standard Chartered Bank Tanzania Limited", "Tanzania Commercial Bank Plc",
+  "United Bank for Africa Tanzania Limited",
+] as const
 
 function getApiSectionForKey(key: string): EmployeeProfileSection | "documents" | null {
   return SECTION_KEY_TO_API[key] ?? null
@@ -1963,40 +1973,18 @@ function QuickActionLink({
   icon: React.ReactNode
 }) {
   return (
-    <Link
+    <FluentButton
+      data-dashboard-action="true"
+      as="a"
       href={href}
-      className="group relative flex items-center gap-2 overflow-hidden rounded-xl bg-white/10 px-3 py-2 text-white no-underline shadow-[0_10px_24px_-18px_rgba(0,0,0,0.55)] transition-all duration-300 hover:bg-white/16 hover:no-underline focus:no-underline active:no-underline"
-      style={{ textDecoration: "none" }}
+      appearance="subtle"
+      size="large"
+      icon={<span className="inline-flex text-primary [&_svg]:size-5">{icon}</span>}
+      className="!w-full !justify-start !gap-3 !px-4 !py-2 !bg-transparent hover:!bg-transparent active:!bg-transparent"
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-white/12 transition-transform duration-300 group-hover:translate-x-1"
-        style={{ clipPath: "polygon(30% 0%, 100% 0%, 100% 100%, 0% 100%)" }}
-      />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -left-3 bottom-0 h-7 w-16 bg-white/10 transition-transform duration-300 group-hover:-translate-x-1"
-        style={{ clipPath: "polygon(0% 100%, 24% 12%, 100% 0%, 76% 100%)" }}
-      />
-      <span
-        className="relative z-10 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/14 text-white no-underline backdrop-blur-sm group-hover:no-underline [&_svg]:size-3.5"
-        style={{ textDecoration: "none" }}
-      >
-        {icon}
-      </span>
-      <span
-        className="relative z-10 min-w-0 flex-1 truncate text-xs font-semibold leading-tight no-underline group-hover:no-underline"
-        style={{ textDecoration: "none" }}
-      >
-        {title}
-      </span>
-      <span
-        className="relative z-10 text-[10px] font-medium text-white/75 no-underline transition-transform group-hover:translate-x-0.5 group-hover:no-underline"
-        style={{ textDecoration: "none" }}
-      >
-        →
-      </span>
-    </Link>
+      <span className="min-w-0 flex-1 truncate text-left">{title}</span>
+      <ChevronRight16Regular aria-hidden="true" className="shrink-0 text-primary" />
+    </FluentButton>
   )
 }
 
@@ -2139,383 +2127,6 @@ function CardDoodleArtwork({
   )
 }
 
-type BrowserNetworkInformation = {
-  type?: string
-  effectiveType?: string
-  downlink?: number
-  rtt?: number
-  saveData?: boolean
-}
-
-type NavigatorWithConnection = Navigator & {
-  connection?: BrowserNetworkInformation
-  mozConnection?: BrowserNetworkInformation
-  webkitConnection?: BrowserNetworkInformation
-}
-
-type NetworkCheckResult = {
-  online: boolean
-  transport: string
-  effectiveType: string | null
-  downlink: number | null
-  rtt: number | null
-  saveData: boolean | null
-  location: {
-    latitude: number
-    longitude: number
-    accuracy: number
-  } | null
-  locationMessage: string | null
-}
-
-type BrowserLocationResult = Pick<
-  NetworkCheckResult,
-  "location" | "locationMessage"
->
-
-function getBrowserConnection(): BrowserNetworkInformation | undefined {
-  const browserNavigator = navigator as NavigatorWithConnection
-  return (
-    browserNavigator.connection ??
-    browserNavigator.mozConnection ??
-    browserNavigator.webkitConnection
-  )
-}
-
-function connectionTypeLabel(type?: string): string {
-  switch (type?.toLowerCase()) {
-    case "wifi":
-      return "Wi-Fi"
-    case "ethernet":
-      return "Ethernet"
-    case "cellular":
-      return "Mobile data"
-    case "bluetooth":
-      return "Bluetooth"
-    case "wimax":
-      return "WiMAX"
-    case "none":
-      return "No connection"
-    case "other":
-    case "unknown":
-    case undefined:
-      return "Not shared by this browser"
-    default:
-      return type || "Not shared by this browser"
-  }
-}
-
-function locationErrorMessage(error: GeolocationPositionError) {
-  switch (error.code) {
-    case error.PERMISSION_DENIED:
-      return "Location permission was not allowed. You can enable it in your browser settings."
-    case error.POSITION_UNAVAILABLE:
-      return "Your current location could not be found."
-    case error.TIMEOUT:
-      return "The location check took too long. Please try again."
-    default:
-      return "Your location could not be checked."
-  }
-}
-
-function requestBrowserLocation(): Promise<BrowserLocationResult> {
-  return new Promise((resolve) => {
-    if (!window.isSecureContext) {
-      resolve({
-        location: null,
-        locationMessage:
-          "To check in with your location, open HRMS using your organization’s secure link.",
-      })
-      return
-    }
-
-    if (!navigator.geolocation) {
-      resolve({
-        location: null,
-        locationMessage: "Location checking is not supported by this browser.",
-      })
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          location: {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-          },
-          locationMessage: null,
-        })
-      },
-      (error) => {
-        resolve({
-          location: null,
-          locationMessage: locationErrorMessage(error),
-        })
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 30_000,
-        timeout: 10_000,
-      },
-    )
-  })
-}
-
-function NetworkCheckButton() {
-  const [open, setOpen] = React.useState(false)
-  const [checking, setChecking] = React.useState(false)
-  const [result, setResult] = React.useState<NetworkCheckResult | null>(null)
-
-  const runCheck = React.useCallback(async () => {
-    setOpen(true)
-    setChecking(true)
-
-    const connection = getBrowserConnection()
-    const locationResult = await requestBrowserLocation()
-
-    setResult({
-      online: navigator.onLine,
-      transport: connectionTypeLabel(connection?.type),
-      effectiveType: connection?.effectiveType?.toUpperCase() ?? null,
-      downlink:
-        typeof connection?.downlink === "number" ? connection.downlink : null,
-      rtt: typeof connection?.rtt === "number" ? connection.rtt : null,
-      saveData:
-        typeof connection?.saveData === "boolean" ? connection.saveData : null,
-      ...locationResult,
-    })
-    setChecking(false)
-  }, [])
-
-  return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1.5 px-2.5 text-xs"
-        onClick={() => void runCheck()}
-      >
-        <Network className="size-3.5" aria-hidden="true" />
-        Network check
-      </Button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPopup from="center" className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wifi className="size-5 text-primary" aria-hidden="true" />
-              Network and location check
-            </DialogTitle>
-            <DialogDescription>
-              See the connection details your browser can safely share.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 px-5 pb-2 sm:px-6" aria-live="polite">
-            {checking ? (
-              <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
-                <FluentLoadingIndicator className="size-6 animate-spin text-primary" aria-hidden="true" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">Checking your connection</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Allow location access if your browser asks.
-                  </p>
-                </div>
-              </div>
-            ) : result ? (
-              <>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-lg border border-border bg-muted/30 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Internet
-                    </p>
-                    <p className={cn("mt-1 text-sm font-semibold", result.online ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                      {result.online ? "Connected" : "Offline"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-muted/30 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Connection type
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{result.transport}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-border p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Connection details
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">
-                    {result.effectiveType ? `${result.effectiveType} estimated quality` : "Quality details are not shared by this browser."}
-                  </p>
-                  {result.downlink !== null || result.rtt !== null || result.saveData !== null ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {[
-                        result.downlink !== null ? `About ${result.downlink} Mbps` : null,
-                        result.rtt !== null ? `${result.rtt} ms response` : null,
-                        result.saveData === true ? "Data saver is on" : null,
-                      ].filter(Boolean).join(" · ")}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="rounded-lg border border-border p-3">
-                  <div className="flex items-start gap-2.5">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">Location</p>
-                      {result.location ? (
-                        <p className="mt-1 break-words text-xs text-muted-foreground">
-                          {result.location.latitude.toFixed(5)}, {result.location.longitude.toFixed(5)} · accurate to about {Math.round(result.location.accuracy)} m
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs text-muted-foreground">{result.locationMessage}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Browsers do not reveal the Wi-Fi name. Attendance uses your permitted location, while the server must verify an approved office network from the request itself.
-                </p>
-              </>
-            ) : null}
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Close
-            </Button>
-            <Button type="button" onClick={() => void runCheck()} disabled={checking}>
-              {checking ? "Checking…" : "Check again"}
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
-    </>
-  )
-}
-
-function AttendancePunchActions({
-  canCheckIn,
-  canCheckOut,
-  onAttendanceChanged,
-}: {
-  canCheckIn: boolean
-  canCheckOut: boolean
-  onAttendanceChanged?: () => Promise<void>
-}) {
-  const [busyAction, setBusyAction] = React.useState<"in" | "out" | null>(null)
-  const [message, setMessage] = React.useState<{
-    tone: "success" | "error"
-    text: string
-  } | null>(null)
-
-  useFluentToastResultState(message, setMessage)
-
-  const submitPunch = React.useCallback(
-    async (action: "in" | "out") => {
-      setMessage(null)
-      setBusyAction(action)
-
-      try {
-        if (!navigator.onLine) {
-          throw new Error("You appear to be offline. Connect to the office network and try again.")
-        }
-
-        const token = readStoredSessionTokens().accessToken
-        if (!token) {
-          throw new Error("Your session has expired. Please sign in again.")
-        }
-
-        const locationResult = await requestBrowserLocation()
-        if (!locationResult.location) {
-          throw new Error(
-            locationResult.locationMessage ||
-              "Location permission is required to record attendance.",
-          )
-        }
-
-        const connection = getBrowserConnection()
-        const payload: AdminRecord = {
-          clientRequestId: crypto.randomUUID(),
-          latitude: locationResult.location.latitude,
-          longitude: locationResult.location.longitude,
-          accuracyMeters: locationResult.location.accuracy,
-          deviceIdentifier: `web-${navigator.platform || "browser"}`,
-          deviceInfo: {
-            platform: "web",
-            networkType: connection?.type,
-          },
-        }
-
-        if (action === "in") {
-          await createMyAttendanceCheckIn(token, payload)
-        } else {
-          await createMyAttendanceCheckOut(token, payload)
-        }
-
-        setMessage({
-          tone: "success",
-          text: action === "in" ? "Check-in recorded." : "Check-out recorded.",
-        })
-        await onAttendanceChanged?.().catch(() => undefined)
-      } catch (errorObject) {
-        setMessage({
-          tone: "error",
-          text:
-            errorObject instanceof Error
-              ? errorObject.message
-              : `Unable to check ${action === "in" ? "in" : "out"}.`,
-        })
-      } finally {
-        setBusyAction(null)
-      }
-    },
-    [onAttendanceChanged],
-  )
-
-  return (
-    <div className="mt-2 space-y-1.5">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 gap-1.5 px-2.5 text-xs"
-          disabled={!canCheckIn || busyAction !== null}
-          onClick={() => void submitPunch("in")}
-        >
-          {busyAction === "in" ? (
-            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <LogIn className="size-3.5" aria-hidden="true" />
-          )}
-          {busyAction === "in" ? "Checking in…" : "Check in"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5 px-2.5 text-xs"
-          disabled={!canCheckOut || busyAction !== null}
-          onClick={() => void submitPunch("out")}
-        >
-          {busyAction === "out" ? (
-            <FluentLoadingIndicator className="size-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <LogOut className="size-3.5" aria-hidden="true" />
-          )}
-          {busyAction === "out" ? "Checking out…" : "Check out"}
-        </Button>
-        <NetworkCheckButton />
-      </div>
-    </div>
-  )
-}
-
 export function EmployeeDashboardView({
   dashboardData,
   token,
@@ -2525,12 +2136,14 @@ export function EmployeeDashboardView({
   leaveBalanceTotals,
   leaveTypes,
   payslips,
-  onAttendanceChanged,
 }: EmployeeDashboardViewProps) {
   const { url: myProfilePhotoUrl } = useMyProfilePhoto()
   const actor = useDashboardActor()
   const dashboardIdentity = useDashboardIdentity()
   useForbiddenPrefixes()
+  const [cardBackground, setCardBackground] = React.useState<WelcomeBackground | "original">("aurora")
+  const selectCardBackground = useAccountAppearance("employeeBackground", "aurora", setCardBackground)
+  const nextBackground = cardBackground === "aurora" ? "geometric" : cardBackground === "geometric" ? "glow" : cardBackground === "glow" ? "plain" : "aurora"
   const [dashboardCardLook, setDashboardCardLook] = React.useState<DashboardCardLook>(defaultDashboardCardLook)
   const [dashboardCardLookSaveState, setDashboardCardLookSaveState] = React.useState<"idle" | "saving" | "error">("idle")
   const dashboardCardLookKey = dashboardData?.user?.id
@@ -2583,13 +2196,11 @@ export function EmployeeDashboardView({
   const activeDashboardCardPalette =
     dashboardCardPalettes.find((palette) => palette.id === dashboardCardLook.palette) ??
     dashboardCardPalettes[0]
-  const isDynamicDashboardCard = dashboardCardLook.palette === "white"
+  const isDynamicDashboardCard = cardBackground !== "original" || dashboardCardLook.palette === "white"
   const dashboardCardBackground = isDynamicDashboardCard
     ? "var(--background)"
     : activeDashboardCardPalette.color
   const fullName = `${dashboardData.user.first_name} ${dashboardData.user.last_name}`.trim()
-  const preferredName =
-    dashboardData.employee.preferred_name?.trim() || dashboardData.user.first_name
   const linksRecord = asRecord(dashboardData.links)
   const dashboardRoot = asRecord(dashboardData)
   const dashboardLeave = asRecord(dashboardRoot?.leave)
@@ -2723,14 +2334,6 @@ export function EmployeeDashboardView({
   const settingsEmailVerifyHref = "/dashboard/settings?tab=email"
 
   const att = getAttendanceStatus(attendanceToday, attendancePunchesToday)
-  const hasCheckedIn = att.checkIn !== "—"
-  const hasCheckedOut = att.checkOut !== "—"
-  const canCheckIn =
-    !hasCheckedIn && (dashboardData.action_flags?.can_check_in ?? true)
-  const canCheckOut =
-    hasCheckedIn &&
-    !hasCheckedOut &&
-    (dashboardData.action_flags?.can_check_out ?? true)
   const dashboardLeaveBalances = flattenDashboardLeaveBalances(dashboardLeave)
   const resolvedLeaveBalances =
     Array.isArray(leaveBalances) && leaveBalances.length > 0 ? leaveBalances : dashboardLeaveBalances
@@ -2813,12 +2416,6 @@ export function EmployeeDashboardView({
   const latestPayslipPeriod = readPayslipPeriodLabel(latestPayslip)
   const latestPayslipStatus = readPayslipStatusLabel(latestPayslip)
 
-  const todayLabel = new Date().toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
-
   const snapshotChips = [
     {
       key: "status",
@@ -2859,95 +2456,36 @@ export function EmployeeDashboardView({
 
   return (
     <motion.div
-      className="space-y-4"
+      className="space-y-2"
       variants={dashboardStagger}
       initial="hidden"
       animate="show"
     >
-      {/* Greeting + day snapshot on the right */}
-      <motion.div
-        variants={dashboardItem}
-        className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-      >
-        <div className="min-w-0 max-w-full">
-          <motion.p
-            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {todayLabel}
-          </motion.p>
-          <h1 className="mt-0.5 break-words text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-            <motion.span
-              className="inline-block"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
-            >
-              {greetingForNow()},
-            </motion.span>{" "}
-            <AnimatedGreetingName name={preferredName} />
-          </h1>
-          <motion.p
-            className="mt-0.5 text-sm text-muted-foreground"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.35, duration: 0.35 }}
-          >
-            Here&apos;s your day at a glance.
-          </motion.p>
-          <AttendancePunchActions
-            canCheckIn={canCheckIn}
-            canCheckOut={canCheckOut}
-            onAttendanceChanged={onAttendanceChanged}
-          />
-        </div>
-
-        <div className="w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain sm:w-auto sm:max-w-[min(100%,36rem)] sm:shrink-0">
-          <div className="inline-flex min-w-full flex-nowrap items-stretch rounded-lg border border-border sm:min-w-0">
-            {snapshotChips.map((chip, index, arr) => (
-              <motion.div
-                key={chip.key}
-                className={cn(
-                  "flex min-w-[4.75rem] flex-1 flex-col justify-center px-2 py-2 sm:min-w-[5.25rem] sm:flex-none sm:px-2.5",
-                  chip.className,
-                  index < arr.length - 1 ? "border-r border-border/60" : null
-                )}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.32 + index * 0.05, duration: 0.28 }}
-              >
-                <span className="truncate text-[9px] font-semibold uppercase tracking-wide opacity-80 sm:text-[10px]">
-                  {chip.label}
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-xs font-semibold tabular-nums leading-tight capitalize sm:text-sm",
-                    chip.valueClassName
-                  )}
-                >
-                  {chip.value}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
       {/* Hero — primary card with labeled identity */}
       <motion.div
         variants={dashboardItem}
-        className={cn(heroPanelClass, pageBleedClass, "overflow-visible")}
+        className={cn(heroPanelClass, pageBleedClass, "overflow-visible !pt-3")}
         style={{ backgroundColor: dashboardCardBackground }}
       >
-        <CardDoodleArtwork
-          pattern={dashboardCardLook.artwork}
-          className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/15" : "text-white/20")}
-        />
-        <div className="relative z-10 space-y-4">
-          <div className="flex justify-end">
-            <details className="group relative z-50">
+        {cardBackground === "original" ? (
+          <CardDoodleArtwork
+            pattern={dashboardCardLook.artwork}
+            className={cn("absolute inset-0 h-full w-full", isDynamicDashboardCard ? "text-foreground/15" : "text-white/20")}
+          />
+        ) : <WelcomeCardBackground background={cardBackground} />}
+        <div className="relative z-10 flex flex-col gap-4">
+          <div className="absolute -right-2 -top-1 z-20 flex items-center gap-2">
+            <FluentButton
+      data-dashboard-action="true"
+              appearance="subtle"
+              size="small"
+              type="button"
+              icon={<PaintBrush20Regular style={{ color: "var(--primary)" }} />}
+              aria-label={`Background: ${cardBackground}. Switch to ${nextBackground}`}
+              title={`Background: ${cardBackground}. Switch to ${nextBackground}`}
+              onClick={() => selectCardBackground(nextBackground)}
+            />
+            {cardBackground === "original" ? <details className="group relative z-50">
               <summary className={cn("inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted focus-visible:ring-ring" : "border-white/30 bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/70")}>
                 <Sparkles className="size-3.5" aria-hidden="true" />
                 Card artwork
@@ -2964,7 +2502,7 @@ export function EmployeeDashboardView({
                           key={artwork.id}
                           type="button"
                           aria-pressed={selected}
-                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, artwork: artwork.id })}
+                          onClick={() => { selectCardBackground("original"); void saveDashboardCardLook({ ...dashboardCardLook, artwork: artwork.id }) }}
                           className={cn(
                             "overflow-hidden rounded-lg border text-left text-[10px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             selected ? "border-primary ring-2 ring-primary/25" : "border-border hover:border-primary/50",
@@ -2994,7 +2532,7 @@ export function EmployeeDashboardView({
                           aria-label={`${palette.label} card color`}
                           aria-pressed={selected}
                           title={palette.label}
-                          onClick={() => void saveDashboardCardLook({ ...dashboardCardLook, palette: palette.id })}
+                          onClick={() => { selectCardBackground("original"); void saveDashboardCardLook({ ...dashboardCardLook, palette: palette.id }) }}
                           className={cn(
                             "relative size-8 rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             selected ? "border-foreground ring-2 ring-primary/30" : "border-border hover:scale-110",
@@ -3022,8 +2560,9 @@ export function EmployeeDashboardView({
                   </p>
                 </div>
               </div>
-            </details>
+            </details> : null}
           </div>
+          <div className="flex flex-col gap-4 pr-7 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
           <div className="flex min-w-0 items-start gap-3">
             <motion.div
               initial={{ opacity: 0, scale: 0.85 }}
@@ -3042,30 +2581,39 @@ export function EmployeeDashboardView({
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className={cn("text-xl font-semibold tracking-tight md:text-2xl", isDynamicDashboardCard ? "text-foreground" : "text-white")}>
-                  {fullName}
+                  <AnimatedGreetingName name={fullName} />
                 </h2>
-                <span className={cn("text-[11px] font-semibold capitalize", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/85")}>
+                <FluentBadge
+                  appearance="tint"
+                  color={employmentStatus.toLowerCase() === "active" ? "success" : "informative"}
+                  icon={<PresenceBadge status={employmentStatus.toLowerCase() === "active" ? "available" : "away"} />}
+                  className="capitalize"
+                >
                   {employmentStatus}
-                </span>
+                </FluentBadge>
               </div>
               {dashboardIdentity.rolesLabel ? (
                 <p className={cn("text-[10px] font-semibold uppercase leading-4 tracking-[0.15em]", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/75")}>
                   {dashboardIdentity.rolesLabel}
                 </p>
               ) : null}
-              <Link href={profileHref} className="inline-block no-underline hover:no-underline">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={cn("h-7 px-2.5 text-xs", isDynamicDashboardCard ? "border-border bg-muted/60 text-foreground hover:bg-muted hover:text-foreground" : "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white")}
-                >
-                  View full profile
-                </Button>
-              </Link>
             </div>
           </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5 lg:ml-auto lg:translate-x-3 lg:shrink-0 lg:gap-x-5">
+            {snapshotChips.map((chip) => (
+              <div key={chip.key} className="min-w-0">
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {chip.label}
+                </dt>
+                <dd className={cn("mt-1 text-sm font-semibold tabular-nums capitalize", chip.valueClassName)}>
+                  {chip.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          </div>
 
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3 text-center sm:grid-cols-5">
             {[
               { label: "Employee no.", value: employeeNo },
               { label: "Position", value: positionLabel },
@@ -3083,17 +2631,18 @@ export function EmployeeDashboardView({
                 <p className={cn("text-[9px] font-semibold uppercase tracking-wide", isDynamicDashboardCard ? "text-muted-foreground" : "text-white/70")}>
                   {field.label}
                 </p>
-                <p className={cn("truncate text-xs font-semibold", isDynamicDashboardCard ? "text-foreground" : "text-white")}>{field.value}</p>
+                <p className={cn("break-words text-xs font-semibold", isDynamicDashboardCard ? "text-foreground" : "text-white")}>{field.value}</p>
               </motion.div>
             ))}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { href: attendanceHref, title: "My attendance", icon: <ClockIcon /> },
-              { href: leaveRequestHref, title: "Request leave", icon: <CalendarClockIcon /> },
-              { href: payrollHref, title: "My payroll", icon: <Landmark /> },
-              { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target /> },
+              { href: attendanceHref, title: "My attendance", icon: <Clock20Regular /> },
+              { href: leaveRequestHref, title: "Request leave", icon: <CalendarClock20Regular /> },
+              { href: payrollHref, title: "My payroll", icon: <Wallet20Regular /> },
+              { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target20Regular /> },
             ].filter((action) =>
               actor.ready &&
               canSeeDashboardPage(action.href, actor.permissionLabels, actor.accessMode)
@@ -3150,10 +2699,26 @@ export function EmployeeDashboardView({
 
       {/* Leave balances — full width */}
       <motion.div variants={dashboardItem}>
-        <DashboardSection
-          title="Leave balances"
-          subtitle={leaveFiscalYear ? `Available days by type · FY ${leaveFiscalYear}` : "Available days by type"}
-          action={
+        <section aria-labelledby="leave-balances-title">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <CalendarClock20Regular aria-hidden="true" className="shrink-0 text-primary" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 id="leave-balances-title" className="text-sm font-semibold text-foreground">Leave balances</h2>
+                  {leaveFiscalYear ? (
+                    <FluentBadge
+                      appearance="tint"
+                      size="small"
+                      aria-label={`Financial year ${leaveFiscalYear}`}
+                      style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}
+                    >
+                      FY {leaveFiscalYear}
+                    </FluentBadge>
+                  ) : null}
+                </div>
+              </div>
+            </div>
             <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5">
               {pendingLeaveRequests > 0 ? (
                 <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
@@ -3165,40 +2730,51 @@ export function EmployeeDashboardView({
                   {approvedLeaveRequests} approved
                 </span>
               ) : null}
-              <Link
+              <FluentButton
+      data-dashboard-action="true"
+                as="a"
                 href={leaveBalancesHref}
-                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+                className="!px-4 !py-2"
+                appearance="subtle"
+                size="small"
+                icon={<AppsList20Regular />}
+                style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}
+                aria-label="View all leave balances"
               >
                 View all
-              </Link>
-              <Link href={leaveRequestHref} className="shrink-0 no-underline hover:no-underline">
-                <Button size="sm" className="h-7 px-2 text-[11px] bg-primary !text-white hover:bg-primary/90 sm:px-2.5 sm:text-xs">
-                  Request time off
-                </Button>
-              </Link>
-            </div>
-          }
-        >
-          {leaveSummaries.length > 0 ? (
-            <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
-              {leaveSummaries.map((item, idx) => (
-                <motion.div
-                  key={`${item.typeName}-${idx}`}
-                  className="flex min-w-[6.25rem] flex-1 flex-col items-center justify-center rounded-xl bg-muted/40 px-1.5 py-2.5 text-center sm:min-w-[7.5rem] sm:px-2 sm:py-3"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 + idx * 0.05, duration: 0.25 }}
+              </FluentButton>
+                <FluentButton
+      data-dashboard-action="true"
+                  as="a"
+                  href={leaveRequestHref}
+                  appearance="primary"
+                  size="small"
+                  className="!px-4 !py-2"
+                  icon={<CalendarAdd20Regular />}
+                  style={{ backgroundColor: "var(--primary)", borderColor: "var(--primary)", color: "var(--primary-foreground)" }}
                 >
-                  <p className="line-clamp-2 min-h-[1.4rem] w-full text-[9px] font-medium leading-tight text-muted-foreground">
-                    {item.typeName}
-                  </p>
-                  <p className="mt-1 text-base font-semibold tabular-nums leading-none text-primary">
-                    {item.available}
-                  </p>
-                  <p className="mt-0.5 text-[8px] text-muted-foreground">days left</p>
-                </motion.div>
-              ))}
+                  Request time off
+                </FluentButton>
             </div>
+          </div>
+          {leaveSummaries.length > 0 ? (
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-4 px-4 py-4 lg:grid-cols-4">
+              {leaveSummaries.map((item, idx) => {
+                const hasBalance = Number(item.available) > 0
+                return (
+                  <div key={`${item.typeName}-${idx}`} className="min-w-0 border-t border-border pt-3">
+                    <dt className="flex items-start gap-2 text-xs font-medium leading-5 text-muted-foreground">
+                      <CalendarClock20Regular aria-hidden="true" className={cn("shrink-0", hasBalance ? "text-primary" : "text-muted-foreground")} />
+                      {item.typeName}
+                    </dt>
+                    <dd className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className={cn("text-2xl font-semibold tracking-tight tabular-nums", hasBalance ? "text-primary" : "text-muted-foreground")}>{item.available}</span>
+                      <span className="text-[11px] text-muted-foreground">{Number(item.available) === 1 ? "day" : "days"} left</span>
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
           ) : (
             <div className="px-3 py-4 text-sm text-muted-foreground">
               {leaveFiscalYear
@@ -3206,23 +2782,31 @@ export function EmployeeDashboardView({
                 : "No leave balance information available yet."}
             </div>
           )}
-        </DashboardSection>
+        </section>
       </motion.div>
 
       <motion.div variants={dashboardItem}>
-        <DashboardSection
-          title="Payroll"
-          subtitle="Latest payslip snapshot"
-          action={
-            <Link
+        <section aria-labelledby="payroll-summary-title">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-2">
+            <div className="flex items-center gap-2.5">
+              <Wallet20Regular aria-hidden="true" className="shrink-0 text-primary" />
+              <div>
+                <h2 id="payroll-summary-title" className="text-sm font-semibold text-foreground">Payroll</h2>
+              </div>
+            </div>
+            <FluentButton
+      data-dashboard-action="true"
+              as="a"
               href={payrollHref}
-              className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
+              className="!px-4 !py-2"
+              appearance="subtle"
+              size="small"
+              icon={<Wallet20Regular />}
+              style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}
             >
               Open payroll
-            </Link>
-          }
-          barClassName="bg-emerald-500"
-        >
+            </FluentButton>
+          </div>
           {latestPayslip ? (
             <div className="grid gap-3 px-3 py-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-muted/40 px-3 py-3">
@@ -3252,93 +2836,83 @@ export function EmployeeDashboardView({
               </div>
             </div>
           ) : (
-            <div className="px-3 py-4 text-sm text-muted-foreground">
-              No payslips have been published to your account yet.
+            <div className="mx-4 mt-3 flex items-center gap-3 border-t border-border py-5">
+              <Receipt32Regular
+                aria-hidden="true"
+                className="shrink-0 text-primary"
+              />
+              <p className="text-sm font-medium leading-5 text-foreground">
+                Your first payslip will appear here
+              </p>
             </div>
           )}
-        </DashboardSection>
+        </section>
       </motion.div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2">
         <motion.div variants={dashboardItem}>
-          <DashboardSection
-            title="Attendance trend"
-            subtitle={
-              attendanceFromDate && attendanceToDate
-                ? `${formatCompactDate(attendanceFromDate)} - ${formatCompactDate(attendanceToDate)}`
-                : "Last 30 days"
-            }
-            action={
-              <Link
-                href={attendanceHistoryHref}
-                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
-              >
+          <section aria-labelledby="attendance-trend-title">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-2">
+              <div className="flex items-center gap-2.5">
+                <Clock20Regular aria-hidden="true" className="shrink-0 text-primary" />
+                <div>
+                  <h2 id="attendance-trend-title" className="text-sm font-semibold text-foreground">Attendance trend</h2>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{attendanceFromDate && attendanceToDate ? `${formatCompactDate(attendanceFromDate)} – ${formatCompactDate(attendanceToDate)}` : "Last 30 days"}</p>
+                </div>
+              </div>
+              <FluentButton data-dashboard-action="true" as="a" href={attendanceHistoryHref} className="!px-4 !py-2" appearance="subtle" size="small" icon={<Clock20Regular />}
+                style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>
                 View history
-              </Link>
-            }
-            barClassName="bg-primary"
-          >
+              </FluentButton>
+            </div>
             {attendanceTotalDays > 0 ? (
-              <div className="grid gap-3 px-3 py-3 sm:grid-cols-2 xl:grid-cols-4">
+              <dl className="grid grid-cols-2 gap-x-5 gap-y-4 px-4 py-4 sm:grid-cols-3 lg:grid-cols-5">
                 {[
-                  {
-                    label: "Tracked days",
-                    value: String(attendanceTotalDays),
-                    tone: "text-foreground",
-                  },
-                  {
-                    label: "Present",
-                    value:
-                      attendancePresentRate !== null
-                        ? `${attendancePresentDays} (${attendancePresentRate}%)`
-                        : String(attendancePresentDays),
-                    tone: "text-emerald-700 dark:text-emerald-400",
-                  },
-                  {
-                    label: "Absent",
-                    value: String(attendanceAbsentDays),
-                    tone: "text-rose-700 dark:text-rose-400",
-                  },
-                  {
-                    label: "Leave / Late",
-                    value: `${attendanceLeaveDays} / ${attendanceLateDays}`,
-                    tone: "text-amber-700 dark:text-amber-400",
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-xl bg-muted/40 px-3 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      {item.label}
-                    </p>
-                    <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
+                  { label: "Tracked days", value: attendanceTotalDays, icon: CalendarCheckmark20Regular, tone: "text-primary", detail: "In this period" },
+                  { label: "Present", value: attendancePresentDays, icon: PersonAvailable20Regular, tone: "text-emerald-700 dark:text-emerald-400", detail: attendancePresentRate !== null ? `${attendancePresentRate}% attendance` : "Days present" },
+                  { label: "Absent", value: attendanceAbsentDays, icon: PersonProhibited20Regular, tone: "text-rose-700 dark:text-rose-400", detail: "Days absent" },
+                  { label: "On leave", value: attendanceLeaveDays, icon: CalendarClock20Regular, tone: "text-primary", detail: "Leave days" },
+                  { label: "Late", value: attendanceLateDays, icon: Clock20Regular, tone: "text-amber-700 dark:text-amber-400", detail: "Late arrivals" },
+                ].map(({ label, value, icon: Icon, tone, detail }) => (
+                  <div key={label} className="min-w-0 border-t border-border pt-3">
+                    <dt className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Icon aria-hidden="true" className={cn("shrink-0", tone)} />
+                      {label}
+                    </dt>
+                    <dd className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className={cn("text-2xl font-semibold tracking-tight tabular-nums", tone)}>{value}</span>
+                      <span className="text-[11px] text-muted-foreground">{detail}</span>
+                    </dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             ) : (
               <div className="px-3 py-4 text-sm text-muted-foreground">
                 Attendance trend data will appear once your recent attendance is available.
               </div>
             )}
-          </DashboardSection>
+          </section>
         </motion.div>
 
         <motion.div variants={dashboardItem}>
-          <DashboardSection
-            title="This week"
-            subtitle="Upcoming schedule preview"
-            action={
-              <Link
-                href={attendanceScheduleHref}
-                className="shrink-0 text-xs font-medium text-primary no-underline hover:underline"
-              >
+          <section aria-labelledby="weekly-schedule-title">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-2">
+              <div className="flex items-center gap-2.5">
+                <CalendarClock20Regular aria-hidden="true" className="shrink-0 text-primary" />
+                <div>
+                  <h2 id="weekly-schedule-title" className="text-sm font-semibold text-foreground">This week</h2>
+                </div>
+              </div>
+              <FluentButton data-dashboard-action="true" as="a" href={attendanceScheduleHref} className="!px-4 !py-2" appearance="subtle" size="small" icon={<CalendarClock20Regular />}
+                style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>
                 Open schedule
-              </Link>
-            }
-            barClassName="bg-primary"
-          >
+              </FluentButton>
+            </div>
             {scheduleDays.length > 0 ? (
               <div className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
                 {scheduleDays.slice(0, 7).map((day) => {
                   const dayDate = readString(day, ["date"])
+                  const isToday = dayDate?.slice(0, 10) === localDateIso()
                   const holidayRecord = asRecord(day.holiday)
                   const shiftRecord = asRecord(day.shift)
                   const isOffDay =
@@ -3358,12 +2932,19 @@ export function EmployeeDashboardView({
                   return (
                     <div
                       key={dayDate || shiftName}
-                      className="flex min-w-[7.5rem] flex-1 flex-col rounded-xl bg-muted/40 px-3 py-3"
+                      aria-current={isToday ? "date" : undefined}
+                      className={cn(
+                        "flex min-w-[8rem] flex-1 flex-col rounded-lg border p-3",
+                        isToday ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border bg-card"
+                      )}
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        {formatWeekdayLabel(dayDate)}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-foreground">
+                      <div className="flex min-h-5 items-center justify-between gap-2">
+                        <p className={cn("text-[10px] font-semibold uppercase tracking-[0.16em]", isToday ? "text-primary" : "text-muted-foreground")}>
+                          {formatWeekdayLabel(dayDate)}
+                        </p>
+                        {isToday ? <FluentBadge size="small" appearance="filled" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Today</FluentBadge> : null}
+                      </div>
+                      <p className="mt-1 text-base font-semibold text-foreground">
                         {formatCompactDate(dayDate)}
                       </p>
                       <p
@@ -3378,7 +2959,7 @@ export function EmployeeDashboardView({
                       >
                         {holidayRecord ? holidayName : isOffDay ? "Off day" : shiftName}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{detail}</p>
+                      <p className="mt-2 border-t border-primary/10 pt-2 text-[11px] tabular-nums text-muted-foreground">{detail}</p>
                     </div>
                   )
                 })}
@@ -3388,16 +2969,23 @@ export function EmployeeDashboardView({
                 Your upcoming schedule preview is not available yet.
               </div>
             )}
-          </DashboardSection>
+          </section>
         </motion.div>
       </div>
 
       {/* Manager (left) + Employment (right) — same card design */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <motion.div variants={dashboardItem}>
-          <DashboardSection title="Your manager" subtitle="Reporting line" barClassName="bg-primary">
-            <div className="flex items-start gap-3 px-3 py-3">
-              <Avatar className="size-11 shrink-0 ring-1 ring-border">
+          <section aria-labelledby="manager-title" className="h-full px-4 pt-2">
+            <div className="flex items-center gap-2.5">
+              <PersonInfo20Regular aria-hidden="true" className="text-primary" />
+              <div>
+                <h2 id="manager-title" className="text-sm font-semibold text-foreground">Your manager</h2>
+                <p className="text-[11px] text-muted-foreground">Reporting line</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-start gap-3 border-t border-border py-5">
+              <Avatar className="size-12 shrink-0 ring-1 ring-border">
                 {managerDetails.profilePhotoUrl ? (
                   <AvatarImage src={managerDetails.profilePhotoUrl} alt={managerDetails.name} />
                 ) : null}
@@ -3405,32 +2993,34 @@ export function EmployeeDashboardView({
                   {initialsFor(managerDetails.name === "Not assigned" ? "NA" : managerDetails.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="min-w-0 flex-1 space-y-3">
                 <div>
                   <p className="truncate text-sm font-semibold text-foreground">{managerDetails.name}</p>
                   {managerDetails.employeeNo ? (
-                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {managerDetails.employeeNo}
                     </p>
                   ) : null}
                 </div>
                 {managerDetails.email || managerDetails.phone ? (
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-2">
                     {managerDetails.email ? (
                       <a
+                        data-dashboard-action="true"
                         href={`mailto:${managerDetails.email}`}
                         className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground no-underline hover:text-primary hover:underline"
                       >
-                        <MailIcon className="size-3 shrink-0 text-primary" />
+                        <Mail20Regular className="shrink-0 text-primary" />
                         <span className="truncate">{managerDetails.email}</span>
                       </a>
                     ) : null}
                     {managerDetails.phone ? (
                       <a
+                        data-dashboard-action="true"
                         href={`tel:${managerDetails.phone.replace(/\s+/g, "")}`}
                         className="flex min-w-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground no-underline hover:text-primary hover:underline"
                       >
-                        <PhoneIcon className="size-3 shrink-0 text-primary" />
+                        <Call20Regular className="shrink-0 text-primary" />
                         <span className="truncate">{managerDetails.phone}</span>
                       </a>
                     ) : null}
@@ -3440,102 +3030,45 @@ export function EmployeeDashboardView({
                 )}
               </div>
             </div>
-          </DashboardSection>
+          </section>
         </motion.div>
 
         <motion.div variants={dashboardItem}>
-          <DashboardSection title="Employment" barClassName="bg-primary">
-            <div className="min-w-0 space-y-1.5 px-3 py-3">
-              <div className="flex flex-col gap-1.5">
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  <Globe2 className="mt-0.5 size-3 shrink-0 text-primary" />
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">Nationality · </span>
-                    <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                      <NationalityFlag code={nationalityCode} className="mt-px" />
-                      <span>{nationalityLabel}</span>
-                    </span>
-                  </span>
-                </p>
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  <User className="mt-0.5 size-3 shrink-0 text-primary" />
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">Gender · </span>
-                    <span className="font-medium text-foreground">{genderLabel}</span>
-                  </span>
-                </p>
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  <Briefcase className="mt-0.5 size-3 shrink-0 text-primary" />
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">Employment type · </span>
-                    <span className="font-medium text-foreground">{employmentTypeLabel}</span>
-                  </span>
-                </p>
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  <CalendarIcon className="mt-0.5 size-3 shrink-0 text-primary" />
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">Probation end · </span>
-                    <span className="font-medium text-foreground">{probationEndDateLabel}</span>
-                  </span>
-                </p>
-                {showFiscalConfirmation ? (
-                  <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                    <UserCheck className="mt-0.5 size-3 shrink-0 text-primary" />
-                    <span className="min-w-0">
-                      <span className="text-muted-foreground/80">FY confirmation · </span>
-                      <span className="font-medium text-foreground">{fiscalConfirmationLabel}</span>
-                    </span>
-                  </p>
-                ) : null}
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  {isEmailVerified ? (
-                    <MailCheck className="mt-0.5 size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <MailWarning className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">Email · </span>
-                    {isEmailVerified ? (
-                      <span className="font-medium text-emerald-700 dark:text-emerald-400">Verified</span>
-                    ) : (
-                      <>
-                        <span className="font-medium text-amber-700 dark:text-amber-400">Not verified</span>
-                        <Link
-                          href={settingsEmailVerifyHref}
-                          className="ml-1.5 font-medium text-primary underline-offset-2 hover:underline"
-                        >
-                          Verify in settings
-                        </Link>
-                      </>
-                    )}
-                  </span>
-                </p>
-                <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
-                  {isTwoFactorEnabled ? (
-                    <ShieldCheck className="mt-0.5 size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  ) : (
-                    <ShieldAlert className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="text-muted-foreground/80">2FA · </span>
-                    {isTwoFactorEnabled ? (
-                      <span className="font-medium text-emerald-700 dark:text-emerald-400">Enabled</span>
-                    ) : (
-                      <>
-                        <span className="font-medium text-amber-700 dark:text-amber-400">Not enabled</span>
-                        <Link
-                          href={settingsTwoFactorHref}
-                          className="ml-1.5 font-medium text-primary underline-offset-2 hover:underline"
-                        >
-                          Enable in settings
-                        </Link>
-                      </>
-                    )}
-                  </span>
-                </p>
+          <section aria-labelledby="employment-title" className="h-full px-4 pt-2">
+            <div className="flex min-h-9 items-center gap-2.5">
+              <Briefcase20Regular aria-hidden="true" className="text-primary" />
+              <h2 id="employment-title" className="text-sm font-semibold text-foreground">Employment</h2>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-5 sm:grid-cols-3">
+              <div>
+                <dt className="text-[11px] text-muted-foreground">Nationality</dt>
+                <dd className="mt-1 flex items-center gap-1.5 text-xs font-medium text-foreground"><NationalityFlag code={nationalityCode} />{nationalityLabel}</dd>
+              </div>
+              {[
+                { label: "Gender", value: genderLabel },
+                { label: "Employment type", value: employmentTypeLabel },
+                { label: "Probation end", value: probationEndDateLabel },
+                ...(showFiscalConfirmation ? [{ label: "FY confirmation", value: fiscalConfirmationLabel }] : []),
+              ].map((field) => (
+                <div key={field.label}>
+                  <dt className="text-[11px] text-muted-foreground">{field.label}</dt>
+                  <dd className="mt-1 text-xs font-medium text-foreground">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-10 text-xs text-muted-foreground">Email</span>
+                <FluentBadge appearance="tint" color={isEmailVerified ? "success" : "warning"}>{isEmailVerified ? "Verified" : "Not verified"}</FluentBadge>
+                {!isEmailVerified ? <FluentButton data-dashboard-action="true" as="a" href={settingsEmailVerifyHref} className="!px-4 !py-2" size="small" appearance="subtle" style={{ color: "var(--primary)" }}>Verify in settings</FluentButton> : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-10 text-xs text-muted-foreground">2FA</span>
+                <FluentBadge appearance="tint" color={isTwoFactorEnabled ? "success" : "warning"}>{isTwoFactorEnabled ? "Enabled" : "Not enabled"}</FluentBadge>
+                {!isTwoFactorEnabled ? <FluentButton data-dashboard-action="true" as="a" href={settingsTwoFactorHref} className="!px-4 !py-2" size="small" appearance="subtle" style={{ color: "var(--primary)" }}>Enable in settings</FluentButton> : null}
               </div>
             </div>
-          </DashboardSection>
+          </section>
         </motion.div>
       </div>
     </motion.div>
@@ -3602,6 +3135,7 @@ export function EmployeeHomeDashboard() {
   const [error, setError] = React.useState<string | null>(null)
   const [isAdmin, setIsAdmin] = React.useState(true)
   const [showOnboardingDialog, setShowOnboardingDialog] = React.useState(false)
+  const [profileBannerDismissed, setProfileBannerDismissed] = React.useState(false)
   const [completedOnboardingItems, setCompletedOnboardingItems] = React.useState<string[]>([])
   const [onboardingDetailsSubmitted, setOnboardingDetailsSubmitted] = React.useState(false)
   const [unavailableOptionalItems, setUnavailableOptionalItems] = React.useState<string[]>([])
@@ -3612,11 +3146,18 @@ export function EmployeeHomeDashboard() {
   const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
+  const [manualOnboardingBank, setManualOnboardingBank] = React.useState(false)
+  const [companyBankDirectory, setCompanyBankDirectory] = React.useState<AdminRecord[]>([])
   const [publicCountryStates, setPublicCountryStates] = React.useState<PublicCountryStateRecord[]>([])
   const [publicLocationLoading, setPublicLocationLoading] = React.useState(false)
   const [publicLocationError, setPublicLocationError] = React.useState<string | null>(null)
   const [publicCityOptions, setPublicCityOptions] = React.useState<string[]>([])
   const [publicCitiesLoading, setPublicCitiesLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!accessToken) return
+    void listCompanyBanks(accessToken).then(setCompanyBankDirectory).catch(() => setCompanyBankDirectory([]))
+  }, [accessToken])
 
   React.useEffect(() => {
     const adminIdentity = isAdminIdentity()
@@ -3921,45 +3462,7 @@ export function EmployeeHomeDashboard() {
     }
   }, [fillingItemKey, formValues.country, formValues.state])
 
-  const refreshAttendance = React.useCallback(async () => {
-    const token = accessToken || readStoredSessionTokens().accessToken
-    if (!token) return
 
-    const todayIso = localDateIso()
-    const [dashboardResult, todayResult, punchesResult] = await Promise.all([
-      loadEmployeeDashboardOverview(token).catch(() => null),
-      getMyAttendanceToday(token).catch(() => null),
-      listMyAttendancePunches(token, {
-        page: 1,
-        limit: 50,
-        sortBy: "created_at",
-        sortOrder: "DESC",
-        dateFrom: todayIso,
-        dateTo: todayIso,
-      })
-        .then((result) => result.rows || [])
-        .catch(() => [] as AdminRecord[]),
-    ])
-
-    const punchesToday = (punchesResult as AdminRecord[]).filter((row) =>
-      isPunchOnLocalDate(row, todayIso),
-    )
-    setAttendanceToday((todayResult as AdminRecord | null) || null)
-    setAttendancePunchesToday(punchesToday)
-
-    if (isEmployeeDashboardData(dashboardResult)) {
-      setDashboardData((current) =>
-        current
-          ? {
-              ...current,
-              action_flags: dashboardResult.action_flags,
-              attendance_overview: dashboardResult.attendance_overview,
-              generated_at: dashboardResult.generated_at,
-            }
-          : dashboardResult,
-      )
-    }
-  }, [accessToken])
 
   if (isAdmin) {
     return null
@@ -3987,7 +3490,7 @@ export function EmployeeHomeDashboard() {
               {error}
             </pre>
             {sessionEnded ? (
-              <Button type="button" onClick={() => window.location.assign(ROUTES.login)}>
+              <Button data-dashboard-action="true" type="button" onClick={() => window.location.assign(ROUTES.login)}>
                 Sign in again
               </Button>
             ) : null}
@@ -4027,6 +3530,13 @@ export function EmployeeHomeDashboard() {
     ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
     : null
   const currentFormSchema = fillingItemKey ? getFormSchema(fillingItemKey) : []
+  const companyBankNames = companyBankDirectory
+    .map((bank) => typeof bank.name === "string" ? bank.name.trim() : "")
+    .filter((name): name is string => Boolean(name))
+  const onboardingBankNames: string[] = Array.from(new Set<string>([
+    ...TANZANIA_ONBOARDING_BANKS,
+    ...companyBankNames,
+  ])).sort((left, right) => left.localeCompare(right))
 
   const missingRequiredFields = currentFormSchema.length > 0
     ? currentFormSchema
@@ -4057,12 +3567,14 @@ export function EmployeeHomeDashboard() {
     setShowOnboardingDialog(false)
     // reset any in-progress form state
     setFillingItemKey(null)
+    setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
     setFormError(null)
   }
 
   const startFilling = (key: string) => {
+    setManualOnboardingBank(false)
     if (unavailableOptionalItems.includes(key)) {
       const nextUnavailable = unavailableOptionalItems.filter((item) => item !== key)
       setUnavailableOptionalItems(nextUnavailable)
@@ -4137,6 +3649,7 @@ export function EmployeeHomeDashboard() {
 
   const cancelFilling = () => {
     setFillingItemKey(null)
+    setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
     setFormError(null)
@@ -4307,28 +3820,57 @@ export function EmployeeHomeDashboard() {
 
   const isStillOnboarding = !isAdmin && dashboardData?.employee?.employment_status === "onboarding"
   const showMissingProfileBanner =
-    !isAdmin && !showOnboardingDialog && pendingItems.length > 0
+    !isAdmin && !showOnboardingDialog && !profileBannerDismissed && pendingItems.length > 0
 
   return (
     <>
       {showMissingProfileBanner ? (
-        <div className="mb-4 flex items-center justify-between gap-3 border border-amber-200 bg-amber-50/80 px-4 py-2.5 dark:border-amber-900 dark:bg-amber-950/30">
-          <div className="text-sm text-amber-900 dark:text-amber-200">
-            {isStillOnboarding
-              ? "Your employee profile is still in onboarding."
-              : `Your profile is missing ${pendingItems.map((item) => item.label.toLowerCase()).join(", ")}.`}
+        <section aria-labelledby="profile-completion-title" className={cn(pageBleedClass, "relative mb-0 flex flex-col gap-3 border border-border border-l-2 border-l-primary bg-card p-4 pr-12 sm:flex-row sm:items-center sm:gap-4")}>
+          <PersonInfo20Regular aria-hidden="true" className="hidden shrink-0 text-primary sm:block" style={{ width: 28, height: 28 }} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 id="profile-completion-title" className="text-sm font-semibold text-card-foreground">
+                {isStillOnboarding ? "Finish setting up your profile" : "Complete your profile"}
+              </h2>
+              <span className="text-xs text-muted-foreground">
+                {pendingItems.length} {pendingItems.length === 1 ? "section" : "sections"} remaining
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Add the following details to keep your employee record up to date.</p>
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Missing profile sections">
+              {pendingItems.map((item) => (
+                <li key={item.key}>
+                  <FluentButton
+      data-dashboard-action="true"
+                    className="!px-4 !py-2"
+                    appearance="outline"
+                    size="small"
+                    type="button"
+                    onClick={() => {
+                      const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
+                      try { sessionStorage.removeItem(dismissedKey) } catch {}
+                      startFilling(item.key)
+                      setShowOnboardingDialog(true)
+                    }}
+                  >
+                    {item.label}
+                  </FluentButton>
+                </li>
+              ))}
+            </ul>
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              const dismissedKey = `onboarding_dialog_dismissed_${dashboardData.user?.id || "current"}`
-              try { sessionStorage.removeItem(dismissedKey) } catch {}
-              setShowOnboardingDialog(true)
-            }}
-          >
-            {isStillOnboarding ? "Finish onboarding" : "Fill details"}
-          </Button>
-        </div>
+          <FluentButton
+      data-dashboard-action="true"
+            appearance="subtle"
+            size="small"
+            type="button"
+            icon={<Dismiss16Regular />}
+            aria-label="Dismiss profile completion reminder"
+            title="Dismiss reminder"
+            className="!absolute right-2 top-2"
+            onClick={() => setProfileBannerDismissed(true)}
+          />
+        </section>
       ) : null}
 
       <EmployeeDashboardView
@@ -4340,17 +3882,17 @@ export function EmployeeHomeDashboard() {
         leaveBalanceTotals={leaveBalanceTotals}
         leaveTypes={leaveTypes}
         payslips={payslips}
-        onAttendanceChanged={refreshAttendance}
       />
 
       <Dialog open={showOnboardingDialog} onOpenChange={(open) => { if (!open) handleCloseOnboardingDialog() }}>
         <DialogPopup
           from="bottom"
           showCloseButton={false}
-          className="flex max-h-[calc(100dvh-0.75rem)] w-[calc(100%-0.75rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-xl border border-border bg-background p-0 shadow-xl sm:max-h-[min(88dvh,46rem)] sm:w-[calc(100%-2rem)]"
+          className="profile-completion-drawer max-w-2xl overflow-hidden bg-background"
+          bodyClassName="!h-full !max-h-none !min-h-0 !flex-1 !gap-0 !overflow-hidden !p-0"
         >
-            <DialogHeader className="m-0 shrink-0 border-b border-border px-3 py-3 sm:px-5 sm:py-3.5">
-              <div className="flex items-center gap-2.5">
+            <DialogHeader className="!m-0 shrink-0 border-b border-border !px-4 !py-4 sm:!px-5">
+              <div className="flex flex-wrap items-start gap-2.5">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
                   <UserCheck className="size-4" />
                 </div>
@@ -4361,7 +3903,7 @@ export function EmployeeHomeDashboard() {
                   <DialogDescription className="mt-0.5 max-w-2xl text-[11px] leading-snug text-muted-foreground sm:text-xs">
                     {isStillOnboarding
                       ? "Add the remaining details so HR can finish setting up your employee account."
-                      : "Some details were not filled during registration or onboarding. You can complete them now, or continue and we will remind you the next time you sign in."}
+                      : "Complete the remaining sections now, or finish later. We’ll remind you next time you sign in."}
                   </DialogDescription>
                 </div>
                 <span className="shrink-0 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
@@ -4425,11 +3967,11 @@ export function EmployeeHomeDashboard() {
                           >
                             <span className="text-primary">{item.icon}</span>
                             <span className="flex-1 font-medium text-foreground">{item.label}</span>
-                            <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => startFilling(item.key)}>
+                            <Button data-dashboard-action="true" type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => startFilling(item.key)}>
                               Add details
                             </Button>
                             {isStillOnboarding ? (
-                              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => markOptionalUnavailable(item.key)}>
+                              <Button data-dashboard-action="true" type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => markOptionalUnavailable(item.key)}>
                                 I don’t have these details
                               </Button>
                             ) : null}
@@ -4441,6 +3983,7 @@ export function EmployeeHomeDashboard() {
                   {isStillOnboarding && !onboardingDetailsSubmitted ? (
                     <div className="mt-4">
                       <Button
+      data-dashboard-action="true"
                         type="button"
                         size="sm"
                         disabled={optionalUnfilledItems.length > 0}
@@ -4497,7 +4040,44 @@ export function EmployeeHomeDashboard() {
                             <Label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
                               {field.label}{field.required ? " *" : ""}
                             </Label>
-                            {isAddressLookupField ? (
+                            {fillingItemKey === "bank_accounts" && field.name === "bank_name" ? (
+                              manualOnboardingBank ? (
+                                <div className="mt-1 flex min-w-0 gap-2">
+                                  <Input
+                                    autoFocus
+                                    value={val}
+                                    placeholder="Enter bank name"
+                                    onChange={(event) => updateFormValue(field.name, event.target.value)}
+                                    className="h-9 min-w-0 flex-1"
+                                  />
+                                  <Button type="button" variant="outline" size="sm" onClick={() => {
+                                    setManualOnboardingBank(false)
+                                    updateFormValue("bank_name", "")
+                                  }}>Choose list</Button>
+                                </div>
+                              ) : (
+                                <FluentDropdown
+                                  className="mt-1 !w-full !min-w-0"
+                                  button={{ className: "!w-full !min-w-0" }}
+                                  placeholder="Select a Tanzanian bank"
+                                  value={val}
+                                  selectedOptions={val ? [val] : []}
+                                  onOptionSelect={(_, data) => {
+                                    if (data.optionValue === "__other__") {
+                                      setManualOnboardingBank(true)
+                                      updateFormValue("bank_name", "")
+                                      return
+                                    }
+                                    updateFormValue("bank_name", data.optionValue ?? "")
+                                  }}
+                                >
+                                  <FluentOption value="__other__" text="Other bank">Other bank — enter manually</FluentOption>
+                                  {onboardingBankNames.map((bank) => (
+                                    <FluentOption key={bank} value={bank} text={bank}>{bank}</FluentOption>
+                                  ))}
+                                </FluentDropdown>
+                              )
+                            ) : isAddressLookupField ? (
                               <>
                                 <input
                                   list={
@@ -4668,24 +4248,20 @@ export function EmployeeHomeDashboard() {
                     </p>
                   ) : null}
 
-                  {missingRequiredFields.length > 0 && (
-                    <div className="mb-3 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                      Please fill required fields: {missingRequiredFields.join(", ")}
-                    </div>
-                  )}
                   {!hasValidCertificateProof ? (
                     <p className="mb-3 text-xs font-medium text-destructive">{documentUploadFile ? "The verification link must be a valid HTTPS URL, or leave it empty." : "Attach the certificate file to continue."}</p>
                   ) : null}
 
                   <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
                     <Button
+      data-dashboard-action="true"
                       onClick={handleSaveFilling}
                       disabled={isSaving || missingRequiredFields.length > 0 || !hasValidCertificateProof}
                       className="h-10 flex-1 rounded-lg text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
                     </Button>
-                    <Button variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-10 rounded-lg text-sm sm:w-auto">
+                    <Button data-dashboard-action="true" variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-10 rounded-lg text-sm sm:w-auto">
                       Cancel
                     </Button>
                   </div>
@@ -4694,24 +4270,17 @@ export function EmployeeHomeDashboard() {
                     Data is stored securely for HR, payroll and compliance.
                   </p>
                     </div>
-                    <aside className="border-t border-border bg-muted/30 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                    {certificateSection ? <aside className="border-t border-border bg-muted/30 p-4 sm:p-5">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Before you save</p>
-                      {certificateSection ? (
-                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
-                          <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
-                          <div className="rounded-lg border border-border bg-background p-3">
-                            <p className="font-semibold text-foreground">Attach your certificate</p>
-                            <p className="mt-1">The certificate file is required. A secure HTTPS verification link is optional.</p>
-                          </div>
-                          <p>Only add accurate information. HR may use these details for employment records and verification.</p>
+                      <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
+                        <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
+                        <div className="rounded-lg border border-border bg-background p-3">
+                          <p className="font-semibold text-foreground">Attach your certificate</p>
+                          <p className="mt-1">The certificate file is required. A secure HTTPS verification link is optional.</p>
                         </div>
-                      ) : (
-                        <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
-                          <p>Complete the required fields marked with an asterisk.</p>
-                          <p>Your changes are saved to your employee profile and can be reviewed by HR.</p>
-                        </div>
-                      )}
-                    </aside>
+                        <p>Only add accurate information. HR may use these details for employment records and verification.</p>
+                      </div>
+                    </aside> : null}
                   </div>
                 </div>
               ) : (
@@ -4726,7 +4295,7 @@ export function EmployeeHomeDashboard() {
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {REQUIRED_ONBOARDING_ITEMS.map((item, itemIndex) => {
+                  {REQUIRED_ONBOARDING_ITEMS.map((item) => {
                     const isPending = unfilledItems.some(p => p.key === item.key)
                     if (!isPending) return null
                     return (
@@ -4736,14 +4305,11 @@ export function EmployeeHomeDashboard() {
                         onClick={() => startFilling(item.key)}
                         className="group flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold tabular-nums text-muted-foreground">
-                          {String(itemIndex + 1).padStart(2, "0")}
-                        </span>
                         <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                             {item.icon}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold tracking-tight text-foreground">
                             {item.label}
                             {item.optional ? (
                               <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -4751,7 +4317,7 @@ export function EmployeeHomeDashboard() {
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">{item.description}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{item.description}</p>
                         </div>
                         <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
                       </button>
@@ -4762,8 +4328,8 @@ export function EmployeeHomeDashboard() {
               )}
             </div>
 
-            <DialogFooter className="m-0 shrink-0 border-t border-border bg-background/95 px-3 py-2 backdrop-blur sm:px-5">
-              <Button 
+            <DialogFooter className="!m-0 shrink-0 border-t border-border bg-background px-4 py-3 sm:px-5">
+              <Button data-dashboard-action="true"
                 variant="outline"
                 onClick={handleCloseOnboardingDialog} 
                 className="h-9 px-4 text-sm"
@@ -4772,6 +4338,7 @@ export function EmployeeHomeDashboard() {
               </Button>
               {!isStillOnboarding ? (
                 <Button
+      data-dashboard-action="true"
                   onClick={handleCloseOnboardingDialog}
                   className="h-9 px-5 text-sm"
                 >

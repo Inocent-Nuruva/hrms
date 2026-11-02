@@ -438,13 +438,13 @@ export function FieldSelfView({ activeTab }: { activeTab: FieldSelfTab }) {
           <h1 className="mt-1 text-xl font-semibold tracking-tight">
             {activeTab === "visits" ? "Visits" : activeTab === "plans" ? "Visit plans" : "Follow-ups"}
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {activeTab === "visits"
-              ? "Check in at a site, record expenses and evidence, then capture the outcome when you leave."
-              : activeTab === "plans"
+          {activeTab !== "visits" ? (
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              {activeTab === "plans"
                 ? "Plan upcoming site visits and submit your plan for review."
                 : "Keep track of actions due after your visits and record them as complete."}
-          </p>
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {activeTab === "visits" ? (

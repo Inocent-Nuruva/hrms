@@ -351,7 +351,6 @@ const financeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Applications", url: "/dashboard/finance/applications" },
       { title: "Accounts", url: "/dashboard/finance/accounts" },
       { title: "Servicing", url: "/dashboard/finance/servicing" },
-      { title: "Payroll deductions", url: "/dashboard/finance/payroll" },
       { title: "Reports", url: "/dashboard/finance/reports" },
       { title: "Settings", url: "/dashboard/finance/settings" },
       {
@@ -368,7 +367,7 @@ export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Payroll", url: "/dashboard/me/finance/payroll" },
       {
-        title: "Loans and advances",
+        title: "Loans & advances",
         url: "/dashboard/me/finance/applications",
       },
     ],
@@ -376,7 +375,33 @@ export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
 ];
 
 export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
-  ...selfFinanceSectionTabGroups,
+  {
+    title: "Payroll",
+    items: [
+      {
+        title: "Bank directory",
+        url: "/dashboard/settings/banks",
+      },
+      {
+        title: "Payroll setup & operations",
+        url: "/dashboard/operations/payroll",
+      },
+      {
+        title: "Loan payroll deductions",
+        url: "/dashboard/finance/payroll",
+      },
+    ],
+  },
+  {
+    title: "My finance",
+    items: [
+      { title: "Payroll", url: "/dashboard/me/finance/payroll" },
+      {
+        title: "Loans & advances",
+        url: "/dashboard/me/finance/applications",
+      },
+    ],
+  },
   ...financeOperationsSectionTabGroups,
 ];
 

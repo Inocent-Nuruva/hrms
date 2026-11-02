@@ -1,13 +1,33 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCwIcon } from "lucide-react";
+import { Button, Card, Input, Field, Textarea as FluentTextarea, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, TeachingPopover, TeachingPopoverTrigger, TeachingPopoverSurface, TeachingPopoverHeader, TeachingPopoverBody, TeachingPopoverTitle, TeachingPopoverFooter } from "@fluentui/react-components";
+import { Info20Regular, ArrowClockwise20Regular, ReceiptMoney24Regular } from "@fluentui/react-icons";
+
+function PayrollGuide({ title, children, inverse = false }: { title: string; children: React.ReactNode; inverse?: boolean }) {
+  return (
+    <TeachingPopover positioning="below-start">
+      <TeachingPopoverTrigger>
+        <Button appearance="subtle" size="small" className={inverse ? "!text-primary-foreground hover:!bg-primary-foreground/10" : undefined} icon={<Info20Regular />} aria-label={`About ${title}`} />
+      </TeachingPopoverTrigger>
+      <TeachingPopoverSurface>
+        <TeachingPopoverHeader>Quick guide</TeachingPopoverHeader>
+        <TeachingPopoverBody>
+          <TeachingPopoverTitle>{title}</TeachingPopoverTitle>
+          {children}
+        </TeachingPopoverBody>
+        <TeachingPopoverFooter primary="Got it" />
+      </TeachingPopoverSurface>
+    </TeachingPopover>
+  );
+}
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/fluent-toast-store";
 import {
+  pageBleedClass,
   MetricTile,
   StatusChip,
   TalentDoodleSprites,
@@ -87,26 +107,28 @@ function Section({
   title,
   description,
   actions,
+  guide = false,
   children,
 }: {
   title: string;
   description?: string;
+  guide?: boolean;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <Card className="!gap-0 !p-0">
       <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          {description ? (
+          <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{title}</h2>{guide && description ? <PayrollGuide title={title}>{description}</PayrollGuide> : null}</div>
+          {description && !guide ? (
             <p className="text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </div>
       <div className="p-4">{children}</div>
-    </div>
+    </Card>
   );
 }
 
@@ -124,28 +146,28 @@ function SimpleTable({
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-muted text-xs text-muted-foreground">
-          <tr>
+      <Table className="w-full text-left text-sm">
+        <TableHeader className="bg-muted text-xs text-muted-foreground">
+          <TableRow>
             {columns.map((column) => (
-              <th key={column.key} className="whitespace-nowrap px-3 py-2">
+              <TableHeaderCell key={column.key} className="whitespace-nowrap px-3 py-2">
                 {column.label}
-              </th>
+              </TableHeaderCell>
             ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
+          </TableRow>
+        </TableHeader>
+        <TableBody className="divide-y divide-border">
           {rows.map((row, index) => (
-            <tr key={rowId(row) || index}>
+            <TableRow key={rowId(row) || index}>
               {columns.map((column) => (
-                <td key={column.key} className="px-3 py-2 align-top">
+                <TableCell key={column.key} className="px-3 py-2 align-top">
                   {column.render(row)}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -389,43 +411,67 @@ export function FinanceServicingView({
   return (
     <section className="space-y-4">
       <TalentDoodleSprites />
+      {activeTab === "payroll" ? (
+        <header className={`${pageBleedClass} relative overflow-hidden bg-primary px-5 py-7 text-primary-foreground sm:px-8 sm:py-8`}>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90">
+            <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+            <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+            <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+            <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
+            <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
+            <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
+          </div>
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-5">
+              <ReceiptMoney24Regular aria-hidden="true" className="size-9 shrink-0 text-primary-foreground/90" />
+              <div aria-hidden="true" className="h-12 w-px bg-primary-foreground/25" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">Finance workspace</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Payroll deductions</h1>
+                  <PayrollGuide title="Payroll deductions" inverse>Check loan deductions before and after each payroll run, and decide how shortfalls are recovered.</PayrollGuide>
+                </div>
+              </div>
+            </div>
+            <Button appearance="subtle" size="large" className="!size-11 !min-w-11 !shrink-0 !text-primary-foreground hover:!bg-primary-foreground/10 disabled:!opacity-50"
+              aria-label="Refresh payroll deductions" title="Refresh payroll deductions" disabled={loading}
+              icon={loading ? <FluentLoadingIndicator /> : <ArrowClockwise20Regular className="!size-6" />}
+              onClick={() => void loadShortfalls()} />
+          </div>
+        </header>
+      ) : (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
             {activeTab === "servicing"
               ? "Loan servicing"
-              : activeTab === "payroll"
-                ? "Payroll deductions"
-                : "Loan settings"}
+              : "Loan settings"}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground">
             {activeTab === "servicing"
               ? "Approve deferments, reschedules, penalties, waivers, write-offs, and exit recoveries. Requests need a second person to approve."
-              : activeTab === "payroll"
-                ? "Check loan deductions before and after each payroll run, and decide how shortfalls are recovered."
-                : "Sanction letter wording and approval delegation while approvers are away."}
-          </p>
+              : "Sanction letter wording and approval delegation while approvers are away."}
+          </div>
         </div>
-        <button
+        <Button
           type="button"
-          className={secondaryButtonClass}
+          appearance="secondary"
           disabled={loading}
           onClick={() =>
             activeTab === "servicing"
               ? void loadServicing()
-              : activeTab === "payroll"
-                ? void loadShortfalls()
-                : void loadSettings()
+              : void loadSettings()
           }
         >
           {loading ? (
             <FluentLoadingIndicator className="size-4 animate-spin" />
           ) : (
-            <RefreshCwIcon className="size-4" />
+            <ArrowClockwise20Regular />
           )}
           Refresh
-        </button>
+        </Button>
       </div>
+      )}
 
       {activeTab === "servicing" ? (
         <>
@@ -646,19 +692,20 @@ export function FinanceServicingView({
       {activeTab === "payroll" ? (
         <>
           <Section
+            guide
             title="Deduction preview"
             description="What loans expect the next payroll to deduct. Rows above the employee's usual deduction capacity are flagged so you can act before payroll runs."
             actions={
               <>
-                <input
-                  className={`${inputClass} w-40`}
-                  placeholder="Payroll period ID"
+                <Input
+                  className="!w-44"
+                  aria-label="Payroll period ID" placeholder="Payroll period ID"
                   value={periodId}
                   onChange={(event) => setPeriodId(event.target.value)}
                 />
-                <button
+                <Button
                   type="button"
-                  className={primaryButtonClass}
+                  appearance="primary"
                   disabled={!periodId || busy === "preview"}
                   onClick={async () => {
                     const result = await run("preview", () => getEmployeeFinancePayrollPreview(token(), periodId), "Preview ready.");
@@ -666,7 +713,7 @@ export function FinanceServicingView({
                   }}
                 >
                   Preview
-                </button>
+                </Button>
               </>
             }
           >
@@ -707,19 +754,20 @@ export function FinanceServicingView({
           </Section>
 
           <Section
+            guide
             title="Payroll run reconciliation"
             description="For one run: what each loan asked for, what payroll reserved and put on the payslip, and what reached the loan ledger."
             actions={
               <>
-                <input
-                  className={`${inputClass} w-40`}
-                  placeholder="Payroll run ID"
+                <Input
+                  className="!w-44"
+                  aria-label="Payroll run ID" placeholder="Payroll run ID"
                   value={runId}
                   onChange={(event) => setRunId(event.target.value)}
                 />
-                <button
+                <Button
                   type="button"
-                  className={primaryButtonClass}
+                  appearance="primary"
                   disabled={!runId || busy === "run"}
                   onClick={async () => {
                     const result = await run("run", () => getEmployeeFinancePayrollRunDeductions(token(), runId), "Run loaded.");
@@ -727,7 +775,7 @@ export function FinanceServicingView({
                   }}
                 >
                   Reconcile run
-                </button>
+                </Button>
               </>
             }
           >
@@ -770,12 +818,13 @@ export function FinanceServicingView({
           </Section>
 
           <Section
+            guide
             title="Shortfalls"
             description="Deductions payroll could not take in full. Choose how each one is recovered."
             actions={
-              <button type="button" className={actionButtonClass} onClick={() => void loadShortfalls()}>
+              <Button type="button" appearance="secondary" onClick={() => void loadShortfalls()}>
                 Reload
-              </button>
+              </Button>
             }
           >
             <SimpleTable
@@ -791,16 +840,16 @@ export function FinanceServicingView({
                   key: "actions",
                   label: "",
                   render: (row) => (
-                    <button
+                    <Button
                       type="button"
-                      className={actionButtonClass}
+                      appearance="secondary"
                       onClick={() => {
                         setShortfallTarget(row);
                         setShortfallForm({ resolution: "CARRY_FORWARD", payment_date: new Date().toISOString().slice(0, 10) });
                       }}
                     >
                       Resolve
-                    </button>
+                    </Button>
                   ),
                 },
               ]}
@@ -1122,8 +1171,7 @@ export function FinanceServicingView({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Resolution</span>
+            <Field label="Resolution">
               <FluentSelect
                 ariaLabel="Resolution"
                 className="w-full"
@@ -1135,53 +1183,49 @@ export function FinanceServicingView({
                   { value: "RESCHEDULE", label: "Reschedule the loan" },
                 ]}
               />
-            </label>
+            </Field>
             {shortfallForm.resolution === "COLLECT_DIRECT" ? (
               <>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Payment reference</span>
-                  <input
-                    className={inputClass}
+                <Field label="Payment reference">
+                  <Input
+                    className="w-full"
                     value={shortfallForm.payment_reference ?? ""}
                     onChange={(event) => setShortfallForm((current) => ({ ...current, payment_reference: event.target.value }))}
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="font-medium">Payment date</span>
+                </Field>
+                <Field label="Payment date">
                   <DateInput
-                    className={inputClass}
+                    className="w-full"
                     value={shortfallForm.payment_date ?? ""}
                     onChange={(event) => setShortfallForm((current) => ({ ...current, payment_date: event.target.value }))}
                   />
-                </label>
+                </Field>
               </>
             ) : null}
             {shortfallForm.resolution === "RESCHEDULE" ? (
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">New term (months)</span>
-                <input
-                  className={inputClass}
+              <Field label="New term (months)">
+                <Input
+                  className="w-full"
                   value={shortfallForm.new_term_months ?? ""}
                   onChange={(event) => setShortfallForm((current) => ({ ...current, new_term_months: event.target.value }))}
                 />
-              </label>
+              </Field>
             ) : null}
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Comments</span>
-              <Textarea
-                className={textareaClass}
+            <Field label="Comments">
+              <FluentTextarea
+                className="w-full"
                 value={shortfallForm.comments ?? ""}
                 onChange={(event) => setShortfallForm((current) => ({ ...current, comments: event.target.value }))}
               />
-            </label>
+            </Field>
           </div>
           <DialogFooter>
-            <button type="button" className={secondaryButtonClass} onClick={() => setShortfallTarget(null)}>
+            <Button type="button" appearance="secondary" onClick={() => setShortfallTarget(null)}>
               Cancel
-            </button>
-            <button type="button" className={primaryButtonClass} disabled={busy === "shortfall"} onClick={() => void submitShortfall()}>
+            </Button>
+            <Button type="button" appearance="primary" disabled={busy === "shortfall"} onClick={() => void submitShortfall()}>
               Resolve
-            </button>
+            </Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

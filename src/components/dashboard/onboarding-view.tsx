@@ -6292,20 +6292,16 @@ export function OnboardingView() {
           <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
             Onboarding
           </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Manage invitations, employee onboarding requests, and reusable
-            workflows
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[10px] font-medium text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           {canViewPendingInvitations ? (
-            <span>{invitations.length} invitations</span>
+            <span className="inline-flex items-center gap-2">Invitations <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{invitations.length}</FluentBadge></span>
           ) : null}
           {canViewOnboardingRequests ? (
-            <span>{filteredRequests.length} requests</span>
+            <span className="inline-flex items-center gap-2">Requests <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{filteredRequests.length}</FluentBadge></span>
           ) : null}
           {canViewOnboardingWorkflows ? (
-            <span>{filteredWorkflows.length} workflows</span>
+            <span className="inline-flex items-center gap-2">Workflows <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{filteredWorkflows.length}</FluentBadge></span>
           ) : null}
         </div>
       </div>
@@ -6732,7 +6728,7 @@ export function OnboardingView() {
                     <FluentSelect
                       ariaLabel="Filter request status"
                       size="small"
-                      className="min-w-[8.5rem]"
+                      className="!w-32 !min-w-0 shrink-0"
                       value={requestStatusFilter}
                       onChange={setRequestStatusFilter}
                       options={requestStatusOptions.map((status) => ({
@@ -10733,7 +10729,7 @@ export function OnboardingView() {
                 <FluentSelect
                   ariaLabel="Filter workflow status"
                   size="small"
-                  className="min-w-[8.5rem]"
+                  className="!w-32 !min-w-0 shrink-0"
                   value={workflowStatusFilter}
                   onChange={setWorkflowStatusFilter}
                   options={workflowStatusOptions.map((status) => ({
