@@ -74,7 +74,15 @@ configured_hash() {
 site_has_expected_base() {
   [[ -f "$SITE_AVAILABLE" ]] || return 1
   grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' "$SITE_AVAILABLE" &&
-    grep -Fq 'proxy_pass http://127.0.0.1:8880;' "$SITE_AVAILABLE"
+    grep -Fq 'proxy_pass http://127.0.0.1:8880;' "$SITE_AVAILABLE" &&
+    grep -Fq 'proxy_pass http://127.0.0.1:8888;' "$SITE_AVAILABLE"
+}
+
+[[ "$ACTION" == 'status' ]] || {
+  # Production must never proxy to UAT ports or claim every hostname on this Nginx.
+  [[ ! -r "$TEMPLATE" ]] ||
+    ! grep -Eq '127\.0\.0\.1:(9999|9990)|listen[[:space:]]+(\[::\]:)?9990|server_name[^;]*[[:space:]]_[[:space:];]' "$TEMPLATE" ||
+    die "${TEMPLATE} targets UAT ports or uses a catch-all server_name. Rerun server-setup.sh with a fixed release."
 }
 
 nginx_loads_file() {

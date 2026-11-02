@@ -87,6 +87,11 @@ jobs:
           node --check deploy/hrms-frontend/ecosystem.config.js
           grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
           grep -Fq 'proxy_pass http://127.0.0.1:8880;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
+          grep -Fq 'proxy_pass http://127.0.0.1:8888;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
+          if grep -Eq '127\.0\.0\.1:(9999|9990)|listen[[:space:]]+(\[::\]:)?9990|server_name[^;]*[[:space:]]_[[:space:];]' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; then
+            echo "Production Nginx template must not target UAT ports or use a catch-all server_name." >&2
+            exit 1
+          fi
       - name: Exclude desktop and e2e-only tooling
         run: npm pkg delete 'devDependencies.@playwright/test' devDependencies.electron devDependencies.electron-builder --package-lock=false
       - name: Install dependencies
@@ -263,6 +268,10 @@ jobs:
           [[ "$TARGET_ENV" == uat && "$APP_PORT" == 9990 || "$TARGET_ENV" == production && "$APP_PORT" == 8880 ]]
           [[ "$REQUIRE_SSL" == true || "$REQUIRE_SSL" == false ]]
           echo "require_ssl=$REQUIRE_SSL" >> "$GITHUB_OUTPUT"
+          if [[ "$TARGET_ENV" == production && ! "$NEXT_PUBLIC_API_BASE_URL" =~ ^https://hrms\.alliance\.co\.tz/?$ ]]; then
+            echo "Production NEXT_PUBLIC_API_BASE_URL must be https://hrms.alliance.co.tz (got '${NEXT_PUBLIC_API_BASE_URL}')." >&2
+            exit 1
+          fi
           [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]
           echo "HEALTH_URL=http://127.0.0.1:${APP_PORT}${HEALTH_PATH}" >> "$GITHUB_ENV"
           cd "$RUNNER_TEMP"; sha256sum --check hrms-frontend-release.tar.gz.sha256

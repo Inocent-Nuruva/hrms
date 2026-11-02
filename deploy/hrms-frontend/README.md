@@ -30,6 +30,25 @@ a label. If another runner with the same labels is later added to this repositor
 add a unique custom `hrms-frontend` label to this runner and to all three
 workflow `runs-on` lists.
 
+## Production domain and HTTPS (hrms.alliance.co.tz)
+
+1. DNS: `A hrms.alliance.co.tz -> 154.72.81.122`; forward TCP 80 and 443 to
+   `192.168.1.30`. Port 80 must stay open for Let's Encrypt renewals.
+2. GitHub Environment `hrms-frontend-production`: secret `SSL_EMAIL`; variables
+   `FRONTEND_PUBLIC_IP=154.72.81.122`,
+   `NEXT_PUBLIC_API_BASE_URL=https://hrms.alliance.co.tz`,
+   `DEPLOY_PUBLIC_URL=https://hrms.alliance.co.tz`, `REQUIRE_SSL=false` for the
+   first issuance, then `true`.
+3. Backend production `.env`: add `https://hrms.alliance.co.tz` to
+   `APP_ALLOWED_ORIGINS` and `NOTIFICATION_WEBSOCKET_ALLOWED_ORIGINS`; keep
+   `APP_TRUST_PROXY=true`.
+4. Rerun `server-setup.sh` as root from the new release whenever the template or
+   `production-edge.sh` changes, then deploy Production from `master`.
+
+The template proxies the domain to frontend `8880` and backend `8888` only.
+Certbot adds the 443 block and HTTP->HTTPS redirect; direct-IP access stays on
+plain HTTP in a separate block and is not a catch-all.
+
 ## Static assets missing after deployment
 
 Run these on the server, using the affected environment's base directory and port:
