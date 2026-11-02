@@ -45,7 +45,15 @@ workflow `runs-on` lists.
 4. Rerun `server-setup.sh` as root from the new release whenever the template or
    `production-edge.sh` changes, then deploy Production from `master`.
 
-The template proxies the domain to frontend `8880` and backend `8888` only.
+Testing the domain on UAT first: set `CONFIGURE_EDGE=true`, `SSL_EMAIL`,
+`FRONTEND_PUBLIC_IP` and `NEXT_PUBLIC_API_BASE_URL=https://hrms.alliance.co.tz`
+in `hrms-frontend-uat`, add the origin to the UAT backend `.env`, rerun
+`server-setup.sh`, then push to `uat`. The domain then uses
+`nginx/hrms.alliance.co.tz.uat.conf` (frontend `9990`, backend `9999`). The first
+successful Production configure takes the domain over permanently; later UAT
+deploys leave Nginx unchanged (`/var/lib/hrms-frontend-edge/domain-owner`).
+
+The Production template proxies the domain to frontend `8880` and backend `8888` only.
 Certbot adds the 443 block and HTTP->HTTPS redirect; direct-IP access stays on
 plain HTTP in a separate block and is not a catch-all.
 
