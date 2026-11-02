@@ -1,5 +1,6 @@
 "use client";
 
+import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator";
 import { DateInput } from "@/components/ui/date-input";
 import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment";
 import { onboardingStepProgress } from "@/lib/onboarding-step-progress";
@@ -11070,7 +11071,7 @@ export function OnboardingView() {
                 </div>
               </div>
 
-              <SheetFooter className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:flex-row sm:justify-end">
+              <SheetFooter className="sticky bottom-0 z-20 !flex w-full shrink-0 !flex-row items-center justify-end gap-2 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
                 <Button
                   type="button"
                   variant="outline"
@@ -11087,10 +11088,15 @@ export function OnboardingView() {
                   type="button"
                   onClick={() => void submitWorkflow()}
                   disabled={saving}
+                  className="min-w-32 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {editingWorkflowId === null
-                    ? "Create Workflow"
-                    : "Save Workflow"}
+                  {saving ? (
+                    <><FluentLoadingIndicator className="mr-2 size-4 animate-spin" />Saving…</>
+                  ) : editingWorkflowId === null ? (
+                    "Create Workflow"
+                  ) : (
+                    "Save Workflow"
+                  )}
                 </Button>
               </SheetFooter>
             </SheetContent>

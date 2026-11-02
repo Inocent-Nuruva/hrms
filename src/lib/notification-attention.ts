@@ -20,6 +20,18 @@ function readMetadata(row: AdminRecord) {
   return asRecord(row.metadata)
 }
 
+function normalizeInternalActionUrl(value: string) {
+  if (!value) return ""
+  if (value.startsWith("/")) return value
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return ""
+  }
+}
+
 function appendRequestHighlight(url: string, requestId: string) {
   if (!url.startsWith("/") || !requestId) return url
 
@@ -76,7 +88,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
   const leaveDestination = resolveLeaveNotificationUrl(row)
   if (leaveDestination) return leaveDestination
 
-  const direct = readString(row, ["action_url", "actionUrl", "url", "link"])
+  const direct = normalizeInternalActionUrl(readString(row, ["action_url", "actionUrl", "url", "link"]))
   const metadata = readMetadata(row)
   const requestId =
     readString(row, ["entity_id", "entityId", "request_id", "requestId"]) ||
@@ -89,7 +101,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
     return appendRequestHighlight(direct, requestId)
   }
 
-  const nested = readString(metadata, ["action_url", "actionUrl", "url", "link"])
+  const nested = normalizeInternalActionUrl(readString(metadata, ["action_url", "actionUrl", "url", "link"]))
   if (nested.startsWith("/")) {
     if (/^\/(?:dashboard\/)?me\/daily-activities(?:\/|\?|$)/i.test(nested)) {
       return "/dashboard/me/activities/today"
