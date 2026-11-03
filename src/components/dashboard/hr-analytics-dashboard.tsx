@@ -1,5 +1,7 @@
 "use client"
 
+import { loadAttendanceReportRows, attendanceReportRate } from "./attendance-report-data"
+import { formsRequest } from "@/lib/forms-feedback"
 import { useAccountAppearance } from "@/hooks/use-account-appearance"
 
 import * as React from "react"
@@ -46,7 +48,7 @@ import {
   type DashboardWarmSnapshot,
 } from "@/lib/dashboard-warm-cache"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
-import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
+import { canAccessDashboardRoute, hasPermission } from "@/lib/dashboard-permissions"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import {
   Card as UiCard,
@@ -1112,7 +1114,7 @@ type AttendanceChartDay = {
 
 type PerformanceStat = {
   label: string
-  value: number
+  value: number | null
 }
 
 function WorkforceInsightPanels({
@@ -1133,10 +1135,10 @@ function WorkforceInsightPanels({
   absent: number | null
   attendanceDays: AttendanceChartDay[]
   attendanceUnavailable: boolean
-  performanceScore: number
+  performanceScore: number | null
   performanceStats: PerformanceStat[]
 }) {
-  const maxPerformanceValue = Math.max(1, ...performanceStats.map((item) => item.value))
+  const maxPerformanceValue = Math.max(1, ...performanceStats.map((item) => item.value ?? 0))
 
   return (
     <div className="mt-3 grid w-full gap-3 lg:grid-cols-2">
@@ -1146,7 +1148,7 @@ function WorkforceInsightPanels({
             <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
             <div className="mt-3 flex items-end gap-2">
               <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">
-                {attendanceRate === null ? "Unavailable" : `${attendanceRate}%`}
+                {attendanceRate === null ? (attendanceUnavailable ? "Unavailable" : "—") : `${attendanceRate}%`}
               </span>
               <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
                 Attendance rate
@@ -1205,15 +1207,15 @@ function WorkforceInsightPanels({
           <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">{rangeLabel}</span>
         </div>
         <div className="mt-5">
-          <p className="text-3xl font-semibold leading-none tabular-nums text-foreground">{performanceScore}%</p>
-          <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">Current performance score</p>
+          <p className="text-3xl font-semibold leading-none tabular-nums text-foreground">{performanceScore === null ? "—" : `${performanceScore}%`}</p>
+          <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">{performanceScore !== null ? "Average published review score" : performanceStats[0]?.value === 0 ? "No published reviews in this period" : "Performance score unavailable"}</p>
         </div>
         <div className="mt-6 flex h-36 items-end justify-around gap-4 border-b border-border/60 pb-2">
           {performanceStats.map((item) => (
             <div key={item.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <div className="flex h-24 w-full max-w-12 items-end justify-center gap-1">
-                <span className="w-2.5 rounded-t bg-emerald-500/20" style={{ height: `${Math.max(12, (item.value / maxPerformanceValue) * 70)}%` }} />
-                <span className="w-2.5 rounded-t bg-emerald-500" style={{ height: `${Math.max(18, (item.value / maxPerformanceValue) * 100)}%` }} />
+                <span className="w-2.5 rounded-t bg-emerald-500/20" style={{ height: `${((item.value ?? 0) / maxPerformanceValue) * 70}%` }} />
+                <span className="w-2.5 rounded-t bg-emerald-500" style={{ height: `${((item.value ?? 0) / maxPerformanceValue) * 100}%` }} />
               </div>
               <span className="truncate text-[9px] font-medium text-foreground">{item.label}</span>
             </div>
@@ -1221,7 +1223,7 @@ function WorkforceInsightPanels({
         </div>
         <div className="mt-3 flex flex-wrap gap-3 text-[9px] text-muted-foreground">
           {performanceStats.map((item) => (
-            <span key={item.label}><span className="font-semibold text-foreground">{item.value}</span> {item.label.toLowerCase()}</span>
+            <span key={item.label}><span className="font-semibold text-foreground">{item.value ?? "Unavailable"}</span> {item.label.toLowerCase()}</span>
           ))}
         </div>
       </section>
@@ -1246,10 +1248,14 @@ function formatDashboardCurrency(value: unknown, currency = "TZS") {
 function PeopleExperiencePanels({
   satisfactionScore,
   satisfactionCategories,
+  satisfactionUnavailable,
+  satisfactionDistribution,
   payrollRows,
   canOpenPayroll,
 }: {
-  satisfactionScore: number
+  satisfactionScore: number | null
+  satisfactionUnavailable: boolean
+  satisfactionDistribution: { satisfied: number; neutral: number; needsAttention: number } | null
   satisfactionCategories: Array<{ label: string; value: number }>
   payrollRows: AdminRecord[]
   canOpenPayroll: boolean
@@ -1266,7 +1272,7 @@ function PeopleExperiencePanels({
     return haystack.includes(payrollSearch.trim().toLowerCase())
   })
   const gaugeLength = 126
-  const gaugeProgress = gaugeLength * (Math.min(100, Math.max(0, satisfactionScore)) / 100)
+  const gaugeProgress = gaugeLength * (Math.min(100, Math.max(0, satisfactionScore ?? 0)) / 100)
 
   return (
     <div className="mt-3 grid w-full gap-3 lg:grid-cols-[minmax(320px,0.85fr)_minmax(0,1.15fr)]">
@@ -1282,17 +1288,17 @@ function PeopleExperiencePanels({
               <path d="M12 58 A48 48 0 0 1 108 58" fill="none" stroke="rgb(16 185 129)" strokeWidth="10" strokeLinecap="round" pathLength={gaugeLength} strokeDasharray={`${gaugeProgress} ${gaugeLength}`} />
             </svg>
             <div className="absolute inset-x-0 bottom-1 text-center">
-              <p className="text-2xl font-semibold tabular-nums text-foreground">{satisfactionScore}%</p>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{satisfactionScore === null ? "—" : `${satisfactionScore}%`}</p>
               <p className="text-[9px] text-muted-foreground">average satisfaction</p>
             </div>
           </div>
           <div className="space-y-2 text-[10px] text-muted-foreground">
-            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500" />Satisfied</p>
-            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500/25" />Neutral</p>
-            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-muted" />Needs attention</p>
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500" />Satisfied · {satisfactionDistribution?.satisfied ?? "—"}</p>
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-emerald-500/25" />Neutral · {satisfactionDistribution?.neutral ?? "—"}</p>
+            <p><span className="mr-1.5 inline-block size-2 rounded-sm bg-muted" />Needs attention · {satisfactionDistribution?.needsAttention ?? "—"}</p>
           </div>
         </div>
-        {satisfactionCategories.some((item) => item.value > 0) ? (
+        {satisfactionCategories.length > 0 ? (
           <div className="mt-4 space-y-3">
             {satisfactionCategories.map((item) => (
               <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_100px] items-center gap-3">
@@ -1307,7 +1313,7 @@ function PeopleExperiencePanels({
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-lg bg-muted/30 px-3 py-3 text-xs text-muted-foreground">No employee satisfaction survey data is available yet.</p>
+          <p className="mt-4 rounded-lg bg-muted/30 px-3 py-3 text-xs text-muted-foreground">{satisfactionUnavailable ? "Satisfaction results could not be loaded." : "No reportable satisfaction responses for this period yet."}</p>
         )}
       </section>
 
@@ -1490,6 +1496,8 @@ export default function HrAnalyticsDashboard({
   )
   const [payrollPayslips, setPayrollPayslips] = React.useState<AdminRecord[]>([])
   const [analyticsSummary, setAnalyticsSummary] = React.useState<AdminRecord | null>(null)
+  const [surveySatisfaction, setSurveySatisfaction] = React.useState<{ score: number | null; categories: Record<string, number>; satisfied: number; neutral: number; needsAttention: number } | null>(null)
+  const canReadForms = hasPermission(actor.permissionLabels, "forms_feedback:manage")
   const [workforceSummary, setWorkforceSummary] = React.useState<AdminRecord | null>(null)
   const [upcomingHoliday, setUpcomingHoliday] = React.useState<AdminRecord | null>(null)
 
@@ -1623,10 +1631,6 @@ export default function HrAnalyticsDashboard({
     if (from_date) leaveParams.from_date = from_date
     if (to_date) leaveParams.to_date = to_date
 
-    // Single page only — full daily-summary history was paging for a long time and blocked the UI.
-    const attParams: Record<string, string | number> = { page: 1, limit: 100 }
-    if (from_date) attParams.from_date = from_date
-    if (to_date) attParams.to_date = to_date
     const todayAttendanceDate = formatLocalDateKey(new Date())
     const todayAttendanceParams: Record<string, string | number> = {
       page: 1,
@@ -1637,6 +1641,8 @@ export default function HrAnalyticsDashboard({
 
     // Progressive paint: each slice updates as soon as it resolves (no waiting on the slowest).
     const tasks: Promise<void>[] = [
+      canReadForms ? formsRequest<{ score: number | null; categories: Record<string, number>; satisfied: number; neutral: number; needsAttention: number }>(`hr/forms-feedback/satisfaction?from=${encodeURIComponent(`${from_date}T00:00:00`)}&to=${encodeURIComponent(`${to_date}T23:59:59`)}`)
+        .then(setSurveySatisfaction).catch(() => { setSurveySatisfaction(null); recordPartialSourceError("Satisfaction results") }) : Promise.resolve().then(() => setSurveySatisfaction(null)),
       // The advanced analytics HR dashboard is the authoritative structured
       // contract. Keep the older role dashboard as a compatibility fallback.
       getAnalyticsDashboard(token, "hr", {
@@ -1712,13 +1718,13 @@ export default function HrAnalyticsDashboard({
             markReady("leave")
           }),
 
-      listAttendanceDailySummariesPage(token, attParams, listOpts)
+      loadAttendanceReportRows(token, from_date, to_date)
         .catch(() => {
           recordPartialSourceError("Attendance history")
-          return { rows: [], total: null } as PagedRowsResult
+          return []
         })
-        .then((attRes) => {
-          setAttendanceSummaries(attRes.rows ?? [])
+        .then((rows) => {
+          setAttendanceSummaries(rows)
           markReady("attendance")
         }),
 
@@ -1791,7 +1797,7 @@ export default function HrAnalyticsDashboard({
     await Promise.allSettled(tasks)
     setLastUpdatedAt(new Date())
     setLoading(false)
-  }, [canOpenPayroll, fromDate, toDate, markReady, recordPartialSourceError, showLeaveRequests])
+  }, [canReadForms, canOpenPayroll, fromDate, toDate, markReady, recordPartialSourceError, showLeaveRequests])
 
   React.useEffect(() => {
     // First mount after login: revalidate quietly so we don't flash skeletons again.
@@ -1942,12 +1948,6 @@ export default function HrAnalyticsDashboard({
     "on_leave_today",
     "onLeaveToday",
   ])
-  const analyticsTodayTotalRecords = readNumberDeep(analyticsSummary, [
-    "today_total_records",
-    "todayTotalRecords",
-    "today_attendance_records",
-    "todayAttendanceRecords",
-  ])
   const todayAttendance = React.useMemo(() => {
     const rows = new Map<string, AdminRecord>()
     const sourceSummaries = [...attendanceSummaries, ...todayAttendanceSummaries]
@@ -1976,6 +1976,10 @@ export default function HrAnalyticsDashboard({
           status.includes("half_day") ||
           status.includes("half day") ||
           status.includes("worked") ||
+          status.includes("early_departure") ||
+          status.includes("overtime") ||
+          status.includes("half_day") ||
+          status.includes("manual_correction") ||
           status.includes("on_time") ||
           status.includes("ontime") ||
           status === "ok" ||
@@ -1984,12 +1988,8 @@ export default function HrAnalyticsDashboard({
       }).length,
     [todayAttendance]
   )
-  const useAnalyticsTodayCounts =
-    todayAttendance.length === 0 &&
-    (analyticsTodayTotalRecords !== 0 || todayAttendanceSummaries.length === 0) &&
-    (analyticsTodayPresent !== null || analyticsTodayAbsent !== null || analyticsTodayLeave !== null)
   const todayPresent =
-    useAnalyticsTodayCounts && analyticsTodayPresent !== null
+    analyticsTodayPresent !== null
       ? analyticsTodayPresent
       : sampledTodayPresent
 
@@ -2004,9 +2004,7 @@ export default function HrAnalyticsDashboard({
     })
     leaveRequests.forEach((request, index) => {
       const status = getLeaveStatus(request)
-      if (status.includes("reject") || status.includes("cancel") || status.includes("pending") || status.includes("submitted")) {
-        return
-      }
+      if (status !== "approved") return
       const start = recordDateKey(readDeepValue(request, ["start_date", "from_date", "date_from"]))
       const end = recordDateKey(readDeepValue(request, ["end_date", "to_date", "date_to"])) || start
       if (!start || todayKey < start || todayKey > end) return
@@ -2017,7 +2015,7 @@ export default function HrAnalyticsDashboard({
     return employeesOnLeave.size
   }, [leaveRequests, todayAttendance, todayKey])
   const todayLeave =
-    useAnalyticsTodayCounts && analyticsTodayLeave !== null ? analyticsTodayLeave : sampledTodayLeave
+    analyticsTodayLeave !== null ? analyticsTodayLeave : sampledTodayLeave
 
   const explicitTodayAbsent = React.useMemo(
     () =>
@@ -2028,13 +2026,9 @@ export default function HrAnalyticsDashboard({
     [todayAttendance]
   )
   const todayAbsent =
-    useAnalyticsTodayCounts && analyticsTodayAbsent !== null
+    analyticsTodayAbsent !== null
       ? analyticsTodayAbsent
-      : explicitTodayAbsent > 0
-        ? explicitTodayAbsent
-        : todayAttendance.length > 0
-          ? Math.max(0, totalHeadcount - todayPresent - todayLeave)
-          : 0
+      : explicitTodayAbsent
   const percentageOfHeadcount = (value: number) =>
     totalHeadcount > 0 ? Math.min(100, Math.round((value / totalHeadcount) * 100)) : 0
   const toneForPercentage = (percentage: number): WorkforceMetricTone => {
@@ -2057,6 +2051,10 @@ export default function HrAnalyticsDashboard({
         (isLate ||
           status.includes("present") ||
           status.includes("worked") ||
+          status.includes("early_departure") ||
+          status.includes("overtime") ||
+          status.includes("half_day") ||
+          status.includes("manual_correction") ||
           status.includes("on_time") ||
           status.includes("ontime") ||
           status === "ok" ||
@@ -2077,12 +2075,11 @@ export default function HrAnalyticsDashboard({
       byDate.set(date, current)
     })
 
-    const total = present + late + absent
     return {
       present,
       late,
       absent,
-      rate: total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : 0,
+      rate: attendanceReportRate(present, late, absent),
       days: Array.from(byDate.entries())
         .sort(([left], [right]) => left.localeCompare(right))
         .slice(-14)
@@ -2098,61 +2095,40 @@ export default function HrAnalyticsDashboard({
     "performance_score",
     "average_performance_score",
   ])
-  const performanceScore = rawPerformanceScore === null
-    ? 0
-    : Math.min(100, Math.round((rawPerformanceScore <= 5 ? rawPerformanceScore * 20 : rawPerformanceScore) * 10) / 10)
+  const publishedReviewCount = readNumberDeep(analyticsSummary, ["published_reviews", "published_team_reviews"])
+  const performanceScore = rawPerformanceScore === null || publishedReviewCount === null || publishedReviewCount === 0
+    ? null
+    : Math.min(100, Math.max(0, Math.round(rawPerformanceScore * 10) / 10))
   const performanceStats: PerformanceStat[] = [
     {
       label: "Reviews",
-      value: readNumberDeep(analyticsSummary, ["published_reviews", "published_team_reviews"]) ?? 0,
+      value: publishedReviewCount,
     },
     {
       label: "Reports",
-      value: readNumberDeep(analyticsSummary, ["approved_daily_reports", "approved_reports"]) ?? 0,
+      value: readNumberDeep(analyticsSummary, ["approved_daily_reports", "approved_reports"]),
     },
     {
       label: "Visits",
-      value: readNumberDeep(analyticsSummary, ["reviewed_field_visits", "reviewed_visits"]) ?? 0,
+      value: readNumberDeep(analyticsSummary, ["reviewed_field_visits", "reviewed_visits"]),
     },
   ]
-  const rawSatisfactionScore = readNumberDeep(analyticsSummary, [
-    "employee_satisfaction",
-    "satisfaction_score",
-    "employee_satisfaction_score",
-    "engagement_score",
-  ])
-  const satisfactionScore = rawSatisfactionScore === null
-    ? 0
-    : Math.min(100, Math.round((rawSatisfactionScore <= 5 ? rawSatisfactionScore * 20 : rawSatisfactionScore) * 10) / 10)
-  const satisfactionCategories = [
-    {
-      label: "Compensation & benefits",
-      value: readNumberDeep(analyticsSummary, ["compensation_satisfaction", "benefits_satisfaction"]) ?? 0,
-    },
-    {
-      label: "Work culture",
-      value: readNumberDeep(analyticsSummary, ["work_culture_satisfaction", "culture_satisfaction"]) ?? 0,
-    },
-    {
-      label: "Work-life balance",
-      value: readNumberDeep(analyticsSummary, ["work_life_balance_satisfaction", "work_life_balance"]) ?? 0,
-    },
-    {
-      label: "Career growth",
-      value: readNumberDeep(analyticsSummary, ["career_growth_satisfaction", "career_growth_score"]) ?? 0,
-    },
-  ].map((item) => ({ ...item, value: Math.min(100, Math.max(0, item.value)) }))
+  const satisfactionScore = surveySatisfaction?.score ?? null
+  const satisfactionCategories = Object.entries(surveySatisfaction?.categories ?? {}).map(([key, value]) => ({ label: key.replaceAll("_", " "), value }))
 
+  const workforceUnavailable = partialSourceErrors.includes("Workforce summary") || summaryHeadcount === null
+  const attendanceUnavailable = workforceUnavailable || (partialSourceErrors.includes("Today's attendance") && (analyticsTodayPresent === null || analyticsTodayAbsent === null))
+  const leaveUnavailable = workforceUnavailable || (analyticsTodayLeave === null && (partialSourceErrors.includes("Today's attendance") || (showLeaveRequests && partialSourceErrors.includes("Leave requests"))))
   const workforceMetrics: WorkforceMetric[] = [
     {
       label: "Total employees",
-      value: partialSourceErrors.includes("Workforce summary") ? null : totalHeadcount,
-      percentage: partialSourceErrors.includes("Workforce summary") ? null : totalHeadcount > 0 ? 100 : 0,
-      description: partialSourceErrors.includes("Workforce summary")
+      value: workforceUnavailable ? null : totalHeadcount,
+      percentage: workforceUnavailable ? null : totalHeadcount > 0 ? 100 : 0,
+      description: workforceUnavailable
         ? "Workforce summary is unavailable"
         : `${activeCount} active across ${departments.length || resolvedDepartmentHeadcounts.length} departments`,
       icon: <UsersIcon className="size-5" aria-hidden="true" />,
-      tone: partialSourceErrors.includes("Workforce summary")
+      tone: workforceUnavailable
         ? "amber"
         : toneForPercentage(totalHeadcount > 0 ? 100 : 0),
       visualization: "sparkline",
@@ -2160,13 +2136,13 @@ export default function HrAnalyticsDashboard({
     },
     {
       label: "Today present",
-      value: partialSourceErrors.includes("Today's attendance") ? null : todayPresent,
-      percentage: partialSourceErrors.includes("Today's attendance") ? null : percentageOfHeadcount(todayPresent),
-      description: partialSourceErrors.includes("Today's attendance")
-        ? "Today's attendance is unavailable"
+      value: attendanceUnavailable ? null : todayPresent,
+      percentage: attendanceUnavailable ? null : percentageOfHeadcount(todayPresent),
+      description: attendanceUnavailable
+        ? "Workforce or attendance data is unavailable"
         : `${percentageOfHeadcount(todayPresent)}% of employees are present today (${todayPresent} of ${totalHeadcount})`,
       icon: <UserCheckIcon className="size-5" aria-hidden="true" />,
-      tone: partialSourceErrors.includes("Today's attendance")
+      tone: attendanceUnavailable
         ? "amber"
         : toneForPercentage(percentageOfHeadcount(todayPresent)),
       visualization: "bars",
@@ -2174,13 +2150,13 @@ export default function HrAnalyticsDashboard({
     },
     {
       label: "Today absent",
-      value: partialSourceErrors.includes("Today's attendance") ? null : todayAbsent,
-      percentage: partialSourceErrors.includes("Today's attendance") ? null : percentageOfHeadcount(todayAbsent),
-      description: partialSourceErrors.includes("Today's attendance")
-        ? "Today's attendance is unavailable"
+      value: attendanceUnavailable ? null : todayAbsent,
+      percentage: attendanceUnavailable ? null : percentageOfHeadcount(todayAbsent),
+      description: attendanceUnavailable
+        ? "Workforce or attendance data is unavailable"
         : `${percentageOfHeadcount(todayAbsent)}% of employees are absent today (${todayAbsent} of ${totalHeadcount})`,
       icon: <UserXIcon className="size-5" aria-hidden="true" />,
-      tone: partialSourceErrors.includes("Today's attendance")
+      tone: attendanceUnavailable
         ? "amber"
         : toneForPercentage(percentageOfHeadcount(todayAbsent)),
       visualization: "ticks",
@@ -2189,24 +2165,20 @@ export default function HrAnalyticsDashboard({
     {
       label: "Today on leave",
       value:
-        partialSourceErrors.includes("Today's attendance") ||
-        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+        leaveUnavailable
           ? null
           : todayLeave,
       percentage:
-        partialSourceErrors.includes("Today's attendance") ||
-        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+        leaveUnavailable
           ? null
           : percentageOfHeadcount(todayLeave),
       description:
-        partialSourceErrors.includes("Today's attendance") ||
-        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
-          ? "Today's leave status is unavailable"
+        leaveUnavailable
+          ? "Workforce or leave data is unavailable"
           : `${percentageOfHeadcount(todayLeave)}% of employees are on approved leave today (${todayLeave} of ${totalHeadcount})`,
       icon: <UserMinusIcon className="size-5" aria-hidden="true" />,
       tone:
-        partialSourceErrors.includes("Today's attendance") ||
-        (showLeaveRequests && partialSourceErrors.includes("Leave requests"))
+        leaveUnavailable
           ? "amber"
           : toneForPercentage(percentageOfHeadcount(todayLeave)),
       visualization: "progress",
@@ -2396,7 +2368,7 @@ export default function HrAnalyticsDashboard({
       title: priorities.length > 0 ? `${priorities.length} areas need attention` : "Your queue is clear",
     },
     {
-      title: `${attendanceReport.rate}% attendance rate`,
+      title: partialSourceErrors.includes("Attendance history") ? "Attendance unavailable" : attendanceReport.rate === null ? "No attendance rate available" : `${attendanceReport.rate}% attendance rate`,
       href: attendanceHref,
     },
     {
@@ -2864,6 +2836,8 @@ export default function HrAnalyticsDashboard({
           performanceStats={performanceStats}
         />
         <PeopleExperiencePanels
+          satisfactionUnavailable={partialSourceErrors.includes("Satisfaction results")}
+          satisfactionDistribution={surveySatisfaction}
           satisfactionScore={satisfactionScore}
           satisfactionCategories={satisfactionCategories}
           payrollRows={payrollPayslips}

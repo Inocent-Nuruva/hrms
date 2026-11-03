@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 import { adminRequest } from "@/lib/admin-api"
 import { getSessionSnapshot, getServerSessionSnapshot, subscribeSession } from "@/lib/auth-session-store"
 import { toast } from "@/components/ui/fluent-toast-store"
@@ -21,7 +22,9 @@ export function useAccountAppearance<K extends keyof Appearance>(
   apply: (value: NonNullable<Appearance[K]>) => void,
 ) {
   const session = React.useSyncExternalStore(subscribeSession, getSessionSnapshot, getServerSessionSnapshot)
-  const token = session.tokens?.accessToken
+  const pathname = usePathname()
+  const syncAccount = pathname === "/dashboard" || pathname?.startsWith("/dashboard/") === true
+  const token = syncAccount ? session.tokens?.accessToken : undefined
   const subject = session.subject
   const applyRef = React.useRef(apply)
   const revision = React.useRef(0)

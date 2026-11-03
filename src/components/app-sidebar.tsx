@@ -162,6 +162,7 @@ const ActiveInsightsIcon = DataBarVerticalAscending24Color
 
 const adminData: SidebarData = {
   navMain: [
+    { title: "Forms & Feedback", url: "/dashboard/forms-feedback", icon: ReportsIcon, activeIcon: ActiveReportsIcon },
     {
       title: "To do",
       url: "/dashboard/me/requests/actions",

@@ -1012,6 +1012,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/team/activity-summary": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/actions": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/insights": null,
+  "/dashboard/forms-feedback": null,
   "/dashboard/me/requests": null,
   "/dashboard/me/requests/actions": null,
   "/dashboard/me/requests/timeline": null,
