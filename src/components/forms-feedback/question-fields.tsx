@@ -7,6 +7,7 @@ import {
   Input,
   Radio,
   RadioGroup,
+  Rating,
   Option,
   SpinButton,
   Textarea,
@@ -78,29 +79,34 @@ export function QuestionFields({
               <Radio value="true" label="Yes" />
               <Radio value="false" label="No" />
             </RadioGroup>
-          ) : q.type === "single_choice" || q.type === "rating" ? (
+          ) : q.type === "rating" ? (
+            <fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0">
+              <Rating
+                aria-label={`${index + 1}. ${q.label}`}
+                aria-required={q.required}
+                color="brand"
+                max={5}
+                size="extra-large"
+                value={
+                  typeof answers[q.id] === "number"
+                    ? (answers[q.id] as number)
+                    : 0
+                }
+                itemLabel={(value) => `${value} out of 5 stars`}
+                onChange={(_, data) => onChange(q.id, data.value || undefined)}
+              />
+            </fieldset>
+          ) : q.type === "single_choice" ? (
             <FeedbackDropdown
               disabled={disabled}
               required={q.required}
               value={String(answers[q.id] ?? "")}
-              onChange={(_, d) =>
-                onChange(
-                  q.id,
-                  q.type === "rating"
-                    ? d.value
-                      ? Number(d.value)
-                      : undefined
-                    : d.value,
-                )
-              }
+              onChange={(_, data) => onChange(q.id, data.value)}
             >
               <Option value="">Select an answer</Option>
-              {(q.type === "rating"
-                ? ["1", "2", "3", "4", "5"]
-                : (q.options ?? [])
-              ).map((o) => (
-                <Option key={o} value={o}>
-                  {o}
+              {(q.options ?? []).map((option) => (
+                <Option key={option} value={option}>
+                  {option}
                 </Option>
               ))}
             </FeedbackDropdown>

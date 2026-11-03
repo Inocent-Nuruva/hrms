@@ -44,7 +44,11 @@ it("shows labelled ratings, preserves false answers, and has no upload control",
       />,
     ),
   )
-  expect(container.querySelector('[role="combobox"]')?.textContent).toBe("4")
+  expect(
+    container.querySelector<HTMLInputElement>(
+      'input[aria-label="4 out of 5 stars"]',
+    )?.checked,
+  ).toBe(true)
   expect(container.querySelector("select")).toBeNull()
   expect(
     container.querySelector<HTMLInputElement>('input[value="false"]')?.checked,

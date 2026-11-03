@@ -468,7 +468,10 @@ export function FormBuilder({
               onValueChange={(value) => schedule({ startDate: value })}
             />
           </Field>
-          <Field label="Opening time">
+          <Field
+            label="Opening time"
+            hint="For the first opening, if today’s time has passed, the form opens on the next schedule check."
+          >
             <TimeInput
               aria-label="Opening time"
               value={definition.schedule.time}

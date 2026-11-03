@@ -161,12 +161,8 @@ test("employee submits anonymous answers once on mobile", async ({ page }) => {
     page.getByRole("button", { name: "Submit response", exact: true }),
   ).toBeDisabled()
   await page
-    .getByRole("combobox", {
-      name: "How satisfied are you at work?",
-      exact: false,
-    })
-    .click()
-  await page.getByRole("option", { name: "4", exact: true }).click()
+    .getByRole("radio", { name: "4 out of 5 stars", exact: true })
+    .check()
   await page
     .getByRole("checkbox", {
       name: "I have reviewed my answers and understand the response identity setting.",
