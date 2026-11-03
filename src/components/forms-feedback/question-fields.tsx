@@ -1,11 +1,14 @@
 "use client"
+import { FeedbackDropdown } from "./feedback-dropdown"
+import { DateInput } from "@/components/ui/date-input"
 import {
   Checkbox,
   Field,
   Input,
   Radio,
   RadioGroup,
-  Select,
+  Option,
+  SpinButton,
   Textarea,
 } from "@fluentui/react-components"
 import type { Question } from "@/lib/forms-feedback"
@@ -76,7 +79,7 @@ export function QuestionFields({
               <Radio value="false" label="No" />
             </RadioGroup>
           ) : q.type === "single_choice" || q.type === "rating" ? (
-            <Select
+            <FeedbackDropdown
               disabled={disabled}
               required={q.required}
               value={String(answers[q.id] ?? "")}
@@ -91,39 +94,49 @@ export function QuestionFields({
                 )
               }
             >
-              <option value="">Select an answer</option>
+              <Option value="">Select an answer</Option>
               {(q.type === "rating"
                 ? ["1", "2", "3", "4", "5"]
                 : (q.options ?? [])
               ).map((o) => (
-                <option key={o} value={o}>
+                <Option key={o} value={o}>
                   {o}
-                </option>
+                </Option>
               ))}
-            </Select>
+            </FeedbackDropdown>
+          ) : q.type === "date" ? (
+            <DateInput
+              disabled={disabled}
+              required={q.required}
+              value={String(answers[q.id] ?? "")}
+              onValueChange={(value) => onChange(q.id, value)}
+            />
+          ) : q.type === "number" ? (
+            <SpinButton
+              value={
+                typeof answers[q.id] === "number"
+                  ? (answers[q.id] as number)
+                  : null
+              }
+              disabled={disabled}
+              aria-required={q.required}
+              displayValue={String(answers[q.id] ?? "")}
+              onChange={(_, data) => {
+                const value =
+                  data.value ??
+                  (data.displayValue?.trim()
+                    ? Number(data.displayValue)
+                    : undefined)
+                onChange(q.id, value)
+              }}
+            />
           ) : (
             <Input
               disabled={disabled}
               required={q.required}
-              type={
-                q.type === "number"
-                  ? "number"
-                  : q.type === "date"
-                    ? "date"
-                    : "text"
-              }
               maxLength={500}
               value={String(answers[q.id] ?? "")}
-              onChange={(_, d) =>
-                onChange(
-                  q.id,
-                  q.type === "number"
-                    ? d.value
-                      ? Number(d.value)
-                      : undefined
-                    : d.value,
-                )
-              }
+              onChange={(_, data) => onChange(q.id, data.value)}
             />
           )}
         </Field>

@@ -1,14 +1,21 @@
 "use client"
+import { FeedbackDropdown } from "./feedback-dropdown"
+import { TimeInput } from "@/components/ui/time-input"
+import { DateInput } from "@/components/ui/date-input"
 import * as React from "react"
 import {
   Badge,
+  Text,
+  Card,
+  Divider,
   Button,
   Checkbox,
   Field,
   Input,
   MessageBar,
   MessageBarBody,
-  Select,
+  Option,
+  SpinButton,
   Switch,
   Tab,
   TabList,
@@ -104,20 +111,23 @@ export function FormBuilder({
       ),
     })
   function addQuestion(question?: Question) {
-    patch({
+    const id = `q_${Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("")}`
+    setDefinition((current) => ({
+      ...current,
       questions: [
-        ...definition.questions,
+        ...current.questions,
         {
-          id: crypto.randomUUID(),
           label: "",
           type: "short_text",
           required: false,
           ...question,
-          ...(question ? { id: crypto.randomUUID() } : {}),
+          id,
         },
       ],
-    })
+    }))
+    setError("")
   }
+
   function move(index: number, direction: number) {
     const questions = [...definition.questions]
     ;[questions[index], questions[index + direction]] = [
@@ -127,6 +137,13 @@ export function FormBuilder({
     patch({ questions })
   }
   async function save(publish: boolean) {
+    if (publish && definition.questions.length === 0) {
+      setStep(1)
+      setError(
+        "Add at least one question before publishing. Choose a suggestion or select Add question.",
+      )
+      return
+    }
     setBusy(true)
     setError("")
     try {
@@ -148,9 +165,14 @@ export function FormBuilder({
   return (
     <section className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">
+        <Text
+          as="h2"
+          size={500}
+          weight="semibold"
+          className="block text-xl font-semibold"
+        >
           {initial ? "Edit future rounds" : "Create form"}
-        </h2>
+        </Text>
         <Button onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
@@ -187,19 +209,19 @@ export function FormBuilder({
             />
           </Field>
           <Field label="Form type">
-            <Select
+            <FeedbackDropdown
               value={definition.kind}
               onChange={(_, d) =>
                 patch({ kind: d.value as FormDefinition["kind"] })
               }
             >
-              <option value="survey">Survey</option>
-              <option value="poll">Poll</option>
-              <option value="data_collection">Data collection</option>
-            </Select>
+              <Option value="survey">Survey</Option>
+              <Option value="poll">Poll</Option>
+              <Option value="data_collection">Data collection</Option>
+            </FeedbackDropdown>
           </Field>
           <Field label="Response identity" hint="Locked when published">
-            <Select
+            <FeedbackDropdown
               disabled={!!initial?.publishedMode}
               value={definition.responseMode}
               onChange={(_, d) =>
@@ -208,9 +230,9 @@ export function FormBuilder({
                 })
               }
             >
-              <option value="anonymous">Anonymous</option>
-              <option value="identified">Identified</option>
-            </Select>
+              <Option value="anonymous">Anonymous</Option>
+              <Option value="identified">Identified</Option>
+            </FeedbackDropdown>
           </Field>
           <MessageBar>
             <MessageBarBody>
@@ -225,7 +247,7 @@ export function FormBuilder({
             label="Include rating answers in employee satisfaction metrics"
           />
           <Field label="Audience">
-            <Select
+            <FeedbackDropdown
               value={definition.audience.type}
               onChange={(_, d) =>
                 patch({
@@ -236,10 +258,10 @@ export function FormBuilder({
                 })
               }
             >
-              <option value="all">All active employees</option>
-              <option value="branches">Selected branches</option>
-              <option value="departments">Selected departments</option>
-            </Select>
+              <Option value="all">All active employees</Option>
+              <Option value="branches">Selected branches</Option>
+              <Option value="departments">Selected departments</Option>
+            </FeedbackDropdown>
           </Field>
           {definition.audience.type !== "all" && (
             <Field label="Select audience" required>
@@ -272,7 +294,8 @@ export function FormBuilder({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="flex flex-col gap-5">
             {definition.questions.map((q, index) => (
-              <section
+              <Card
+                appearance="subtle"
                 key={q.id}
                 className="flex flex-col gap-3 border-b border-border pb-5"
               >
@@ -313,7 +336,7 @@ export function FormBuilder({
                   />
                 </Field>
                 <Field label="Answer type">
-                  <Select
+                  <FeedbackDropdown
                     value={q.type}
                     onChange={(_, d) =>
                       editQuestion(q.id, {
@@ -336,11 +359,11 @@ export function FormBuilder({
                       "number",
                       "date",
                     ].map((type) => (
-                      <option key={type} value={type}>
+                      <Option key={type} value={type}>
                         {type.replaceAll("_", " ")}
-                      </option>
+                      </Option>
                     ))}
-                  </Select>
+                  </FeedbackDropdown>
                 </Field>
                 {["single_choice", "multiple_choice"].includes(q.type) && (
                   <Field label="Options — one per line">
@@ -354,13 +377,13 @@ export function FormBuilder({
                 )}
                 {q.type === "rating" && (
                   <Field label="Category">
-                    <Select
+                    <FeedbackDropdown
                       value={q.category ?? ""}
                       onChange={(_, d) =>
                         editQuestion(q.id, { category: d.value })
                       }
                     >
-                      <option value="">General</option>
+                      <Option value="">General</Option>
                       {[
                         "compensation",
                         "work_culture",
@@ -368,11 +391,11 @@ export function FormBuilder({
                         "career_growth",
                         "management_support",
                       ].map((c) => (
-                        <option key={c} value={c}>
+                        <Option key={c} value={c}>
                           {c.replaceAll("_", " ")}
-                        </option>
+                        </Option>
                       ))}
-                    </Select>
+                    </FeedbackDropdown>
                   </Field>
                 )}
                 <Switch
@@ -382,7 +405,7 @@ export function FormBuilder({
                     editQuestion(q.id, { required: d.checked })
                   }
                 />
-              </section>
+              </Card>
             ))}
             <Button
               icon={<Add24Regular />}
@@ -393,10 +416,17 @@ export function FormBuilder({
             </Button>
           </div>
           <aside className="flex flex-col gap-3">
-            <h3 className="font-semibold">Suggested questions</h3>
-            <p className="text-sm text-muted-foreground">
+            <Text
+              as="h3"
+              size={400}
+              weight="semibold"
+              className="block font-semibold"
+            >
+              Suggested questions
+            </Text>
+            <Text as="p" className="block text-sm text-muted-foreground">
               Add a suggestion, then edit it to fit your form.
-            </p>
+            </Text>
             {library.map((q) => (
               <Button
                 key={q.id}
@@ -413,7 +443,7 @@ export function FormBuilder({
       {step === 2 && (
         <div className="grid max-w-3xl gap-5 sm:grid-cols-2">
           <Field label="Repeat">
-            <Select
+            <FeedbackDropdown
               value={definition.schedule.frequency}
               onChange={(_, d) =>
                 schedule({
@@ -421,10 +451,10 @@ export function FormBuilder({
                 })
               }
             >
-              <option value="once">Once</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </Select>
+              <Option value="once">Once</Option>
+              <Option value="weekly">Weekly</Option>
+              <Option value="monthly">Monthly</Option>
+            </FeedbackDropdown>
           </Field>
           <Field label="Timezone">
             <Input
@@ -433,28 +463,29 @@ export function FormBuilder({
             />
           </Field>
           <Field label="Start date">
-            <Input
-              type="date"
+            <DateInput
               value={definition.schedule.startDate}
-              onChange={(_, d) => schedule({ startDate: d.value })}
+              onValueChange={(value) => schedule({ startDate: value })}
             />
           </Field>
           <Field label="Opening time">
-            <Input
-              type="time"
+            <TimeInput
+              aria-label="Opening time"
               value={definition.schedule.time}
-              onChange={(_, d) => schedule({ time: d.value })}
+              onChange={(event) => schedule({ time: event.target.value })}
             />
           </Field>
           {definition.schedule.frequency === "monthly" && (
             <>
               <Field label="Day of month">
-                <Input
-                  type="number"
+                <SpinButton
                   min={1}
                   max={31}
-                  value={String(definition.schedule.dayOfMonth ?? 23)}
-                  onChange={(_, d) => schedule({ dayOfMonth: Number(d.value) })}
+                  value={definition.schedule.dayOfMonth ?? 23}
+                  displayValue={String(definition.schedule.dayOfMonth ?? 23)}
+                  onChange={(_, d) =>
+                    schedule({ dayOfMonth: d.value ?? Number(d.displayValue) })
+                  }
                 />
               </Field>
               <Switch
@@ -465,23 +496,29 @@ export function FormBuilder({
             </>
           )}
           <Field label="Days open">
-            <Input
-              type="number"
+            <SpinButton
               min={1}
               max={90}
-              value={String(definition.schedule.openDays)}
-              onChange={(_, d) => schedule({ openDays: Number(d.value) })}
+              value={definition.schedule.openDays ?? null}
+              displayValue={String(definition.schedule.openDays)}
+              onChange={(_, d) =>
+                schedule({ openDays: d.value ?? Number(d.displayValue) })
+              }
             />
           </Field>
           <Field label="Remind every N days (optional)">
-            <Input
-              type="number"
+            <SpinButton
               min={1}
               max={30}
-              value={String(definition.schedule.reminderDays ?? "")}
+              value={definition.schedule.reminderDays ?? null}
+              displayValue={String(definition.schedule.reminderDays ?? "")}
               onChange={(_, d) =>
                 schedule({
-                  reminderDays: d.value ? Number(d.value) : undefined,
+                  reminderDays:
+                    d.value ??
+                    (d.displayValue?.trim()
+                      ? Number(d.displayValue)
+                      : undefined),
                 })
               }
             />
@@ -489,23 +526,26 @@ export function FormBuilder({
           {definition.schedule.frequency !== "once" && (
             <>
               <Field label="End date (optional)">
-                <Input
-                  type="date"
+                <DateInput
                   value={definition.schedule.endDate ?? ""}
-                  onChange={(_, d) =>
-                    schedule({ endDate: d.value || undefined })
+                  onValueChange={(value) =>
+                    schedule({ endDate: value || undefined })
                   }
                 />
               </Field>
               <Field label="Maximum rounds (optional)">
-                <Input
-                  type="number"
+                <SpinButton
                   min={1}
                   max={120}
-                  value={String(definition.schedule.occurrences ?? "")}
+                  value={definition.schedule.occurrences ?? null}
+                  displayValue={String(definition.schedule.occurrences ?? "")}
                   onChange={(_, d) =>
                     schedule({
-                      occurrences: d.value ? Number(d.value) : undefined,
+                      occurrences:
+                        d.value ??
+                        (d.displayValue?.trim()
+                          ? Number(d.displayValue)
+                          : undefined),
                     })
                   }
                 />
@@ -540,10 +580,17 @@ export function FormBuilder({
       )}
       {step === 3 && (
         <div className="flex max-w-3xl flex-col gap-5">
-          <h3 className="text-xl font-semibold">
+          <Text
+            as="h3"
+            size={400}
+            weight="semibold"
+            className="block text-xl font-semibold"
+          >
             {definition.title || "Untitled form"}
-          </h3>
-          <p>{definition.description}</p>
+          </Text>
+          <Text as="p" className="block">
+            {definition.description}
+          </Text>
           <Badge className="self-start" appearance="tint">
             {definition.responseMode}
           </Badge>
@@ -559,7 +606,8 @@ export function FormBuilder({
           />
         </div>
       )}
-      <footer className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-border bg-background py-4">
+      <Divider />
+      <footer className="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-background py-4">
         <Button
           disabled={busy || step === 0}
           onClick={() => setStep((s) => s - 1)}

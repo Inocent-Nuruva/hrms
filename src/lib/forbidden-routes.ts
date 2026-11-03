@@ -28,6 +28,8 @@ const CONFIRMED_STORAGE_KEY = "hrms.confirmedPlatformRoutes"
 // Company SMS pages are the same: a 403 from /api/sms/* must not hide the
 // section root or bounce Overview / Registry / Logs back to /dashboard.
 const DO_NOT_REMEMBER = new Set([
+  // Shared employee/HR workspace: a denied subrequest must not hide the entry.
+  "/dashboard/forms-feedback",
   "/dashboard/operations/reports",
   "/dashboard/sms",
   "/dashboard/sms/overview",

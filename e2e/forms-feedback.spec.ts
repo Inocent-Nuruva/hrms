@@ -86,6 +86,11 @@ async function prepare(page: Page) {
       path === "/api/hr/forms-feedback" &&
       route.request().method() === "POST"
     ) {
+      const questions = route.request().postDataJSON().questions
+      expect(questions).toHaveLength(3)
+      expect(
+        new Set(questions.map((question: { id: string }) => question.id)).size,
+      ).toBe(3)
       state.saves++
       data = { id: "draft-1" }
     }
@@ -97,6 +102,13 @@ test("HR can add suggested questions and preview the anonymous notice", async ({
   page,
 }) => {
   await prepare(page)
+  // Network HTTP origins do not expose randomUUID; adding questions must still work.
+  await page.addInitScript(() => {
+    Object.defineProperty(crypto, "randomUUID", {
+      value: undefined,
+      configurable: true,
+    })
+  })
   await page.goto("/dashboard/forms-feedback")
   await page.getByRole("button", { name: "Create form", exact: true }).click()
   await page
@@ -112,6 +124,20 @@ test("HR can add suggested questions and preview the anonymous notice", async ({
   await expect(
     page.getByRole("textbox", { name: "Question", exact: true }),
   ).toHaveValue("How satisfied are you at work?")
+  await page
+    .getByRole("button", {
+      name: "How satisfied are you at work?",
+      exact: true,
+    })
+    .click()
+  await page.getByRole("button", { name: "Add question", exact: true }).click()
+  await expect(
+    page.getByRole("textbox", { name: "Question", exact: true }),
+  ).toHaveCount(3)
+  await page.getByRole("tab", { name: "3. Schedule" }).click()
+  await expect(
+    page.locator('input[type="date"], input[type="time"], select'),
+  ).toHaveCount(0)
   await page.getByRole("tab", { name: "4. Preview" }).click()
   await expect(
     page.getByText("Your identity is not linked to your answers.", {
@@ -139,7 +165,8 @@ test("employee submits anonymous answers once on mobile", async ({ page }) => {
       name: "How satisfied are you at work?",
       exact: false,
     })
-    .selectOption("4")
+    .click()
+  await page.getByRole("option", { name: "4", exact: true }).click()
   await page
     .getByRole("checkbox", {
       name: "I have reviewed my answers and understand the response identity setting.",
@@ -194,7 +221,7 @@ test("HR switches between summary and anonymous responses", async ({
         ? { rows: [round], total: 1 }
         : {
             rows: [
-              { id: "form-1", definition, status: "closed", roundCount: 1 },
+              { id: "form-1", definition, status: "scheduled", roundCount: 1 },
             ],
             total: 1,
           }
@@ -202,6 +229,10 @@ test("HR switches between summary and anonymous responses", async ({
   })
   await page.goto("/dashboard/forms-feedback")
   await page.getByRole("tab", { name: "Manage forms", exact: true }).click()
+  await page.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Close form?" })).toBeVisible()
+  await page.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Close form?" })).toHaveCount(0)
   await page.getByRole("button", { name: "View rounds", exact: true }).click()
   await page.getByRole("button", { name: "View results", exact: true }).click()
   await expect(

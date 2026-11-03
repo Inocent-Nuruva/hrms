@@ -2,6 +2,15 @@
 import * as React from "react"
 import {
   Badge,
+  Text,
+  Card,
+  Divider,
+  Dialog,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Button,
   Checkbox,
   MessageBar,
@@ -51,6 +60,9 @@ export function FormsFeedbackWorkspace() {
   const [results, setResults] = React.useState<Results | null>(null)
   const [resultsTab, setResultsTab] = React.useState("summary")
   const [resultsPage, setResultsPage] = React.useState(1)
+  const [pendingClose, setPendingClose] = React.useState<FeedbackForm | null>(
+    null,
+  )
   const [busy, setBusy] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -167,10 +179,17 @@ export function FormsFeedbackWorkspace() {
         <div className="flex items-center gap-3">
           <DocumentBulletList24Regular className="text-primary" />
           <div>
-            <h1 className="text-2xl font-semibold">Forms &amp; Feedback</h1>
-            <p className="text-sm text-muted-foreground">
+            <Text
+              as="h1"
+              size={700}
+              weight="semibold"
+              className="text-2xl font-semibold"
+            >
+              Forms &amp; Feedback
+            </Text>
+            <Text as="p" className="block text-sm text-muted-foreground">
               Share feedback, answer polls and collect information.
-            </p>
+            </Text>
           </div>
         </div>
         {manage && !builder && (
@@ -187,6 +206,53 @@ export function FormsFeedbackWorkspace() {
           </Button>
         )}
       </header>
+      <Divider />
+      <Dialog
+        open={pendingClose !== null}
+        onOpenChange={(_, data) => {
+          if (!data.open && !busy) setPendingClose(null)
+        }}
+      >
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Close form?</DialogTitle>
+            <DialogContent>
+              <Text as="p" className="block">
+                Close {pendingClose?.definition.title} and all its open rounds?
+                Employees will no longer be able to submit responses. Existing
+                results will remain available.
+              </Text>
+              {error && (
+                <MessageBar intent="error">
+                  <MessageBarBody>{error}</MessageBarBody>
+                </MessageBar>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button disabled={busy} onClick={() => setPendingClose(null)}>
+                Cancel
+              </Button>
+              <Button
+                appearance="primary"
+                disabled={busy}
+                onClick={() => {
+                  if (!pendingClose) return
+                  void run(async () => {
+                    await formsRequest(
+                      `hr/forms-feedback/${pendingClose.id}/close`,
+                      "POST",
+                    )
+                    setPendingClose(null)
+                    setRevision((value) => value + 1)
+                  })
+                }}
+              >
+                {busy ? "Closing…" : "Close form"}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       {error && (
         <MessageBar intent="error">
           <MessageBarBody>{error}</MessageBarBody>
@@ -236,8 +302,15 @@ export function FormsFeedbackWorkspace() {
           >
             Back to forms
           </Button>
-          <h2 className="text-xl font-semibold">{selected.definition.title}</h2>
-          <p>{selected.definition.description}</p>
+          <Text
+            as="h2"
+            size={500}
+            weight="semibold"
+            className="block text-xl font-semibold"
+          >
+            {selected.definition.title}
+          </Text>
+          <Text as="p" className="block">{selected.definition.description}</Text>
           <Badge className="self-start" appearance="tint">
             {selected.definition.responseMode}
           </Badge>
@@ -246,9 +319,9 @@ export function FormsFeedbackWorkspace() {
               {identityNotice(selected.definition.responseMode)}
             </MessageBarBody>
           </MessageBar>
-          <p className="text-sm text-muted-foreground">
+          <Text as="p" className="block text-sm text-muted-foreground">
             Closes {date(selected.closesAt)}
-          </p>
+          </Text>
           <QuestionFields
             disabled={busy}
             questions={selected.definition.questions}
@@ -285,16 +358,21 @@ export function FormsFeedbackWorkspace() {
               Export results
             </Button>
           </div>
-          <h2 className="text-xl font-semibold">
+          <Text
+            as="h2"
+            size={500}
+            weight="semibold"
+            className="block text-xl font-semibold"
+          >
             {results.round.definition.title}
-          </h2>
-          <p>
+          </Text>
+          <Text as="p" className="block">
             {results.total} submissions · {results.eligible} eligible ·{" "}
             {results.eligible
               ? Math.round((results.total / results.eligible) * 100)
               : 0}
             % participation
-          </p>
+          </Text>
           <Badge className="self-start" appearance="tint">
             {results.round.definition.responseMode}
           </Badge>
@@ -316,7 +394,14 @@ export function FormsFeedbackWorkspace() {
               </TabList>
               {resultsTab === "summary" ? (
                 <>
-                  <h3 className="font-semibold">Summary</h3>
+                  <Text
+                    as="h3"
+                    size={400}
+                    weight="semibold"
+                    className="block font-semibold"
+                  >
+                    Summary
+                  </Text>
                   <div className="grid gap-4 md:grid-cols-2">
                     {results.round.definition.questions
                       .filter((q) =>
@@ -332,7 +417,14 @@ export function FormsFeedbackWorkspace() {
                           key={q.id}
                           className="flex flex-col gap-2 border-b border-border pb-4"
                         >
-                          <h4 className="font-medium">{q.label}</h4>
+                          <Text
+                            as="h4"
+                            size={300}
+                            weight="semibold"
+                            className="font-medium"
+                          >
+                            {q.label}
+                          </Text>
                           {results.summary
                             .filter((s) => s.question === q.id)
                             .map((s, i) => (
@@ -361,31 +453,53 @@ export function FormsFeedbackWorkspace() {
                 </>
               ) : (
                 <>
-                  <h3 className="font-semibold">Responses</h3>
-                  {results.rows.length === 0 && <p>No submissions yet.</p>}
+                  <Text
+                    as="h3"
+                    size={400}
+                    weight="semibold"
+                    className="block font-semibold"
+                  >
+                    Responses
+                  </Text>
+                  {results.rows.length === 0 && (
+                    <Text as="p" className="block">No submissions yet.</Text>
+                  )}
                   {results.rows.map((r, index) => (
-                    <article
+                    <Card
+                      role="group"
+                      appearance="subtle"
                       key={index}
                       className="flex flex-col gap-3 border-b border-border py-4"
                     >
-                      <h4 className="font-medium">
+                      <Text
+                        as="h4"
+                        size={300}
+                        weight="semibold"
+                        className="font-medium"
+                      >
                         {r.employee
                           ? `${r.employee.name} · ${r.employee.employeeNo}`
                           : "Submission"}
-                      </h4>
+                      </Text>
                       {results.round.definition.questions.map((q) => (
                         <div key={q.id}>
-                          <p className="text-sm text-muted-foreground">
+                          <Text
+                            as="p"
+                            className="block text-sm text-muted-foreground"
+                          >
                             {q.label}
-                          </p>
-                          <p className="whitespace-pre-wrap break-words">
+                          </Text>
+                          <Text
+                            as="p"
+                            className="block whitespace-pre-wrap break-words"
+                          >
                             {Array.isArray(r.answers[q.id])
                               ? (r.answers[q.id] as unknown[]).join(", ")
                               : String(r.answers[q.id] ?? "—")}
-                          </p>
+                          </Text>
                         </div>
                       ))}
-                    </article>
+                    </Card>
                   ))}
                   <div className="flex gap-3">
                     <Button
@@ -457,9 +571,14 @@ export function FormsFeedbackWorkspace() {
               >
                 All forms
               </Button>
-              <h2 className="font-semibold">
+              <Text
+                as="h2"
+                size={500}
+                weight="semibold"
+                className="block font-semibold"
+              >
                 {selectedForm.definition.title} — rounds
-              </h2>
+              </Text>
             </div>
           )}
           {loading ? (
@@ -467,17 +586,27 @@ export function FormsFeedbackWorkspace() {
           ) : area === "manage" && !selectedForm ? (
             <div className="flex flex-col">
               {forms.length === 0 && (
-                <p className="py-8 text-muted-foreground">
+                <Text as="p" className="block py-8 text-muted-foreground">
                   No forms yet. Create a form to get started.
-                </p>
+                </Text>
               )}
               {forms.map((form) => (
-                <article
+                <Card
+                  role="group"
+                  appearance="subtle"
                   key={form.id}
+                  orientation="horizontal"
                   className="flex flex-wrap items-center justify-between gap-4 border-b border-border py-4"
                 >
                   <div className="flex flex-col gap-2">
-                    <h2 className="font-semibold">{form.definition.title}</h2>
+                    <Text
+                      as="h2"
+                      size={500}
+                      weight="semibold"
+                      className="block font-semibold"
+                    >
+                      {form.definition.title}
+                    </Text>
                     <div className="flex gap-2">
                       <Badge appearance="tint">
                         {form.displayStatus ?? form.status}
@@ -486,13 +615,13 @@ export function FormsFeedbackWorkspace() {
                         {form.definition.responseMode}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <Text as="p" className="block text-sm text-muted-foreground">
                       {form.roundCount} rounds ·{" "}
                       {form.definition.schedule.frequency}
                       {form.nextOpenAt
                         ? ` · Opens ${date(form.nextOpenAt)}`
                         : ""}
-                    </p>
+                    </Text>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -529,45 +658,43 @@ export function FormsFeedbackWorkspace() {
                       <Button
                         disabled={busy}
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              "Close this form and any open rounds?",
-                            )
-                          )
-                            void run(async () => {
-                              await formsRequest(
-                                `hr/forms-feedback/${form.id}/close`,
-                                "POST",
-                              )
-                              setRevision((r) => r + 1)
-                            })
+                          setError("")
+                          setPendingClose(form)
                         }}
                       >
                         Close
                       </Button>
                     )}
                   </div>
-                </article>
+                </Card>
               ))}
             </div>
           ) : (
             <div className="flex flex-col">
               {rounds.length === 0 && (
-                <p className="py-8 text-muted-foreground">
+                <Text as="p" className="block py-8 text-muted-foreground">
                   No forms available yet.
-                </p>
+                </Text>
               )}
               {rounds.map((round) => {
                 const closed = new Date(round.closesAt) <= new Date()
                 return (
-                  <article
+                  <Card
+                    role="group"
+                    appearance="subtle"
                     key={round.id}
+                    orientation="horizontal"
                     className="flex flex-wrap items-center justify-between gap-4 border-b border-border py-4"
                   >
                     <div className="flex flex-col gap-2">
-                      <h2 className="font-semibold">
+                      <Text
+                        as="h2"
+                        size={500}
+                        weight="semibold"
+                        className="block font-semibold"
+                      >
                         {round.definition.title}
-                      </h2>
+                      </Text>
                       <div className="flex gap-2">
                         <Badge appearance="tint">
                           {area === "mine" && round.submitted
@@ -580,10 +707,10 @@ export function FormsFeedbackWorkspace() {
                           {round.definition.responseMode}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <Text as="p" className="block text-sm text-muted-foreground">
                         Closes {date(round.closesAt)} ·{" "}
                         {round.definition.questions.length} questions
-                      </p>
+                      </Text>
                     </div>
                     {area === "manage" ? (
                       <Button
@@ -605,7 +732,7 @@ export function FormsFeedbackWorkspace() {
                         Complete form
                       </Button>
                     )}
-                  </article>
+                  </Card>
                 )
               })}
             </div>

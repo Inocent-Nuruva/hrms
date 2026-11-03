@@ -31,6 +31,15 @@ describe("forbidden route memory", () => {
     })
   }
 
+  it("keeps Forms & Feedback visible despite a previously remembered denial", () => {
+    stubSession()
+    window.sessionStorage.setItem("hrms.forbiddenRoutes.v3", JSON.stringify(["/dashboard/forms-feedback"]))
+    expect(canSeeDashboardPage("/dashboard/forms-feedback", ["forms_feedback:manage"], "admin")).toBe(true)
+    rememberForbiddenRoute("/dashboard/forms-feedback")
+    expect(isRememberedForbiddenRoute("/dashboard/forms-feedback")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/forms-feedback", [], "employee")).toBe(true)
+  })
+
   it("hides only the tab that failed, not sibling tabs", () => {
     stubSession()
     expect(canSeeDashboardPage("/dashboard/structure/grades", ["employee_grades:read"], "admin")).toBe(true)
