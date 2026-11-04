@@ -5790,7 +5790,7 @@ export function EmployeeProfilePage({
                   value={profilePassword}
                   onChange={(_event, data) => setProfilePassword(data.value)}
                   minLength={6}
-                  className="!w-full pr-10"
+                  className="password-reveal-managed !w-full pr-10"
                   placeholder="Leave blank to keep current password"
                 />
                 <FluentButton

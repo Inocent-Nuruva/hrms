@@ -4,6 +4,16 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Prevent Edge/IE from adding a second reveal icon when HRMS already renders
+   its own accessible password visibility control. Fluent UI applies the class
+   to a wrapper, while the shared native input applies it directly. */
+input.password-reveal-managed::-ms-reveal,
+input.password-reveal-managed::-ms-clear,
+.password-reveal-managed input::-ms-reveal,
+.password-reveal-managed input::-ms-clear {
+  display: none;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

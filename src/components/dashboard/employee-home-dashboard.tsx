@@ -4,7 +4,7 @@ import { useAccountAppearance } from "@/hooks/use-account-appearance"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Dropdown as FluentDropdown, Option as FluentOption } from "@fluentui/react-components"
+import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Dropdown as FluentDropdown, Option as FluentOption, Switch as FluentSwitch } from "@fluentui/react-components"
 import { PaintBrush20Regular, Clock20Regular, CalendarClock20Regular, Wallet20Regular, Target20Regular, PersonInfo20Regular, Dismiss16Regular, CalendarAdd20Regular, AppsList20Regular, ChevronRight16Regular, Receipt32Regular, Mail20Regular, Call20Regular, Briefcase20Regular, CalendarCheckmark20Regular, PersonAvailable20Regular, PersonProhibited20Regular } from "@fluentui/react-icons"
 import { WelcomeCardBackground, type WelcomeBackground } from "./welcome-card-background"
 import { DateInput } from "@/components/ui/date-input"
@@ -320,6 +320,30 @@ const EMPLOYEE_OWNED_PROFILE_KEYS = new Set(
   REQUIRED_ONBOARDING_ITEMS.map((item) => item.key).filter((key) => key !== "departments"),
 )
 
+const REPEATABLE_PROFILE_KEYS = new Set([
+  "academic_qualifications",
+  "professional_qualifications",
+  "experience_details",
+])
+
+const REPEATABLE_PROFILE_COLUMNS: Record<string, Array<{ label: string; keys: string[] }>> = {
+  academic_qualifications: [
+    { label: "Qualification", keys: ["degree_or_certificate"] },
+    { label: "Institution", keys: ["institution_name"] },
+    { label: "Completed", keys: ["end_date", "education_level"] },
+  ],
+  professional_qualifications: [
+    { label: "Qualification", keys: ["programme_name"] },
+    { label: "Provider", keys: ["issuing_organization", "institution_name"] },
+    { label: "Issued", keys: ["issue_date"] },
+  ],
+  experience_details: [
+    { label: "Role", keys: ["job_title"] },
+    { label: "Company", keys: ["company_name"] },
+    { label: "Started", keys: ["start_date"] },
+  ],
+}
+
 // Sections whose certificate file is mandatory and verification link optional.
 const CERTIFICATE_SECTIONS: Record<string, { urlField: string; documentSection: string; titlePrefix: string; titleField: string }> = {
   academic_qualifications: {
@@ -343,6 +367,25 @@ function employeeSectionHasItems(employee: Record<string, unknown> | null | unde
     const value = employee[alias]
     return Array.isArray(value) && value.length > 0
   })
+}
+
+function employeeSectionItems(employee: Record<string, unknown> | null | undefined, key: string) {
+  if (!employee) return [] as AdminRecord[]
+  const aliases = PROFILE_SECTION_ALIASES[key] ?? [key]
+  for (const alias of aliases) {
+    const value = employee[alias]
+    if (Array.isArray(value)) return value.filter((item): item is AdminRecord => Boolean(item) && typeof item === "object")
+  }
+  return [] as AdminRecord[]
+}
+
+function repeatableCellValue(row: AdminRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (typeof value === "number") return String(value)
+  }
+  return "—"
 }
 
 function mergeEmployeeSectionRecords(
@@ -3142,8 +3185,10 @@ export function EmployeeHomeDashboard() {
   const [onboardingSubmissionError, setOnboardingSubmissionError] = React.useState<string | null>(null)
   const [accessToken, setAccessToken] = React.useState<string>("")
   const [fillingItemKey, setFillingItemKey] = React.useState<string | null>(null)
+  const [isAddingRepeatableItem, setIsAddingRepeatableItem] = React.useState(false)
   const [formValues, setFormValues] = React.useState<Record<string, string>>({})
   const [documentUploadFile, setDocumentUploadFile] = React.useState<File | null>(null)
+  const [certificateProofMethod, setCertificateProofMethod] = React.useState<"file" | "link">("file")
   const [formError, setFormError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
   const [manualOnboardingBank, setManualOnboardingBank] = React.useState(false)
@@ -3530,6 +3575,11 @@ export function EmployeeHomeDashboard() {
     ? REQUIRED_ONBOARDING_ITEMS.find((i) => i.key === fillingItemKey) || null
     : null
   const currentFormSchema = fillingItemKey ? getFormSchema(fillingItemKey) : []
+  const currentSectionItems = fillingItemKey
+    ? employeeSectionItems(dashboardData.employee as Record<string, unknown>, fillingItemKey)
+    : []
+  const isRepeatableSection = fillingItemKey ? REPEATABLE_PROFILE_KEYS.has(fillingItemKey) : false
+  const repeatableColumns = fillingItemKey ? REPEATABLE_PROFILE_COLUMNS[fillingItemKey] ?? [] : []
   const companyBankNames = companyBankDirectory
     .map((bank) => typeof bank.name === "string" ? bank.name.trim() : "")
     .filter((name): name is string => Boolean(name))
@@ -3552,8 +3602,8 @@ export function EmployeeHomeDashboard() {
   const certificateUrl = certificateSection ? formValues[certificateSection.urlField]?.trim() ?? "" : ""
   const hasValidCertificateProof = (() => {
     if (!certificateSection) return true
-    if (!documentUploadFile) return false
-    if (!certificateUrl) return true
+    if (certificateProofMethod === "file") return Boolean(documentUploadFile)
+    if (!certificateUrl) return false
     try {
       return new URL(certificateUrl).protocol === "https:"
     } catch {
@@ -3567,9 +3617,11 @@ export function EmployeeHomeDashboard() {
     setShowOnboardingDialog(false)
     // reset any in-progress form state
     setFillingItemKey(null)
+    setIsAddingRepeatableItem(false)
     setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
+    setCertificateProofMethod("file")
     setFormError(null)
   }
 
@@ -3605,8 +3657,10 @@ export function EmployeeHomeDashboard() {
     }
 
     setFillingItemKey(key)
+    setIsAddingRepeatableItem(!REPEATABLE_PROFILE_KEYS.has(key))
     setFormValues(init)
     setDocumentUploadFile(null)
+    setCertificateProofMethod("file")
     setFormError(null)
   }
 
@@ -3649,9 +3703,11 @@ export function EmployeeHomeDashboard() {
 
   const cancelFilling = () => {
     setFillingItemKey(null)
+    setIsAddingRepeatableItem(false)
     setManualOnboardingBank(false)
     setFormValues({})
     setDocumentUploadFile(null)
+    setCertificateProofMethod("file")
     setFormError(null)
   }
 
@@ -3685,18 +3741,18 @@ export function EmployeeHomeDashboard() {
     const apiSection = getApiSectionForKey(fillingItemKey)
     const payload = buildPayload(fillingItemKey, formValues)
 
-    if (certificateSection && certificateUrl) {
+    if (certificateSection && certificateProofMethod === "link") {
       try {
-        if (new URL(certificateUrl).protocol !== "https:") {
-          setFormError("The verification link must use https://, or leave it empty.")
+        if (!certificateUrl || new URL(certificateUrl).protocol !== "https:") {
+          setFormError("Enter a valid HTTPS verification link.")
           return
         }
       } catch {
-        setFormError("Enter a valid HTTPS verification link, or leave it empty.")
+        setFormError("Enter a valid HTTPS verification link.")
         return
       }
     }
-    if (certificateSection && !documentUploadFile) {
+    if (certificateSection && certificateProofMethod === "file" && !documentUploadFile) {
       setFormError("Attach your certificate file.")
       return
     }
@@ -3727,7 +3783,7 @@ export function EmployeeHomeDashboard() {
           payload.file = await fileToBase64UploadDto(documentUploadFile)
           await saveDocument(payload)
         } else if (certificateSection) {
-          if (documentUploadFile) {
+          if (certificateProofMethod === "file" && documentUploadFile) {
             await saveDocument({
               title: `${certificateSection.titlePrefix} - ${String(formValues[certificateSection.titleField] || "Qualification")}`,
               type: "certificate",
@@ -3737,7 +3793,7 @@ export function EmployeeHomeDashboard() {
               file: await fileToBase64UploadDto(documentUploadFile),
             })
           }
-          if (certificateUrl) {
+          if (certificateProofMethod === "link") {
             payload[certificateSection.urlField] = certificateUrl
           } else {
             delete payload[certificateSection.urlField]
@@ -3761,9 +3817,7 @@ export function EmployeeHomeDashboard() {
           employee: {
             ...employeeRecord,
             [fillingItemKey]:
-              Array.isArray(existingSectionItems) && existingSectionItems.length > 0
-                ? existingSectionItems
-                : [{
+              [...(Array.isArray(existingSectionItems) ? existingSectionItems : []), {
                     ...payload,
                     ...(fillingItemKey === "documents" && documentUploadFile
                       ? {
@@ -3781,9 +3835,14 @@ export function EmployeeHomeDashboard() {
       const remainingAfter = pendingItems.filter((p) => p.key !== fillingItemKey).length
 
       // Clear form UI
-      setFillingItemKey(null)
+      if (REPEATABLE_PROFILE_KEYS.has(fillingItemKey)) {
+        setIsAddingRepeatableItem(false)
+      } else {
+        setFillingItemKey(null)
+      }
       setFormValues({})
       setDocumentUploadFile(null)
+      setCertificateProofMethod("file")
       setFormError(null)
 
       // Background refresh to pull authoritative arrays from server (non-blocking)
@@ -3995,29 +4054,86 @@ export function EmployeeHomeDashboard() {
                   ) : null}
                 </div>
               ) : fillingItemKey && currentFillingItem ? (
-                <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
                   <div>
-                    <div className="min-w-0 p-3 sm:p-4">
-                      <div className="mb-3 flex items-start justify-between gap-2 border-b border-border pb-2.5">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+                    <div className="min-w-0 p-2.5 sm:p-3">
+                      <div className="mb-2 flex items-start justify-between gap-2 border-b border-border pb-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/15 [&_svg]:size-4">
                             {currentFillingItem.icon}
                           </div>
                           <div className="min-w-0">
-                            <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">Profile details</p>
-                            <div className="text-sm font-semibold tracking-tight text-foreground">{currentFillingItem.label}</div>
-                            <div className="text-[11px] leading-snug text-muted-foreground">{currentFillingItem.description}</div>
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">Profile details</p>
+                            <div className="text-[13px] font-semibold leading-tight tracking-tight text-foreground">{currentFillingItem.label}</div>
+                            <div className="text-[10px] leading-tight text-muted-foreground">{currentFillingItem.description}</div>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={cancelFilling}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border px-2 text-[11px] font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <span aria-hidden="true">←</span><span className="hidden sm:inline">Back to checklist</span><span className="sm:hidden">Back</span>
                         </button>
                       </div>
 
+                  {isRepeatableSection && !isAddingRepeatableItem ? (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">Saved records</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {currentSectionItems.length === 0
+                              ? "No records have been added yet."
+                              : `${currentSectionItems.length} ${currentSectionItems.length === 1 ? "record" : "records"}`}
+                          </p>
+                        </div>
+                        <FluentButton
+                          appearance="primary"
+                          size="small"
+                          onClick={() => {
+                            setFormValues(getInitialFormValues(fillingItemKey))
+                            setDocumentUploadFile(null)
+                            setCertificateProofMethod("file")
+                            setFormError(null)
+                            setIsAddingRepeatableItem(true)
+                          }}
+                        >
+                          Add {currentSectionItems.length > 0 ? "another" : "record"}
+                        </FluentButton>
+                      </div>
+                      {currentSectionItems.length > 0 ? (
+                        <div className="overflow-x-auto rounded-md border border-border">
+                          <table className="w-full min-w-[520px] border-collapse text-left text-xs">
+                            <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <tr>
+                                {repeatableColumns.map((column) => (
+                                  <th key={column.label} className="px-3 py-2 font-semibold">{column.label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {currentSectionItems.map((row, index) => (
+                                <tr key={String(row.id ?? `${fillingItemKey}-${index}`)} className="bg-background">
+                                  {repeatableColumns.map((column, columnIndex) => (
+                                    <td key={column.label} className={cn("px-3 py-2 text-muted-foreground", columnIndex === 0 && "font-medium text-foreground")}>
+                                      {repeatableCellValue(row, column.keys)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="flex min-h-24 flex-col items-center justify-center rounded-md border border-dashed border-border bg-muted/20 px-4 py-5 text-center">
+                          <div className="text-primary">{currentFillingItem.icon}</div>
+                          <p className="mt-2 text-xs font-medium text-foreground">Add your first {currentFillingItem.label.toLowerCase()} record</p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">You can return and add more records at any time.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : <>
                   {formError && (
                     <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
                       {formError}
@@ -4029,15 +4145,23 @@ export function EmployeeHomeDashboard() {
                       This section is managed by HR. Click <span className="font-medium">Mark complete</span> to finish.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2">
+                    <>
+                    <div className="grid grid-cols-1 gap-x-2.5 gap-y-2 sm:grid-cols-2">
                       {currentFormSchema.map((field) => {
+                        if (
+                          certificateSection &&
+                          ((field.name === certificateSection.urlField && certificateProofMethod !== "link") ||
+                            (field.type === "file" && certificateProofMethod !== "file"))
+                        ) {
+                          return null
+                        }
                         const val = formValues[field.name] ?? ""
                         const isAddressLookupField =
                           fillingItemKey === "addresses" &&
                           (field.name === "country" || field.name === "state" || field.name === "city")
                         return (
                           <div key={field.name} className={field.name === "responsibilities_description" || field.name.includes("notes") ? "sm:col-span-2" : ""}>
-                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
+                            <Label className="mb-1 block text-[11px] font-medium text-slate-700 dark:text-slate-300">
                               {field.label}{field.required ? " *" : ""}
                             </Label>
                             {fillingItemKey === "bank_accounts" && field.name === "bank_name" ? (
@@ -4048,7 +4172,7 @@ export function EmployeeHomeDashboard() {
                                     value={val}
                                     placeholder="Enter bank name"
                                     onChange={(event) => updateFormValue(field.name, event.target.value)}
-                                    className="h-9 min-w-0 flex-1"
+                                    className="h-8 min-w-0 flex-1 text-sm"
                                   />
                                   <Button type="button" variant="outline" size="sm" onClick={() => {
                                     setManualOnboardingBank(false)
@@ -4057,7 +4181,8 @@ export function EmployeeHomeDashboard() {
                                 </div>
                               ) : (
                                 <FluentDropdown
-                                  className="mt-1 !w-full !min-w-0"
+                                  size="small"
+                                  className="mt-0.5 !w-full !min-w-0"
                                   button={{ className: "!w-full !min-w-0" }}
                                   placeholder="Select a Tanzanian bank"
                                   value={val}
@@ -4109,7 +4234,7 @@ export function EmployeeHomeDashboard() {
                                               : field.placeholder
                                   }
                                   onChange={(e) => updateFormValue(field.name, e.target.value)}
-                                  className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                                  className="mt-0.5 h-8 w-full rounded-md border border-slate-300 bg-white px-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                                   required={!!field.required}
                                 />
                                 {/* Visible clickable suggestions for better discoverability when picking country -> state -> city */}
@@ -4152,6 +4277,7 @@ export function EmployeeHomeDashboard() {
                               <FluentSelect
                                 ariaLabel={field.label}
                                 className="w-full"
+                                size="small"
                                 value={String(val || (field.defaultValue ?? ""))}
                                 onChange={(value) => updateFormValue(field.name, value)}
                                 options={field.options.map((opt) => ({
@@ -4194,7 +4320,7 @@ export function EmployeeHomeDashboard() {
                                 value={String(val ?? "")}
                                 placeholder={field.placeholder}
                                 onChange={(event) => updateFormValue(field.name, event.target.value)}
-                                className="mt-1 h-9 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                className="mt-0.5 h-8 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
                                 required={!!field.required}
                               />
                             ) : (
@@ -4203,7 +4329,7 @@ export function EmployeeHomeDashboard() {
                                 value={val}
                                 placeholder={field.placeholder}
                                 onChange={(e) => updateFormValue(field.name, e.target.value)}
-                                className="mt-1 h-9 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
+                                className="mt-0.5 h-8 rounded-md border-slate-300 bg-white text-sm focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-950"
                                 required={!!field.required}
                               />
                             )}
@@ -4214,6 +4340,30 @@ export function EmployeeHomeDashboard() {
                         )
                       })}
                     </div>
+                    {certificateSection ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">Certificate proof method</p>
+                          <p className="text-[10px] text-muted-foreground">Choose one: upload a file or enter a secure link.</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <span className={cn(certificateProofMethod === "file" && "text-primary")}>Upload file</span>
+                          <FluentSwitch
+                            aria-label="Use verification link instead of certificate file"
+                            checked={certificateProofMethod === "link"}
+                            onChange={(_, data) => {
+                              const nextMethod = data.checked ? "link" : "file"
+                              setCertificateProofMethod(nextMethod)
+                              setDocumentUploadFile(null)
+                              updateFormValue(certificateSection.urlField, "")
+                              setFormError(null)
+                            }}
+                          />
+                          <span className={cn(certificateProofMethod === "link" && "text-primary")}>Verification link</span>
+                        </div>
+                      </div>
+                    ) : null}
+                    </>
                   )}
 
                   {fillingItemKey === "addresses" && (
@@ -4249,34 +4399,39 @@ export function EmployeeHomeDashboard() {
                   ) : null}
 
                   {!hasValidCertificateProof ? (
-                    <p className="mb-3 text-xs font-medium text-destructive">{documentUploadFile ? "The verification link must be a valid HTTPS URL, or leave it empty." : "Attach the certificate file to continue."}</p>
+                    <p className="mb-3 text-xs font-medium text-destructive">
+                      {certificateProofMethod === "link"
+                        ? "Enter a valid HTTPS verification link to continue."
+                        : "Attach the certificate file to continue."}
+                    </p>
                   ) : null}
 
-                  <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:items-center">
+                  <div className="mt-3 flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:items-center">
                     <Button
       data-dashboard-action="true"
                       onClick={handleSaveFilling}
                       disabled={isSaving || missingRequiredFields.length > 0 || !hasValidCertificateProof}
-                      className="h-10 flex-1 rounded-lg text-sm"
+                      className="h-8 flex-1 rounded-md text-sm"
                     >
                       {isSaving ? "Saving..." : "Save & mark complete"}
                     </Button>
-                    <Button data-dashboard-action="true" variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-10 rounded-lg text-sm sm:w-auto">
+                    <Button data-dashboard-action="true" variant="outline" onClick={cancelFilling} disabled={isSaving} className="h-8 rounded-md text-sm sm:w-auto">
                       Cancel
                     </Button>
                   </div>
 
-                  <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  <p className="mt-2 text-center text-[10px] text-muted-foreground">
                     Data is stored securely for HR, payroll and compliance.
                   </p>
+                  </>}
                     </div>
-                    {certificateSection ? <aside className="border-t border-border bg-muted/30 p-4 sm:p-5">
+                    {certificateSection && (!isRepeatableSection || isAddingRepeatableItem) ? <aside className="border-t border-border bg-muted/30 p-3">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Before you save</p>
                       <div className="mt-3 grid gap-3 text-xs leading-relaxed text-muted-foreground">
-                        <p>Enter your country of residence and the institution and qualification details shown on your certificate.</p>
+                        <p>Enter your country of residence and the institution and qualification details.</p>
                         <div className="rounded-lg border border-border bg-background p-3">
-                          <p className="font-semibold text-foreground">Attach your certificate</p>
-                          <p className="mt-1">The certificate file is required. A secure HTTPS verification link is optional.</p>
+                          <p className="font-semibold text-foreground">Provide certificate proof</p>
+                          <p className="mt-1">Choose either a certificate file or a secure HTTPS verification link.</p>
                         </div>
                         <p>Only add accurate information. HR may use these details for employment records and verification.</p>
                       </div>
@@ -4285,7 +4440,7 @@ export function EmployeeHomeDashboard() {
                 </div>
               ) : (
                 <div>
-                  <div className="mb-2 flex items-end justify-between gap-3">
+                  <div className="mb-1.5 flex items-end justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Details still needed</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">Choose a section and add the information you have.</p>
@@ -4294,32 +4449,46 @@ export function EmployeeHomeDashboard() {
                       {pendingItems.length} remaining
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {optionalUnfilledItems.length > 0 ? (
+                    <div className="mb-1.5 flex items-center gap-2 rounded-md border border-yellow-300/70 bg-yellow-50/70 px-2 py-1 text-[11px] text-yellow-900 dark:border-yellow-700/60 dark:bg-yellow-950/30 dark:text-yellow-100">
+                      <FluentBadge appearance="tint" color="warning" size="small">
+                        Optional
+                      </FluentBadge>
+                      <span>These sections are helpful, but they do not block profile completion.</span>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {REQUIRED_ONBOARDING_ITEMS.map((item) => {
                     const isPending = unfilledItems.some(p => p.key === item.key)
-                    if (!isPending) return null
+                    const savedCount = employeeSectionItems(dashboardData.employee as Record<string, unknown>, item.key).length
+                    if (!isPending && !REPEATABLE_PROFILE_KEYS.has(item.key)) return null
                     return (
                       <button
                         key={item.key}
                         type="button"
                         onClick={() => startFilling(item.key)}
-                        className="group flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        className="group flex min-h-12 w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-left transition hover:border-primary/30 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground [&_svg]:size-4">
                             {item.icon}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold tracking-tight text-foreground">
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] font-semibold leading-tight tracking-tight text-foreground">
                             {item.label}
                             {item.optional ? (
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <FluentBadge appearance="tint" color="warning" size="small">
                                 Optional
-                              </span>
+                              </FluentBadge>
+                            ) : null}
+                            {savedCount > 0 ? (
+                              <FluentBadge appearance="tint" color="success" size="small">
+                                {savedCount} saved
+                              </FluentBadge>
                             ) : null}
                           </div>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{item.description}</p>
+                          <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">{item.description}</p>
                         </div>
-                        <span className="shrink-0 text-lg text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary">→</span>
+                        <ChevronRight16Regular className="shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
                       </button>
                     )
                   })}

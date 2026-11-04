@@ -1594,7 +1594,7 @@ export function EmployeesListView({
               minLength={8}
               autoComplete="new-password"
               placeholder="Enter a temporary password"
-              className="w-full"
+              className="password-reveal-managed w-full"
             />
           </Field>
           <AlertDialogFooter>

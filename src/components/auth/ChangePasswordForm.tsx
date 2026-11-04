@@ -131,7 +131,7 @@ export function ChangePasswordForm({
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
             required
-            className="h-10 pl-9 pr-10"
+            className="password-reveal-managed h-10 pl-9 pr-10"
             placeholder="Enter current password"
           />
           <button
@@ -158,7 +158,7 @@ export function ChangePasswordForm({
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
             required
-            className="h-10 pl-9 pr-10"
+            className="password-reveal-managed h-10 pl-9 pr-10"
             placeholder="Create a strong password"
           />
           <button
@@ -229,7 +229,7 @@ export function ChangePasswordForm({
             onChange={(event) => setConfirmPassword(event.target.value)}
             required
             className={cn(
-              "h-10 pl-9 pr-10",
+              "password-reveal-managed h-10 pl-9 pr-10",
               confirmPassword &&
                 (passwordsMatch
                   ? "border-emerald-500/50 focus-visible:border-emerald-500"
