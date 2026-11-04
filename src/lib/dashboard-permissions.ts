@@ -1067,6 +1067,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     // onboarding_requests:read for their own checklist, so that permission is
     // deliberately insufficient for invitation and company request data.
     permissions: [
+      COMPANY_DASHBOARD_SWITCH_PERMISSION,
       "employees:create",
       "onboarding_workflows:read",
       "onboarding_requests:create",

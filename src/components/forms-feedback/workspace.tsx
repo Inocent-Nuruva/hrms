@@ -48,14 +48,14 @@ const date = (value: string) => new Date(value).toLocaleString();
 
 function audienceLabel(form: FeedbackForm) {
   const audience = form.definition.audience;
-  if (audience.type === "all") return "All employees";
-  const count = audience.ids.length;
+  if (!audience || audience.type === "all") return "All employees";
+  const count = audience.ids?.length ?? 0;
   const unit = audience.type === "branches" ? "branch" : "department";
   return `${count} ${count === 1 ? unit : `${unit}s`}`;
 }
 
 function scheduleLabel(form: FeedbackForm) {
-  const frequency = form.definition.schedule.frequency;
+  const frequency = form.definition.schedule?.frequency ?? "once";
   if (frequency === "once") return "Once";
   return `${frequency.charAt(0).toUpperCase()}${frequency.slice(1)}`;
 }
@@ -91,22 +91,7 @@ export function FormsFeedbackWorkspace() {
   const [revision, setRevision] = React.useState(0);
   const listPageSize = manage ? 10 : 20;
   React.useEffect(() => {
-    if (!actor.ready || !manage || area === "manage") return;
-    setArea("manage");
-    setFilter("all");
-    setPage(1);
-    setSelectedForm(null);
-  }, [actor.ready, area, manage]);
-
-  React.useEffect(() => {
-    if (
-      !actor.ready ||
-      builder ||
-      selected ||
-      results ||
-      (manage && area !== "manage")
-    )
-      return;
+    if (!actor.ready || builder || selected || results) return;
     let active = true;
     const load = async () => {
       setLoading(true);
@@ -258,6 +243,7 @@ export function FormsFeedbackWorkspace() {
             {manage && !builder ? (
               <Button
                 appearance="outline"
+                aria-label="Create form"
                 className="!border-white/40 !bg-white/10 !text-white shadow-none backdrop-blur-sm hover:!border-white/60 hover:!bg-white/20 hover:!text-white"
                 icon={<Add24Regular />}
                 onClick={() => {
@@ -626,32 +612,50 @@ export function FormsFeedbackWorkspace() {
         ) : (
           <section className="w-full overflow-hidden rounded-none border-y border-slate-200 bg-white shadow-sm">
             {manage ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 sm:px-5">
-                <h2 className="font-semibold text-slate-950">Campaigns</h2>
-                {!selectedForm ? (
+              <>
+                <div className="border-b border-slate-200 px-4 pt-2 sm:px-5">
                   <TabList
-                    size="small"
-                    selectedValue={filter}
-                    onTabSelect={(_, d) => {
-                      setFilter(String(d.value));
+                    selectedValue={area}
+                    onTabSelect={(_, data) => {
+                      setArea(String(data.value));
+                      setFilter("all");
                       setPage(1);
+                      setSelectedForm(null);
                     }}
                   >
-                    {[
-                      "all",
-                      "draft",
-                      "scheduled",
-                      "open",
-                      "closed",
-                      "paused",
-                    ].map((value) => (
-                      <Tab key={value} value={value}>
-                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                      </Tab>
-                    ))}
+                    <Tab value="mine">My forms</Tab>
+                    <Tab value="manage">Manage forms</Tab>
                   </TabList>
+                </div>
+                {area === "manage" ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 sm:px-5">
+                    <h2 className="font-semibold text-slate-950">Campaigns</h2>
+                    {!selectedForm ? (
+                      <TabList
+                        size="small"
+                        selectedValue={filter}
+                        onTabSelect={(_, d) => {
+                          setFilter(String(d.value));
+                          setPage(1);
+                        }}
+                      >
+                        {[
+                          "all",
+                          "draft",
+                          "scheduled",
+                          "open",
+                          "closed",
+                          "paused",
+                        ].map((value) => (
+                          <Tab key={value} value={value}>
+                            {value.charAt(0).toUpperCase() + value.slice(1)}
+                          </Tab>
+                        ))}
+                      </TabList>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
+              </>
             ) : (
               <div className="border-b border-slate-200 px-4 pt-2 sm:px-5">
                 <TabList selectedValue="mine">
@@ -709,15 +713,25 @@ export function FormsFeedbackWorkspace() {
               </div>
             ) : area === "manage" && !selectedForm ? (
               <div className="max-w-full overflow-x-auto">
-                <Table aria-label="Feedback campaigns" size="small" className="min-w-[720px]">
+                <Table
+                  aria-label="Feedback campaigns"
+                  size="small"
+                  className="min-w-[720px]"
+                >
                   <TableHeader>
                     <TableRow>
                       <TableHeaderCell>Campaign</TableHeaderCell>
                       <TableHeaderCell>Status</TableHeaderCell>
-                      <TableHeaderCell className="hidden lg:table-cell">Audience</TableHeaderCell>
-                      <TableHeaderCell className="hidden xl:table-cell">Schedule</TableHeaderCell>
+                      <TableHeaderCell className="hidden lg:table-cell">
+                        Audience
+                      </TableHeaderCell>
+                      <TableHeaderCell className="hidden xl:table-cell">
+                        Schedule
+                      </TableHeaderCell>
                       <TableHeaderCell>Responses</TableHeaderCell>
-                      <TableHeaderCell className="sticky right-0 z-10 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">Actions</TableHeaderCell>
+                      <TableHeaderCell className="sticky right-0 z-10 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.45)]">
+                        Actions
+                      </TableHeaderCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -754,7 +768,9 @@ export function FormsFeedbackWorkspace() {
                               {form.displayStatus ?? form.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">{audienceLabel(form)}</TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {audienceLabel(form)}
+                          </TableCell>
                           <TableCell className="hidden xl:table-cell">
                             <div>{scheduleLabel(form)}</div>
                             {form.nextOpenAt ? (
