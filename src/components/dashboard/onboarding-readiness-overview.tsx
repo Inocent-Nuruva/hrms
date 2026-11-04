@@ -120,11 +120,28 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
         </Tooltip>
       </div>
       {error ? <MessageBar intent="error"><MessageBarBody><strong>Readiness unavailable</strong><p>{error} Activation is disabled until a fresh check succeeds.</p></MessageBarBody></MessageBar> : !readiness ? <Spinner label="Checking activation requirements…" /> : <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Onboarding stages">
+        <div className="grid overflow-hidden rounded-xl border border-border/80 bg-background shadow-sm sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-border/70" aria-label="Onboarding stages">
           {stages.map((stage) => {
             const items = visibleRequirements.filter((item) => item.required && stage.actions.includes(item.action))
             const remaining = items.filter((item) => !complete(item))
-            return <Card key={stage.label}><CardHeader image={remaining.length ? <Clock20Regular /> : <CheckmarkCircle20Regular />} header={<Text weight="semibold">{stage.label}</Text>} description={items.length ? remaining.length ? `${remaining.length} remaining` : "Required checks complete" : "No required checks"} /></Card>
+            const stageComplete = items.length > 0 && remaining.length === 0
+            const stageStatus = !items.length ? "No checks" : stageComplete ? "Complete" : `${remaining.length} left`
+            return <div
+              key={stage.label}
+              className="group flex min-w-0 items-center gap-3 border-b border-border/70 px-3 py-2.5 transition-colors last:border-b-0 hover:bg-muted/30 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0"
+            >
+              <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${stageComplete ? "bg-emerald-50 text-emerald-700" : remaining.length ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"}`} aria-hidden="true">
+                {stageComplete ? <CheckmarkCircle20Regular /> : <Clock20Regular />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold leading-5">{stage.label}</p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className={`text-xs font-medium ${stageComplete ? "text-emerald-700" : remaining.length ? "text-amber-700" : "text-muted-foreground"}`}>{stageStatus}</span>
+                  {items.length ? <span className="text-xs text-muted-foreground">{items.length - remaining.length}/{items.length}</span> : null}
+                </div>
+              </div>
+              <span className={`size-1.5 shrink-0 rounded-full ${stageComplete ? "bg-emerald-500" : remaining.length ? "bg-amber-500" : "bg-muted-foreground/40"}`} aria-hidden="true" />
+            </div>
           })}
         </div>
         {summaryTarget ? createPortal(summary, summaryTarget) : summary}
