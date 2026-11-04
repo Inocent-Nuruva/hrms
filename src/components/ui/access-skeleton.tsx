@@ -17,14 +17,22 @@ export function AccessSkeleton({
       className={cn("w-full p-3 sm:p-4", className)}
     >
       {variant === "dashboard" ? (
-        <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className="grid gap-3 rounded-lg border border-border/60 p-4">
-              <SkeletonItem className="max-w-36" size={16} />
-              <SkeletonItem className="max-w-20" size={32} />
-              <SkeletonItem className="max-w-52" size={12} />
-            </div>
-          ))}
+        <div className="w-full space-y-4">
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">Preparing your workspace</p>
+            <p className="text-sm text-muted-foreground" role="status">
+              Checking your access and loading the latest dashboard information…
+            </p>
+          </div>
+          <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="grid gap-3 rounded-lg border border-border/60 p-4">
+                <SkeletonItem className="max-w-36" size={16} />
+                <SkeletonItem className="max-w-20" size={32} />
+                <SkeletonItem className="max-w-52" size={12} />
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="w-full space-y-3">
@@ -76,7 +84,7 @@ export function DashboardShellSkeleton() {
         </Skeleton>
       </aside>
       <div className="min-w-0">
-        <header className="flex h-14 items-center justify-between border-b border-border px-4">
+        <header className="flex h-[4.5rem] items-center justify-between border-b border-border px-4">
           <Skeleton aria-label="Loading header" className="flex w-full items-center justify-between gap-4">
             <SkeletonItem className="max-w-72" size={32} />
             <div className="flex items-center gap-3">

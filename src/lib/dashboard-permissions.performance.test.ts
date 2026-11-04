@@ -18,35 +18,35 @@ const COMPANY_ADMIN_PERMISSIONS = [
 ]
 
 describe("performance and probation route access", () => {
-  it("shows HR performance setup to company-dashboard actors", () => {
+  it("does not treat generic company-dashboard access as performance access", () => {
     expect(
       canAccessDashboardRoute(
         "/dashboard/performance/overview",
         COMPANY_ADMIN_PERMISSIONS,
         "admin",
       ),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       canAccessDashboardRoute(
         "/dashboard/performance/setup",
         COMPANY_ADMIN_PERMISSIONS,
         "admin",
       ),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       canAccessDashboardRoute(
         "/dashboard/performance/setup",
         COMPANY_ADMIN_PERMISSIONS,
         "employee",
       ),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       canSeeDashboardPage(
         "/dashboard/performance/setup",
         COMPANY_ADMIN_PERMISSIONS,
         "employee",
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("shows HR setup when the API grant is performance_periods:read", () => {

@@ -382,7 +382,7 @@ const adminData: SidebarData = {
               url: "/dashboard/operations/payroll",
             },
             {
-              title: "Loan payroll deductions",
+              title: "Payroll deductions",
               url: "/dashboard/finance/payroll",
             },
           ],
@@ -592,7 +592,7 @@ const adminSearchIndex = [
   { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
   { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
   { title: "Finance / Servicing", url: "/dashboard/finance/servicing", section: "Finance", keywords: ["deferment", "reschedule", "penalty", "waiver", "write-off", "exit recovery"] },
-  { title: "Payroll / Loan payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
+  { title: "Payroll / Payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
   { title: "Finance / Bank, ERP & migration", url: "/dashboard/finance/integrations", section: "Finance", keywords: ["bank", "erp", "journal", "payment file", "statement", "migration"] },
   { title: "Finance / Settings", url: "/dashboard/finance/settings", section: "Finance", keywords: ["sanction letter", "template", "delegation"] },
   { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
@@ -712,6 +712,15 @@ function filterNavByPermissions(
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
+      if (accessMode === "employee" && item.title === "Performance management") {
+        return null
+      }
+      const roleAwareTitle =
+        accessMode === "employee" && item.title === "Attendance"
+          ? "My attendance"
+          : accessMode === "employee" && item.title === "Employees"
+            ? "My profile"
+            : item.title
       const hasChildren = Array.isArray(item.items) && item.items.length > 0
       const accessibleUrl = firstAccessibleNavUrl(
         item.url,
@@ -723,7 +732,11 @@ function filterNavByPermissions(
 
       if (!hasChildren) {
         if (!accessibleUrl) return null
-        return accessibleUrl === item.url ? item : { ...item, url: accessibleUrl }
+        return {
+          ...item,
+          title: roleAwareTitle,
+          ...(accessibleUrl === item.url ? {} : { url: accessibleUrl }),
+        }
       }
 
       const filteredItems: SidebarNavItem[] = filterNavByPermissions(
@@ -738,6 +751,7 @@ function filterNavByPermissions(
       }
       return {
         ...item,
+        title: roleAwareTitle,
         url: accessibleUrl ?? filteredItems[0]?.url ?? item.url,
         items: filteredItems,
       }

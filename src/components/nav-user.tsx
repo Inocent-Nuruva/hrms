@@ -124,7 +124,7 @@ export function HeaderUserMenu({
           />
         }
       >
-        <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-7" />
+        <UserAvatar src={avatarSrc} alt={user.name} initials={userInitials} className="size-9" />
         <span className="pointer-events-none absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-2 ring-background" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="min-w-60" side="bottom" align="end" sideOffset={8}>

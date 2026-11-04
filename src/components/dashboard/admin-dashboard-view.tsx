@@ -1339,7 +1339,7 @@ export default function AdminDashboardView({
         style={
           {
             "--sidebar-width": "15.5rem",
-            "--header-height": "calc(var(--spacing) * 14)",
+            "--header-height": "calc(var(--spacing) * 18)",
           } as React.CSSProperties
         }
       >
@@ -1354,7 +1354,7 @@ export default function AdminDashboardView({
           onSelectResource={navigateToResource}
         />
         <SidebarTrigger
-          className="fixed left-3 top-2 z-[60] !hidden text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex"
+          className="fixed left-3 top-[calc((var(--header-height)-2.5rem)/2)] z-[60] !hidden !size-10 !min-w-10 text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex [&_svg]:!size-5"
           aria-label="Toggle navigation"
           title="Navigation"
         />

@@ -1,13 +1,14 @@
-"use client"
+"use client";
 
 import {
   deleteNotification,
+  dismissAllNotifications,
   getUnreadNotificationsCount,
   listNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   markNotificationAsSeen,
-} from "@/lib/admin-api"
+} from "@/lib/admin-api";
 
 export type {
   NotificationCategory,
@@ -15,7 +16,7 @@ export type {
   NotificationPriority,
   NotificationQueryParams,
   NotificationStatus,
-} from "@/lib/admin-api"
+} from "@/lib/admin-api";
 
 export const notificationsApi = {
   list: listNotifications,
@@ -23,7 +24,10 @@ export const notificationsApi = {
   markSeen: markNotificationAsSeen,
   markRead: markNotificationAsRead,
   markAllRead: markAllNotificationsAsRead,
-  archive: deleteNotification,
-}
+  delete: deleteNotification,
+  dismissAll: dismissAllNotifications,
+};
 
-export type NotificationListResult = Awaited<ReturnType<typeof listNotifications>>
+export type NotificationListResult = Awaited<
+  ReturnType<typeof listNotifications>
+>;

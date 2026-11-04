@@ -24,6 +24,7 @@ export function DatePickerPresets({
 }: DatePickerPresetsProps) {
   return (
     <DateInput
+      aria-label={placeholder}
       id={id}
       value={value}
       onValueChange={onChange}

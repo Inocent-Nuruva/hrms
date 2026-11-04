@@ -623,7 +623,7 @@ export function AttendancePunchActions({
           type="button"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-8 min-h-8 min-w-[5.25rem] gap-1.5 rounded-lg bg-gradient-to-r from-primary to-primary/85 px-2.5 text-xs font-semibold shadow-sm transition-all hover:-translate-y-px hover:shadow-md disabled:translate-y-0 disabled:shadow-none disabled:opacity-40"
+            ? "h-10 min-h-10 min-w-[6rem] gap-1.5 rounded-lg bg-gradient-to-r from-primary to-primary/85 px-3 text-sm font-semibold shadow-sm transition-all hover:-translate-y-px hover:shadow-md disabled:translate-y-0 disabled:shadow-none disabled:opacity-40"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckIn || busyAction !== null}
           onClick={() => setPendingAction("in")}
@@ -640,7 +640,7 @@ export function AttendancePunchActions({
           variant="outline"
           size={compact ? "xs" : "sm"}
           className={compact
-            ? "h-8 min-h-8 min-w-[5.5rem] gap-1.5 rounded-lg border-border/70 bg-muted/40 px-2.5 text-xs font-semibold shadow-none transition-all hover:-translate-y-px hover:border-primary/30 hover:bg-primary/10 disabled:translate-y-0 disabled:border-transparent disabled:bg-muted/50 disabled:text-muted-foreground/55 disabled:opacity-100"
+            ? "h-10 min-h-10 min-w-[6.25rem] gap-1.5 rounded-lg border-border/70 bg-muted/40 px-3 text-sm font-semibold shadow-none transition-all hover:-translate-y-px hover:border-primary/30 hover:bg-primary/10 disabled:translate-y-0 disabled:border-transparent disabled:bg-muted/50 disabled:text-muted-foreground/55 disabled:opacity-100"
             : "h-8 gap-1.5 px-2.5 text-xs"}
           disabled={!canCheckOut || busyAction !== null}
           onClick={() => setPendingAction("out")}
@@ -735,11 +735,11 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
       mobile && "w-full justify-center",
     )}>
       <div className="hidden min-w-[76px] flex-col pl-1 leading-tight 2xl:flex">
-        <span className="flex items-center gap-1 text-[10px] font-semibold text-foreground">
+        <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
           <span className={cn("size-1.5 rounded-full ring-2 ring-background", state.checkOut ? "bg-muted-foreground/50" : "bg-emerald-500")} />
           {statusLabel}
         </span>
-        <span className="mt-0.5 text-[9px] tabular-nums text-muted-foreground">{statusDetail}</span>
+        <span className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">{statusDetail}</span>
       </div>
       <AttendancePunchActions
         canCheckIn={state.canCheckIn}

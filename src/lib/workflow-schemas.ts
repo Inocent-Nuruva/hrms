@@ -92,6 +92,12 @@ export const activityTaskSchema = formObject({
   activity_category_id: optionalId,
   expected_result: z.string().max(4000).optional(),
   employee_kpi_id: optionalId,
+  performance_relevance: z.enum([
+    "NOT_EVALUATED",
+    "SUPPORTING_EVIDENCE",
+    "KEY_DELIVERABLE",
+    "DEVELOPMENT_ACTIVITY",
+  ]),
   audience: z.enum(["employee", "self"]),
   employeeIds: z.array(positiveId).max(100),
   checklistItems: z.array(text(250)).max(100),
@@ -265,14 +271,12 @@ export function performanceFormSchema(mode: string): z.ZodType {
       "start_date",
       "end_date",
     ).superRefine((input, context) => {
-      if (
-        !(
-          input.start_date <= input.goal_setting_deadline &&
-          input.goal_setting_deadline < input.mid_cycle_review_date &&
-          input.mid_cycle_review_date <= input.end_date &&
-          input.end_date <= input.final_review_deadline
-        )
-      )
+      if (!(
+        input.start_date <= input.goal_setting_deadline &&
+        input.goal_setting_deadline < input.mid_cycle_review_date &&
+        input.mid_cycle_review_date <= input.end_date &&
+        input.end_date <= input.final_review_deadline
+      ))
         context.addIssue({
           code: "custom",
           path: ["final_review_deadline"],
@@ -432,7 +436,8 @@ export function performanceFormSchema(mode: string): z.ZodType {
         context.addIssue({
           code: "custom",
           path: ["comment"],
-          message: "Explain why the review is being returned, rejected, or skipped.",
+          message:
+            "Explain why the review is being returned, rejected, or skipped.",
         });
     });
   if (mode === "moderate" || mode === "reopen")

@@ -241,9 +241,6 @@ export function firstVisibleSiblingOrHome(
     )
     if (visible) return visible.url
   }
-  if (path === "/dashboard/performance" || path.startsWith("/dashboard/performance/")) {
-    return "/dashboard/performance/overview"
-  }
   if (accessMode === "employee") {
     return selfServiceHomeFor(path) ?? "/dashboard"
   }

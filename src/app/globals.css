@@ -285,6 +285,44 @@ body[data-app-text-scale="compact"]
   line-height: 16px !important;
 }
 
+/*
+ * Keep Fluent's notification switches visually intact inside the compact
+ * dashboard type scale. The stock thumb is an em-sized SVG, so global text
+ * scaling can move part of it beyond the track. This preserves the Fluent
+ * input, focus, checked and disabled behavior while giving the indicator a
+ * fixed Fluent medium-switch geometry.
+ */
+.notification-preference-switch .fui-Switch__indicator {
+  position: relative;
+  width: 40px !important;
+  height: 20px !important;
+  overflow: hidden;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+.notification-preference-switch .fui-Switch__indicator > svg {
+  display: none;
+}
+
+.notification-preference-switch .fui-Switch__indicator::after {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: currentColor;
+  content: "";
+  transition: transform 100ms ease;
+}
+
+.notification-preference-switch
+  .fui-Switch__input:checked
+  ~ .fui-Switch__indicator::after {
+  transform: translateX(20px);
+}
+
 .performance-overview-metric-value {
   font-size: 1.5rem !important;
   line-height: 0.9 !important;
@@ -1594,7 +1632,7 @@ main.relative.flex table:not(.fui-Table):not([role="grid"]) > tbody > tr > td {
  */
 @media (max-width: 767px) {
   [data-slot="sidebar-wrapper"] {
-    --header-height: calc(var(--spacing) * 14);
+    --header-height: calc(var(--spacing) * 18);
   }
 
   .site-header,

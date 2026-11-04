@@ -151,7 +151,6 @@ export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
     "performance_plans:read",
     "performance_reviews:read",
     "performance_improvement_plans:read",
-    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -166,7 +165,6 @@ export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
     "kpi_templates:read",
     "performance_rating_scales:read",
     "kpi_rules:read",
-    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -1065,7 +1063,16 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/employees/onboarding": {
-    permissions: ["onboarding_requests:read", "onboarding_workflows:read"],
+    // This is the company-wide HR workspace. Ordinary employees also receive
+    // onboarding_requests:read for their own checklist, so that permission is
+    // deliberately insufficient for invitation and company request data.
+    permissions: [
+      "employees:create",
+      "onboarding_workflows:read",
+      "onboarding_requests:create",
+      "onboarding_requests:approve",
+      "onboarding_requests:complete",
+    ],
     mode: "any",
   },
   // Other employees' profiles — not self profile under /dashboard/me/profile.

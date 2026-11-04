@@ -6,14 +6,13 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
-  ArchiveIcon, ArrowUpRightIcon, CheckIcon, RefreshCwIcon, RotateCcwIcon, ToggleLeftIcon } from "lucide-react";
+  ArrowUpRightIcon, CheckIcon, RefreshCwIcon, RotateCcwIcon, ToggleLeftIcon } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
 
 import { formatAdminValue } from "@/components/dashboard/admin-view-shared"
 import {
   createTestNotification,
-  deleteNotification,
   getNotificationChannelRegistryItem,
   getNotificationChannelSetting,
   getNotificationDelivery,
@@ -1036,32 +1035,6 @@ export function NotificationsView() {
     }
   }, [loadRows, syncUnreadCount])
 
-  const handleArchiveNotification = React.useCallback(
-    async (row: AdminRecord) => {
-      const token = readStoredToken()
-      const id = readNotificationId(row)
-      if (!token || id === null || isArchivedNotification(row)) return
-
-      const key = rowIdentity("inbox", row)
-      markBusy(key, true)
-      try {
-        await deleteNotification(token, id)
-        updateRow("inbox", key, null, true)
-        syncUnreadCount()
-        toast.success("Notification archived.")
-      } catch (errorObject) {
-        toast.error(
-          errorObject instanceof Error
-            ? errorObject.message
-            : "Failed to archive notification.",
-        )
-      } finally {
-        markBusy(key, false)
-      }
-    },
-    [markBusy, syncUnreadCount, updateRow],
-  )
-
   const handleOpenTarget = React.useCallback(
     async (row: AdminRecord) => {
       if (!isArchivedNotification(row)) {
@@ -1454,21 +1427,6 @@ export function NotificationsView() {
                     <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <CheckIcon className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="admin-table-icon-button"
-                  data-variant="danger"
-                  title="Archive"
-                  aria-label="Archive"
-                  disabled={busy || isArchivedNotification(row)}
-                  onClick={() => void handleArchiveNotification(row)}
-                >
-                  {busy ? (
-                    <FluentLoadingIndicator className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <ArchiveIcon className="h-3.5 w-3.5" />
                   )}
                 </button>
               </div>
@@ -2124,7 +2082,6 @@ export function NotificationsView() {
     ]
   }, [
     busyKeys,
-    handleArchiveNotification,
     handleMarkRead,
     handleRetryPlatformMailLog,
     handleRetryMailLog,
@@ -2545,15 +2502,6 @@ export function NotificationsView() {
                       >
                         {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <CheckIcon className="size-3.5" />}
                         Mark read
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-700 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-300"
-                        disabled={selectedBusy || isArchivedNotification(selectedRow)}
-                        onClick={() => void handleArchiveNotification(selectedRow)}
-                      >
-                        {selectedBusy ? <FluentLoadingIndicator className="size-3.5 animate-spin" /> : <ArchiveIcon className="size-3.5" />}
-                        Archive
                       </button>
                       <button
                         type="button"

@@ -1,8 +1,8 @@
-"use client"
-import { FeedbackDropdown } from "./feedback-dropdown"
-import { TimeInput } from "@/components/ui/time-input"
-import { DateInput } from "@/components/ui/date-input"
-import * as React from "react"
+"use client";
+import { FeedbackDropdown } from "./feedback-dropdown";
+import { TimeInput } from "@/components/ui/time-input";
+import { DateInput } from "@/components/ui/date-input";
+import * as React from "react";
 import {
   Badge,
   Text,
@@ -20,13 +20,13 @@ import {
   Tab,
   TabList,
   Textarea,
-} from "@fluentui/react-components"
+} from "@fluentui/react-components";
 import {
   Add24Regular,
   ArrowUp24Regular,
   ArrowDown24Regular,
   Delete24Regular,
-} from "@fluentui/react-icons"
+} from "@fluentui/react-icons";
 import {
   formsRequest,
   identityNotice,
@@ -34,53 +34,70 @@ import {
   type FeedbackForm,
   type FormDefinition,
   type Question,
-} from "@/lib/forms-feedback"
-import { listBranches, listDepartments } from "@/lib/admin-api"
-import { readStoredSessionTokens } from "@/lib/session-client"
-import { QuestionFields } from "./question-fields"
+} from "@/lib/forms-feedback";
+import { listBranches, listDepartments } from "@/lib/admin-api";
+import { readStoredSessionTokens } from "@/lib/session-client";
+import { QuestionFields } from "./question-fields";
 export function FormBuilder({
   initial,
   onDone,
-  onCancel,
 }: {
-  initial?: FeedbackForm
-  onDone: () => void
-  onCancel: () => void
+  initial?: FeedbackForm;
+  onDone: () => void;
 }) {
   const [definition, setDefinition] = React.useState<FormDefinition>(
     () => initial?.definition ?? newDefinition(),
-  )
-  const [step, setStep] = React.useState(0)
-  const [library, setLibrary] = React.useState<Question[]>([])
+  );
+  const [step, setStep] = React.useState(0);
+  const [furthestStep, setFurthestStep] = React.useState(initial ? 3 : 0);
+  const [library, setLibrary] = React.useState<Question[]>([]);
   const [audienceOptions, setAudienceOptions] = React.useState<
     { id: number; name: string }[]
-  >([])
-  const [error, setError] = React.useState("")
-  const [busy, setBusy] = React.useState(false)
-  const [preview, setPreview] = React.useState<Record<string, unknown>>({})
-  const [savedId, setSavedId] = React.useState(initial?.id)
+  >([]);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [preview, setPreview] = React.useState<Record<string, unknown>>({});
+  const [savedId, setSavedId] = React.useState(initial?.id);
+  const steps = [
+    {
+      label: "Details & audience",
+      description: "Name the campaign and choose who will receive it.",
+    },
+    {
+      label: "Questions",
+      description: "Build the questions employees will answer.",
+    },
+    {
+      label: "Schedule",
+      description: "Choose when the campaign opens, closes, and repeats.",
+    },
+    {
+      label: "Review & send",
+      description: "Check the employee experience before publishing.",
+    },
+  ];
   React.useEffect(() => {
-    let live = true
+    let live = true;
     formsRequest<Question[]>("hr/forms-feedback/suggestions")
       .then((rows) => {
-        if (live) setLibrary(rows)
+        if (live) setLibrary(rows);
       })
       .catch(() => {
         if (live)
           setError(
             "Question suggestions could not load. You can still add questions manually.",
-          )
-      })
+          );
+      });
     return () => {
-      live = false
-    }
-  }, [])
+      live = false;
+    };
+  }, []);
   React.useEffect(() => {
-    if (definition.audience.type === "all") return
-    let live = true
-    const token = readStoredSessionTokens().accessToken
+    if (definition.audience.type === "all") return;
+    let live = true;
+    const token = readStoredSessionTokens().accessToken;
     const load =
-      definition.audience.type === "branches" ? listBranches : listDepartments
+      definition.audience.type === "branches" ? listBranches : listDepartments;
     load(token, { page: 1, limit: 500 })
       .then((result) => {
         if (live)
@@ -91,27 +108,27 @@ export function FormBuilder({
                 r.name ?? r.branch_name ?? r.department_name ?? r.id,
               ),
             })),
-          )
+          );
       })
       .catch(() => {
-        if (live) setError("Could not load audience options.")
-      })
+        if (live) setError("Could not load audience options.");
+      });
     return () => {
-      live = false
-    }
-  }, [definition.audience.type])
+      live = false;
+    };
+  }, [definition.audience.type]);
   const patch = (value: Partial<FormDefinition>) =>
-    setDefinition((d) => ({ ...d, ...value }))
+    setDefinition((d) => ({ ...d, ...value }));
   const schedule = (value: Partial<FormDefinition["schedule"]>) =>
-    setDefinition((d) => ({ ...d, schedule: { ...d.schedule, ...value } }))
+    setDefinition((d) => ({ ...d, schedule: { ...d.schedule, ...value } }));
   const editQuestion = (id: string, value: Partial<Question>) =>
     patch({
       questions: definition.questions.map((q) =>
         q.id === id ? { ...q, ...value } : q,
       ),
-    })
+    });
   function addQuestion(question?: Question) {
-    const id = `q_${Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("")}`
+    const id = `q_${Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("")}`;
     setDefinition((current) => ({
       ...current,
       questions: [
@@ -124,65 +141,97 @@ export function FormBuilder({
           id,
         },
       ],
-    }))
-    setError("")
+    }));
+    setError("");
   }
 
   function move(index: number, direction: number) {
-    const questions = [...definition.questions]
-    ;[questions[index], questions[index + direction]] = [
+    const questions = [...definition.questions];
+    [questions[index], questions[index + direction]] = [
       questions[index + direction],
       questions[index],
-    ]
-    patch({ questions })
+    ];
+    patch({ questions });
+  }
+  function continueToNextStep() {
+    setError("");
+    if (step === 0) {
+      if (!definition.title.trim()) {
+        setError("Enter a campaign title before continuing.");
+        return;
+      }
+      if (
+        definition.audience.type !== "all" &&
+        definition.audience.ids.length === 0
+      ) {
+        setError("Select at least one audience before continuing.");
+        return;
+      }
+    }
+    if (step === 1) {
+      if (definition.questions.length === 0) {
+        setError("Add at least one question before continuing.");
+        return;
+      }
+      if (definition.questions.some((question) => !question.label.trim())) {
+        setError("Give every question a label before continuing.");
+        return;
+      }
+    }
+    const nextStep = Math.min(step + 1, steps.length - 1);
+    setStep(nextStep);
+    setFurthestStep((current) => Math.max(current, nextStep));
   }
   async function save(publish: boolean) {
     if (publish && definition.questions.length === 0) {
-      setStep(1)
+      setStep(1);
       setError(
         "Add at least one question before publishing. Choose a suggestion or select Add question.",
-      )
-      return
+      );
+      return;
     }
-    setBusy(true)
-    setError("")
+    setBusy(true);
+    setError("");
     try {
       const form = await formsRequest<FeedbackForm>(
         `hr/forms-feedback${savedId ? `/${savedId}` : ""}`,
         savedId ? "PUT" : "POST",
         definition,
-      )
-      setSavedId(form.id)
+      );
+      setSavedId(form.id);
       if (publish)
-        await formsRequest(`hr/forms-feedback/${form.id}/publish`, "POST")
-      onDone()
+        await formsRequest(`hr/forms-feedback/${form.id}/publish`, "POST");
+      onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save form")
+      setError(e instanceof Error ? e.message : "Could not save form");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
   return (
-    <section className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <Text
-          as="h2"
-          size={500}
-          weight="semibold"
-          className="block text-xl font-semibold"
-        >
-          {initial ? "Edit future rounds" : "Create form"}
-        </Text>
-        <Button onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
+    <section className="flex min-h-0 flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            Step {step + 1} of {steps.length}
+          </p>
+          <h2 className="mt-1 text-xl font-semibold text-foreground">
+            {steps[step].label}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {steps[step].description}
+          </p>
+        </div>
+        <Badge appearance="tint" color="brand">
+          {Math.round(((step + 1) / steps.length) * 100)}% complete
+        </Badge>
       </div>
       <TabList
         selectedValue={step}
         onTabSelect={(_, d) => setStep(Number(d.value))}
       >
-        {["Details", "Questions", "Schedule", "Preview"].map((label, i) => (
-          <Tab key={label} value={i}>
+        {steps.map(({ label }, i) => (
+          <Tab key={label} value={i} disabled={i > furthestStep}>
             {i + 1}. {label}
           </Tab>
         ))}
@@ -557,8 +606,8 @@ export function FormBuilder({
           )}
           <Button
             onClick={() => {
-              const now = new Date()
-              now.setMinutes(now.getMinutes() + 1)
+              const now = new Date();
+              now.setMinutes(now.getMinutes() + 1);
               const parts = new Intl.DateTimeFormat("en-CA", {
                 timeZone: definition.schedule.timezone,
                 year: "numeric",
@@ -567,14 +616,14 @@ export function FormBuilder({
                 hour: "2-digit",
                 minute: "2-digit",
                 hourCycle: "h23",
-              }).formatToParts(now)
+              }).formatToParts(now);
               const p = (key: string) =>
-                parts.find((x) => x.type === key)?.value
+                parts.find((x) => x.type === key)?.value;
               schedule({
                 frequency: "once",
                 startDate: `${p("year")}-${p("month")}-${p("day")}`,
                 time: `${p("hour")}:${p("minute")}`,
-              })
+              });
             }}
           >
             Set to open in one minute
@@ -610,7 +659,7 @@ export function FormBuilder({
         </div>
       )}
       <Divider />
-      <footer className="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-background py-4">
+      <footer className="sticky bottom-0 -mx-5 flex flex-wrap justify-end gap-3 border-t border-border bg-background px-5 py-4 sm:-mx-6 sm:px-6">
         <Button
           disabled={busy || step === 0}
           onClick={() => setStep((s) => s - 1)}
@@ -621,7 +670,7 @@ export function FormBuilder({
           Save draft
         </Button>
         {step < 3 ? (
-          <Button appearance="primary" onClick={() => setStep((s) => s + 1)}>
+          <Button appearance="primary" onClick={continueToNextStep}>
             Continue
           </Button>
         ) : (
@@ -630,10 +679,10 @@ export function FormBuilder({
             disabled={busy}
             onClick={() => void save(true)}
           >
-            {busy ? "Saving…" : "Schedule form"}
+            {busy ? "Saving…" : "Send / schedule campaign"}
           </Button>
         )}
       </footer>
     </section>
-  )
+  );
 }

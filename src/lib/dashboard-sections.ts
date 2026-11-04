@@ -391,7 +391,7 @@ export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
         url: "/dashboard/operations/payroll",
       },
       {
-        title: "Loan payroll deductions",
+        title: "Payroll deductions",
         url: "/dashboard/finance/payroll",
       },
     ],

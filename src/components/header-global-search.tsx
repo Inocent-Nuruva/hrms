@@ -99,15 +99,15 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
   return (
     <div
       ref={containerRef}
-      className="relative min-w-0 shrink sm:shrink-0"
+      className="relative min-w-0 w-full max-w-56 flex-1 sm:max-w-xs"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
       }}
     >
-      <Field label="Search in HRMS" size="small" className="min-w-0 gap-0 [&_label]:sr-only">
+      <Field label="Search in HRMS" size="medium" className="min-w-0 gap-0 [&_label]:sr-only">
         <FluentSearchBox
           ref={inputRef}
-          size="small"
+          size="medium"
           value={query}
           placeholder="Search HRMS"
           onFocus={() => setOpen(true)}
@@ -137,7 +137,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls="header-search-results"
-          className="w-full min-w-28 max-w-full !px-3 !py-1.5 sm:w-52 sm:pr-14"
+          className="w-full min-w-0 max-w-full !px-3.5 !py-2 text-sm sm:pr-16"
         />
       </Field>
       {!query ? (

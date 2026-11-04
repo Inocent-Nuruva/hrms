@@ -104,17 +104,17 @@ describe("forbidden route memory", () => {
     expect(
       canSeeDashboardPage(
         "/dashboard/performance/setup",
-        ["view_company_dashboard"],
+        ["performance_periods:read"],
         "admin",
       ),
     ).toBe(true)
     expect(
       canSeeDashboardPage(
         "/dashboard/performance/setup",
-        ["view_company_dashboard"],
+        ["performance_periods:read"],
         "employee",
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("does not hide My pages after an API permission error", () => {
@@ -171,10 +171,10 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe("/dashboard/performance/overview")
+    ).toBe("/dashboard/me/performance/overview")
     expect(
       firstVisibleSiblingOrHome("/dashboard/performance/setup", ["performance:read"], "employee"),
-    ).toBe("/dashboard/performance/overview")
+    ).toBe("/dashboard/me/performance/overview")
     expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/probation/cases", ["probation:read"], "employee"),

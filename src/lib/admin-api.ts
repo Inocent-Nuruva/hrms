@@ -3602,6 +3602,14 @@ export async function deleteNotification(token: string, id: string | number) {
   return (normalizeSingle(payload) as NotificationItem | null) ?? null;
 }
 
+export async function dismissAllNotifications(token: string) {
+  const payload = await adminRequest<unknown>("/api/notifications", {
+    method: "DELETE",
+    token,
+  });
+  return (normalizeSingle(payload) as { deleted_count?: number } | null) ?? {};
+}
+
 export async function createTestNotification(
   token: string,
   data: CreateTestNotificationInput | AdminRecord,
@@ -6247,10 +6255,9 @@ export async function listAttendanceWorkFromHomeRequests(
 }
 
 export async function listTeamAttendanceWorkFromHomeRequests(token: string) {
-  return adminRequest<unknown>(
-    "/api/attendance/work-from-home/requests/team",
-    { token },
-  );
+  return adminRequest<unknown>("/api/attendance/work-from-home/requests/team", {
+    token,
+  });
 }
 
 export async function reviewAttendanceWorkFromHomeRequest(
@@ -16193,7 +16200,9 @@ export async function createMyEmployeeSectionItem(
 }
 
 export async function listCompanyBanks(token: string) {
-  const payload = await adminRequest<unknown>("/api/employees/bank-directory", { token });
+  const payload = await adminRequest<unknown>("/api/employees/bank-directory", {
+    token,
+  });
   return normalizeList(payload);
 }
 
@@ -16205,7 +16214,11 @@ export async function createCompanyBank(token: string, data: AdminRecord) {
   });
 }
 
-export async function uploadCompanyBankLogo(token: string, bankId: string | number, file: File) {
+export async function uploadCompanyBankLogo(
+  token: string,
+  bankId: string | number,
+  file: File,
+) {
   const form = new FormData();
   form.append("file", file);
   return adminRequest<unknown>(`/api/employees/bank-directory/${bankId}/logo`, {
