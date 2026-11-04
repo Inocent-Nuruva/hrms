@@ -106,6 +106,10 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
         title: "Recalculation Jobs",
         url: "/dashboard/attendance/recalculation-jobs",
       },
+      {
+        title: "Exemptions",
+        url: "/dashboard/attendance/exemptions",
+      },
       { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
       {
         title: "Device Sync Logs",

@@ -6264,6 +6264,49 @@ export async function reviewAttendanceWorkFromHomeRequest(
   );
 }
 
+export type AttendanceExemptionRow = {
+  employee_id: number;
+  employee_no: string;
+  employee_name: string;
+  attendance_exempt_from: string | null;
+  attendance_exempt_reason: string | null;
+  absent_days: number;
+};
+
+export async function listAttendanceExemptions(token: string) {
+  const payload = await adminRequest<unknown>("/api/attendance/exemptions", {
+    token,
+  });
+  return normalizeList(payload) as AttendanceExemptionRow[];
+}
+
+export async function listAttendanceExemptionCandidates(
+  token: string,
+  inactiveDays = 30,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/attendance/exemptions/candidates?inactive_days=${inactiveDays}`,
+    { token },
+  );
+  return normalizeList(payload) as AttendanceExemptionRow[];
+}
+
+export async function updateAttendanceExemptions(
+  token: string,
+  data: {
+    employee_ids: number[];
+    exempt_from: string | null;
+    reason?: string;
+    recalculate_from?: string;
+  },
+) {
+  return adminRequest<unknown>("/api/attendance/exemptions", {
+    method: "PUT",
+    token,
+    body: data,
+  });
+}
+
 export async function cancelAttendanceWorkFromHomeRequest(
   token: string,
   id: string | number,

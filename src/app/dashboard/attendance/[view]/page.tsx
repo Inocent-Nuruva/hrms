@@ -6,6 +6,7 @@ import { HrAttendanceCorrectionApprovalsView } from "@/components/dashboard/hr-a
 import { ScheduleManagementClient } from "@/components/dashboard/schedule-management-client"
 import { AttendanceWorkFromHomeClient } from "@/components/dashboard/attendance-work-from-home-client"
 import { AccessControlActivityClient } from "@/components/dashboard/access-control-activity-client"
+import { AttendanceExemptionsClient } from "@/components/dashboard/attendance-exemptions-client"
 
 const ALLOWED_VIEWS = new Set([
   "settings",
@@ -48,6 +49,7 @@ const ALLOWED_VIEWS = new Set([
   "employee-timetables",
   "work-from-home-requests",
   "biometric-access",
+  "exemptions",
 ])
 
 const ACCESS_CONTROL_ATTENDANCE_VIEWS = new Set([
@@ -133,6 +135,10 @@ export default async function AttendanceViewPage({ params, searchParams }: Atten
 
   if (normalized === "work-from-home-requests") {
     return <AttendanceWorkFromHomeClient />
+  }
+
+  if (normalized === "exemptions") {
+    return <AttendanceExemptionsClient />
   }
 
   if (normalized === "biometric-access") {

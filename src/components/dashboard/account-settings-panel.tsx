@@ -130,7 +130,7 @@ const NOTIFICATION_PREFERENCE_GROUPS: Array<{
   },
   {
     title: "Attendance",
-    types: ["ATTENDANCE_CORRECTION"],
+    types: ["ATTENDANCE_LATE", "ATTENDANCE_MISSING", "ATTENDANCE_CORRECTION"],
   },
 ]
 

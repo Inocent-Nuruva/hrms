@@ -123,6 +123,7 @@ const DAILY_SUMMARY_STATUS_OPTIONS = [
   "HALF_DAY",
   "OFF_DAY",
   "HOLIDAY",
+  "NOT_TRACKED",
   "ON_LEAVE",
 ]
 

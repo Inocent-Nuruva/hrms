@@ -1094,6 +1094,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/holidays": "attendance_holidays:read",
   "/dashboard/attendance/device-sync-logs": "attendance_device_sync_logs:read",
   "/dashboard/attendance/daily-summaries": "attendance_summaries:read",
+  "/dashboard/attendance/exemptions": "attendance_summaries:read",
   "/dashboard/attendance/processing-exceptions": "attendance_processing:read",
   "/dashboard/attendance/recalculation-jobs": {
     permissions: ["attendance_processing:read", "attendance_recalculation:execute"],
