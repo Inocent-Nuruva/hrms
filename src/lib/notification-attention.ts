@@ -45,6 +45,20 @@ function appendRequestHighlight(url: string, requestId: string) {
   return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`
 }
 
+/** Legacy manager-portal links (/manager/...) have no frontend route; map them to the dashboard equivalents. */
+function rewriteLegacyManagerUrl(url: string) {
+  const match = url.match(/^\/manager(\/[^?#]*)?([?#].*)?$/i)
+  if (!match) return url
+  const section = (match[1] ?? "").split("/").filter(Boolean)[0]?.toLowerCase() ?? ""
+  const suffix = match[2] ?? ""
+  const destinations: Record<string, string> = {
+    attendance: "/dashboard/me/team/attendance",
+    team: "/dashboard/me/team/members",
+    activities: "/dashboard/activities/reviews",
+  }
+  return `${destinations[section] ?? "/dashboard/me/team/overview"}${suffix}`
+}
+
 function isTestNotification(row: AdminRecord) {
   const type = readString(row, ["type"]).toLowerCase()
   const source = readString(readMetadata(row), ["source"]).toLowerCase()
@@ -88,7 +102,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
   const leaveDestination = resolveLeaveNotificationUrl(row)
   if (leaveDestination) return leaveDestination
 
-  const direct = normalizeInternalActionUrl(readString(row, ["action_url", "actionUrl", "url", "link"]))
+  const direct = rewriteLegacyManagerUrl(normalizeInternalActionUrl(readString(row, ["action_url", "actionUrl", "url", "link"])))
   const metadata = readMetadata(row)
   const requestId =
     readString(row, ["entity_id", "entityId", "request_id", "requestId"]) ||
@@ -101,7 +115,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
     return appendRequestHighlight(direct, requestId)
   }
 
-  const nested = normalizeInternalActionUrl(readString(metadata, ["action_url", "actionUrl", "url", "link"]))
+  const nested = rewriteLegacyManagerUrl(normalizeInternalActionUrl(readString(metadata, ["action_url", "actionUrl", "url", "link"])))
   if (nested.startsWith("/")) {
     if (/^\/(?:dashboard\/)?me\/daily-activities(?:\/|\?|$)/i.test(nested)) {
       return "/dashboard/me/activities/today"
