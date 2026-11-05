@@ -151,7 +151,6 @@ export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
     "performance_plans:read",
     "performance_reviews:read",
     "performance_improvement_plans:read",
-    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -166,7 +165,6 @@ export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
     "kpi_templates:read",
     "performance_rating_scales:read",
     "kpi_rules:read",
-    COMPANY_DASHBOARD_SWITCH_PERMISSION,
   ],
   mode: "any",
 }
@@ -797,6 +795,20 @@ export const COMPANY_MANAGEMENT_ROUTE_PERMISSION: PermissionRequirement = {
   mode: "any",
 }
 
+/**
+ * Attendance correction and profile update review queues. HR holds
+ * approve/final_approve; line and department managers hold manager_review and
+ * only ever see their own team (enforced by the API).
+ */
+export const SELF_SERVICE_REVIEW_ROUTE_PERMISSION = {
+  permissions: [
+    "self_service_requests:approve",
+    "self_service_requests:manager_review",
+    "self_service_requests:final_approve",
+  ],
+  mode: "any",
+} satisfies PermissionRequirement
+
 export const ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION = {
   permissions: [
     "attendance_business_trips:approve",
@@ -1012,6 +1024,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/team/activity-summary": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/team/actions": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/insights": null,
+  "/dashboard/forms-feedback": null,
   "/dashboard/me/requests": null,
   "/dashboard/me/requests/actions": null,
   "/dashboard/me/requests/timeline": null,
@@ -1064,14 +1077,25 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/employees/onboarding": {
-    permissions: ["onboarding_requests:read", "onboarding_workflows:read"],
+    // This is the company-wide HR workspace. Ordinary employees also receive
+    // onboarding_requests:read for their own checklist, so that permission is
+    // deliberately insufficient for invitation and company request data.
+    permissions: [
+      COMPANY_DASHBOARD_SWITCH_PERMISSION,
+      "employees:create",
+      "onboarding_workflows:read",
+      "onboarding_requests:create",
+      "onboarding_requests:approve",
+      "onboarding_requests:complete",
+    ],
     mode: "any",
   },
   // Other employees' profiles — not self profile under /dashboard/me/profile.
   "/dashboard/employees/profile": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
   "/dashboard/employees/profile/": EMPLOYEE_DIRECTORY_ROUTE_PERMISSION,
-  "/dashboard/employees/profile-update-approvals": "self_service_requests:approve",
-  "/dashboard/employees/profile-change-requests": "self_service_requests:approve",
+  "/dashboard/employees/profile-update-approvals": SELF_SERVICE_REVIEW_ROUTE_PERMISSION,
+  // Backed by /api/hr/profile-change-requests (profile_change_request.view_all).
+  "/dashboard/employees/profile-change-requests": "profile_change_request.view_all",
   "/dashboard/attendance": ATTENDANCE_ROUTE_PERMISSIONS,
   "/dashboard/attendance/biometric-access": {
     permissions: [
@@ -1093,6 +1117,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/holidays": "attendance_holidays:read",
   "/dashboard/attendance/device-sync-logs": "attendance_device_sync_logs:read",
   "/dashboard/attendance/daily-summaries": "attendance_summaries:read",
+  "/dashboard/attendance/exemptions": "attendance_summaries:read",
   "/dashboard/attendance/processing-exceptions": "attendance_processing:read",
   "/dashboard/attendance/recalculation-jobs": {
     permissions: ["attendance_processing:read", "attendance_recalculation:execute"],
@@ -1106,7 +1131,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/attendance/timetable-generated-schedules": "shift_schedules:read",
   "/dashboard/attendance/shift-rotation-groups": "shift_rotation_groups:read",
   "/dashboard/attendance/shift-rotation-rules": "shift_rotation_rules:read",
-  "/dashboard/attendance/correction-requests": "self_service_requests:approve",
+  "/dashboard/attendance/correction-requests": SELF_SERVICE_REVIEW_ROUTE_PERMISSION,
   "/dashboard/attendance/timetables": "timetables:read",
   "/dashboard/attendance/timetable-days": "timetable_days:read",
   "/dashboard/attendance/timetable-shift-rules": "timetable_days:read",
@@ -1151,11 +1176,13 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     mode: "any",
   },
   "/dashboard/leave-management/balances": {
-    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    // Matches GET /leave/balances{,/transactions} (leave-balances.view).
+    permissions: ["leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
   "/dashboard/leave-management/transactions": {
-    permissions: ["leave_balances:read", "leave-balances.view", "leave-balances.manage"],
+    // Matches GET /leave/balances{,/transactions} (leave-balances.view).
+    permissions: ["leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
   "/dashboard/leave-management/balance-import": {
@@ -1188,6 +1215,16 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/performance/plans": PERFORMANCE_PLANS_PERMISSION,
   "/dashboard/performance/reviews": PERFORMANCE_REVIEWS_PERMISSION,
   "/dashboard/performance/improvement": PERFORMANCE_IMPROVEMENT_PERMISSION,
+  // HR-only: managers also hold performance_development_plans:read for their
+  // team view, so require HR plan access too.
+  "/dashboard/performance/development": {
+    permissions: ["performance_plans:read", "performance_development_plans:read"],
+    mode: "all",
+  },
+  "/dashboard/performance/calibration": {
+    permissions: [...PERFORMANCE_MODULE_WIDE, "performance_calibration:read"],
+    mode: "any",
+  },
   "/dashboard/probation": PROBATION_SECTION_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
@@ -1290,6 +1327,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/roles": "roles:read",
   "/dashboard/permissions": "permissions:read",
   "/dashboard/settings": null,
+  "/dashboard/settings/banks": "employees:update",
   "/dashboard/settings/default-avatars": {
     permissions: [
       "view_company_data",

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 969 530" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="base" x2="1" y2="1">
+      <stop stop-color="#f7fafc"/>
+      <stop offset=".55" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fcf5ff"/>
+    </linearGradient>
+    <radialGradient id="bloom" cx=".55" cy=".63" r=".73">
+      <stop stop-color="#f9edff"/>
+      <stop offset=".52" stop-color="#e8b4fc"/>
+      <stop offset="1" stop-color="#cfdeff"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1=".25" y1=".65" x2=".94" y2=".3">
+      <stop stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset=".40" stop-color="#e4d6ff" stop-opacity=".6"/>
+      <stop offset=".62" stop-color="#d784f6" stop-opacity=".95"/>
+      <stop offset=".78" stop-color="#c7a0fa" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#dcd3ff" stop-opacity=".9"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#base)" d="M0 0h969v530H0z"/>
+  <path fill="url(#bloom)" d="M362 530C362 319 500 136 692 90C793 65 886 72 969 104V530Z"/>
+  <path fill="url(#ribbon)" d="M0 0H852C854 125 749 160 656 244C578 312 554 376 511 413C449 468 381 477 296 459C160 430 51 325 0 192Z"/>
+  <path fill="none" stroke="#fff" stroke-opacity=".95" stroke-width="4" d="M0 192C51 325 160 430 296 459C381 477 449 468 511 413C554 376 578 312 656 244C749 160 854 125 852 0"/>
+</svg>

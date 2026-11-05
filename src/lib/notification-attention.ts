@@ -20,6 +20,18 @@ function readMetadata(row: AdminRecord) {
   return asRecord(row.metadata)
 }
 
+function normalizeInternalActionUrl(value: string) {
+  if (!value) return ""
+  if (value.startsWith("/")) return value
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return ""
+  }
+}
+
 function appendRequestHighlight(url: string, requestId: string) {
   if (!url.startsWith("/") || !requestId) return url
 
@@ -31,6 +43,20 @@ function appendRequestHighlight(url: string, requestId: string) {
   }
   const nextQuery = params.toString()
   return `${path}${nextQuery ? `?${nextQuery}` : ""}${hash ? `#${hash}` : ""}`
+}
+
+/** Legacy manager-portal links (/manager/...) have no frontend route; map them to the dashboard equivalents. */
+function rewriteLegacyManagerUrl(url: string) {
+  const match = url.match(/^\/manager(\/[^?#]*)?([?#].*)?$/i)
+  if (!match) return url
+  const section = (match[1] ?? "").split("/").filter(Boolean)[0]?.toLowerCase() ?? ""
+  const suffix = match[2] ?? ""
+  const destinations: Record<string, string> = {
+    attendance: "/dashboard/me/team/attendance",
+    team: "/dashboard/me/team/members",
+    activities: "/dashboard/activities/reviews",
+  }
+  return `${destinations[section] ?? "/dashboard/me/team/overview"}${suffix}`
 }
 
 function isTestNotification(row: AdminRecord) {
@@ -76,7 +102,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
   const leaveDestination = resolveLeaveNotificationUrl(row)
   if (leaveDestination) return leaveDestination
 
-  const direct = readString(row, ["action_url", "actionUrl", "url", "link"])
+  const direct = rewriteLegacyManagerUrl(normalizeInternalActionUrl(readString(row, ["action_url", "actionUrl", "url", "link"])))
   const metadata = readMetadata(row)
   const requestId =
     readString(row, ["entity_id", "entityId", "request_id", "requestId"]) ||
@@ -89,7 +115,7 @@ export function resolveNotificationUrl(row: AdminRecord) {
     return appendRequestHighlight(direct, requestId)
   }
 
-  const nested = readString(metadata, ["action_url", "actionUrl", "url", "link"])
+  const nested = rewriteLegacyManagerUrl(normalizeInternalActionUrl(readString(metadata, ["action_url", "actionUrl", "url", "link"])))
   if (nested.startsWith("/")) {
     if (/^\/(?:dashboard\/)?me\/daily-activities(?:\/|\?|$)/i.test(nested)) {
       return "/dashboard/me/activities/today"

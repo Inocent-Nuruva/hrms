@@ -41,6 +41,7 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
         title: "Salary approvals",
         url: "/dashboard/employees/salary-approvals",
       },
+      { title: "Recruitment", url: "/dashboard/operations/recruitment" },
     ],
   },
 ];
@@ -105,6 +106,10 @@ export const attendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       {
         title: "Recalculation Jobs",
         url: "/dashboard/attendance/recalculation-jobs",
+      },
+      {
+        title: "Exemptions",
+        url: "/dashboard/attendance/exemptions",
       },
       { title: "Unmatched Logs", url: "/dashboard/attendance/unmatched-logs" },
       {
@@ -186,6 +191,10 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       },
       { title: "My Schedule", url: "/dashboard/attendance/schedule-preview" },
       {
+        title: "Correction Requests",
+        url: "/dashboard/attendance/corrections",
+      },
+      {
         title: "Work-from-home Requests",
         url: "/dashboard/attendance/work-from-home-requests",
       },
@@ -261,7 +270,9 @@ const performanceOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/performance/overview" },
       { title: "Setup", url: "/dashboard/performance/setup" },
       { title: "Plans", url: "/dashboard/performance/plans" },
+      { title: "Development", url: "/dashboard/performance/development" },
       { title: "Reviews", url: "/dashboard/performance/reviews" },
+      { title: "Calibration", url: "/dashboard/performance/calibration" },
       { title: "Improvement", url: "/dashboard/performance/improvement" },
     ],
   },
@@ -351,7 +362,6 @@ const financeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Applications", url: "/dashboard/finance/applications" },
       { title: "Accounts", url: "/dashboard/finance/accounts" },
       { title: "Servicing", url: "/dashboard/finance/servicing" },
-      { title: "Payroll deductions", url: "/dashboard/finance/payroll" },
       { title: "Reports", url: "/dashboard/finance/reports" },
       { title: "Settings", url: "/dashboard/finance/settings" },
       {
@@ -368,7 +378,7 @@ export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
     items: [
       { title: "Payroll", url: "/dashboard/me/finance/payroll" },
       {
-        title: "Loans and advances",
+        title: "Loans & advances",
         url: "/dashboard/me/finance/applications",
       },
     ],
@@ -376,7 +386,33 @@ export const selfFinanceSectionTabGroups: DashboardSectionTabGroup[] = [
 ];
 
 export const financeSectionTabGroups: DashboardSectionTabGroup[] = [
-  ...selfFinanceSectionTabGroups,
+  {
+    title: "Payroll",
+    items: [
+      {
+        title: "Bank directory",
+        url: "/dashboard/settings/banks",
+      },
+      {
+        title: "Payroll setup & operations",
+        url: "/dashboard/operations/payroll",
+      },
+      {
+        title: "Payroll deductions",
+        url: "/dashboard/finance/payroll",
+      },
+    ],
+  },
+  {
+    title: "My finance",
+    items: [
+      { title: "Payroll", url: "/dashboard/me/finance/payroll" },
+      {
+        title: "Loans & advances",
+        url: "/dashboard/me/finance/applications",
+      },
+    ],
+  },
   ...financeOperationsSectionTabGroups,
 ];
 
@@ -432,7 +468,9 @@ export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/performance/overview" },
       { title: "Setup", url: "/dashboard/performance/setup" },
       { title: "Plans", url: "/dashboard/performance/plans" },
+      { title: "Development", url: "/dashboard/performance/development" },
       { title: "Reviews", url: "/dashboard/performance/reviews" },
+      { title: "Calibration", url: "/dashboard/performance/calibration" },
       { title: "Improvement", url: "/dashboard/performance/improvement" },
       { title: "Reports", url: "/dashboard/performance/reports" },
     ],
@@ -525,6 +563,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Attendance", url: "/dashboard/me/team/attendance" },
       { title: "Activity summary", url: "/dashboard/me/team/activity-summary" },
       { title: "Actions", url: "/dashboard/me/team/actions" },
+      { title: "Movements", url: "/dashboard/team/movements" },
     ],
   },
 ];

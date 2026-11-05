@@ -206,6 +206,25 @@ function taskReviewStatus(task: AdminRecord) {
   ).toUpperCase();
 }
 
+function taskPerformanceRelevance(task: AdminRecord) {
+  return readString(
+    task,
+    ["performanceRelevance", "performance_relevance"],
+    "NOT_EVALUATED",
+  ).toUpperCase();
+}
+
+function performanceRelevanceLabel(value: string) {
+  return (
+    {
+      NOT_EVALUATED: "Not evaluated",
+      SUPPORTING_EVIDENCE: "Supporting evidence",
+      KEY_DELIVERABLE: "Key deliverable",
+      DEVELOPMENT_ACTIVITY: "Development activity",
+    }[value] ?? value
+  );
+}
+
 function reportIdOf(row: AdminRecord | null | undefined) {
   return readString(row, [
     "report_id",
@@ -423,7 +442,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
   );
   const [team, setTeam] = React.useState<AdminRecord[]>([]);
   const [employeeKpis, setEmployeeKpis] = React.useState<AdminRecord[]>([]);
-  const [activityCategories, setActivityCategories] = React.useState<AdminRecord[]>([]);
+  const [activityCategories, setActivityCategories] = React.useState<
+    AdminRecord[]
+  >([]);
   const [selected, setSelected] = React.useState<AdminRecord | null>(null);
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("ALL");
@@ -436,6 +457,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     start_time: "09:00",
     end_time: "10:00",
     priority: "MEDIUM",
+    performance_relevance: "NOT_EVALUATED",
   });
   const [checklistDraft, setChecklistDraft] = React.useState("");
   const [checklistItems, setChecklistItems] = React.useState<string[]>([]);
@@ -502,8 +524,8 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     try {
       if (mode === "self") {
         const scheduleDate = today();
-        const [taskRows, reportRows, kpiRows, scheduleRows, categoryRows] = await Promise.all(
-          [
+        const [taskRows, reportRows, kpiRows, scheduleRows, categoryRows] =
+          await Promise.all([
             listMyActivityTasks(accessToken, { limit: 100 }),
             listMyActivities(accessToken, { limit: 100 }),
             listMyEmployeeKpis(accessToken, { status: "APPROVED", limit: 100 }),
@@ -512,8 +534,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
               to_date: scheduleDate,
             }),
             listMyActivityCategories(accessToken),
-          ],
-        );
+          ]);
         const fromReports = entriesFromReports(reportRows);
         const reportEntryById = new Map(
           fromReports.map((entry) => [entryIdOf(entry) || rowId(entry), entry]),
@@ -629,7 +650,15 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     }
     const linkedKpiId = params.get("kpi");
     if (linkedKpiId)
-      setForm((current) => ({ ...current, employee_kpi_id: linkedKpiId }));
+      setForm((current) => ({
+        ...current,
+        employee_kpi_id: linkedKpiId,
+        performance_relevance:
+          !current.performance_relevance ||
+          current.performance_relevance === "NOT_EVALUATED"
+            ? "KEY_DELIVERABLE"
+            : current.performance_relevance,
+      }));
   }, [mode]);
 
   const day = today();
@@ -802,7 +831,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
     .filter((member): member is AdminRecord => Boolean(member));
   const managerSelectableCategories = activityCategories.filter((category) =>
     selectedTeamMembers.every((member) => {
-      const departmentId = readString(category, ["departmentId", "department_id"]);
+      const departmentId = readString(category, [
+        "departmentId",
+        "department_id",
+      ]);
       const positionId = readString(category, ["positionId", "position_id"]);
       const gradeId = readString(category, ["gradeId", "grade_id"]);
       const memberDepartmentId =
@@ -973,6 +1005,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       start_time: "09:00",
       end_time: "10:00",
       priority: "MEDIUM",
+      performance_relevance: "NOT_EVALUATED",
       activity_category_id: "",
     });
     setChecklistDraft("");
@@ -994,6 +1027,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
       start_time: "09:00",
       end_time: "10:00",
       priority: "MEDIUM",
+      performance_relevance: "NOT_EVALUATED",
       activity_category_id: "",
     });
     setChecklistDraft("");
@@ -1074,6 +1108,9 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
         employee_kpi_id: canLinkRelatedKpi
           ? Number(form.employee_kpi_id)
           : undefined,
+        performance_relevance:
+          form.performance_relevance ||
+          (canLinkRelatedKpi ? "KEY_DELIVERABLE" : "NOT_EVALUATED"),
         priority: form.priority || "MEDIUM",
         checklist: checklistPayload(),
       };
@@ -1975,6 +2012,7 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   start_time: "09:00",
                   end_time: "10:00",
                   priority: "MEDIUM",
+                  performance_relevance: "NOT_EVALUATED",
                   activity_category_id: "",
                 });
                 setChecklistDraft("");
@@ -3145,7 +3183,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">
-                      Activity category <span className="font-normal text-slate-500">(optional)</span>
+                      Activity category{" "}
+                      <span className="font-normal text-slate-500">
+                        (optional)
+                      </span>
                     </span>
                     <FluentSelect
                       ariaLabel="Activity category"
@@ -3252,10 +3293,22 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                       value={form.employee_kpi_id ?? ""}
                       placeholder="No related KPI"
                       onChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          employee_kpi_id: value,
-                        }))
+                        setForm((current) => {
+                          const relevance =
+                            current.performance_relevance || "NOT_EVALUATED";
+                          return {
+                            ...current,
+                            employee_kpi_id: value,
+                            performance_relevance: value
+                              ? relevance === "NOT_EVALUATED"
+                                ? "KEY_DELIVERABLE"
+                                : relevance
+                              : relevance === "KEY_DELIVERABLE" ||
+                                  relevance === "SUPPORTING_EVIDENCE"
+                                ? "NOT_EVALUATED"
+                                : relevance,
+                          };
+                        })
                       }
                       options={[
                         { value: "", label: "No related KPI" },
@@ -3279,6 +3332,39 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                         Select one employee to link this task to a KPI.
                       </span>
                     ) : null}
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span className="font-medium">Performance relevance</span>
+                    <FluentSelect
+                      ariaLabel="Performance relevance"
+                      className="w-full"
+                      value={form.performance_relevance ?? "NOT_EVALUATED"}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          performance_relevance: value,
+                        }))
+                      }
+                      options={[
+                        { value: "NOT_EVALUATED", label: "Not evaluated" },
+                        {
+                          value: "KEY_DELIVERABLE",
+                          label: "Key deliverable",
+                        },
+                        {
+                          value: "SUPPORTING_EVIDENCE",
+                          label: "Supporting evidence",
+                        },
+                        {
+                          value: "DEVELOPMENT_ACTIVITY",
+                          label: "Development activity",
+                        },
+                      ]}
+                    />
+                    <span className="text-xs text-slate-500">
+                      Only manager-approved key deliverables increment
+                      activity-based KPI progress.
+                    </span>
                   </label>
                   <label className="grid gap-1.5 text-sm">
                     <span className="font-medium">Priority</span>
@@ -3629,7 +3715,10 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                 {readString(selected, ["title"], "Untitled task")}
               </DialogTitle>
               <DialogDescription>
-                {readString(selected, ["activity_category_name", "activityCategoryName"])
+                {readString(selected, [
+                  "activity_category_name",
+                  "activityCategoryName",
+                ])
                   ? `Category: ${readString(selected, ["activity_category_name", "activityCategoryName"])}. `
                   : ""}
                 Review the assignment, update its progress, and keep the
@@ -3758,6 +3847,14 @@ export function ActivityTaskWorkspace({ mode }: { mode: WorkspaceMode }) {
                       Review status
                       <span className="flex h-10 items-center">
                         <StatusPill value={taskReviewStatus(selected)} />
+                      </span>
+                    </div>
+                    <div className="grid gap-1 text-xs font-medium text-slate-500">
+                      Performance relevance
+                      <span className="flex h-10 items-center text-sm font-medium text-slate-800">
+                        {performanceRelevanceLabel(
+                          taskPerformanceRelevance(selected),
+                        )}
                       </span>
                     </div>
                     {plannedStartDateOf(selected) ? (

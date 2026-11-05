@@ -19,7 +19,7 @@ import {
   tokens,
 } from "@fluentui/react-components"
 import {
-  Home24Color,
+  Home24Regular,
   ArrowSort20Regular,
   Pin20Filled,
   Pin20Regular,
@@ -48,32 +48,7 @@ const OPEN_GROUPS_STORAGE_KEY = "hrms.sidebar.fluent-open-groups.v1"
 const PINNED_LINKS_STORAGE_KEY = "hrms.sidebar.pinned-links.v1"
 const NAV_SORT_STORAGE_KEY = "hrms.sidebar.sort-order.v1"
 const NAV_USAGE_STORAGE_KEY = "hrms.sidebar.link-usage.v1"
-const Home = Home24Color
-
-const sidebarIconColors: Record<string, string> = {
-  "Access Control": tokens.colorPalettePurpleForeground2,
-  Attendance: tokens.colorPaletteTealForeground2,
-  Branches: tokens.colorPaletteRoyalBlueForeground2,
-  Companies: tokens.colorPaletteRoyalBlueForeground2,
-  Departments: tokens.colorPaletteSeafoamForeground2,
-  Employees: tokens.colorPaletteTealForeground2,
-  Promotion: tokens.colorPaletteGreenForeground2,
-  "Leave Management": tokens.colorPaletteMarigoldForeground2,
-  "Performance & Activities": tokens.colorPalettePurpleForeground2,
-  Probation: tokens.colorPaletteMarigoldForeground2,
-  Field: tokens.colorPaletteTealForeground2,
-  Finance: tokens.colorPaletteGreenForeground2,
-  Movements: tokens.colorPalettePeachForeground2,
-  Positions: tokens.colorPaletteRoyalBlueForeground2,
-  Structure: tokens.colorPalettePurpleForeground2,
-  "Invite & register": tokens.colorPaletteTealForeground2,
-  Payroll: tokens.colorPaletteGreenForeground2,
-  "Reports & Analytics": tokens.colorPaletteRoyalBlueForeground2,
-  Notifications: tokens.colorPaletteMarigoldForeground2,
-  SMS: tokens.colorPaletteTealForeground2,
-  Insights: tokens.colorPalettePurpleForeground2,
-  "To do": tokens.colorPaletteMarigoldForeground2,
-}
+const Home = Home24Regular
 
 const useStyles = makeStyles({
   nav: {
@@ -82,7 +57,7 @@ const useStyles = makeStyles({
     fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
   },
   iconBadge: {
-    color: tokens.colorBrandForeground1,
+    color: "var(--primary)",
     display: "inline-flex",
     width: "24px",
     height: "24px",
@@ -611,12 +586,12 @@ export function NavMain({
 
       {todoItem?.items?.length ? (() => {
         const isActive = nodeContainsCurrentPath(todoItem, currentPath)
-        const Icon = todoItem.activeIcon ?? todoItem.icon
+        const Icon = todoItem.icon ?? todoItem.activeIcon
         const value = categoryValue(todoItem)
         return (
           <NavCategory key={value} value={value}>
             <NavCategoryItem
-              icon={Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[todoItem.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined}
+              icon={Icon ? <span className={styles.iconBadge} style={{ color: "var(--primary)" }} aria-hidden="true"><Icon /></span> : undefined}
               className={styles.item}
               data-active-category={isActive ? "true" : undefined}
             >
@@ -652,7 +627,7 @@ export function NavMain({
           navItem={{
             value: item.url,
             disabled: item.disabled,
-            icon: <span className={styles.iconBadge} style={{ color: tokens.colorBrandForeground1 }} aria-hidden="true"><Pin20Filled /></span>,
+            icon: <span className={styles.iconBadge} style={{ color: "var(--primary)" }} aria-hidden="true"><Pin20Filled /></span>,
             className: styles.item,
           }}
           toggleButton={{
@@ -696,9 +671,17 @@ export function NavMain({
         </Menu>
       </div>
 
-      {arrangedItems.map((item) => {
+      {arrangedItems.map((group) => {
+        const visibleDestinations = group.items?.length
+          ? collectPinnableNodes(group.items).filter((node) => node.url && !pinnedUrls.includes(node.url))
+          : []
+        if (group.items?.length && visibleDestinations.length === 0) return null
+        // Skip redundant category navigation when only one destination remains.
+        const item: NavMainItem = visibleDestinations.length === 1
+          ? { ...group, ...visibleDestinations[0], items: undefined }
+          : group
         const isActive = nodeContainsCurrentPath(item, currentPath)
-        const Icon = item.activeIcon ?? item.icon
+        const Icon = item.icon ?? item.activeIcon
 
         if (item.items?.length) {
           const value = categoryValue(item)
@@ -706,7 +689,7 @@ export function NavMain({
           return (
             <NavCategory key={value} value={value}>
               <NavCategoryItem
-                icon={Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined}
+                icon={Icon ? <span className={styles.iconBadge} style={{ color: "var(--primary)" }} aria-hidden="true"><Icon /></span> : undefined}
                 className={styles.item}
                 data-active-category={isActiveCategory ? "true" : undefined}
               >
@@ -741,7 +724,7 @@ export function NavMain({
             className={styles.splitItem}
             navItem={{
               value: item.url,
-              icon: Icon ? <span className={styles.iconBadge} style={{ color: sidebarIconColors[item.title] ?? tokens.colorBrandForeground1 }} aria-hidden="true"><Icon /></span> : undefined,
+              icon: Icon ? <span className={styles.iconBadge} style={{ color: "var(--primary)" }} aria-hidden="true"><Icon /></span> : undefined,
               disabled: item.disabled,
               className: styles.item,
             }}

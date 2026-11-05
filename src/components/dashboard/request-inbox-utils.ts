@@ -28,7 +28,14 @@ export function actionSubject(row: AdminRecord) {
 }
 
 export function isOpenAction(row: AdminRecord) {
-  return ["OPEN", "PENDING", "TODO", "ACTION_REQUIRED"].includes(readString(row, ["status"], "OPEN").toUpperCase())
+  return ["OPEN", "IN_PROGRESS", "PENDING", "TODO", "ACTION_REQUIRED"].includes(readString(row, ["status"], "OPEN").toUpperCase())
+}
+
+/** Pending keeps every request for a person who still has work open, so the group does not collapse to one row. */
+export function groupsForInboxTab(actions: AdminRecord[], filters: InboxFilters, now = new Date()) {
+  if (filters.status !== "open") return filterAndGroupActions(actions, filters, now)
+  return filterAndGroupActions(actions, { ...filters, status: "all" }, now)
+    .filter((group) => group.items.some((item) => isOpenAction(item)))
 }
 
 export function isEmployeeRequestAction(row: AdminRecord) {

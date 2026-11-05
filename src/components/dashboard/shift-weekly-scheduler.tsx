@@ -1104,7 +1104,7 @@ export function ShiftWeeklyScheduler({
 
         <aside className={cn(
           "border-t border-border bg-muted/[0.12] xl:border-l xl:border-t-0",
-          filteredEmployeeViews.length > 1 && "xl:sticky xl:top-14 xl:z-20 xl:self-start"
+          filteredEmployeeViews.length > 1 && "xl:sticky xl:top-18 xl:z-20 xl:self-start"
         )}>
           <div className="border-b border-border px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">

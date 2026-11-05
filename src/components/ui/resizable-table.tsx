@@ -24,6 +24,7 @@ import {
 import { Resizable } from "react-resizable";
 import "react-resizable/css/styles.css";
 import React from "react";
+import { createPortal } from "react-dom";
 import { useTheme } from "@/components/theme-provider";
 import { useRenderDiagnostics } from "@/hooks/use-render-diagnostics";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+
+function SortControlPortal({ container, children }: { container?: HTMLElement | null; children: React.ReactNode }) {
+  return container ? createPortal(children, container) : children;
+}
 
 export interface Employee {
   id: string;
@@ -502,6 +507,8 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   fluent?: boolean;
   /** Use a borderless Fluent icon button for the standalone Sort action. */
   sortIconOnly?: boolean;
+  /** Optional destination for the standalone Sort control. */
+  sortContainer?: HTMLElement | null;
 }
 
 type SortOrder = "asc" | "desc";
@@ -581,6 +588,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   storageKey,
   fluent = true,
   sortIconOnly = false,
+  sortContainer,
 }: ResizableTableProps<T> = {}) {
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const selectedIds = controlledSelectedRowIds ?? internalSelectedIds;
@@ -1446,6 +1454,7 @@ export function ResizableTable<T = Record<string, unknown>>({
             {toolbarActions}
 
             {showSort && !filterContent ? (
+              <SortControlPortal container={sortContainer}>
               <div className="relative">
                 <Button
                   type="button"
@@ -1515,6 +1524,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                   </>
                 )}
               </div>
+              </SortControlPortal>
             ) : null}
 
             {showExport ? (

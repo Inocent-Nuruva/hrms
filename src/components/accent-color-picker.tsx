@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useAccountAppearance } from "@/hooks/use-account-appearance"
 import { PaletteIcon } from "lucide-react"
 
 import { buttonVariants } from "@/components/ui/button"
@@ -76,13 +77,14 @@ export function AccentColorPicker({ className }: { className?: string }) {
     applyAccent(initial)
   }, [])
 
-  const setAndPersist = (next: string) => {
+  const applySavedAccent = React.useCallback((next: string) => {
     setColor(next)
     applyAccent(next)
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY, next)
     }
-  }
+  }, [])
+  const setAndPersist = useAccountAppearance("accent", DEFAULT_ACCENT, applySavedAccent)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

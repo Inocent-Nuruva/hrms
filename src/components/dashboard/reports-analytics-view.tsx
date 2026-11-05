@@ -266,6 +266,8 @@ function Surface({
 export function ReportsAnalyticsView() {
   const [token, setToken] = React.useState("")
   const [loading, setLoading] = React.useState(true)
+  const [loadIssues, setLoadIssues] = React.useState<string[]>([])
+  const [reloadKey, setReloadKey] = React.useState(0)
   const [catalog, setCatalog] = React.useState<CatalogCategory[]>([])
   const [operationalReports, setOperationalReports] = React.useState<AdminRecord[]>([])
   const [datasets, setDatasets] = React.useState<AdminRecord[]>([])
@@ -320,6 +322,20 @@ export function ReportsAnalyticsView() {
             getAnalyticsDashboard(token, "hr"),
           ])
         if (cancelled) return
+
+        const sources = [
+          ["report catalog", catalogResult],
+          ["operational reports", operationalResult],
+          ["data sources", datasetResult],
+          ["departments", departmentResult],
+          ["saved reports", savedResult],
+          ["dashboard summary", dashboardResult],
+        ] as const
+        setLoadIssues(
+          sources
+            .filter(([, result]) => result.status === "rejected")
+            .map(([label]) => label),
+        )
 
         if (catalogResult.status === "fulfilled") {
           const categories = asRecordArray(asRecord(catalogResult.value)?.categories)
@@ -380,7 +396,7 @@ export function ReportsAnalyticsView() {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [reloadKey, token])
 
   const selectedDataset = React.useMemo(
     () => datasets.find((row) => readString(row, ["code", "datasetCode"]) === datasetCode) ?? null,
@@ -640,6 +656,20 @@ export function ReportsAnalyticsView() {
           </div>
         </div>
       </Surface>
+
+      {loadIssues.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:px-6" role="status">
+          <div>
+            <p className="font-semibold">Some report sources are unavailable</p>
+            <p className="text-xs text-amber-800">
+              Could not load {loadIssues.join(", ")}. This can be caused by missing permissions or a temporary API failure.
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setReloadKey((value) => value + 1)}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       <Surface>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1144,7 +1174,11 @@ export function ReportsAnalyticsView() {
               ) : (
                 <tr>
                   <td className="px-3 py-6 text-sm text-muted-foreground">
-                    {loading ? "Loading reports..." : "No report preview yet."}
+                    {loading
+                      ? "Loading report data and checking access…"
+                      : loadIssues.length
+                        ? "A preview is unavailable because one or more report sources could not be loaded."
+                        : "No report preview yet. Choose a report and run it to see results."}
                   </td>
                 </tr>
               )}

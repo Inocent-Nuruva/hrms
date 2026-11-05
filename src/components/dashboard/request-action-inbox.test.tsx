@@ -13,10 +13,12 @@ const api = vi.hoisted(() => ({
   completeOnboardingTask: vi.fn(),
   completeOffboardingTask: vi.fn(),
   leaveRequestApprovalAction: vi.fn(),
+  getLeaveReviewContext: vi.fn().mockResolvedValue({ balance: null, overlapping_team_leave: [], attendance_last_30_days: { by_status: [] } }),
   reportMyActionItemIssue: vi.fn(),
   getOnboardingRequest: vi.fn(),
 }))
 vi.mock("@/lib/admin-api", () => api)
+vi.mock("@/lib/notifications-store", () => ({ useNotifications: () => ({}) }))
 vi.mock("@/lib/session-client", () => ({ readStoredSessionTokens: () => ({ accessToken: "session-token" }) }))
 vi.mock("@/components/ui/fluent-toast-store", () => ({ toast: { success: vi.fn() } }))
 vi.mock("@/components/animate-ui/components/base/dialog", () => {
@@ -79,6 +81,36 @@ async function writeComment(value: string) {
   })
 }
 describe("grouped request review", () => {
+  it("keeps the expand arrow and every request when Pending still has open work for that person", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[
+      task,
+      { ...task, id: 2, status: "COMPLETED", title: "Create email" },
+    ]} loading={false} onRefresh={refresh} />))
+    expect(container.querySelector('button[aria-label="Collapse requests for Amina John"]')).not.toBeNull()
+    expect(container.textContent).toContain("Provide laptop")
+    expect(container.textContent).toContain("Create email")
+    expect(container.textContent).toContain("1 pending · 1 completed")
+  })
+  it("replaces the confirmation prompt after the assigned work is marked complete", async () => {
+    api.completeOnboardingTask.mockResolvedValueOnce({})
+    await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    expect(container.textContent).toContain("Confirm that the assigned work has actually been completed")
+    await click("Mark item complete")
+    expect(container.textContent).not.toContain("Confirm that the assigned work has actually been completed")
+    expect(container.textContent).toContain("This item has been completed. No further action is needed.")
+  })
+  it("shows pending task names by default and keeps a single task expandable", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="Collapse requests for Amina John"]')!
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    expect(container.textContent).toContain("1 to complete")
+    expect(container.querySelector('button[aria-label="Review Provide laptop"]')).not.toBeNull()
+    await act(async () => toggle.click())
+    expect(container.querySelector('button[aria-label="Review Provide laptop"]')).toBeNull()
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+  })
+
   it("shows the intended employee and reports a reason without completing work", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[task]} loading={false} onRefresh={refresh} />))
     await selectRequest()
@@ -106,6 +138,20 @@ describe("grouped request review", () => {
     await writeComment("The bank details need correction.")
     await click("Return for correction")
     expect(api.rejectOnboardingRequest).toHaveBeenCalledWith("session-token", "20", { comments: "The bank details need correction." })
+  })
+  it("returns leave for correction instead of rejecting it", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceModule: "leave", sourceEntityType: "LEAVE_REQUEST", sourceEntityId: 30 }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    await writeComment("Please choose other dates.")
+    await click("Return for correction")
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "30", { action: "return_for_correction", comments: "Please choose other dates." })
+  })
+  it("rejects leave only through the explicit Reject action", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceModule: "leave", sourceEntityType: "LEAVE_REQUEST", sourceEntityId: 31 }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    await writeComment("Not possible this month.")
+    await click("Reject")
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "31", { action: "reject", comments: "Not possible this month." })
   })
   it("routes employee detail submissions to their required section-by-section review", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[{

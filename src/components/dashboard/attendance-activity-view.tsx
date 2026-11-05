@@ -73,6 +73,7 @@ import {
   listMyAttendanceHistory,
   runPendingAttendanceProcessingJobs,
   submitMyAttendanceCorrectionRequest,
+  updateMyAttendanceCorrectionRequest,
   fileToBase64UploadDto,
   updateAttendanceProcessingException,
   upsertAttendanceDailySummaryAdjustment,
@@ -86,6 +87,7 @@ import {
   readPrimaryEmployeeId,
 } from "@/lib/attendance-daily-summary-search"
 import { cn } from "@/lib/utils"
+import { getSelfServiceStatusMeta } from "@/components/dashboard/self-service-approval-timeline"
 import { useDashboardMotion } from "@/lib/dashboard-motion"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
@@ -123,8 +125,47 @@ const DAILY_SUMMARY_STATUS_OPTIONS = [
   "HALF_DAY",
   "OFF_DAY",
   "HOLIDAY",
+  "NOT_TRACKED",
   "ON_LEAVE",
 ]
+
+// Statuses an employee may request; must match the backend AttendanceDailyStatusEnum.
+const CORRECTION_REQUESTED_STATUS_OPTIONS = [
+  "PRESENT",
+  "LATE",
+  "EARLY_DEPARTURE",
+  "HALF_DAY",
+  "ABSENT",
+  "OFF_DAY_PRESENT",
+  "OFFICIAL_DUTY",
+  "BUSINESS_TRIP",
+]
+
+const CORRECTION_REQUEST_TYPE_OPTIONS = [
+  { value: "check_in", label: "Missing / wrong check in" },
+  { value: "check_out", label: "Missing / wrong check out" },
+  { value: "check_in_and_check_out", label: "Check in and check out" },
+  { value: "status_correction", label: "Wrong attendance status" },
+]
+
+function createEmptyCorrectionForm() {
+  return {
+    attendance_date: getTodayDateInputValue(),
+    request_type: "check_in",
+    requested_check_in_at: "",
+    requested_check_out_at: "",
+    requested_status: "PRESENT",
+    reason: "",
+  }
+}
+
+/** ISO timestamp → local "HH:mm" for a time input. */
+function toTimeInputValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+}
 
 const SECTION_CONFIG: Record<AttendanceActivitySectionKey, SectionConfig> = {
   "daily-summaries": {
@@ -616,6 +657,14 @@ function correctionRequestStatusTone(statusValue: string) {
       chip: "bg-amber-500/10 text-amber-900 dark:text-amber-300",
       label: "text-amber-800 dark:text-amber-300",
       count: "text-amber-800 dark:text-amber-300",
+    }
+  }
+  if (key.includes("returned")) {
+    return {
+      bar: "bg-orange-500",
+      chip: "bg-orange-500/10 text-orange-900 dark:text-orange-300",
+      label: "text-orange-700 dark:text-orange-300",
+      count: "text-orange-700 dark:text-orange-300",
     }
   }
   if (key.includes("reject") || key.includes("deny")) {
@@ -3154,14 +3203,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
     action: "submit" | "cancel"
   } | null>(null)
   const [attendanceExporting, setAttendanceExporting] = React.useState(false)
-  const [correctionForm, setCorrectionForm] = React.useState({
-    attendance_date: getTodayDateInputValue(),
-    request_type: "check_in",
-    requested_check_in_at: "",
-    requested_check_out_at: "",
-    requested_status: "PRESENT",
-    reason: "",
-  })
+  const [correctionForm, setCorrectionForm] = React.useState(createEmptyCorrectionForm)
+  // Set when the dialog edits an existing draft or returned request.
+  const [correctionEditing, setCorrectionEditing] = React.useState<{
+    id: string | number
+    status: string
+    reviewerNote: string
+  } | null>(null)
   const dailySummaryActiveFilterCount = React.useMemo(() => {
     const today = getTodayDateInputValue()
     let count = 0
@@ -4140,28 +4188,38 @@ export function AttendanceActivityView({ section }: { section: string }) {
     setMessage(null)
 
     try {
-      const createdRequest = await createMyAttendanceCorrectionRequest(token, {
+      const usesCheckIn = correctionForm.request_type !== "check_out" &&
+        correctionForm.request_type !== "status_correction"
+      const usesCheckOut = correctionForm.request_type !== "check_in" &&
+        correctionForm.request_type !== "status_correction"
+      const payload = {
         attendance_date: correctionForm.attendance_date,
         request_type: correctionForm.request_type,
-        requested_check_in_at: toIsoDateTime(
-          correctionForm.attendance_date,
-          correctionForm.requested_check_in_at
-        ),
-        requested_check_out_at: toIsoDateTime(
-          correctionForm.attendance_date,
-          correctionForm.requested_check_out_at
-        ),
-        requested_status: correctionForm.requested_status,
-        reason: correctionForm.reason.trim() || undefined,
-      })
+        requested_check_in_at: usesCheckIn
+          ? (toIsoDateTime(correctionForm.attendance_date, correctionForm.requested_check_in_at) ?? null)
+          : null,
+        requested_check_out_at: usesCheckOut
+          ? (toIsoDateTime(correctionForm.attendance_date, correctionForm.requested_check_out_at) ?? null)
+          : null,
+        requested_status:
+          correctionForm.request_type === "status_correction"
+            ? correctionForm.requested_status
+            : null,
+        reason: correctionForm.reason.trim() || null,
+      }
+      const createdRequest = correctionEditing
+        ? await updateMyAttendanceCorrectionRequest(token, correctionEditing.id, payload)
+        : await createMyAttendanceCorrectionRequest(token, payload)
       const createdRecord = asRecordValue(createdRequest)
-      const createdRequestId = readNumberFromRow(createdRecord ?? {}, ["id", "request_id"])
+      const createdRequestId =
+        readNumberFromRow(createdRecord ?? {}, ["id", "request_id"]) ??
+        (correctionEditing ? Number(correctionEditing.id) : null)
       const createdStatus = (
         readStringFromRow(createdRecord ?? {}, ["status", "request_status"]) ?? ""
       ).toLowerCase()
 
       let submittedRequest = createdRequest
-      let wasSubmitted = !["", "-", "draft"].includes(createdStatus)
+      let wasSubmitted = !["", "-", "draft", "returned_for_correction"].includes(createdStatus)
       if (correctionEvidenceFile && createdRequestId !== null) {
         const file = await fileToBase64UploadDto(correctionEvidenceFile)
         await addMyAttendanceCorrectionDocument(token, createdRequestId, file)
@@ -4187,18 +4245,16 @@ export function AttendanceActivityView({ section }: { section: string }) {
       }
       setMessage(
         mode === "submit"
-          ? "Attendance correction request submitted."
-          : "Attendance correction request saved as draft."
+          ? correctionEditing
+            ? "Attendance correction request updated and resubmitted."
+            : "Attendance correction request submitted."
+          : correctionEditing
+            ? "Attendance correction request changes saved."
+            : "Attendance correction request saved as draft."
       )
       setCorrectionDialogOpen(false)
-      setCorrectionForm({
-        attendance_date: getTodayDateInputValue(),
-        request_type: "check_in",
-        requested_check_in_at: "",
-        requested_check_out_at: "",
-        requested_status: "PRESENT",
-        reason: "",
-      })
+      setCorrectionEditing(null)
+      setCorrectionForm(createEmptyCorrectionForm())
       setCorrectionEvidenceFile(null)
       await fetchSectionData(true)
     } catch (errorObject) {
@@ -4213,6 +4269,41 @@ export function AttendanceActivityView({ section }: { section: string }) {
     } finally {
       setCorrectionBusy(false)
       setCorrectionSaveMode(null)
+    }
+  }
+
+  const openCorrectionEditor = (row: AdminRecord) => {
+    const id = readFirstValue(row, ["id"])
+    if (id === null || id === undefined) return
+    const requestType = String(readFirstValue(row, ["request_type"]) ?? "check_in")
+    setCorrectionEditing({
+      id: id as string | number,
+      status: String(readFirstValue(row, ["status"]) ?? "draft").toLowerCase(),
+      reviewerNote: String(
+        readFirstValue(row, ["review_comment", "manager_review_comment"]) ?? ""
+      ),
+    })
+    setCorrectionForm({
+      attendance_date: String(
+        readFirstValue(row, ["attendance_date"]) ?? getTodayDateInputValue()
+      ).slice(0, 10),
+      // Legacy "missing_punch" requests are edited as check in + check out.
+      request_type: requestType === "missing_punch" ? "check_in_and_check_out" : requestType,
+      requested_check_in_at: toTimeInputValue(readFirstValue(row, ["requested_check_in_at"])),
+      requested_check_out_at: toTimeInputValue(readFirstValue(row, ["requested_check_out_at"])),
+      requested_status: String(readFirstValue(row, ["requested_status"]) ?? "PRESENT"),
+      reason: String(readFirstValue(row, ["reason"]) ?? ""),
+    })
+    setCorrectionEvidenceFile(null)
+    setCorrectionDialogOpen(true)
+  }
+
+  const closeCorrectionDialog = (open: boolean) => {
+    setCorrectionDialogOpen(open)
+    if (!open && correctionEditing) {
+      setCorrectionEditing(null)
+      setCorrectionForm(createEmptyCorrectionForm())
+      setCorrectionEvidenceFile(null)
     }
   }
 
@@ -5454,8 +5545,18 @@ export function AttendanceActivityView({ section }: { section: string }) {
                               .trim()
                               .toLowerCase()
                             const tone = correctionRequestStatusTone(status)
-                            const canSubmit = status === "draft"
-                            const canCancel = ["draft", "submitted"].includes(status)
+                            const canSubmit = ["draft", "returned_for_correction"].includes(status)
+                            const canCancel = [
+                              "draft",
+                              "submitted",
+                              "pending_manager_approval",
+                              "pending_hr_approval",
+                              "returned_for_correction",
+                            ].includes(status)
+                            const reviewerNote = formatOptionalValue(
+                              readFirstValue(row, ["review_comment", "manager_review_comment"]),
+                              ""
+                            )
                             const requestType = prettifyLabel(
                               readFirstValue(row, ["request_type", "requestType"]) ??
                                 "attendance correction"
@@ -5529,11 +5630,20 @@ export function AttendanceActivityView({ section }: { section: string }) {
                                         tone.label
                                       )}
                                     >
-                                      {status.replace(/[_-]+/g, " ")}
+                                      {getSelfServiceStatusMeta(status)?.label ??
+                                        status.replace(/[_-]+/g, " ")}
                                     </div>
                                     <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                                       {requestType}
                                     </div>
+                                    {status === "returned_for_correction" && reviewerNote ? (
+                                      <div
+                                        className="mt-0.5 line-clamp-2 text-[11px] text-orange-700 dark:text-orange-300"
+                                        title={reviewerNote}
+                                      >
+                                        Fix: {reviewerNote}
+                                      </div>
+                                    ) : null}
                                   </div>
 
                                   <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -5596,12 +5706,22 @@ export function AttendanceActivityView({ section }: { section: string }) {
                                   <div className="flex shrink-0 items-center gap-1.5">
                                     {canSubmit ? (
                                       <button
+                                        className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-border px-2.5 text-[11px] font-medium text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                                        type="button"
+                                        disabled={correctionBusy}
+                                        onClick={() => openCorrectionEditor(row)}
+                                      >
+                                        Edit
+                                      </button>
+                                    ) : null}
+                                    {canSubmit ? (
+                                      <button
                                         className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-border px-2.5 text-[11px] font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                                         type="button"
                                         disabled={correctionBusy}
                                         onClick={() => setPendingCorrectionAction({ id, action: "submit" })}
                                       >
-                                        Submit
+                                        {status === "returned_for_correction" ? "Resubmit" : "Submit"}
                                       </button>
                                     ) : null}
                                     {canCancel ? (
@@ -5970,12 +6090,25 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
       </div>
 
-      <Dialog open={correctionDialogOpen} onOpenChange={setCorrectionDialogOpen}>
+      <Dialog open={correctionDialogOpen} onOpenChange={closeCorrectionDialog}>
         <DialogPopup className="sm:max-w-lg" bodyClassName="!h-full !max-h-none">
           <DialogHeader>
-            <DialogTitle>Request attendance correction</DialogTitle>
-            <DialogDescription>Create a correction request for an incorrect or missing attendance record.</DialogDescription>
+            <DialogTitle>
+              {correctionEditing ? "Edit attendance correction" : "Request attendance correction"}
+            </DialogTitle>
+            <DialogDescription>
+              {correctionEditing?.status === "returned_for_correction"
+                ? "Your reviewer returned this request. Update it and resubmit it for approval."
+                : correctionEditing
+                  ? "Update your draft correction request."
+                  : "Create a correction request for an incorrect or missing attendance record."}
+            </DialogDescription>
           </DialogHeader>
+          {correctionEditing?.reviewerNote ? (
+            <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300">
+              <span className="font-medium">Reviewer note:</span> {correctionEditing.reviewerNote}
+            </div>
+          ) : null}
           <div className="grid gap-4">
             <div className="grid gap-4">
               <label className="grid gap-1.5 text-sm">
@@ -5993,12 +6126,11 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   ariaLabel="Request type"
                   value={correctionForm.request_type}
                   onChange={(value) => setCorrectionForm((current) => ({ ...current, request_type: value }))}
-                  options={[
-                    { value: "check_in", label: "Check in" },
-                    { value: "check_out", label: "Check out" },
-                  ]}
+                  options={CORRECTION_REQUEST_TYPE_OPTIONS}
                 />
               </label>
+              {correctionForm.request_type !== "check_out" &&
+              correctionForm.request_type !== "status_correction" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Requested check-in time</span>
                 <TimeInput
@@ -6008,6 +6140,9 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_in_at: event.target.value }))}
                 />
               </label>
+              ) : null}
+              {correctionForm.request_type !== "check_in" &&
+              correctionForm.request_type !== "status_correction" ? (
               <label className="grid gap-1.5 text-sm">
                 <span className="font-medium text-slate-700">Requested check-out time</span>
                 <TimeInput
@@ -6017,19 +6152,22 @@ export function AttendanceActivityView({ section }: { section: string }) {
                   onChange={(event) => setCorrectionForm((current) => ({ ...current, requested_check_out_at: event.target.value }))}
                 />
               </label>
+              ) : null}
             </div>
+            {correctionForm.request_type === "status_correction" ? (
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Requested status</span>
               <FluentSelect
                 ariaLabel="Requested status"
                 value={correctionForm.requested_status}
                 onChange={(value) => setCorrectionForm((current) => ({ ...current, requested_status: value }))}
-                options={DAILY_SUMMARY_STATUS_OPTIONS.map((status) => ({
+                options={CORRECTION_REQUESTED_STATUS_OPTIONS.map((status) => ({
                   value: status,
                   label: prettifyLabel(status),
                 }))}
               />
             </label>
+            ) : null}
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Reason</span>
               <Textarea
@@ -6062,13 +6200,17 @@ export function AttendanceActivityView({ section }: { section: string }) {
               disabled={correctionBusy}
               onClick={() => void saveCorrectionRequest("draft")}
             >
-              {correctionSaveMode === "draft" ? "Saving…" : "Save as draft"}
+              {correctionSaveMode === "draft"
+                ? "Saving…"
+                : correctionEditing
+                  ? "Save changes"
+                  : "Save as draft"}
             </Button>
             <Button
               appearance="outline"
               type="button"
               disabled={correctionBusy}
-              onClick={() => setCorrectionDialogOpen(false)}
+              onClick={() => closeCorrectionDialog(false)}
             >
               Close
             </Button>
@@ -6078,7 +6220,13 @@ export function AttendanceActivityView({ section }: { section: string }) {
               disabled={correctionBusy}
               onClick={() => void saveCorrectionRequest("submit")}
             >
-              {correctionSaveMode === "submit" ? "Submitting…" : "Create request"}
+              {correctionSaveMode === "submit"
+                ? "Submitting…"
+                : correctionEditing?.status === "returned_for_correction"
+                  ? "Save & resubmit"
+                  : correctionEditing
+                    ? "Save & submit"
+                    : "Create request"}
             </Button>
           </DialogFooter>
         </DialogPopup>

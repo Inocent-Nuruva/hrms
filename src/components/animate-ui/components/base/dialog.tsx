@@ -90,6 +90,7 @@ export interface DialogPopupProps {
   children?: React.ReactNode
   from?: PopupFrom
   showCloseButton?: boolean
+  disableEscapeClose?: boolean
 }
 
 function DialogPopup({
@@ -97,10 +98,20 @@ function DialogPopup({
   bodyClassName,
   children,
   showCloseButton = true,
+  disableEscapeClose = false,
 }: DialogPopupProps) {
   const size = dialogSurfaceSize(className)
   return (
-    <DialogSurface className={className} data-size={size}>
+    <DialogSurface
+      className={className}
+      data-size={size}
+      onKeyDownCapture={(event: React.KeyboardEvent<HTMLElement>) => {
+        if (disableEscapeClose && event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }}
+    >
       <DialogBody
         className={cn(
           "!flex !flex-col gap-3 overflow-y-auto",

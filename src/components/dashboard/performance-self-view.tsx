@@ -528,8 +528,16 @@ export function PerformanceSelfView({
         );
       }
       const results = await Promise.allSettled(tasks);
-      const firstError = results.find((result) => result.status === "rejected");
-      if (firstError && firstError.status === "rejected") {
+      const failedResults = results.filter((result) => result.status === "rejected");
+      const firstError = failedResults[0];
+      // Employee performance is assembled from several independently
+      // permissioned sources. Optional sources must not blank the entire page
+      // when the employee can still see their core performance data.
+      if (
+        firstError?.status === "rejected" &&
+        results.length > 0 &&
+        failedResults.length === results.length
+      ) {
         commit(() =>
           setError(
             workflowFailure(

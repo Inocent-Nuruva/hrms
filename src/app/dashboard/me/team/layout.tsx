@@ -1,15 +1,9 @@
-import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs"
-import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
+import { EmployeeWorkspaceLayout } from "@/components/dashboard/employee-workspace-layout"
 
 export default function SelfTeamLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <div className="flex flex-col gap-0">
-      <DashboardSectionTabs groups={employeeSectionTabGroups} />
-      <div className="min-w-0">{children}</div>
-    </div>
-  )
+  return <EmployeeWorkspaceLayout>{children}</EmployeeWorkspaceLayout>
 }

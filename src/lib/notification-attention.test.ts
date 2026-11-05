@@ -34,6 +34,19 @@ describe("notification attention routing", () => {
   it("keeps absolute evidence links on the employee request page", () => {
     expect(resolveNotificationUrl({ type: "LEAVE_EVIDENCE_REQUIRED", entity_type: "LEAVE_REQUEST", entity_id: 7, action_url: "https://hr.example/dashboard/me/leave/requests?highlight=7" })).toBe("/dashboard/me/leave/requests?highlight=7")
   })
+
+  it("opens absolute onboarding and employee profile links as internal routes", () => {
+    expect(resolveNotificationUrl({
+      type: "ONBOARDING_TASK_COMPLETED",
+      entity_id: 91,
+      action_url: "https://hr.example/dashboard/employees/onboarding?tab=requests&request_id=12",
+    })).toBe("/dashboard/employees/onboarding?tab=requests&request_id=12")
+    expect(resolveNotificationUrl({
+      type: "EMPLOYEE_INVITATION_ACCEPTED",
+      entity_id: 44,
+      action_url: "https://hr.example/dashboard/employees/profile/AIC-EMP-1004",
+    })).toBe("/dashboard/employees/profile/AIC-EMP-1004?highlight=44")
+  })
   it("repairs historical leave links without opening nonexistent pages", () => {
     expect(resolveNotificationUrl({ type: "LEAVE_APPROVAL_REQUIRED", action_url: "https://hr.example/leave/7/review" })).toBe("/dashboard/leave-management/requests?highlight=7")
     expect(resolveNotificationUrl({ type: "LEAVE_APPROVED", action_url: "/leave/7" })).toBe("/dashboard/me/leave/requests?highlight=7")

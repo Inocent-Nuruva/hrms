@@ -30,6 +30,10 @@ export type LeaveWorkflowFormValue = {
   leave_type_id: string
   status: string
   is_default: string
+  /** "" = off */
+  reminder_after_days: string
+  /** "" = off */
+  escalate_after_days: string
 }
 
 export type LeaveWorkflowEditorStep = {
@@ -347,6 +351,33 @@ export function LeaveWorkflowEditorSheet({
           onChange={(event) => onValueChange({ name: event.target.value })}
         />
       </label>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <span>Remind approvers after (days)</span>
+          <input
+            type="number"
+            min={1}
+            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
+            placeholder="Off"
+            value={value.reminder_after_days}
+            onChange={(event) => onValueChange({ reminder_after_days: event.target.value })}
+          />
+          <span className="text-xs font-normal text-slate-500">Repeats every N days while a step is waiting.</span>
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+          <span>Escalate after (days)</span>
+          <input
+            type="number"
+            min={1}
+            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
+            placeholder="Off"
+            value={value.escalate_after_days}
+            onChange={(event) => onValueChange({ escalate_after_days: event.target.value })}
+          />
+          <span className="text-xs font-normal text-slate-500">Adds the waiting approver&apos;s manager (or HR) once.</span>
+        </label>
+      </div>
 
       <div className="grid gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
         <span>Leave type</span>

@@ -4,7 +4,7 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import {
-  ArrowRightIcon, CheckCircle2, FilterIcon, ImageIcon, InfoIcon, RefreshCw, UserRoundIcon, XCircle, XIcon } from "lucide-react";
+  ArrowRightIcon, CheckCircle2, FilterIcon, ImageIcon, InfoIcon, RefreshCw, Undo2, UserRoundIcon, XCircle, XIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -36,12 +36,24 @@ import {
   getHrProfileUpdateApprovalRequest,
   listHrProfileUpdateApprovalRequests,
   rejectHrProfileUpdateRequest,
+  returnHrProfileUpdateRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
+import {
+  SELF_SERVICE_REVIEW_STATUS_OPTIONS,
+  SelfServiceApprovalTimeline,
+  canReviewSelfServiceRequest,
+  getSelfServiceStatusMeta,
+  isFinalApproval,
+  reviewStatusFilterToQuery,
+} from "@/components/dashboard/self-service-approval-timeline"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
@@ -211,6 +223,21 @@ function getRequestId(row: AdminRecord | null) {
 function getStatusMeta(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : ""
   const normalized = raw.toLowerCase()
+  const workflowMeta = getSelfServiceStatusMeta(normalized)
+  if (workflowMeta) {
+    const textClassNames: Record<string, string> = {
+      pending_manager_approval: "text-amber-700 dark:text-amber-400",
+      submitted: "text-amber-700 dark:text-amber-400",
+      pending_hr_approval: "text-sky-700 dark:text-sky-400",
+      returned_for_correction: "text-orange-700 dark:text-orange-400",
+      approved: "text-emerald-700 dark:text-emerald-400",
+      rejected: "text-rose-700 dark:text-rose-400",
+    }
+    return {
+      ...workflowMeta,
+      textClassName: textClassNames[normalized] ?? "text-muted-foreground",
+    }
+  }
 
   if (normalized === "approved") {
     return {
@@ -618,6 +645,11 @@ function ChangeComparison({ rows }: { rows: ChangeRow[] }) {
 }
 
 export function HrProfileUpdateApprovalsView() {
+  const actor = useDashboardActor()
+  useForbiddenRouteGuard(
+    actor.ready &&
+      canAccessDashboardRoute("/dashboard/employees/profile-update-approvals", actor.permissionLabels, actor.accessMode)
+  )
   const searchParams = useSearchParams()
   const highlightedRequestId = React.useMemo(
     () =>
@@ -630,7 +662,7 @@ export function HrProfileUpdateApprovalsView() {
   const [requests, setRequests] = React.useState<AdminRecord[]>([])
   const [selectedRequestId, setSelectedRequestId] = React.useState("")
   const [selectedRequestDetail, setSelectedRequestDetail] = React.useState<AdminRecord | null>(null)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = React.useState("queue")
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -640,7 +672,9 @@ export function HrProfileUpdateApprovalsView() {
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
-  const [actionLoading, setActionLoading] = React.useState<"approve" | "reject" | null>(null)
+  const [actionLoading, setActionLoading] = React.useState<
+    "approve" | "reject" | "return" | null
+  >(null)
   const [reviewOpen, setReviewOpen] = React.useState(false)
 
   const selectedListRequest = React.useMemo(
@@ -829,26 +863,18 @@ export function HrProfileUpdateApprovalsView() {
     setLoading(true)
     setError(null)
     try {
-      // Match attendance-corrections query shape — avoid sortBy/includeHistory flags
-      // that some backends reject with HTTP 400 Bad Request.
-      // "draft" is self-service only; load history and filter client-side.
+      // "queue" lists requests awaiting this reviewer; "all" merges every status.
       const apiStatus =
-        statusFilter === "all" || statusFilter === "draft" ? undefined : statusFilter
+        statusFilter === "all" ? undefined : reviewStatusFilterToQuery(statusFilter)
       const result = await listHrProfileUpdateApprovalRequests(token, {
         page: 1,
         limit: 100,
         status: apiStatus,
-        includeHistory: statusFilter === "all" || statusFilter === "draft",
+        includeHistory: statusFilter === "all",
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
       })
-      const listRows =
-        statusFilter === "draft"
-          ? result.rows.filter((row) => {
-              const status = String(row.status ?? "").trim().toLowerCase()
-              return status === "draft" || status.includes("draft")
-            })
-          : result.rows
+      const listRows = result.rows
       // List payloads often only include employee_id — resolve names for display.
       const enrichedRows = await enrichRowsWithEmployeeNames(token, listRows)
       setRequests(enrichedRows)
@@ -892,7 +918,7 @@ export function HrProfileUpdateApprovalsView() {
     void loadRequests()
   }, [loadRequests])
 
-  const handleDecision = React.useCallback(async (action: "approve" | "reject") => {
+  const handleDecision = React.useCallback(async (action: "approve" | "reject" | "return") => {
     const token = readStoredToken()
     if (!token || !activeRequest) {
       const message = "Authentication required. Please log in again."
@@ -907,8 +933,11 @@ export function HrProfileUpdateApprovalsView() {
     }
 
     const note = decisionComment.trim()
-    if (action === "reject" && !note) {
-      const message = "Add a rejection reason before declining this request."
+    if (action !== "approve" && !note) {
+      const message =
+        action === "reject"
+          ? "Add a rejection reason before declining this request."
+          : "Explain what the employee must correct before returning this request."
       setError(message)
       setFeedback(message)
       showErrorAlert(message)
@@ -919,8 +948,9 @@ export function HrProfileUpdateApprovalsView() {
     setError(null)
     setFeedback(null)
     try {
+      const finalApproval = isFinalApproval(activeRequest)
       const body = {
-        comment: note || (action === "approve" ? "Approved by HR" : "Rejected by HR"),
+        comment: note || (finalApproval ? "Approved by HR" : "Approved by manager"),
         metadata: {
           reviewed_from: "HR_PORTAL",
         },
@@ -928,14 +958,20 @@ export function HrProfileUpdateApprovalsView() {
 
       if (action === "approve") {
         await approveHrProfileUpdateRequest(token, requestId, body)
-      } else {
+      } else if (action === "reject") {
         await rejectHrProfileUpdateRequest(token, requestId, body)
+      } else {
+        await returnHrProfileUpdateRequest(token, requestId, body)
       }
 
       const successMessage =
         action === "approve"
-          ? "Profile update approved and applied to the employee record."
-          : "Profile update request rejected."
+          ? finalApproval
+            ? "Profile update approved and applied to the employee record."
+            : "Profile update approved and forwarded to HR for final approval."
+          : action === "reject"
+            ? "Profile update request rejected."
+            : "Profile update request returned to the employee."
       setFeedback(successMessage)
       setDecisionComment("")
       showSuccessAlert(successMessage)
@@ -983,14 +1019,17 @@ export function HrProfileUpdateApprovalsView() {
 
   const activeFilterCount = React.useMemo(() => {
     let count = 0
-    if (statusFilter !== "all") count += 1
+    if (statusFilter !== "queue") count += 1
     if (dateFrom.trim()) count += 1
     if (dateTo.trim()) count += 1
     return count
   }, [dateFrom, dateTo, statusFilter])
 
+  const canDecide = canReviewSelfServiceRequest(activeRequest)
+  const finalApproval = isFinalApproval(activeRequest)
+
   const clearFilters = React.useCallback(() => {
-    setStatusFilter("all")
+    setStatusFilter("queue")
     setDateFrom("")
     setDateTo("")
     setSearchQuery("")
@@ -1105,13 +1144,11 @@ export function HrProfileUpdateApprovalsView() {
                         <SelectValue placeholder="All statuses" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All (incl. history)</SelectItem>
-                        <SelectItem value="submitted">Submitted</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        {SELF_SERVICE_REVIEW_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1174,9 +1211,9 @@ export function HrProfileUpdateApprovalsView() {
         {!loading && filteredRequests.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {requests.length === 0
-              ? statusFilter === "all"
-                ? "No profile update requests yet — pending and past decisions will appear here."
-                : `No ${statusFilter} profile update requests match the current filters.`
+              ? statusFilter === "queue"
+                ? "No profile update requests are awaiting your review."
+                : "No profile update requests match the current filters."
               : "No requests match your search."}
           </p>
         ) : null}
@@ -1303,31 +1340,38 @@ export function HrProfileUpdateApprovalsView() {
                   <ChangeComparison rows={changeRows} />
                 </div>
 
+                <SelfServiceApprovalTimeline
+                  history={activeRequest.approval_history}
+                  className="border-t border-border/70 pt-4"
+                />
+
                 <div className="space-y-2.5 border-t border-border/70 pt-4">
                   <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
-                    HR note
+                    {finalApproval ? "HR note" : "Reviewer note"}
                   </p>
                   <Textarea
                     className="min-h-[5.5rem] resize-y text-sm"
                     placeholder={
-                      statusMeta.terminal
-                        ? "This request is already closed."
-                        : "Optional note for approval — required clarity on rejection."
+                      canDecide
+                        ? "Optional note for approval — required for rejection or return."
+                        : "This request is not awaiting your decision."
                     }
                     value={decisionComment}
                     onChange={(event) => setDecisionComment(event.target.value)}
-                    disabled={statusMeta.terminal || actionLoading !== null}
+                    disabled={!canDecide || actionLoading !== null}
                   />
                   <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-sky-700 dark:text-sky-300">
                     <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
                     <span>
-                      Approve applies changes to the employee record. Reject with a clear reason so
-                      they know what to fix.
+                      {finalApproval
+                        ? "Final approval applies changes to the employee record."
+                        : "Approval forwards the request to HR for final approval."}{" "}
+                      Reject or return with a clear reason so they know what to fix.
                     </span>
                   </p>
                 </div>
 
-                {!statusMeta.terminal ? (
+                {canDecide ? (
                   <div className="flex flex-wrap gap-2 border-t border-border/70 pt-4">
                     <button
                       type="button"
@@ -1340,7 +1384,20 @@ export function HrProfileUpdateApprovalsView() {
                       ) : (
                         <CheckCircle2 className="size-4" />
                       )}
-                      Approve
+                      {finalApproval ? "Final approve" : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-orange-300/80 bg-background px-4 text-sm font-semibold text-orange-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-orange-300 dark:hover:bg-orange-950/40 sm:flex-none"
+                      onClick={() => void handleDecision("return")}
+                      disabled={actionLoading !== null}
+                    >
+                      {actionLoading === "return" ? (
+                        <FluentLoadingIndicator className="size-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="size-4" />
+                      )}
+                      Return
                     </button>
                     <button
                       type="button"

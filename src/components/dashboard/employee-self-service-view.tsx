@@ -7,10 +7,6 @@ import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-pr
 import * as React from "react"
 import { motion } from "framer-motion"
 import {
-  Accordion,
-  AccordionHeader,
-  AccordionItem,
-  AccordionPanel,
   Badge as FluentBadge,
   Button as FluentButton,
   Card as FluentCard,
@@ -28,6 +24,7 @@ import {
   Textarea as FluentTextarea,
   makeStyles,
   Persona,
+  PresenceBadge,
   ProgressBar,
   Tab,
   TabList,
@@ -49,6 +46,12 @@ import {
   YAxis,
 } from "recharts"
 import {
+  Briefcase20Regular,
+  Building20Regular,
+  PeopleTeam20Regular,
+  Calendar20Regular,
+  Person20Regular,
+  Location20Regular,
   Briefcase20Color,
   Building20Color,
   CalendarClock20Color,
@@ -59,7 +62,15 @@ import {
   DocumentRegular as PayrollDocumentIcon,
   EyeRegular as PayrollDetailsIcon,
   WalletRegular as PayrollWalletIcon,
+  BuildingBank20Regular,
+  History20Regular,
+  Money20Regular,
+  PersonMoney20Regular,
+  ReceiptMoney20Regular,
+  Savings20Regular,
+  ShieldCheckmark20Regular,
   Camera20Color,
+  Add20Regular,
   ContactCard20Color,
   ContactCard20Regular,
   Edit16Regular,
@@ -71,6 +82,7 @@ import {
   DocumentPdf20Regular,
   Eye20Regular,
   Send20Regular,
+  Edit20Regular,
   Dismiss20Regular,
   Save20Regular,
 } from "@fluentui/react-icons"
@@ -108,6 +120,8 @@ import {
   listMyLeaveRequests,
   listLeaveTypes,
   createMyProfileChangeRequest,
+  createMyEmployeeSectionItem,
+  listCompanyBanks,
   getMyProfileChangeRequest,
   submitMyProfileChangeRequest,
   cancelMyProfileChangeRequest,
@@ -120,6 +134,9 @@ import {
   getMyPayslip,
   getMyPayrollSummary,
   submitMyLeaveRequest,
+  updateMyLeaveRequest,
+  resubmitMyLeaveRequest,
+  endLeaveEarly,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
   listSelectableAvatarsForMe,
@@ -137,7 +154,6 @@ import {
 } from "@/lib/my-profile-photo"
 import { AUTH_STORAGE_KEYS, resolveApiBaseUrl } from "@/utils/constants"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
@@ -153,6 +169,8 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
+import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
+import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -787,10 +805,38 @@ function resolveLeaveStatusMeta(value: unknown) {
     }
   }
 
-  if (["pending", "submitted", "in_review", "under_review"].includes(normalized)) {
+  if (normalized === "returned_for_correction") {
+    return {
+      key: "returned" as const,
+      label: "Returned",
+      badgeClassName: "bg-orange-500/12 text-orange-800 dark:text-orange-300",
+      helperText: "Needs your changes — edit and resubmit",
+      textClassName: "text-orange-700 dark:text-orange-300",
+      barClassName: "bg-orange-500",
+      chipClassName: "bg-orange-500/10 text-orange-800 dark:text-orange-300",
+    }
+  }
+
+  if (
+    [
+      "pending",
+      "submitted",
+      "in_review",
+      "under_review",
+      "pending_department_manager",
+      "pending_hr",
+    ].includes(normalized)
+  ) {
     return {
       key: "pending" as const,
-      label: raw.replace(/_/g, " ") || "Pending",
+      label:
+        normalized === "pending_department_manager"
+          ? "Pending manager"
+          : normalized === "pending_hr"
+            ? "Pending HR"
+            : normalized === "in_review"
+              ? "Pending management"
+              : raw.replace(/_/g, " ") || "Pending",
       badgeClassName: "bg-amber-500/12 text-amber-800 dark:text-amber-300",
       helperText: "Awaiting review",
       textClassName: "text-amber-700 dark:text-amber-300",
@@ -1670,15 +1716,6 @@ function useSelfEmployeeData() {
   }
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-2.5 text-[13px]">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right font-medium leading-tight text-foreground">{value}</span>
-    </div>
-  )
-}
-
 // Doodles / decorative backgrounds (from reference, for visual interest on stat and info cards)
 function DoodleSprites() {
   return (
@@ -1820,18 +1857,56 @@ type EditableUserField =
   | "user_no"
   | "status"
   | "profile_photo_url"
+  | "personal_phone_number"
+  | "personal_email"
+  | "address_line_1"
+  | "address_line_2"
+  | "state"
+  | "country"
+  | "postal_code"
+  | "emergency_contact_name"
+  | "emergency_contact_relationship"
+  | "emergency_contact_phone"
+  | "emergency_contact_email"
+  | "emergency_contact_address"
+  | "emergency_contact_occupation"
 
 type SectionEditorState = {
   key: string
   title: string
   fields: EditableUserField[]
+  requestType?: "CONTACT_INFORMATION" | "ADDRESS_INFORMATION" | "EMERGENCY_CONTACT"
 }
 
 function getEditableFieldLabel(field: EditableUserField) {
   if (field === "profile_photo_url") {
     return "Profile picture"
   }
+  const labels: Partial<Record<EditableUserField, string>> = {
+    personal_phone_number: "Phone number",
+    personal_email: "Email address",
+    address_line_1: "Address",
+    address_line_2: "Address line 2",
+    state: "State / region",
+    emergency_contact_name: "Full name",
+    emergency_contact_relationship: "Relationship",
+    emergency_contact_phone: "Phone number",
+    emergency_contact_email: "Email address",
+    emergency_contact_address: "Address",
+    emergency_contact_occupation: "Occupation",
+  }
+  if (labels[field]) return labels[field]
   return field.replaceAll("_", " ")
+}
+
+function isRequiredPersonalRecordField(field: EditableUserField) {
+  return [
+    "address_line_1",
+    "city",
+    "emergency_contact_name",
+    "emergency_contact_relationship",
+    "emergency_contact_phone",
+  ].includes(field)
 }
 
 type ApiErrorWithPayload = Error & {
@@ -2157,8 +2232,125 @@ const SELF_SERVICE_SECTION_TAB_LABELS: Record<string, string> = {
   company_user: "User",
 }
 
+const TANZANIA_LICENSED_BANKS = [
+  "Absa Bank Tanzania Limited",
+  "Access Bank Tanzania Limited",
+  "Akiba Commercial Bank Plc",
+  "Amana Bank Limited",
+  "Azania Bank Limited",
+  "Bank of Africa Tanzania Limited",
+  "Bank of Baroda Tanzania Limited",
+  "Bank of India Tanzania Limited",
+  "China Dasheng Bank Limited",
+  "Citibank Tanzania Limited",
+  "Cooperative Bank of Tanzania Limited",
+  "CRDB Bank Plc",
+  "DCB Commercial Bank Plc",
+  "Diamond Trust Bank Tanzania Plc",
+  "Ecobank Tanzania Limited",
+  "Equity Bank Tanzania Limited",
+  "Exim Bank Tanzania Limited",
+  "Guaranty Trust Bank Tanzania Limited",
+  "Habib African Bank Limited",
+  "I&M Bank Tanzania Limited",
+  "International Commercial Bank Tanzania Limited",
+  "KCB Bank Tanzania Limited",
+  "Letshego Faidika Bank Tanzania Limited",
+  "Mkombozi Commercial Bank Plc",
+  "Mwalimu Commercial Bank Plc",
+  "Mwanga Hakika Bank Limited",
+  "National Bank of Commerce Limited",
+  "NMB Bank Plc",
+  "NCBA Bank Tanzania Limited",
+  "People's Bank of Zanzibar Limited",
+  "Stanbic Bank Tanzania Limited",
+  "Standard Chartered Bank Tanzania Limited",
+  "Tanzania Commercial Bank Plc",
+  "United Bank for Africa Tanzania Limited",
+] as const
+
+const TANZANIA_BANK_LOGO_DOMAINS: Record<(typeof TANZANIA_LICENSED_BANKS)[number], string> = {
+  "Absa Bank Tanzania Limited": "absa.co.tz",
+  "Access Bank Tanzania Limited": "accessbank.co.tz",
+  "Akiba Commercial Bank Plc": "acbtz.co.tz",
+  "Amana Bank Limited": "amanabank.co.tz",
+  "Azania Bank Limited": "azaniabank.co.tz",
+  "Bank of Africa Tanzania Limited": "boatanzania.co.tz",
+  "Bank of Baroda Tanzania Limited": "bankofbaroda.co.tz",
+  "Bank of India Tanzania Limited": "bankofindia.co.tz",
+  "China Dasheng Bank Limited": "chinadashengbank.co.tz",
+  "Citibank Tanzania Limited": "citi.com",
+  "Cooperative Bank of Tanzania Limited": "coopbank.co.tz",
+  "CRDB Bank Plc": "crdbbank.co.tz",
+  "DCB Commercial Bank Plc": "dcb.co.tz",
+  "Diamond Trust Bank Tanzania Plc": "diamondtrust.co.tz",
+  "Ecobank Tanzania Limited": "ecobank.com",
+  "Equity Bank Tanzania Limited": "equitybank.co.tz",
+  "Exim Bank Tanzania Limited": "eximbank.co.tz",
+  "Guaranty Trust Bank Tanzania Limited": "gtbank.co.tz",
+  "Habib African Bank Limited": "habibafricanbank.co.tz",
+  "I&M Bank Tanzania Limited": "imbank.co.tz",
+  "International Commercial Bank Tanzania Limited": "icbank.co.tz",
+  "KCB Bank Tanzania Limited": "kcbgroup.com",
+  "Letshego Faidika Bank Tanzania Limited": "letshego.co.tz",
+  "Mkombozi Commercial Bank Plc": "mkombozibank.co.tz",
+  "Mwalimu Commercial Bank Plc": "mwalimubank.co.tz",
+  "Mwanga Hakika Bank Limited": "mwangahakikabank.co.tz",
+  "National Bank of Commerce Limited": "nbc.co.tz",
+  "NMB Bank Plc": "nmbbank.co.tz",
+  "NCBA Bank Tanzania Limited": "ncbagroup.co.tz",
+  "People's Bank of Zanzibar Limited": "pbzbank.co.tz",
+  "Stanbic Bank Tanzania Limited": "stanbicbank.co.tz",
+  "Standard Chartered Bank Tanzania Limited": "sc.com",
+  "Tanzania Commercial Bank Plc": "tcbbank.co.tz",
+  "United Bank for Africa Tanzania Limited": "ubagroup.com",
+}
+
+function getTanzaniaBankLogoUrl(bank: (typeof TANZANIA_LICENSED_BANKS)[number]) {
+  return `https://${TANZANIA_BANK_LOGO_DOMAINS[bank]}/favicon.ico`
+}
+
+function TanzaniaBankLogo({
+  bank,
+  className,
+}: {
+  bank: (typeof TANZANIA_LICENSED_BANKS)[number]
+  className?: string
+}) {
+  const initials = bank
+    .split(/\s+/)
+    .filter((word) => !["bank", "tanzania", "limited", "plc"].includes(word.toLowerCase()))
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase() || "B"
+
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "relative inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-primary/10 text-[8px] font-bold text-primary",
+        className,
+      )}
+    >
+      {initials}
+      {/* Institution favicons are decorative, externally hosted, and intentionally not image-optimized. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={getTanzaniaBankLogoUrl(bank)}
+        alt=""
+        className="absolute inset-0 size-full bg-white object-contain"
+        onError={(event) => {
+          event.currentTarget.style.display = "none"
+        }}
+      />
+    </span>
+  )
+}
+
 function SelfServiceProfileSectionTabs({
   sections,
+  initialSectionId,
 }: {
   sections: Array<{
     id: string
@@ -2166,15 +2358,24 @@ function SelfServiceProfileSectionTabs({
     count: number
     content: React.ReactNode
   }>
+  initialSectionId?: string
 }) {
-  const [activeId, setActiveId] = React.useState(sections[0]?.id ?? "")
+  const [activeId, setActiveId] = React.useState(
+    sections.some((section) => section.id === initialSectionId)
+      ? initialSectionId ?? ""
+      : sections[0]?.id ?? ""
+  )
   const active = sections.find((section) => section.id === activeId) ?? sections[0]
 
   React.useEffect(() => {
+    if (initialSectionId && sections.some((section) => section.id === initialSectionId)) {
+      setActiveId(initialSectionId)
+      return
+    }
     if (!sections.some((section) => section.id === activeId) && sections[0]) {
       setActiveId(sections[0].id)
     }
-  }, [activeId, sections])
+  }, [activeId, initialSectionId, sections])
 
   if (!active) return null
 
@@ -2622,7 +2823,7 @@ function ProfilePersonalTab({
   onRequestAdd,
 }: {
   employee: AdminRecord
-  onRequestAdd: () => void
+  onRequestAdd: (kind: "contact" | "address" | "relative") => void
 }) {
   const contacts = asRecordList(employee.contacts)
   const addresses = asRecordList(employee.addresses)
@@ -2700,7 +2901,7 @@ function ProfilePersonalTab({
                       message="No contacts available yet. Send the details to HR for approval."
                       actionLabel="Add contact"
                       icon={<ContactCard20Regular />}
-                      onAction={onRequestAdd}
+                      onAction={() => onRequestAdd("contact")}
                     />
                   )}
                 </SelfServiceSectionCard>
@@ -2736,7 +2937,7 @@ function ProfilePersonalTab({
                       message="No addresses available yet. Send an address to HR for approval."
                       actionLabel="Add address"
                       icon={<LocationAdd20Regular />}
-                      onAction={onRequestAdd}
+                      onAction={() => onRequestAdd("address")}
                     />
                   )}
                 </SelfServiceSectionCard>
@@ -2775,7 +2976,7 @@ function ProfilePersonalTab({
                       message="No relatives available yet. Send an emergency contact to HR for approval."
                       actionLabel="Add relative"
                       icon={<PeopleAdd20Regular />}
-                      onAction={onRequestAdd}
+                      onAction={() => onRequestAdd("relative")}
                     />
                   )}
                 </SelfServiceSectionCard>
@@ -2793,10 +2994,16 @@ function ProfileRecordsTab({
   employee,
   correctionRequests,
   teamAttendance,
+  initialSectionId,
+  token,
+  onRefresh,
 }: {
   employee: AdminRecord | null
   correctionRequests: AdminRecord[]
   teamAttendance: AdminRecord[]
+  initialSectionId?: string
+  token: string
+  onRefresh: () => Promise<void>
 }) {
   const identifications = asRecordList(employee?.identifications)
   const bankAccounts = asRecordList(employee?.bank_accounts)
@@ -2804,6 +3011,73 @@ function ProfileRecordsTab({
   const professional = asRecordList(employee?.professional_qualifications)
   const experience = asRecordList(employee?.experience_details)
   const documents = asRecordList(employee?.documents)
+  const [bankDialogOpen, setBankDialogOpen] = React.useState(false)
+  const [manualBankName, setManualBankName] = React.useState(false)
+  const [companyBanks, setCompanyBanks] = React.useState<AdminRecord[]>([])
+  const [bankSaving, setBankSaving] = React.useState(false)
+  const [bankError, setBankError] = React.useState("")
+  const [bankDraft, setBankDraft] = React.useState({
+    bank_name: "",
+    account_name: "",
+    account_number: "",
+    branch_name: "",
+    account_currency: "TZS",
+    is_primary: false,
+  })
+
+  React.useEffect(() => {
+    if (!token) return
+    void listCompanyBanks(token).then(setCompanyBanks).catch(() => setCompanyBanks([]))
+  }, [token])
+
+  const bankChoices = React.useMemo(() => {
+    const choices = TANZANIA_LICENSED_BANKS.map((name) => ({ name, logo_url: "" }))
+    for (const record of companyBanks) {
+      const name = readString(record, ["name"], "").trim()
+      if (!name || choices.some((choice) => choice.name.toLowerCase() === name.toLowerCase())) continue
+      choices.push({ name: name as (typeof TANZANIA_LICENSED_BANKS)[number], logo_url: readString(record, ["logo_url"], "") })
+    }
+    return choices
+  }, [companyBanks])
+  const selectedBankChoice = bankChoices.find((choice) => choice.name === bankDraft.bank_name)
+
+  async function saveBankAccount() {
+    if (!bankDraft.bank_name.trim() || !bankDraft.account_number.trim()) {
+      setBankError("Bank name and account number are required.")
+      return
+    }
+    if (!token) {
+      setBankError("Your session has expired. Please sign in again.")
+      return
+    }
+    setBankSaving(true)
+    setBankError("")
+    try {
+      await createMyEmployeeSectionItem(token, "bank-accounts", {
+        bank_name: bankDraft.bank_name.trim(),
+        account_name: bankDraft.account_name.trim() || undefined,
+        account_number: bankDraft.account_number.trim(),
+        branch_name: bankDraft.branch_name.trim() || undefined,
+        account_currency: bankDraft.account_currency.trim().toUpperCase() || "TZS",
+        is_primary: bankDraft.is_primary,
+      })
+      await onRefresh()
+      setBankDialogOpen(false)
+      setManualBankName(false)
+      setBankDraft({
+        bank_name: "",
+        account_name: "",
+        account_number: "",
+        branch_name: "",
+        account_currency: "TZS",
+        is_primary: false,
+      })
+    } catch (errorObject) {
+      setBankError(errorObject instanceof Error ? errorObject.message : "Could not add the bank account.")
+    } finally {
+      setBankSaving(false)
+    }
+  }
 
   const pendingCorrections = correctionRequests.filter((row) => {
     const status = readString(row, ["status"], "").toLowerCase()
@@ -2812,7 +3086,7 @@ function ProfileRecordsTab({
 
   return (
     <FluentCard appearance="outline" size="small" className={cn(pageBleedClass, "!flex-col !items-stretch !gap-5 !rounded-none !border-x-0 !border-border/70 !bg-card !p-4 shadow-sm sm:!border-x sm:!p-5")}>
-    <motion.div className="space-y-4" variants={profileTabStagger} initial="hidden" animate="show">
+    <motion.div className="flex flex-col gap-4" variants={profileTabStagger} initial="hidden" animate="show">
       <motion.div
         variants={profileTabItem}
         className="inline-flex max-w-full flex-nowrap items-stretch overflow-x-auto border-b border-border/60"
@@ -2948,8 +3222,9 @@ function ProfileRecordsTab({
       </motion.div>
 
       {employee ? (
-        <motion.div variants={profileTabItem}>
+        <motion.div variants={profileTabItem} className="order-first">
           <SelfServiceProfileSectionTabs
+            initialSectionId={initialSectionId}
             sections={[
               {
                 id: "identifications",
@@ -2983,7 +3258,13 @@ function ProfileRecordsTab({
                 title: "Bank Accounts",
                 count: bankAccounts.length,
                 content: (
-                  <SelfServiceSectionCard title="Bank Accounts" count={bankAccounts.length}>
+                  <div className="space-y-3">
+                    <div className="flex justify-end">
+                      <FluentButton appearance="primary" icon={<Add20Regular />} onClick={() => setBankDialogOpen(true)}>
+                        Add bank account
+                      </FluentButton>
+                    </div>
+                    <SelfServiceSectionCard title="Bank Accounts" count={bankAccounts.length}>
                     {bankAccounts.length ? (
                       bankAccounts.map((record, index) => (
                         <ProfileDataItem
@@ -2998,14 +3279,16 @@ function ProfileRecordsTab({
                               label: "Account number",
                               value: readString(record, ["account_number"], "—"),
                             },
-                            { label: "Currency", value: readString(record, ["currency"], "—") },
+                            { label: "Currency", value: readString(record, ["account_currency", "currency"], "—") },
+                            { label: "Status", value: readString(record, ["verification_status"], "Pending") },
                           ]}
                         />
                       ))
                     ) : (
                       <ProfileEmptyRow message="No bank accounts available." />
                     )}
-                  </SelfServiceSectionCard>
+                    </SelfServiceSectionCard>
+                  </div>
                 ),
               },
               {
@@ -3131,6 +3414,120 @@ function ProfileRecordsTab({
         </motion.div>
       ) : null}
     </motion.div>
+      <Dialog open={bankDialogOpen} onOpenChange={setBankDialogOpen}>
+        <DialogPopup from="bottom" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add bank account</DialogTitle>
+            <DialogDescription>Add the account used for payroll. HR must verify it before payroll can use it.</DialogDescription>
+          </DialogHeader>
+          <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            {[
+              ["bank_name", "Bank name *"],
+              ["account_name", "Account name"],
+              ["account_number", "Account number *"],
+              ["branch_name", "Branch name"],
+              ["account_currency", "Currency"],
+            ].map(([field, label]) => (
+              <div key={field} className={cn("min-w-0 space-y-1", field === "account_number" && "sm:col-span-2")}>
+                <Label htmlFor={`bank-${field}`}>{label}</Label>
+                {field === "bank_name" ? (
+                  <div className="relative min-w-0">
+                    {manualBankName ? (
+                      <div className="flex min-w-0 gap-2">
+                        <Input
+                          id="bank-bank_name"
+                          autoFocus
+                          placeholder="Enter bank name"
+                          value={bankDraft.bank_name}
+                          onChange={(event) => setBankDraft((current) => ({ ...current, bank_name: event.target.value }))}
+                        />
+                        <Button type="button" variant="outline" onClick={() => {
+                          setManualBankName(false)
+                          setBankDraft((current) => ({ ...current, bank_name: "" }))
+                        }}>Choose list</Button>
+                      </div>
+                    ) : (
+                      <>
+                    {bankDraft.bank_name && TANZANIA_LICENSED_BANKS.includes(bankDraft.bank_name as (typeof TANZANIA_LICENSED_BANKS)[number]) ? (
+                      <TanzaniaBankLogo
+                        bank={bankDraft.bank_name as (typeof TANZANIA_LICENSED_BANKS)[number]}
+                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2"
+                      />
+                    ) : selectedBankChoice?.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={resolveBackendMediaUrl(selectedBankChoice.logo_url) ?? undefined}
+                        alt=""
+                        className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-5 -translate-y-1/2 rounded-sm object-contain"
+                      />
+                    ) : null}
+                    <FluentDropdown
+                      id="bank-bank_name"
+                      aria-label="Bank name"
+                      placeholder="Select a Tanzanian bank"
+                      className="!w-full !min-w-0"
+                      button={{ className: cn("!w-full !min-w-0", bankDraft.bank_name && "!pl-10") }}
+                      value={bankDraft.bank_name}
+                      selectedOptions={bankDraft.bank_name ? [bankDraft.bank_name] : []}
+                      onOptionSelect={(_, data) => {
+                        if (data.optionValue === "__other__") {
+                          setManualBankName(true)
+                          setBankDraft((current) => ({ ...current, bank_name: "" }))
+                          return
+                        }
+                        setBankDraft((current) => ({ ...current, bank_name: data.optionValue ?? "" }))
+                      }}
+                    >
+                      <FluentOption value="__other__" text="Other bank">
+                        <span className="flex items-center gap-2.5"><Add20Regular />Other bank — enter manually</span>
+                      </FluentOption>
+                      {bankChoices.map((choice) => (
+                        <FluentOption key={choice.name} value={choice.name} text={choice.name}>
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            {TANZANIA_LICENSED_BANKS.includes(choice.name as (typeof TANZANIA_LICENSED_BANKS)[number]) ? (
+                              <TanzaniaBankLogo bank={choice.name as (typeof TANZANIA_LICENSED_BANKS)[number]} />
+                            ) : choice.logo_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={resolveBackendMediaUrl(choice.logo_url) ?? undefined} alt="" className="size-5 shrink-0 rounded-sm object-contain" />
+                            ) : (
+                              <BuildingBank20Regular className="size-5 shrink-0 text-primary" />
+                            )}
+                            <span className="truncate">{choice.name}</span>
+                          </span>
+                        </FluentOption>
+                      ))}
+                    </FluentDropdown>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <Input
+                    id={`bank-${field}`}
+                    value={String(bankDraft[field as keyof typeof bankDraft])}
+                    onChange={(event) => setBankDraft((current) => ({ ...current, [field]: event.target.value }))}
+                  />
+                )}
+              </div>
+            ))}
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={bankDraft.is_primary}
+                onChange={(event) => setBankDraft((current) => ({ ...current, is_primary: event.target.checked }))}
+              />
+              Make this my primary bank account
+            </label>
+            {bankError ? <p className="text-sm text-destructive sm:col-span-2">{bankError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={bankSaving} onClick={() => setBankDialogOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={bankSaving} onClick={() => void saveBankAccount()}>
+              {bankSaving ? <FluentLoadingIndicator className="mr-1 size-4 animate-spin" /> : null}
+              Add account
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </FluentCard>
   )
 }
@@ -3943,6 +4340,19 @@ export function EmployeeSelfServiceProfileView() {
     user_no: "",
     status: "",
     profile_photo_url: "",
+    personal_phone_number: "",
+    personal_email: "",
+    address_line_1: "",
+    address_line_2: "",
+    state: "",
+    country: "",
+    postal_code: "",
+    emergency_contact_name: "",
+    emergency_contact_relationship: "",
+    emergency_contact_phone: "",
+    emergency_contact_email: "",
+    emergency_contact_address: "",
+    emergency_contact_occupation: "",
   })
   const profilePhotoInputRef = React.useRef<HTMLInputElement | null>(null)
   const baseEditorValues = React.useMemo(
@@ -3968,12 +4378,30 @@ export function EmployeeSelfServiceProfileView() {
         readString(employee, ["user_no", "employee_no", "employeeId"], ""),
       status: readString(currentUser, ["status"], "") || readString(employee, ["employment_status"], ""),
       profile_photo_url: resolveProfilePhotoUrl(currentUser, employee, myProfilePhotoUrl),
+      personal_phone_number: "",
+      personal_email: "",
+      address_line_1: "",
+      address_line_2: "",
+      state: "",
+      country: "",
+      postal_code: "",
+      emergency_contact_name: "",
+      emergency_contact_relationship: "",
+      emergency_contact_phone: "",
+      emergency_contact_email: "",
+      emergency_contact_address: "",
+      emergency_contact_occupation: "",
     }),
     [currentUser, employee, myProfilePhotoUrl]
   )
 
   const openSectionEditor = React.useCallback(
-    (key: string, title: string, fields: EditableUserField[]) => {
+    (
+      key: string,
+      title: string,
+      fields: EditableUserField[],
+      requestType?: SectionEditorState["requestType"],
+    ) => {
       setSectionError(null)
       setSectionErrorLines([])
       setProfilePhotoPreviewUrl("")
@@ -3981,7 +4409,7 @@ export function EmployeeSelfServiceProfileView() {
       setSelectedProfilePhotoFile(null)
       setSelectedDefaultAvatarId(null)
       setSectionValues(baseEditorValues)
-      setSectionEditor({ key, title, fields })
+      setSectionEditor({ key, title, fields, requestType })
     },
     [baseEditorValues]
   )
@@ -4272,23 +4700,57 @@ export function EmployeeSelfServiceProfileView() {
       setSectionErrorLines([])
       return
     }
+    if (
+      sectionEditor.requestType === "CONTACT_INFORMATION" &&
+      !requestedChanges.personal_phone_number &&
+      !requestedChanges.personal_email
+    ) {
+      setSectionError("Add a phone number or email address.")
+      setSectionErrorLines([])
+      return
+    }
+    if (
+      sectionEditor.requestType === "ADDRESS_INFORMATION" &&
+      (!requestedChanges.address_line_1 || !requestedChanges.city)
+    ) {
+      setSectionError("Address and city are required.")
+      setSectionErrorLines([])
+      return
+    }
+    if (
+      sectionEditor.requestType === "EMERGENCY_CONTACT" &&
+      (!requestedChanges.emergency_contact_name ||
+        !requestedChanges.emergency_contact_relationship ||
+        !requestedChanges.emergency_contact_phone)
+    ) {
+      setSectionError("Name, relationship, and phone are required.")
+      setSectionErrorLines([])
+      return
+    }
     setSectionSaving(true)
     setSectionError(null)
     setSectionErrorLines([])
     try {
       const groups: Array<{ request_type: string; changes: AdminRecord }> = []
-      const fieldGroups: Array<[string, string[]]> = [
-        ["PERSONAL_INFORMATION", ["first_name", "last_name"]],
-        ["CONTACT_INFORMATION", ["email", "phone"]],
-        ["ADDRESS_INFORMATION", ["city"]],
-      ]
-      for (const [request_type, fields] of fieldGroups) {
-        const changes = Object.fromEntries(
-          fields
-            .filter((field) => field in requestedChanges)
-            .map((field) => [field, requestedChanges[field]]),
-        )
-        if (Object.keys(changes).length) groups.push({ request_type, changes })
+      if (sectionEditor.requestType) {
+        groups.push({
+          request_type: sectionEditor.requestType,
+          changes: requestedChanges,
+        })
+      } else {
+        const fieldGroups: Array<[string, string[]]> = [
+          ["PERSONAL_INFORMATION", ["first_name", "last_name"]],
+          ["CONTACT_INFORMATION", ["email", "phone"]],
+          ["ADDRESS_INFORMATION", ["city"]],
+        ]
+        for (const [request_type, fields] of fieldGroups) {
+          const changes = Object.fromEntries(
+            fields
+              .filter((field) => field in requestedChanges)
+              .map((field) => [field, requestedChanges[field]]),
+          )
+          if (Object.keys(changes).length) groups.push({ request_type, changes })
+        }
       }
       if (!groups.length) throw new Error("No supported personal profile changes were selected.")
 
@@ -4598,7 +5060,46 @@ export function EmployeeSelfServiceProfileView() {
           {activeTab === "personal" && employee ? (
             <ProfilePersonalTab
               employee={employee}
-              onRequestAdd={() => router.push("/dashboard/me/requests/profile-changes")}
+              onRequestAdd={(kind) => {
+                if (kind === "contact") {
+                  openSectionEditor(
+                    "add-contact",
+                    "Contact",
+                    ["personal_phone_number", "personal_email"],
+                    "CONTACT_INFORMATION",
+                  )
+                  return
+                }
+                if (kind === "address") {
+                  openSectionEditor(
+                    "add-address",
+                    "Address",
+                    [
+                      "address_line_1",
+                      "address_line_2",
+                      "city",
+                      "state",
+                      "postal_code",
+                      "country",
+                    ],
+                    "ADDRESS_INFORMATION",
+                  )
+                  return
+                }
+                openSectionEditor(
+                  "add-relative",
+                  "Emergency Contact",
+                  [
+                    "emergency_contact_name",
+                    "emergency_contact_relationship",
+                    "emergency_contact_phone",
+                    "emergency_contact_email",
+                    "emergency_contact_address",
+                    "emergency_contact_occupation",
+                  ],
+                  "EMERGENCY_CONTACT",
+                )
+              }}
             />
           ) : null}
 
@@ -4607,6 +5108,9 @@ export function EmployeeSelfServiceProfileView() {
               employee={employee}
               correctionRequests={correctionRequests}
               teamAttendance={teamAttendance}
+              initialSectionId={searchParams?.get("section") ?? undefined}
+              token={token}
+              onRefresh={refresh}
             />
           ) : null}
 
@@ -4627,12 +5131,27 @@ export function EmployeeSelfServiceProfileView() {
             <DialogPopup from="bottom" className="sm:max-w-xl">
               <DialogHeader>
                 {openedFromSettings ? <BackToSettingsLink /> : null}
-                <DialogTitle>{sectionEditor ? `Edit ${sectionEditor.title}` : "Edit Section"}</DialogTitle>
+                <DialogTitle>
+                  {sectionEditor
+                    ? `${sectionEditor.key.startsWith("add-") ? "Add" : "Edit"} ${sectionEditor.title}`
+                    : "Edit Section"}
+                </DialogTitle>
+                {sectionEditor?.requestType ? (
+                  <DialogDescription>
+                    Enter the details below. They will be sent to HR for approval before appearing on your profile.
+                  </DialogDescription>
+                ) : null}
               </DialogHeader>
               <div className="grid gap-3">
+                {sectionEditor?.requestType === "CONTACT_INFORMATION" ? (
+                  <p className="text-sm text-muted-foreground">Provide at least a phone number or an email address.</p>
+                ) : null}
                 {sectionEditor?.fields.map((field) => (
                   <div key={field} className="space-y-1">
-                    <Label className="text-xs uppercase tracking-wide text-slate-500">{getEditableFieldLabel(field)}</Label>
+                    <Label className="text-xs uppercase tracking-wide text-slate-500">
+                      {getEditableFieldLabel(field)}
+                      {sectionEditor.requestType && isRequiredPersonalRecordField(field) ? " *" : ""}
+                    </Label>
                     {field === "profile_photo_url" ? (
                       <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
                         <div className="flex items-center gap-3">
@@ -4727,9 +5246,18 @@ export function EmployeeSelfServiceProfileView() {
                       </div>
                     ) : (
                       <Input
-                        type={field === "password" ? "password" : "text"}
+                        type={
+                          field === "password"
+                            ? "password"
+                            : field.includes("email")
+                              ? "email"
+                              : field.includes("phone")
+                                ? "tel"
+                                : "text"
+                        }
                         value={sectionValues[field]}
                         placeholder={field === "password" ? "Leave blank to keep current password" : undefined}
+                        required={Boolean(sectionEditor.requestType && isRequiredPersonalRecordField(field))}
                         onChange={(event) => handleSectionFieldChange(field, event.target.value)}
                       />
                     )}
@@ -4769,7 +5297,9 @@ export function EmployeeSelfServiceProfileView() {
                     ? selectedDefaultAvatarId != null
                       ? "Apply Avatar"
                       : "Upload Picture"
-                    : "Save Changes"}
+                    : sectionEditor?.requestType
+                      ? "Send to HR"
+                      : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogPopup>
@@ -4781,40 +5311,76 @@ export function EmployeeSelfServiceProfileView() {
 
 export function EmployeeOrganizationView() {
   const { loading, error, employee } = useSelfEmployeeData()
+  const branchRecords = [
+    asRecord(employee?.primary_branch),
+    asRecord(employee?.branch),
+    ...(Array.isArray(employee?.departments) ? employee.departments.map((assignment) => {
+      const record = asRecord(assignment)
+      return asRecord(asRecord(record?.department)?.branch) ?? asRecord(record?.branch)
+    }) : []),
+  ]
+  const workLocation = branchRecords
+    .map((branch) => readString(branch, ["city", "address", "country"], ""))
+    .find(Boolean) || readString(employee, ["work_location", "workLocation"], "")
+  const manager = resolveManagerDisplay(employee)
+  const supervisor = asRecord(employee?.supervisor)
+  const supervisorName = manager.name !== "-" ? manager.name : (
+    readString(supervisor, ["full_name", "name"], "") ||
+    [readString(supervisor, ["first_name"], ""), readString(supervisor, ["last_name"], "")].filter(Boolean).join(" ") ||
+    readString(supervisor, ["email"], "")
+  )
+  const status = employee ? readString(employee, ["employment_status", "status"]) : ""
 
   return (
-    <div className={cn(pageBleedClass, "grid gap-4")}>
-      <Card className="rounded-none border-x-0 sm:border-x">
-        <CardHeader>
-          <CardTitle>My Organization Details</CardTitle>
-          <CardDescription>Read-only information about your branch, department, and role context.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex flex-col items-center justify-center gap-4 py-10">
-              <FluentLoadingIndicator size="large" />
-              <p className="text-sm text-muted-foreground">Loading organization details...</p>
+    <section className={cn(pageBleedClass, "px-4 py-4 sm:px-5")} aria-labelledby="organization-details-title">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <Building20Regular aria-hidden="true" className="shrink-0 text-primary" />
+          <div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 id="organization-details-title" className="text-base font-semibold text-foreground">My Organization Details</h1>
+              {!loading && !error && employee && status ? (
+                <FluentBadge
+                  appearance="tint"
+                  color={status.toLowerCase() === "active" ? "success" : "informative"}
+                  icon={<PresenceBadge status={status.toLowerCase() === "active" ? "available" : "away"} />}
+                  className="capitalize"
+                  aria-label={`Employment status: ${status}`}
+                >
+                  {status}
+                </FluentBadge>
+              ) : null}
             </div>
-          ) : null}
-          {!loading && error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {!loading && !error && employee ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <InfoRow label="Branch" value={readString(asRecord(employee.branch), ["name", "branch_name"])} />
-                <InfoRow label="Department" value={readString(asRecord(employee.department), ["name", "department_name"])} />
-                <InfoRow label="Position" value={readString(asRecord(employee.position), ["name", "position_name"])} />
+            <p className="mt-1 text-xs text-muted-foreground">Your workplace, role, and reporting line</p>
+          </div>
+        </div>
+        <FluentBadge appearance="outline" color="subtle">Read only</FluentBadge>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center gap-3 py-10" role="status">
+          <FluentLoadingIndicator />
+          <p className="text-sm text-muted-foreground">Loading organization details…</p>
+        </div>
+      ) : error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : employee ? (
+        <>
+          <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { label: "Branch", value: resolveBranchNameFromEmployee(employee), icon: Building20Regular },
+              { label: "Department", value: resolveDepartmentNameFromEmployee(employee), icon: PeopleTeam20Regular },
+              { label: "Position", value: readString(asRecord(employee.primary_position), ["name", "position_name"], "") || readString(asRecord(employee.position), ["name", "position_name"], "") || readString(employee, ["position_name"], ""), icon: Briefcase20Regular },
+              { label: "Date joined", value: formatDate(employee["hire_date"] ?? employee["joining_date"]), icon: Calendar20Regular },
+              { label: "Supervisor", value: supervisorName, icon: Person20Regular },
+              { label: "Work location", value: workLocation, icon: Location20Regular },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="border-t border-border pt-3">
+                <dt className="flex items-center gap-2 text-xs text-muted-foreground"><Icon aria-hidden="true" className="shrink-0 text-primary" />{label}</dt>
+                <dd className="mt-2 break-words text-sm font-medium text-foreground">{value && value !== "-" && value !== "—" ? value : <span className="font-normal text-muted-foreground">Not provided</span>}</dd>
               </div>
-              <div>
-                <InfoRow label="Employment Status" value={readString(employee, ["employment_status", "status"])} />
-                <InfoRow label="Date Joined" value={formatDate(employee["hire_date"] ?? employee["joining_date"])} />
-                <InfoRow label="Supervisor" value={readString(asRecord(employee.supervisor), ["full_name", "name", "email"])} />
-                <InfoRow label="Work Location" value={readString(asRecord(employee.branch), ["city", "address", "country"])} />
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+            ))}
+          </dl>
+        </>
+      ) : <p className="mt-5 text-sm text-muted-foreground">Organization details are not available yet.</p>}
+    </section>
   )
 }
 
@@ -5399,23 +5965,121 @@ export function EmployeePayrollView() {
 
   return (
     <section className="space-y-5 pb-8">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">My payroll</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Welcome back, {employeeName}!</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Current pay period: {latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Not published yet"}
-          </p>
+      <div className={pageBleedClass}>
+      <FluentCard
+        className={cn(
+          "relative overflow-hidden !rounded-none !border-x-0 !border-y !border-border !bg-primary !p-0 shadow-sm",
+        )}
+      >
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90">
+          <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+          <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+          <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+          <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
+          <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
+          <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
         </div>
-        <FluentButton
-          appearance="subtle"
-          icon={mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollRefreshIcon />}
-          disabled={mounted ? listLoading || !token : undefined}
-          onClick={() => void loadPayslips()}
-        >
-          Refresh
-        </FluentButton>
-      </header>
+        <header className="relative flex flex-wrap items-center justify-between gap-5 px-5 py-5 text-primary-foreground sm:px-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <PersonMoney20Regular className="size-9 shrink-0 text-primary-foreground/90" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold tracking-tight text-primary-foreground sm:text-2xl">My payroll</h1>
+                <FluentBadge
+                  appearance="ghost"
+                  color={latestStatus ? latestBadgeColor : "warning"}
+                  className="!gap-2 !rounded-none !px-1 !font-medium !text-primary-foreground"
+                  icon={<span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-current ring-[3px] ring-current/10" />}
+                >
+                  {latestStatus ? formatMovementLabel(latestStatus) : "Awaiting first payslip"}
+                </FluentBadge>
+              </div>
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-primary-foreground/90">
+                <span>Welcome back,</span>
+                <span className="relative isolate inline-block break-words pb-1 text-xl font-semibold tracking-tight text-primary-foreground after:absolute after:inset-x-0 after:bottom-1 after:-z-10 after:h-2 after:-rotate-2 after:rounded-sm after:bg-primary-foreground/20 sm:text-2xl">
+                  {employeeName}
+                </span>
+              </p>
+              <div className="mt-2 flex items-center gap-2 text-xs font-medium text-primary-foreground/90">
+                <PayrollCalendarIcon />
+                <span>Current period: {latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Not published yet"}</span>
+              </div>
+            </div>
+          </div>
+          <FluentButton
+            appearance="subtle"
+            size="large"
+            className="!ml-auto !size-11 !min-w-11 !shrink-0 !text-primary-foreground hover:!bg-primary-foreground/10 disabled:!opacity-50 [&_svg]:!size-6"
+            aria-label={mounted && listLoading ? "Refreshing payroll" : "Refresh payroll"}
+            title="Refresh payroll"
+            aria-busy={mounted && listLoading}
+            icon={mounted && listLoading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollRefreshIcon />}
+            disabled={mounted ? listLoading || !token : undefined}
+            onClick={() => void loadPayslips()}
+          />
+        </header>
+      </FluentCard>
+
+      <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: "Net take-home",
+            value: latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—",
+            detail: latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Latest published pay",
+            icon: Savings20Regular,
+            tone: "text-emerald-600 dark:text-emerald-400",
+          },
+          {
+            label: "Gross earnings",
+            value: latestPayslip ? formatPayslipMoney(latestGross, latestCurrency) : "—",
+            detail: "Before deductions",
+            icon: Money20Regular,
+            tone: "text-primary",
+          },
+          {
+            label: "Total deductions",
+            value: latestPayslip ? formatPayslipMoney(latestDeductions, latestCurrency) : "—",
+            detail: "Tax and other deductions",
+            icon: ReceiptMoney20Regular,
+            tone: "text-amber-600 dark:text-amber-400",
+          },
+          {
+            label: "Tax withheld",
+            value: latestPayslip ? formatPayslipMoney(latestTax, latestCurrency) : "—",
+            detail: "Latest published period",
+            icon: ShieldCheckmark20Regular,
+            tone: "text-rose-600 dark:text-rose-400",
+          },
+        ].map((metric) => {
+          const MetricIcon = metric.icon
+          return (
+            <FluentCard key={metric.label} className="relative isolate min-w-0 overflow-hidden !rounded-none !border-0 !border-b !border-r !border-border !gap-1 !px-5 !py-3 !shadow-none sm:!px-6">
+              <div aria-hidden="true" className={`pointer-events-none absolute inset-0 -z-10 overflow-hidden ${metric.tone}`}>
+                <div className="absolute -right-12 -top-16 size-56 rounded-full border-[28px] border-current opacity-[0.06]" />
+                <div className="absolute right-6 top-8 size-28 rounded-full border border-current opacity-[0.12]" />
+                <div className="absolute -bottom-10 right-20 h-40 w-20 rotate-[25deg] bg-current opacity-[0.035]" />
+                <div className="absolute left-[55%] top-8 h-20 w-px rotate-[38deg] bg-current opacity-[0.12]" />
+                <div className="absolute left-[58%] top-10 size-1.5 rounded-full bg-current opacity-[0.15]" />
+                <div className="absolute left-[62%] top-16 size-1 rounded-full bg-current opacity-[0.12]" />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <FluentText size={200} weight="semibold" className="!text-muted-foreground">
+                  {metric.label}
+                </FluentText>
+                <MetricIcon className={`size-5 ${metric.tone}`} />
+              </div>
+              <FluentText size={500} weight="semibold" className="!my-0 !block !tracking-tight !text-foreground tabular-nums">
+                {metric.value}
+              </FluentText>
+              <FluentText size={200} className="!mt-0 !block !text-muted-foreground">
+                {metric.detail}
+              </FluentText>
+            </FluentCard>
+          )
+        })}
+      </div>
+
+      </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {payslipsError ? (
@@ -5424,44 +6088,42 @@ export function EmployeePayrollView() {
         </div>
       ) : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,1fr)]">
-        <div className="space-y-5">
-          <FluentCard className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.045] shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4 p-6">
+      <div className="relative isolate grid items-start gap-4 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,1fr)]">
+        <div className="space-y-4">
+          <FluentCard className="!gap-0 !rounded-none !border-0 !border-b !border-border !bg-transparent !p-5 !shadow-none">
+            <div className="flex items-start gap-3">
+              <ReceiptMoney20Regular className="mt-0.5 size-6 shrink-0 text-primary" />
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Net take-home pay</p>
-                <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums text-foreground">{latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—"}</p>
-                <p className="mt-2 text-sm text-muted-foreground">{latestPayslip ? readPayslipPeriodLabel(latestPayslip) : "Your latest published pay will appear here."}</p>
+                <h2 className="text-sm font-semibold">How your pay is calculated</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">A transparent gross-to-net breakdown for your latest payslip.</p>
               </div>
-              <FluentBadge appearance="tint" color={latestBadgeColor}>{latestStatus ? formatMovementLabel(latestStatus) : "Not published"}</FluentBadge>
             </div>
-            <div className="grid border-t border-border/80 sm:grid-cols-2 sm:divide-x sm:divide-border/80">
-              <div className="px-6 py-4"><p className="text-xs text-muted-foreground">Gross earnings</p><p className="mt-1 font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestGross, latestCurrency) : "—"}</p></div>
-              <div className="border-t border-border/80 px-6 py-4 sm:border-t-0"><p className="text-xs text-muted-foreground">Total deductions</p><p className="mt-1 font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestDeductions, latestCurrency) : "—"}</p></div>
-            </div>
+            <dl className="mt-4 divide-y divide-border text-sm">
+              {[
+                { label: "Gross earnings", value: latestGross, icon: Money20Regular },
+                { label: "Tax", value: -latestTax, icon: ShieldCheckmark20Regular },
+                { label: "Other deductions", value: -otherDeductions, icon: ReceiptMoney20Regular },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="flex items-center justify-between gap-4 py-3">
+                  <dt className="flex items-center gap-3 text-muted-foreground"><Icon className="shrink-0 text-primary" />{label}</dt>
+                  <dd className="font-medium tabular-nums">{latestPayslip ? formatPayslipMoney(value, latestCurrency) : "—"}</dd>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-4 py-4 text-primary">
+                <dt className="flex items-center gap-3 font-semibold"><Savings20Regular />Net take-home</dt>
+                <dd className="text-lg font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—"}</dd>
+              </div>
+            </dl>
           </FluentCard>
 
-          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
-            <h2 className="text-base font-semibold">How your pay is calculated</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A transparent gross-to-net breakdown for your latest payslip.</p>
-            <Accordion collapsible defaultOpenItems={["breakdown"]} className="mt-3">
-              <AccordionItem value="breakdown">
-                <AccordionHeader>Gross earnings to take-home pay</AccordionHeader>
-                <AccordionPanel>
-                  <div className="space-y-3 border-t border-border pt-3 text-sm">
-                    {[["Gross earnings", latestGross], ["Tax", -latestTax], ["Other deductions", -otherDeductions]].map(([label, value]) => (
-                      <div key={String(label)} className="flex justify-between gap-4"><span className="text-muted-foreground">{label}</span><span className="font-medium tabular-nums">{latestPayslip ? formatPayslipMoney(value, latestCurrency) : "—"}</span></div>
-                    ))}
-                    <div className="flex justify-between gap-4 border-t border-border pt-3"><span className="font-semibold">Net take-home</span><span className="font-semibold tabular-nums">{latestPayslip ? formatPayslipMoney(latestNet, latestCurrency) : "—"}</span></div>
-                  </div>
-                </AccordionPanel>
-              </AccordionItem>
-            </Accordion>
-          </FluentCard>
-
-          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
-            <h2 className="text-base font-semibold">Pay trend</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Gross and net pay across your latest published periods.</p>
+          <FluentCard className="!gap-0 !rounded-none !border-0 !border-b !border-border !bg-transparent !p-5 !shadow-none">
+            <div className="flex items-start gap-3">
+              <History20Regular className="mt-0.5 size-6 shrink-0 text-primary" />
+              <div>
+                <h2 className="text-sm font-semibold">Pay trend</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Gross and net pay across your latest published periods.</p>
+              </div>
+            </div>
             {trendData.length > 0 ? (
               <div className="mt-4 h-64 w-full" aria-label="Historical gross and net pay chart">
                 <ResponsiveContainer width="100%" height="100%">
@@ -5475,16 +6137,20 @@ export function EmployeePayrollView() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="mt-6 text-sm text-muted-foreground">A trend will appear after your first payslip is published.</p>}
+            ) : <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <History20Regular aria-hidden="true" className="mb-1 size-10 text-primary/70" />
+              <p className="text-sm font-semibold">Your pay journey starts here</p>
+              <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">Compare gross and take-home pay once your first payslip is published.</p>
+            </div>}
           </FluentCard>
 
-          <FluentCard className="overflow-hidden rounded-2xl border border-border shadow-sm">
+          <FluentCard className="overflow-hidden !gap-0 !rounded-none !border-0 !border-b !border-border !bg-transparent !p-0 !shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Earnings history</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{payslips.length} published {payslips.length === 1 ? "payslip" : "payslips"}</p>
+            <h2 className="text-sm font-semibold text-foreground">Earnings history</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{payslips.length} published {payslips.length === 1 ? "payslip" : "payslips"}</p>
           </div>
-          <PayrollCalendarIcon className="text-xl text-muted-foreground" />
+          <PayrollCalendarIcon className="size-6 text-primary" />
         </div>
         {listLoading ? (
           <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground">
@@ -5492,9 +6158,9 @@ export function EmployeePayrollView() {
           </div>
         ) : payslips.length === 0 ? (
           <div className="px-5 py-10 text-center">
-            <PayrollDocumentIcon className="mx-auto mb-3 text-2xl text-muted-foreground" />
-            <p className="font-medium text-foreground">No payslips published yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">When a payslip is published to your account, it will appear here.</p>
+            <PayrollDocumentIcon aria-hidden="true" className="mx-auto mb-3 size-10 text-primary/70" />
+            <p className="text-sm font-semibold text-foreground">No payslips published yet</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When a payslip is published to your account, it will appear here.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -5536,27 +6202,40 @@ export function EmployeePayrollView() {
           </FluentCard>
         </div>
 
-        <aside className="space-y-5 xl:sticky xl:top-4">
-          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
-            <h2 className="text-base font-semibold">Quick actions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Your most-used payroll tasks.</p>
+        <aside className="relative flex flex-col gap-4 xl:sticky xl:top-4">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-y-5 -left-2 hidden w-px bg-gradient-to-b from-transparent via-primary/30 to-transparent xl:block">
+            <span className="absolute inset-y-[15%] -left-1 w-2 rounded-full bg-primary/10 blur-sm" />
+            <span className="absolute left-1/2 top-12 size-1.5 -translate-x-1/2 rotate-45 bg-primary/50 ring-4 ring-background" />
+          </div>
+          <FluentCard className="!gap-0 !rounded-none !border-0 !border-b !border-border !bg-transparent !p-5 !shadow-none">
+            <div className="flex items-start gap-3">
+              <PayrollWalletIcon className="mt-0.5 size-6 shrink-0 text-primary" />
+              <div>
+                <h2 className="text-sm font-semibold">Quick actions</h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Your most-used payroll tasks.</p>
+              </div>
+            </div>
             <div className="mt-4 grid gap-2">
-              <FluentButton appearance="primary" icon={latestPayslip && downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />} disabled={!latestPayslip || downloadingId === latestPayslipId} onClick={() => latestPayslip && void handleDownloadPayslip(latestPayslip)}>Download latest payslip</FluentButton>
-              <FluentButton as="a" href="/dashboard/me/profile" appearance="secondary" icon={<PayrollWalletIcon />}>Manage bank account</FluentButton>
-              <FluentButton appearance="secondary" icon={<PayrollDocumentIcon />} disabled={!latestPayslip} onClick={() => latestPayslip && void openPayslipDetail(latestPayslip)}>View tax documents</FluentButton>
+              <FluentButton className="!justify-start !px-3 !py-2.5" data-dashboard-action="true" appearance="primary" icon={latestPayslip && downloadingId === latestPayslipId ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <PayrollDownloadIcon />} disabled={!latestPayslip || downloadingId === latestPayslipId} onClick={() => latestPayslip && void handleDownloadPayslip(latestPayslip)}>Download latest payslip</FluentButton>
+              <FluentButton as="a" href="/dashboard/me/profile?tab=records&section=bank_accounts" className="!justify-start !px-3 !py-2.5" data-dashboard-action="true" appearance="subtle" icon={<PayrollWalletIcon />}>Manage bank account</FluentButton>
+              <FluentButton className="!justify-start !px-3 !py-2.5" data-dashboard-action="true" appearance="subtle" icon={<PayrollDocumentIcon />} disabled={!latestPayslip} onClick={() => latestPayslip && void openPayslipDetail(latestPayslip)}>View latest payslip</FluentButton>
             </div>
             <div className="mt-5 border-t border-border pt-4 text-sm">
-              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Bank</span><span className="font-medium text-right">{readString(bankDetails, ["bank_name"], "Not provided")}</span></div>
+              <div className="flex justify-between gap-3"><span className="flex items-center gap-2 text-muted-foreground"><BuildingBank20Regular />Bank</span><span className="font-medium text-right">{readString(bankDetails, ["bank_name"], "Not provided")}</span></div>
               <div className="mt-2 flex justify-between gap-3"><span className="text-muted-foreground">Account</span><span className="font-medium text-right">{readString(bankDetails, ["account_number_masked"], "—")}</span></div>
             </div>
           </FluentCard>
 
-          <FluentCard className="rounded-2xl border border-border p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold">Year-to-date summary</h2><FluentBadge appearance="tint">{new Date().getFullYear()}</FluentBadge></div>
-            <p className="mt-1 text-sm text-muted-foreground">Published payroll totals for the current year.</p>
-            <div className="mt-5 space-y-5">
+          <FluentCard className="!gap-0 !rounded-none !border-0 !border-b !border-border !bg-transparent !p-5 !shadow-none">
+            <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><Savings20Regular className="size-6 text-primary" /><h2 className="text-sm font-semibold">Year-to-date summary</h2></div><FluentBadge appearance="tint" color="brand">{new Date().getFullYear()}</FluentBadge></div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Published payroll totals for the current year.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
               {[["Gross pay", ytdGross, "brand"], ["Net pay", ytdNet, "success"], ["Deductions", ytdDeductions, "warning"], ["Tax paid", taxTotal, "error"], ["Pension", pensionTotal, "brand"]].map(([label, value, color]) => (
-                <div key={String(label)}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="text-muted-foreground">{label}</span><span className="font-semibold tabular-nums">{formatPayslipMoney(value, summaryCurrency)}</span></div><ProgressBar value={Number(value) / ytdMaximum} color={color as "brand" | "success" | "warning" | "error"} /></div>
+                <div key={String(label)} className="min-w-0 border-l-2 border-primary/25 py-1 pl-3">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="my-2 break-words text-base font-semibold tabular-nums">{formatPayslipMoney(value, summaryCurrency)}</p>
+                  <ProgressBar value={Math.min(1, Number(value) / ytdMaximum)} color={color as "brand" | "success" | "warning" | "error"} thickness="medium" />
+                </div>
               ))}
             </div>
           </FluentCard>
@@ -5699,6 +6378,12 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     reason: "",
   })
   const [leaveAttachmentFile, setLeaveAttachmentFile] = React.useState<File | null>(null)
+  // Set while the dialog edits an existing draft or returned request.
+  const [editingLeaveRequest, setEditingLeaveRequest] = React.useState<{
+    id: number
+    status: string
+    returnReason: string
+  } | null>(null)
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
   const activeTab = tab
@@ -5715,7 +6400,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     for (const row of requests) {
       const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
       if (meta.key === "draft") counts.draft += 1
-      else if (meta.key === "pending") counts.pending += 1
+      else if (meta.key === "pending" || meta.key === "returned") counts.pending += 1
       else if (meta.key === "approved") counts.approved += 1
       else if (meta.key === "rejected") counts.rejected += 1
       else if (meta.key === "cancelled") counts.cancelled += 1
@@ -5727,7 +6412,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     if (!leaveRequestStatusFilter) return requests
     return requests.filter((row) => {
       const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
-      return meta.key === leaveRequestStatusFilter
+      return (
+        meta.key === leaveRequestStatusFilter ||
+        (leaveRequestStatusFilter === "pending" && meta.key === "returned")
+      )
     })
   }, [leaveRequestStatusFilter, requests])
 
@@ -6081,6 +6769,45 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     setActionErrorMessage(null)
 
     try {
+      if (editingLeaveRequest) {
+        const requestId = editingLeaveRequest.id
+        await updateMyLeaveRequest(token, requestId, {
+          leave_type_id: Number(requestForm.leave_type_id),
+          duration_type: requestForm.duration_type,
+          start_date: requestForm.start_date,
+          end_date: requestForm.end_date,
+          ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
+          ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
+          reason: requestForm.reason.trim() || "Draft",
+        })
+        if (leaveAttachmentFile) {
+          await uploadMyLeaveRequestDocument(token, requestId, leaveAttachmentFile)
+        }
+        if (submit) {
+          if (editingLeaveRequest.status === "returned_for_correction") {
+            await resubmitMyLeaveRequest(token, requestId)
+          } else {
+            await submitMyLeaveRequest(token, requestId)
+          }
+        }
+        setEditingLeaveRequest(null)
+        setRequestForm({
+          leave_type_id: "",
+          duration_type: "FULL_DAY",
+          start_date: "",
+          end_date: "",
+          half_day_session: "FIRST_HALF",
+          start_time: "09:00",
+          end_time: "13:00",
+          reason: "",
+        })
+        setLeaveAttachmentFile(null)
+        setMessage(submit ? "Leave request updated and sent for approval." : "Leave request changes saved.")
+        setRequestDialogOpen(false)
+        await loadData()
+        return
+      }
+
       // Create as draft only when explicitly requested. Submit sends submit:true so
       // the API creates the request in the approval workflow, not as a draft.
       const payload = await createMyLeaveRequest(token, {
@@ -6146,6 +6873,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }, [
     availableLeaveTypes.length,
+    editingLeaveRequest,
     employeeId,
     leaveSubmissionBalanceError,
     loadData,
@@ -6170,6 +6898,72 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setActionErrorMessage(text)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const onEndLeaveEarly = async (id: number, row: AdminRecord) => {
+    if (!token) return
+    const end = String(row.end_date ?? "").slice(0, 10)
+    const suggested = new Date().toISOString().slice(0, 10)
+    const newEnd = window.prompt(
+      `New last day of leave (YYYY-MM-DD, before ${end}). Unused days return to your balance.`,
+      suggested,
+    )
+    if (!newEnd) return
+    setLoading(true)
+    setMessage(null)
+    setActionErrorMessage(null)
+    try {
+      await endLeaveEarly(token, id, { new_end_date: newEnd.trim() })
+      setMessage("Leave shortened. Unused days were returned to your balance.")
+      await loadData()
+    } catch (errorObject) {
+      setActionErrorMessage(errorObject instanceof Error ? errorObject.message : "Could not end leave early.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openEditLeaveRequest = (id: number, row: AdminRecord) => {
+    const readDate = (value: unknown) => (typeof value === "string" ? value.slice(0, 10) : "")
+    const readTime = (value: unknown, fallback: string) =>
+      typeof value === "string" && value ? value.slice(0, 5) : fallback
+    setEditingLeaveRequest({
+      id,
+      status: readString(row, ["status"], "draft").toLowerCase(),
+      returnReason: readString(row, ["return_reason"], ""),
+    })
+    setRequestForm({
+      leave_type_id: String(
+        readNumber(row, ["leave_type_id"]) ?? readNumber(asRecord(row.leave_type), ["id"]) ?? ""
+      ),
+      duration_type: readString(row, ["duration_type"], "FULL_DAY"),
+      start_date: readDate(row.start_date),
+      end_date: readDate(row.end_date),
+      half_day_session: readString(row, ["half_day_session"], "FIRST_HALF"),
+      start_time: readTime(row.start_time, "09:00"),
+      end_time: readTime(row.end_time, "13:00"),
+      reason: readString(row, ["reason"], "") === "-" ? "" : readString(row, ["reason"], ""),
+    })
+    setLeaveAttachmentFile(null)
+    setRequestDialogOpen(true)
+  }
+
+  const closeRequestDialog = (open: boolean) => {
+    setRequestDialogOpen(open)
+    if (!open && editingLeaveRequest) {
+      setEditingLeaveRequest(null)
+      setRequestForm({
+        leave_type_id: "",
+        duration_type: "FULL_DAY",
+        start_date: "",
+        end_date: "",
+        half_day_session: "FIRST_HALF",
+        start_time: "09:00",
+        end_time: "13:00",
+        reason: "",
+      })
+      setLeaveAttachmentFile(null)
     }
   }
 
@@ -6379,7 +7173,22 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                   {filteredLeaveRequests.map((row, index) => {
               const id = readNumber(row, ["id"])
               const status = readString(row, ["status"], "pending").toLowerCase()
-              const canCancel = ["pending", "draft"].includes(status)
+              // The API enforces policy cutoffs and start dates for approved leave.
+              const canCancel = [
+                "pending",
+                "draft",
+                "pending_department_manager",
+                "pending_hr",
+                "in_review",
+                "returned_for_correction",
+                "approved",
+              ].includes(status)
+              const canEdit = status === "draft" || status === "returned_for_correction"
+              const today = new Date().toISOString().slice(0, 10)
+              const canEndEarly =
+                status === "approved" &&
+                String(row.start_date ?? "").slice(0, 10) <= today &&
+                String(row.end_date ?? "").slice(0, 10) > today
               const statusMeta = resolveLeaveStatusMeta(status)
               const leaveType =
                 readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
@@ -6425,6 +7234,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                     <div className="flex justify-end gap-1">
                       {id ? <FluentButton appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`View workflow for ${slipId}`} title="View approval progress" disabled={loading} onClick={() => openLeaveWorkflowDialog(id, row)} /> : null}
                       {id ? <FluentButton appearance="subtle" size="small" icon={<DocumentPdf20Regular />} aria-label={`Download PDF for ${slipId}`} title="Download request PDF" disabled={loading} onClick={() => void onDownloadPdf(id)} /> : null}
+                      {id && canEndEarly ? <FluentButton appearance="subtle" size="small" disabled={loading} onClick={() => void onEndLeaveEarly(id, row)}>End early</FluentButton> : null}
+                      {id && canEdit ? <FluentButton appearance={status === "returned_for_correction" ? "primary" : "subtle"} size="small" icon={<Edit20Regular />} disabled={loading} onClick={() => openEditLeaveRequest(id, row)}>{status === "returned_for_correction" ? "Edit & resubmit" : "Edit"}</FluentButton> : null}
                       {id && status === "draft" ? <FluentButton appearance="primary" size="small" icon={<Send20Regular />} disabled={loading} onClick={() => void onSubmitRequest(id)}>Submit</FluentButton> : null}
                       {id && canCancel ? <FluentButton appearance="subtle" size="small" icon={<Dismiss20Regular />} aria-label={status === "draft" ? `Discard ${slipId}` : `Cancel ${slipId}`} title={status === "draft" ? "Discard draft" : "Cancel request"} disabled={loading} onClick={() => openCancelDialog(id)} /> : null}
                     </div>
@@ -6439,6 +7250,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         ) : null}
 
         {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        <LeaveDelegationsPanel token={token} mode="self" />
       </motion.section>
     )
   }
@@ -6492,6 +7304,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentCard>
           ))}
         </div> : null}
+        {balances.length > 0 ? <LeaveAccrualProjectionCard token={token} /> : null}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {balances.map((row, index) => (
             <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">
@@ -6722,15 +7535,24 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       <div className="flex-1 min-h-0 relative">
         {tabContent}
       </div>
-      <FluentDialog open={requestDialogOpen} onOpenChange={(_event, data) => setRequestDialogOpen(data.open)}>
+      <FluentDialog open={requestDialogOpen} onOpenChange={(_event, data) => closeRequestDialog(data.open)}>
         <FluentDialogSurface className="w-[min(680px,96vw)]">
           <FluentDialogBody className="min-h-0">
             <FluentDialogTitle action={
-              <FluentButton appearance="subtle" aria-label="Close leave request" icon={<Dismiss20Regular />} onClick={() => setRequestDialogOpen(false)} />
-            }>Request leave</FluentDialogTitle>
+              <FluentButton appearance="subtle" aria-label="Close leave request" icon={<Dismiss20Regular />} onClick={() => closeRequestDialog(false)} />
+            }>{editingLeaveRequest ? "Edit leave request" : "Request leave"}</FluentDialogTitle>
             <FluentText as="p" size={300} className="text-muted-foreground">
-              Choose the leave type and dates. Submit for approval now, or save a draft to finish later.
+              {editingLeaveRequest?.status === "returned_for_correction"
+                ? "Your approver returned this request. Update it and resubmit for approval."
+                : editingLeaveRequest
+                  ? "Update your draft, then save it or submit it for approval."
+                  : "Choose the leave type and dates. Submit for approval now, or save a draft to finish later."}
             </FluentText>
+            {editingLeaveRequest?.returnReason && editingLeaveRequest.returnReason !== "-" ? (
+              <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300">
+                <span className="font-medium">Reason returned:</span> {editingLeaveRequest.returnReason}
+              </div>
+            ) : null}
             <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-4 overflow-y-auto py-4 pr-1">
             <FluentField label="Leave type">
               <FluentDropdown
@@ -6816,9 +7638,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentField>
             </FluentDialogContent>
             <FluentDialogActions position="end">
-              <FluentButton appearance="secondary" onClick={() => setRequestDialogOpen(false)}>Close</FluentButton>
-              <FluentButton appearance="secondary" icon={<Save20Regular />} onClick={() => void onRequestLeave(false)} disabled={loading || availableLeaveTypes.length === 0}>{loading ? "Saving…" : "Save draft"}</FluentButton>
-              <FluentButton appearance="primary" icon={<Send20Regular />} onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}>{loading ? "Submitting…" : "Submit request"}</FluentButton>
+              <FluentButton appearance="secondary" onClick={() => closeRequestDialog(false)}>Close</FluentButton>
+              <FluentButton appearance="secondary" icon={<Save20Regular />} onClick={() => void onRequestLeave(false)} disabled={loading || availableLeaveTypes.length === 0}>{loading ? "Saving…" : editingLeaveRequest ? "Save changes" : "Save draft"}</FluentButton>
+              <FluentButton appearance="primary" icon={<Send20Regular />} onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}>{loading ? "Submitting…" : editingLeaveRequest?.status === "returned_for_correction" ? "Save & resubmit" : "Submit request"}</FluentButton>
             </FluentDialogActions>
           </FluentDialogBody>
         </FluentDialogSurface>

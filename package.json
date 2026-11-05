@@ -4,9 +4,9 @@
   "private": true,
   "main": "desktop/main.cjs",
   "scripts": {
-    "dev": "NODE_OPTIONS=--max-old-space-size=2048 next dev --turbopack --disable-source-maps",
-    "dev:turbo": "NODE_OPTIONS=--max-old-space-size=2048 next dev --turbopack --disable-source-maps",
-    "dev:webpack": "NODE_OPTIONS=--max-old-space-size=4096 NEXT_WEBPACK_PARALLELISM=1 next dev --webpack --disable-source-maps",
+    "dev": "NODE_OPTIONS=--max-old-space-size=2048 NEXT_WEBPACK_PARALLELISM=1 next dev --webpack --disable-source-maps",
+    "dev:turbo": "NODE_OPTIONS=--max-old-space-size=1024 next dev --turbopack --disable-source-maps",
+    "dev:webpack": "NODE_OPTIONS=--max-old-space-size=2048 NEXT_WEBPACK_PARALLELISM=1 next dev --webpack --disable-source-maps",
     "desktop": "electron .",
     "desktop:build": "npm run desktop:package",
     "desktop:package": "npm run build && electron-builder --dir",

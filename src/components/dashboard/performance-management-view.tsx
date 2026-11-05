@@ -106,6 +106,7 @@ import {
 } from "@/components/dashboard/talent-visuals";
 
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
+import { firstVisibleSiblingOrHome } from "@/lib/forbidden-routes";
 import {
   activatePerformancePeriod,
   approvePerformanceReview,
@@ -716,19 +717,13 @@ export function PerformanceManagementView({
       : `/dashboard/performance/${activeTab}`;
   const canAccess =
     actor.ready &&
-    (canAccessDashboardRoute(
+    canAccessDashboardRoute(
       performancePath,
       actor.permissionLabels,
       actor.accessMode,
-    ) ||
-      canAccessDashboardRoute(
-        "/dashboard/performance/overview",
-        actor.permissionLabels,
-        actor.accessMode,
-      ));
+    );
   const canCreatePerformance = canPerformPermission(actor.permissionLabels, {
     permissions: [
-      "view_company_dashboard",
       "performance:create",
       "performance:update",
       "performance_periods:create",
@@ -805,6 +800,17 @@ export function PerformanceManagementView({
     forgetForbiddenRoute("/dashboard/performance/reviews");
     forgetForbiddenRoute("/dashboard/performance/improvement");
   }, []);
+
+  React.useEffect(() => {
+    if (!actor.ready || canAccess) return;
+    router.replace(
+      firstVisibleSiblingOrHome(
+        performancePath,
+        actor.permissionLabels,
+        actor.accessMode,
+      ),
+    );
+  }, [actor.accessMode, actor.permissionLabels, actor.ready, canAccess, performancePath, router]);
 
   const [setupKpiCategory, setSetupKpiCategory] = React.useState("");
   const [setupFinancialYearId, setSetupFinancialYearId] = React.useState("");

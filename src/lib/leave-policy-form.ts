@@ -10,6 +10,19 @@ export type LeavePolicyTypeAssignment = {
   minimum_balance_after_encashment: string
   encashment_requires_approval: string
   maximum_accumulation_days: string
+  /** "" = use the policy's accrual schedule */
+  accrual_method: string
+  /** "" = use the leave type's basic carry-forward; "true"/"false" = policy rule */
+  carry_forward_enabled: string
+  /** "" = no cap */
+  carry_forward_max_days: string
+  /** "none" | "months" | "date" */
+  carry_forward_expiry_mode: string
+  carry_forward_expiry_months: string
+  /** MM-DD */
+  carry_forward_expiry_date: string
+  carry_forward_auto_expire: string
+  carry_forward_consume_first: string
 }
 
 export type LeavePolicyFormValue = {
@@ -158,6 +171,7 @@ function normalizeAccrualMethod(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
   if (normalized === "yearly" || normalized === "annual" || normalized === "annually") return "yearly"
   if (normalized === "monthly") return "monthly"
+  if (normalized === "daily") return "daily"
   if (normalized === "manual") return "manual"
   return value.trim() || "yearly"
 }
@@ -194,6 +208,14 @@ export function emptyLeavePolicyTypeAssignment(): LeavePolicyTypeAssignment {
     minimum_balance_after_encashment: "0",
     encashment_requires_approval: "true",
     maximum_accumulation_days: "0",
+    accrual_method: "",
+    carry_forward_enabled: "",
+    carry_forward_max_days: "",
+    carry_forward_expiry_mode: "none",
+    carry_forward_expiry_months: "",
+    carry_forward_expiry_date: "",
+    carry_forward_auto_expire: "true",
+    carry_forward_consume_first: "true",
   }
 }
 
@@ -337,6 +359,49 @@ function mapLeaveTypeAssignment(entry: unknown): LeavePolicyTypeAssignment {
       ["maximum_accumulation_days", "maximumAccumulationDays"],
       "0",
     ),
+    ...readCarryForwardFields(record),
+  }
+}
+
+function readCarryForwardFields(record: PolicyRecord) {
+  const text = (key: string) => {
+    const value = record[key]
+    return value === null || value === undefined ? "" : String(value)
+  }
+  const enabled = record.carry_forward_enabled
+  const months = text("carry_forward_expiry_months")
+  const date = text("carry_forward_expiry_date")
+  const maxDays = text("carry_forward_max_days")
+  return {
+    accrual_method: text("accrual_method"),
+    carry_forward_enabled: enabled === true ? "true" : enabled === false ? "false" : "",
+    carry_forward_max_days: maxDays === "" ? "" : String(Number(maxDays)),
+    carry_forward_expiry_mode: date ? "date" : months ? "months" : "none",
+    carry_forward_expiry_months: months,
+    carry_forward_expiry_date: date,
+    carry_forward_auto_expire: record.carry_forward_auto_expire === false ? "false" : "true",
+    carry_forward_consume_first: record.carry_forward_consume_first === false ? "false" : "true",
+  }
+}
+
+/** API payload for the per-type accrual and carry-forward overrides. */
+export function leavePolicyTypeCarryForwardPayload(row: LeavePolicyTypeAssignment) {
+  const inherit = row.carry_forward_enabled === ""
+  return {
+    accrual_method: row.accrual_method || null,
+    carry_forward_enabled: inherit ? null : row.carry_forward_enabled === "true",
+    carry_forward_max_days:
+      inherit || row.carry_forward_max_days.trim() === "" ? null : Number(row.carry_forward_max_days),
+    carry_forward_expiry_months:
+      !inherit && row.carry_forward_expiry_mode === "months" && row.carry_forward_expiry_months
+        ? Number(row.carry_forward_expiry_months)
+        : null,
+    carry_forward_expiry_date:
+      !inherit && row.carry_forward_expiry_mode === "date" && row.carry_forward_expiry_date
+        ? row.carry_forward_expiry_date
+        : null,
+    carry_forward_auto_expire: row.carry_forward_auto_expire !== "false",
+    carry_forward_consume_first: row.carry_forward_consume_first !== "false",
   }
 }
 
@@ -528,6 +593,7 @@ export function leavePolicyCoverageParts(
 export function leavePolicyAccrualLabel(method: string): string {
   if (method === "yearly") return "Yearly"
   if (method === "monthly") return "Monthly"
+  if (method === "daily") return "Daily pro-rata"
   if (method === "manual") return "Manual"
   return method || "Yearly"
 }

@@ -176,6 +176,8 @@ export interface LeaveTypesQueryParams extends UsersQueryParams {
 export interface LeaveRequestsQueryParams extends UsersQueryParams {
   employee_id?: number;
   leave_type_id?: number;
+  department_id?: number;
+  manager_employee_id?: number;
   status?: string;
   from_date?: string;
   to_date?: string;
@@ -2016,6 +2018,15 @@ function buildLeaveRequestsQuery(params: LeaveRequestsQueryParams) {
   if (typeof params.leave_type_id === "number" && params.leave_type_id > 0) {
     searchParams.set("leave_type_id", String(params.leave_type_id));
   }
+  if (typeof params.department_id === "number" && params.department_id > 0) {
+    searchParams.set("department_id", String(params.department_id));
+  }
+  if (
+    typeof params.manager_employee_id === "number" &&
+    params.manager_employee_id > 0
+  ) {
+    searchParams.set("manager_employee_id", String(params.manager_employee_id));
+  }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim());
   }
@@ -3602,6 +3613,14 @@ export async function deleteNotification(token: string, id: string | number) {
   return (normalizeSingle(payload) as NotificationItem | null) ?? null;
 }
 
+export async function dismissAllNotifications(token: string) {
+  const payload = await adminRequest<unknown>("/api/notifications", {
+    method: "DELETE",
+    token,
+  });
+  return (normalizeSingle(payload) as { deleted_count?: number } | null) ?? {};
+}
+
 export async function createTestNotification(
   token: string,
   data: CreateTestNotificationInput | AdminRecord,
@@ -4670,6 +4689,88 @@ export async function deleteCostCenter(token: string, id: string | number) {
     method: "DELETE",
     token,
   });
+}
+
+/** Leave approval out-of-office cover. `all` = every delegation (HR). */
+export async function listLeaveDelegations(token: string, all = false) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/leave/delegations${all ? "?all=true" : ""}`,
+      { token },
+    ),
+  );
+}
+
+export async function createLeaveDelegation(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/leave/delegations", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function cancelLeaveDelegation(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/delegations/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/** HR rules that add a management approval after HR for matching leave. */
+export async function listLeaveManagementRules(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/leave/management-approval-rules", {
+      token,
+    }),
+  );
+}
+
+export async function saveLeaveManagementRule(
+  token: string,
+  data: AdminRecord,
+  id?: string | number,
+) {
+  return adminRequest<unknown>(
+    id === undefined
+      ? "/api/leave/management-approval-rules"
+      : `/api/leave/management-approval-rules/${id}`,
+    { method: id === undefined ? "POST" : "PATCH", token, body: data },
+  );
+}
+
+export async function deactivateLeaveManagementRule(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/leave/management-approval-rules/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/** Accrued / available / pending / used / projected leave for a period. */
+export async function getLeaveBalanceProjection(
+  token: string,
+  params: {
+    employee_id?: number;
+    leave_type_id?: number;
+    as_of?: string;
+    period?: "day" | "week" | "month" | "year";
+    self?: boolean;
+  },
+) {
+  const query = new URLSearchParams();
+  if (params.employee_id) query.set("employee_id", String(params.employee_id));
+  if (params.leave_type_id)
+    query.set("leave_type_id", String(params.leave_type_id));
+  if (params.as_of) query.set("as_of", params.as_of);
+  if (params.period) query.set("period", params.period);
+  const base = params.self
+    ? "/api/me/leave/balances/projection"
+    : "/api/leave/balances/projection";
+  return normalizeSingle(
+    await adminRequest<unknown>(`${base}?${query.toString()}`, { token }),
+  );
 }
 
 export async function listLeaveTypes(
@@ -6247,10 +6348,9 @@ export async function listAttendanceWorkFromHomeRequests(
 }
 
 export async function listTeamAttendanceWorkFromHomeRequests(token: string) {
-  return adminRequest<unknown>(
-    "/api/attendance/work-from-home/requests/team",
-    { token },
-  );
+  return adminRequest<unknown>("/api/attendance/work-from-home/requests/team", {
+    token,
+  });
 }
 
 export async function reviewAttendanceWorkFromHomeRequest(
@@ -6262,6 +6362,49 @@ export async function reviewAttendanceWorkFromHomeRequest(
     `/api/attendance/work-from-home/requests/${id}/review`,
     { method: "PATCH", token, body: data },
   );
+}
+
+export type AttendanceExemptionRow = {
+  employee_id: number;
+  employee_no: string;
+  employee_name: string;
+  attendance_exempt_from: string | null;
+  attendance_exempt_reason: string | null;
+  absent_days: number;
+};
+
+export async function listAttendanceExemptions(token: string) {
+  const payload = await adminRequest<unknown>("/api/attendance/exemptions", {
+    token,
+  });
+  return normalizeList(payload) as AttendanceExemptionRow[];
+}
+
+export async function listAttendanceExemptionCandidates(
+  token: string,
+  inactiveDays = 30,
+) {
+  const payload = await adminRequest<unknown>(
+    `/api/attendance/exemptions/candidates?inactive_days=${inactiveDays}`,
+    { token },
+  );
+  return normalizeList(payload) as AttendanceExemptionRow[];
+}
+
+export async function updateAttendanceExemptions(
+  token: string,
+  data: {
+    employee_ids: number[];
+    exempt_from: string | null;
+    reason?: string;
+    recalculate_from?: string;
+  },
+) {
+  return adminRequest<unknown>("/api/attendance/exemptions", {
+    method: "PUT",
+    token,
+    body: data,
+  });
 }
 
 export async function cancelAttendanceWorkFromHomeRequest(
@@ -9943,6 +10086,32 @@ export async function submitMyLeaveRequest(token: string, id: string | number) {
   });
 }
 
+/** Edit a draft or returned leave request (days are recalculated server-side). */
+export async function updateMyLeaveRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+/** Resubmit a leave request that an approver returned for correction. */
+export async function resubmitMyLeaveRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/resubmit`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function cancelMyLeaveRequest(
   token: string,
   id: string | number,
@@ -10014,6 +10183,69 @@ export async function getLeaveRequest(token: string, id: string | number) {
     token,
   });
   return normalizeLeaveRequestDetail(payload);
+}
+
+/** Balance, overlapping team leave and recent attendance for an approver. */
+export async function getLeaveReviewContext(token: string, id: string | number) {
+  return normalizeSingle(
+    await adminRequest<unknown>(`/api/leave/requests/${id}/review-context`, {
+      token,
+    }),
+  );
+}
+
+/** Shorten approved leave; unused days go back to the balance. */
+export async function endLeaveEarly(
+  token: string,
+  id: string | number,
+  data: { new_end_date: string; reason?: string },
+) {
+  return adminRequest<unknown>(`/api/leave/requests/${id}/end-early`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Server-built leave report as an Excel or CSV file. */
+export async function downloadLeaveReport(
+  token: string,
+  type: "balances" | "taken" | "pending" | "by-department",
+  format: "xlsx" | "csv",
+  params: Record<string, string | number | undefined> = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const query = new URLSearchParams({ format });
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const response = await fetch(
+    buildUrl(`/api/leave/reports/${type}?${query.toString()}`),
+    {
+      headers: { Authorization: `Bearer ${token}`, accept: "*/*" },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(extractMessage(payload, response.status));
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ?? `leave-${type}.${format}`,
+  };
+}
+
+/** Same decision for several requests; returns a per-request result. */
+export async function bulkLeaveApprovalAction(token: string, data: AdminRecord) {
+  return normalizeSingle(
+    await adminRequest<unknown>("/api/leave/requests/bulk-approval-action", {
+      method: "POST",
+      token,
+      body: data,
+    }),
+  );
 }
 
 export async function leaveRequestApprovalAction(
@@ -11877,6 +12109,7 @@ function isForbiddenOrMissingError(error: unknown): boolean {
 /** GET /api/me/offboarding — current employee's offboarding requests. */
 export async function listMyOffboardingRequests(
   token: string,
+  options: { strict?: boolean } = {},
 ): Promise<AdminRecord[]> {
   try {
     const payload = await adminRequest<unknown>("/api/me/offboarding", {
@@ -11884,7 +12117,7 @@ export async function listMyOffboardingRequests(
     });
     return normalizeList(payload);
   } catch (error) {
-    if (isForbiddenOrMissingError(error)) return [];
+    if (!options.strict && isForbiddenOrMissingError(error)) return [];
     throw error;
   }
 }
@@ -14811,8 +15044,9 @@ export async function submitMyProfileUpdateRequest(
  * Keep to values the HR approvals endpoint typically accepts (avoid draft — self-service only).
  */
 const PROFILE_UPDATE_HISTORY_STATUSES = [
-  "submitted",
-  "pending",
+  "pending_manager_approval",
+  "pending_hr_approval",
+  "returned_for_correction",
   "approved",
   "rejected",
   "cancelled",
@@ -15097,9 +15331,70 @@ export async function rejectHrProfileUpdateRequest(
   );
 }
 
+export async function returnHrProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/profile-updates/${id}/return`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function updateMyProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/profile-update-requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/attendance/correction-requests/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function returnHrAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections/${id}/return`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function listHrAttendanceCorrectionApprovalRequests(
   token: string,
-  params: SelfServiceRequestQueryParams & { employee_id?: number } = {},
+  params: SelfServiceRequestQueryParams & {
+    employee_id?: number;
+    department_id?: number;
+    manager_employee_id?: number;
+  } = {},
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1;
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
@@ -15110,6 +15405,12 @@ export async function listHrAttendanceCorrectionApprovalRequests(
 
   if (params.employee_id !== undefined) {
     query.set("employee_id", String(params.employee_id));
+  }
+  if (params.department_id !== undefined) {
+    query.set("department_id", String(params.department_id));
+  }
+  if (params.manager_employee_id !== undefined) {
+    query.set("manager_employee_id", String(params.manager_employee_id));
   }
   if (params.status) {
     query.set("status", params.status);
@@ -16145,6 +16446,35 @@ export async function createMyEmployeeSectionItem(
     method: "POST",
     token,
     body: data,
+  });
+}
+
+export async function listCompanyBanks(token: string) {
+  const payload = await adminRequest<unknown>("/api/employees/bank-directory", {
+    token,
+  });
+  return normalizeList(payload);
+}
+
+export async function createCompanyBank(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/employees/bank-directory", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function uploadCompanyBankLogo(
+  token: string,
+  bankId: string | number,
+  file: File,
+) {
+  const form = new FormData();
+  form.append("file", file);
+  return adminRequest<unknown>(`/api/employees/bank-directory/${bankId}/logo`, {
+    method: "POST",
+    token,
+    body: form,
   });
 }
 

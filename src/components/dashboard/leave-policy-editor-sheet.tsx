@@ -152,6 +152,163 @@ function BoolPair({
 const inputClass =
   "h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-white"
 
+function ChoiceRow({
+  label,
+  hint,
+  value,
+  layoutId,
+  options,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  layoutId: string
+  options: Array<[string, string]>
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="min-w-0 sm:col-span-2">
+      <FieldLabel label={label} hint={hint} />
+      <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {options.map(([optionValue, optionLabel]) => {
+          const active = value === optionValue
+          return (
+            <WorkflowChoiceCard
+              key={optionValue || "default"}
+              active={active}
+              layoutId={layoutId}
+              onClick={() => onChange(optionValue)}
+            >
+              <span className={cn("block text-xs font-semibold", active ? "text-white" : "text-slate-900")}>
+                {optionLabel}
+              </span>
+            </WorkflowChoiceCard>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Per-leave-type accrual and carry-forward rules for this policy, so e.g.
+ * annual leave can accrue daily pro-rata while other types stay yearly.
+ */
+function PolicyTypeAccrualCarryForward({
+  index,
+  assignment,
+  onChange,
+}: {
+  index: number
+  assignment: LeavePolicyTypeAssignment
+  onChange: (patch: Partial<LeavePolicyTypeAssignment>) => void
+}) {
+  const custom = assignment.carry_forward_enabled !== ""
+  const enabled = assignment.carry_forward_enabled === "true"
+  return (
+    <>
+      <ChoiceRow
+        label="Accrual for this type"
+        hint="Daily pro-rata accrues the yearly allowance by days employed (28 ÷ 12 ≈ 2.33 days a month), starting on the employment date."
+        value={assignment.accrual_method}
+        layoutId={`policy-type-accrual-${index}`}
+        options={[
+          ["", "Policy schedule"],
+          ["daily", "Daily pro-rata"],
+          ["monthly", "Monthly"],
+          ["yearly", "Full year"],
+        ]}
+        onChange={(next) => onChange({ accrual_method: next })}
+      />
+      <ChoiceRow
+        label="Carry-forward"
+        hint="Use the leave type's basic setting, or set a carry-forward rule for employees covered by this policy."
+        value={assignment.carry_forward_enabled}
+        layoutId={`policy-type-cf-${index}`}
+        options={[
+          ["", "Leave type default"],
+          ["true", "Allowed"],
+          ["false", "Not allowed"],
+        ]}
+        onChange={(next) => onChange({ carry_forward_enabled: next })}
+      />
+      {custom && enabled ? (
+        <>
+          <Field label="Max days carried" hint="Leave blank for no cap.">
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              className={inputClass}
+              placeholder="No cap"
+              value={assignment.carry_forward_max_days}
+              onChange={(event) => onChange({ carry_forward_max_days: event.target.value })}
+            />
+          </Field>
+          <ChoiceRow
+            label="Carried days expire"
+            hint="When unused carried-forward days lapse in the new leave year."
+            value={assignment.carry_forward_expiry_mode}
+            layoutId={`policy-type-cf-expiry-${index}`}
+            options={[
+              ["none", "Never"],
+              ["months", "After months"],
+              ["date", "On a date"],
+            ]}
+            onChange={(next) => onChange({ carry_forward_expiry_mode: next })}
+          />
+          {assignment.carry_forward_expiry_mode === "months" ? (
+            <Field label="Months into the new year" hint="e.g. 3 = carried days expire after 31 March.">
+              <input
+                type="number"
+                min={1}
+                max={12}
+                className={inputClass}
+                value={assignment.carry_forward_expiry_months}
+                onChange={(event) => onChange({ carry_forward_expiry_months: event.target.value })}
+              />
+            </Field>
+          ) : null}
+          {assignment.carry_forward_expiry_mode === "date" ? (
+            <Field label="Expiry date (MM-DD)" hint="Day of the new leave year, e.g. 06-30.">
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
+                placeholder="MM-DD"
+                className={inputClass}
+                value={assignment.carry_forward_expiry_date}
+                onChange={(event) => onChange({ carry_forward_expiry_date: event.target.value })}
+              />
+            </Field>
+          ) : null}
+          {assignment.carry_forward_expiry_mode !== "none" ? (
+            <BoolPair
+              label="Expire automatically"
+              hint="Unused carried days are removed on the expiry date and recorded in the balance history."
+              value={assignment.carry_forward_auto_expire}
+              layoutId={`policy-type-cf-auto-${index}`}
+              trueLabel="Automatic"
+              falseLabel="HR decides"
+              onChange={(next) => onChange({ carry_forward_auto_expire: next })}
+            />
+          ) : null}
+          <BoolPair
+            label="Use carried days first"
+            hint="Whether leave taken uses carried-forward days before newly accrued days."
+            value={assignment.carry_forward_consume_first}
+            layoutId={`policy-type-cf-first-${index}`}
+            trueLabel="Carried first"
+            falseLabel="Accrued first"
+            onChange={(next) => onChange({ carry_forward_consume_first: next })}
+          />
+        </>
+      ) : null}
+    </>
+  )
+}
+
 type PolicyStage = "basics" | "entitlements" | "who" | "rules"
 
 const STAGES: Array<{ key: PolicyStage; number: string; label: string }> = [
@@ -433,10 +590,11 @@ export function LeavePolicyEditorSheet({
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="min-w-0 sm:col-span-2">
                             <FieldLabel label="Accrual schedule" hint="Choose when leave days are added: yearly, monthly, or by HR." />
-                            <div className="mt-1 grid grid-cols-3 gap-1.5">
+                            <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                               {[
                                 ["yearly", "Yearly"],
                                 ["monthly", "Monthly"],
+                                ["daily", "Daily pro-rata"],
                                 ["manual", "Manual"],
                               ].map(([optionValue, label]) => {
                                 const active = value.accrual_method === optionValue
@@ -455,7 +613,7 @@ export function LeavePolicyEditorSheet({
                               })}
                             </div>
                           </div>
-                          {value.accrual_method !== "manual" ? (
+                          {value.accrual_method !== "manual" && value.accrual_method !== "daily" ? (
                             <Field label="Days added each period" hint="How many leave days are added each time.">
                               <input
                                 type="number"
@@ -599,8 +757,8 @@ export function LeavePolicyEditorSheet({
                                         />
                                       </Field>
                                       <Field
-                                        label="Entitlement carry-over cap"
-                                        hint="The most unused days that can move to the next year. Enter 0 for no limit."
+                                        label="Maximum accumulated balance"
+                                        hint="The most leave days an employee may hold for this type (applied to balance imports). Enter 0 for no limit."
                                       >
                                         <input
                                           type="number"
@@ -612,6 +770,11 @@ export function LeavePolicyEditorSheet({
                                           }
                                         />
                                       </Field>
+                                      <PolicyTypeAccrualCarryForward
+                                        index={index}
+                                        assignment={assignment}
+                                        onChange={(patch) => updateAssignment(index, patch)}
+                                      />
                                       <BoolPair
                                         label="Encashment"
                                         hint="Choose whether employees can receive money for unused leave days."

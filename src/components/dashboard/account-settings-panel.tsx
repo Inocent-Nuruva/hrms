@@ -8,6 +8,12 @@ import {
   CheckCircle2, Copy, ImageIcon, InfoIcon, KeyRound, LogOut, MailCheck, RefreshCw, ShieldCheck, ShieldOff, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/fluent-toast-store"
 import {
+  Switch,
+  Tab,
+  TabList,
+  type SelectTabData,
+} from "@fluentui/react-components"
+import {
   extractDefaultAvatarImageUrl,
   extractBackupCodes,
   extractProfilePhotoUrl,
@@ -46,7 +52,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
   DialogDescription,
@@ -72,6 +77,7 @@ interface AccountSettingsPanelProps {
 }
 
 type SecurityTab = "reset-password" | "two-factor" | "devices" | "email"
+type SettingsSection = "profile" | "security" | "notifications"
 
 const NOTIFICATION_PREFERENCE_CHANNELS: NotificationChannel[] = [
   "IN_APP",
@@ -130,7 +136,7 @@ const NOTIFICATION_PREFERENCE_GROUPS: Array<{
   },
   {
     title: "Attendance",
-    types: ["ATTENDANCE_CORRECTION"],
+    types: ["ATTENDANCE_LATE", "ATTENDANCE_MISSING", "ATTENDANCE_CORRECTION"],
   },
 ]
 
@@ -308,6 +314,11 @@ function AccountSettingsPanelContent({
   const searchParams = useSearchParams()
   const [hasHydrated, setHasHydrated] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<SecurityTab>("reset-password")
+  const settingsSection = (() => {
+    const section = searchParams?.get("section")?.toLowerCase()
+    if (section === "security" || section === "notifications") return section
+    return "profile"
+  })() satisfies SettingsSection
   const [requiresPasswordChange, setRequiresPasswordChange] = React.useState(false)
   const [passwordBusy, setPasswordBusy] = React.useState(false)
   const [passwordError, setPasswordError] = React.useState<string | null>(null)
@@ -336,6 +347,7 @@ function AccountSettingsPanelContent({
   const [notificationPreferencesLoading, setNotificationPreferencesLoading] = React.useState(false)
   const [notificationPreferencesError, setNotificationPreferencesError] = React.useState<string | null>(null)
   const [notificationPreferenceBusyKey, setNotificationPreferenceBusyKey] = React.useState<string | null>(null)
+  const [notificationSearch, setNotificationSearch] = React.useState("")
   const [profilePictureOpen, setProfilePictureOpen] = React.useState(false)
   const [profilePictureSaving, setProfilePictureSaving] = React.useState(false)
   const [profilePictureError, setProfilePictureError] = React.useState<string | null>(null)
@@ -469,6 +481,24 @@ function AccountSettingsPanelContent({
     [pathname, requiresPasswordChange, router, searchParams]
   )
 
+  const handleSectionChange = React.useCallback(
+    (section: SettingsSection) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "")
+      params.set("section", section)
+      router.replace(`${pathname ?? "/dashboard/settings"}?${params.toString()}`, { scroll: false })
+    },
+    [pathname, router, searchParams],
+  )
+  const handleSectionTabSelect = React.useCallback(
+    (_event: unknown, data: SelectTabData) => {
+      const section = String(data.value) as SettingsSection
+      if (section === "profile" || section === "security" || section === "notifications") {
+        handleSectionChange(section)
+      }
+    },
+    [handleSectionChange],
+  )
+
   const refreshSecurityFlags = React.useCallback(async () => {
     const accessToken = resolveFreshAccessToken(token)
     if (!accessToken) return
@@ -594,6 +624,16 @@ function AccountSettingsPanelContent({
     })
     return map
   }, [notificationPreferences])
+  const visibleNotificationGroups = React.useMemo(() => {
+    const query = notificationSearch.trim().toLowerCase()
+    if (!query) return NOTIFICATION_PREFERENCE_GROUPS
+    return NOTIFICATION_PREFERENCE_GROUPS.map((group) => ({
+      ...group,
+      types: group.types.filter((type) =>
+        `${group.title} ${type} ${formatNotificationPreferenceLabel(type)}`.toLowerCase().includes(query),
+      ),
+    })).filter((group) => group.types.length > 0)
+  }, [notificationSearch])
 
   const handleChangePassword = async ({
     currentPassword,
@@ -908,6 +948,22 @@ function AccountSettingsPanelContent({
 
   return (
     <div className="grid gap-4 px-4 lg:px-6">
+      <nav className="sticky top-0 z-20 -mx-4 min-w-0 border-b border-border/80 bg-card px-4 py-1 lg:-mx-6 lg:px-6" aria-label="Settings sections">
+        <div className="tab-rail-scroll min-w-0">
+          <TabList
+            aria-label="Settings pages"
+            size="small"
+            selectedValue={settingsSection}
+            onTabSelect={handleSectionTabSelect}
+          >
+            <Tab value="profile">Profile</Tab>
+            <Tab value="security">Security</Tab>
+            <Tab value="notifications">Notifications</Tab>
+          </TabList>
+        </div>
+      </nav>
+      {settingsSection === "profile" ? (
+        <>
       {profilePictureHref ? (
         <Card>
           <CardHeader>
@@ -1071,6 +1127,9 @@ function AccountSettingsPanelContent({
           </CardContent>
         </Card>
       ) : null}
+        </>
+      ) : null}
+      {settingsSection === "security" ? (
       <Card>
         <CardHeader>
           <CardTitle>Security & Authentication</CardTitle>
@@ -1586,6 +1645,9 @@ function AccountSettingsPanelContent({
         </CardContent>
       </Card>
 
+      ) : null}
+
+      {settingsSection === "notifications" ? (
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-1.5">
@@ -1621,6 +1683,18 @@ function AccountSettingsPanelContent({
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="max-w-md">
+            <Label htmlFor="notification-preference-search" className="sr-only">
+              Search notification types
+            </Label>
+            <Input
+              id="notification-preference-search"
+              type="search"
+              value={notificationSearch}
+              onChange={(event) => setNotificationSearch(event.target.value)}
+              placeholder="Search notification types"
+            />
+          </div>
           {notificationPreferencesError ? (
             <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
               {notificationPreferencesError}
@@ -1634,7 +1708,7 @@ function AccountSettingsPanelContent({
             </div>
           ) : (
             <div className="space-y-4">
-              {NOTIFICATION_PREFERENCE_GROUPS.map((group) => (
+              {visibleNotificationGroups.map((group) => (
                 <div key={group.title} className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-foreground">{group.title}</h3>
@@ -1679,28 +1753,31 @@ function AccountSettingsPanelContent({
                               const hasExplicitPreference = Boolean(preference)
                               return (
                                 <td key={channel} className="px-3 py-3 text-center align-middle">
-                                  <div className="flex flex-col items-center gap-1">
+                                  <div className="flex justify-center">
                                     <Switch
+                                      className="notification-preference-switch"
+                                      size="medium"
                                       checked={readNotificationPreferenceEnabled(preference)}
                                       disabled={busy || !token}
                                       aria-label={`${formatNotificationPreferenceLabel(notificationType)} ${formatNotificationPreferenceLabel(channel)}`}
-                                      onCheckedChange={(checked) =>
+                                      label={
+                                        busy
+                                          ? "Saving..."
+                                          : hasExplicitPreference
+                                            ? readNotificationPreferenceEnabled(preference)
+                                              ? "On"
+                                              : "Off"
+                                            : "Default on"
+                                      }
+                                      labelPosition="after"
+                                      onChange={(_event, data) =>
                                         void handleToggleNotificationPreference(
                                           notificationType,
                                           channel,
-                                          Boolean(checked)
+                                          data.checked
                                         )
                                       }
                                     />
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {busy
-                                        ? "Saving..."
-                                        : hasExplicitPreference
-                                          ? readNotificationPreferenceEnabled(preference)
-                                            ? "On"
-                                            : "Off"
-                                          : "Default on"}
-                                    </span>
                                   </div>
                                 </td>
                               )
@@ -1712,10 +1789,16 @@ function AccountSettingsPanelContent({
                   </div>
                 </div>
               ))}
+              {visibleNotificationGroups.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                  No notification types match “{notificationSearch}”.
+                </div>
+              ) : null}
             </div>
           )}
         </CardContent>
       </Card>
+      ) : null}
     </div>
   )
 }

@@ -450,7 +450,7 @@ export function LoginFlow({ defaultEmail = "", nextPath, onSuccess }: LoginFlowP
                 }
               }}
               placeholder="Enter password"
-              className="w-full"
+              className="password-reveal-managed w-full"
               contentAfter={
                 <Button
                   type="button"

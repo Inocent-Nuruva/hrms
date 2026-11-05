@@ -38,6 +38,7 @@ import {
 } from "@fluentui/react-icons"
 import {
   Button,
+  Badge,
   Field,
   InfoLabel,
   Input,
@@ -1721,15 +1722,15 @@ function AttendanceDetailsContent({
               : <Building24Color className="size-6" />
 
   return (
-    <div className="space-y-5 pr-1">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-4">
+    <div className={section === "holidays" ? "space-y-3 pr-1" : "space-y-5 pr-1"}>
+      <div className={section === "holidays" ? "flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-3" : "flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-4"}>
         <div className="flex min-w-0 items-start gap-3">
           <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/50 ring-1 ring-border/60">
             {heroIcon}
           </span>
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <h3 className={section === "holidays" ? "text-base font-semibold text-foreground" : "text-lg font-semibold text-foreground"}>{title}</h3>
+            <p className={section === "holidays" ? "mt-0.5 text-xs text-muted-foreground" : "mt-0.5 text-sm text-muted-foreground"}>
               {isSetupRecord ? `${sectionLabel} configuration` : `Attendance ${sectionLabel} record`}
             </p>
           </div>
@@ -1746,7 +1747,7 @@ function AttendanceDetailsContent({
           <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {sectionLabel} details
           </h4>
-          <div className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+          <div className={section === "holidays" ? "mt-2 grid gap-x-4 gap-y-2 sm:grid-cols-2" : "mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2"}>
             {readableEntries.map((entry) => {
               const isBoolean = entry.value === "Yes" || entry.value === "No"
               return (
@@ -1795,9 +1796,9 @@ function AttendanceDetailsContent({
       ) : null}
 
       {activityEntries.length > 0 ? (
-        <section className="border-t border-border/70 pt-4">
+        <section className={section === "holidays" ? "border-t border-border/70 pt-3" : "border-t border-border/70 pt-4"}>
           <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Record activity</h4>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div className={section === "holidays" ? "mt-2 grid gap-2 sm:grid-cols-2" : "mt-3 grid gap-4 sm:grid-cols-2"}>
             {activityEntries.map((entry) => (
               <div key={`${entry.label}-${entry.value}`} className="flex min-w-0 items-start gap-2.5">
                 <span className="mt-0.5 text-primary"><ClockAlarm20Regular /></span>
@@ -3887,7 +3888,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
               }
             }}
             title={`${ATTENDANCE_DETAIL_LABELS[activeSection] ?? activeSection.replaceAll("-", " ")} details`}
-            popupClassName={ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? "sm:max-w-3xl" : undefined}
+            popupClassName={activeSection === "holidays" ? "sm:max-w-lg !p-4" : ATTENDANCE_SETUP_SECTIONS.has(activeSection) ? "sm:max-w-3xl" : undefined}
             description={
               canReviewMobilePunchOverride
                 ? "Review the selected mobile punch override request and approve or reject it."
@@ -4139,17 +4140,44 @@ export function AttendanceManagementView({ section }: { section: string }) {
           ...columns.map((column: string) => ({
             key: column,
             label:
-              column === "branch_id"
+              activeSection === "holidays" && column === "branch_id"
+                ? "Branch"
+                : activeSection === "holidays" && (column === "company_id" || column === "companyId")
+                  ? "Company"
+                : activeSection === "holidays" && column === "type"
+                  ? "Holiday type"
+                : column === "branch_id"
                 ? "branch"
                 : column === "company_id" || column === "companyId"
                   ? "company"
                 : ATTENDANCE_SETUP_SECTIONS.has(activeSection)
                   ? column.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
                   : column.replaceAll("_", " "),
-            defaultWidth: 75,
+            defaultWidth: activeSection === "holidays"
+              ? column === "name" ? 280 : column === "company_id" || column === "companyId" ? 260 : 150
+              : 75,
             sortable: true,
             render:
-              column === "branch_id"
+              activeSection === "holidays" && column === "name"
+                ? (row: AdminRecord) => (
+                    <div className="flex items-center gap-2.5 py-1">
+                      <Calendar20Regular aria-hidden="true" className="shrink-0 text-primary" />
+                      <span className="font-medium text-foreground">{String(row.name ?? "Holiday")}</span>
+                    </div>
+                  )
+                : activeSection === "holidays" && column === "type"
+                  ? (row: AdminRecord) => (
+                      <Badge appearance="tint" color={String(row.type).toUpperCase() === "RELIGIOUS" ? "informative" : "brand"}>
+                        {String(row.type ?? "Other").toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                      </Badge>
+                    )
+                : activeSection === "holidays" && column === "date"
+                  ? (row: AdminRecord) => <span className="whitespace-nowrap tabular-nums text-foreground">{formatAdminValue(row.date)}</span>
+                : activeSection === "holidays" && column === "affects_overtime"
+                  ? (row: AdminRecord) => <Badge appearance="outline" color={row.affects_overtime === true ? "success" : "subtle"}>{row.affects_overtime === true ? "Yes" : "No"}</Badge>
+                : activeSection === "holidays" && column === "branch_id"
+                  ? (row: AdminRecord) => <span className="text-muted-foreground">{readNumberFromRecord(row, ["branch_id", "branchId"]) == null ? "Not specified" : resolveBranchName(readNumberFromRecord(row, ["branch_id", "branchId"]))}</span>
+                : column === "branch_id"
                 ? (row: AdminRecord) =>
                     resolveBranchName(readNumberFromRecord(row, ["branch_id", "branchId"]))
                 : column === "company_id" || column === "companyId"

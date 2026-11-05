@@ -41,7 +41,7 @@ export const SUPPORT_PAGES: SupportPage[] = [
   { title: "Grades", url: "/dashboard/structure/grades", hint: "Pay grades and ranks", keywords: ["grade", "structure"] },
   { title: "Employee numbering", url: "/dashboard/structure/numbering", hint: "Prefix and next employee number", keywords: ["numbering", "prefix", "employee number"] },
   { title: "Invite and register", url: "/dashboard/operations/recruitment", hint: "Invites and new hires", keywords: ["invite", "register", "recruit", "hire"] },
-  { title: "Payroll", url: "/dashboard/operations/payroll", hint: "Company payroll runs, inputs, and configuration (HR/finance)", keywords: ["payroll", "run", "salary processing"], audience: "company" },
+  { title: "Payroll setup & operations", url: "/dashboard/operations/payroll", hint: "Company payroll runs, inputs, and configuration (HR/finance)", keywords: ["payroll", "setup", "run", "salary processing"], audience: "company" },
   { title: "Reports", url: "/dashboard/operations/reports", hint: "Attendance downloads", keywords: ["report", "download", "export"], audience: "company" },
   { title: "Notifications", url: "/dashboard/operations/notifications", hint: "Company alerts", keywords: ["notification", "inbox"], audience: "company" },
   { title: "SMS", url: "/dashboard/sms/overview", hint: "Send texts, templates, and message logs", keywords: ["sms", "text", "message", "test sms"], audience: "company" },

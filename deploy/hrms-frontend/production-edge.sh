@@ -4,8 +4,33 @@ set -Eeuo pipefail
 
 umask 027
 
+log() { printf '[hrms-edge] %s\n' "$*"; }
+warn() { printf '[hrms-edge] WARNING: %s\n' "$*" >&2; }
+die() { printf '[hrms-edge] ERROR: %s\n' "$*" >&2; exit 1; }
+
+[[ "${EUID}" -eq 0 ]] || die 'This helper must run as root through its restricted sudo rule.'
+
+ACTION="${1:-}"
+REQUIRE_SSL="${2:-false}"
+# The domain serves UAT until Production first configures it; after that,
+# Production owns it and UAT deploys leave Nginx alone.
+TARGET="${3:-production}"
+[[ "$REQUIRE_SSL" == 'true' || "$REQUIRE_SSL" == 'false' ]] || die 'REQUIRE_SSL must be true or false.'
+[[ "$ACTION" == 'configure' || "$ACTION" == 'preflight' || "$ACTION" == 'status' ]] || {
+  die 'Usage: hrms-frontend-edge {configure|preflight|status} [true|false] [production|uat]'
+}
+case "$TARGET" in
+  production)
+    APP_PORT='8880'; BACKEND_PORT='8888'; FOREIGN_PORTS='9999|9990'
+    TEMPLATE_FILE='hrms.alliance.co.tz.conf' ;;
+  uat)
+    APP_PORT='9990'; BACKEND_PORT='9999'; FOREIGN_PORTS='8888|8880'
+    TEMPLATE_FILE='hrms.alliance.co.tz.uat.conf' ;;
+  *) die 'Target must be production or uat.' ;;
+esac
+
 readonly DOMAIN='hrms.alliance.co.tz'
-readonly APP_PORT='8880'
+readonly TARGET APP_PORT BACKEND_PORT FOREIGN_PORTS
 readonly HEALTH_PATH='/api/health/ready'
 readonly APP_HEALTH_URL="http://127.0.0.1:${APP_PORT}${HEALTH_PATH}"
 readonly LOCAL_NGINX_HEALTH_URL="http://127.0.0.1${HEALTH_PATH}"
@@ -15,24 +40,12 @@ readonly SITE_NAME='hrms.alliance.co.tz'
 readonly SITE_AVAILABLE="/etc/nginx/sites-available/${SITE_NAME}"
 readonly SITE_ENABLED="/etc/nginx/sites-enabled/${SITE_NAME}"
 readonly SITE_CONF_D="/etc/nginx/conf.d/${SITE_NAME}.conf"
-readonly TEMPLATE='/usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf'
+readonly TEMPLATE="/usr/local/share/hrms-frontend/nginx/${TEMPLATE_FILE}"
 readonly STATE_DIR='/var/lib/hrms-frontend-edge'
 readonly TEMPLATE_HASH_FILE="${STATE_DIR}/nginx-template.sha256"
+readonly OWNER_FILE="${STATE_DIR}/domain-owner"
 readonly CERT_FAILURE_MARKER="${STATE_DIR}/certbot-last-failure"
 readonly CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
-
-log() { printf '[hrms-edge] %s\n' "$*"; }
-warn() { printf '[hrms-edge] WARNING: %s\n' "$*" >&2; }
-die() { printf '[hrms-edge] ERROR: %s\n' "$*" >&2; exit 1; }
-
-[[ "${EUID}" -eq 0 ]] || die 'This helper must run as root through its restricted sudo rule.'
-
-ACTION="${1:-}"
-REQUIRE_SSL="${2:-false}"
-[[ "$REQUIRE_SSL" == 'true' || "$REQUIRE_SSL" == 'false' ]] || die 'REQUIRE_SSL must be true or false.'
-[[ "$ACTION" == 'configure' || "$ACTION" == 'preflight' || "$ACTION" == 'status' ]] || {
-  die 'Usage: hrms-frontend-edge {configure|preflight|status} [true|false]'
-}
 
 ssl_failure() {
   warn "$1"
@@ -71,10 +84,23 @@ configured_hash() {
   tr -d '[:space:]' < "$TEMPLATE_HASH_FILE"
 }
 
+
+domain_owner() {
+  [[ -f "$OWNER_FILE" ]] && tr -d '[:space:]' < "$OWNER_FILE"
+}
+
 site_has_expected_base() {
   [[ -f "$SITE_AVAILABLE" ]] || return 1
   grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' "$SITE_AVAILABLE" &&
-    grep -Fq 'proxy_pass http://127.0.0.1:8880;' "$SITE_AVAILABLE"
+    grep -Fq "proxy_pass http://127.0.0.1:${APP_PORT};" "$SITE_AVAILABLE" &&
+    grep -Fq "proxy_pass http://127.0.0.1:${BACKEND_PORT};" "$SITE_AVAILABLE"
+}
+
+[[ "$ACTION" == 'status' ]] || {
+  # A template must never proxy to the other environment or claim every hostname on this Nginx.
+  [[ ! -r "$TEMPLATE" ]] ||
+    ! grep -Eq "127\.0\.0\.1:(${FOREIGN_PORTS})|listen[[:space:]]+(\[::\]:)?(9990|8880)|server_name[^;]*[[:space:]]_[[:space:];]" "$TEMPLATE" ||
+    die "${TEMPLATE} targets the wrong environment's ports or uses a catch-all server_name. Rerun server-setup.sh with a fixed release."
 }
 
 nginx_loads_file() {
@@ -87,9 +113,9 @@ nginx_loads_file() {
 print_status() {
   log "Frontend PM2 target: 127.0.0.1:${APP_PORT}"
   if curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 10 "$APP_HEALTH_URL" >/dev/null; then
-    log 'Frontend port 8880 status: ready'
+    log "Frontend port ${APP_PORT} (${TARGET}) status: ready"
   else
-    warn 'Frontend port 8880 status: unavailable'
+    warn "Frontend port ${APP_PORT} (${TARGET}) status: unavailable"
   fi
 
   if command -v nginx >/dev/null 2>&1 && nginx -t; then
@@ -122,6 +148,11 @@ fi
 
 if [[ "$ACTION" == 'status' ]]; then
   print_status
+  exit 0
+fi
+
+if [[ "$TARGET" == 'uat' && "$(domain_owner || true)" == 'production' ]]; then
+  log "Production already serves ${DOMAIN}; leaving Nginx unchanged for UAT."
   exit 0
 fi
 
@@ -279,6 +310,7 @@ curl --noproxy '*' --fail --silent --show-error --connect-timeout 3 --max-time 1
     die 'The local Nginx reverse-proxy health check failed; the previous site was restored.'
   }
 log 'Local Nginx reverse-proxy health check passed.'
+printf '%s\n' "$TARGET" > "$OWNER_FILE"
 
 if [[ "$config_update_deferred" == 1 ]]; then
   ssl_failure 'The Nginx template update was deferred to avoid removing the existing SSL configuration. Configure SSL_EMAIL and deploy again.'

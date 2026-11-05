@@ -25,6 +25,7 @@ import {
   Card as FluentCard,
   CardHeader as FluentCardHeader,
   Input as FluentInput,
+  Field as FluentField,
   MessageBar,
   MessageBarBody,
   Tab,
@@ -6586,8 +6587,8 @@ export function PayrollOperationsView() {
 
     if (createMode === "adjustment") {
       return (
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Payroll period">
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          <FluentField label="Payroll period">
             <FluentSelect
               ariaLabel="Payroll period"
               className="w-full"
@@ -6608,10 +6609,10 @@ export function PayrollOperationsView() {
                 }),
               ]}
             />
-          </Field>
-          <Field label="Employee ID">
-            <input
-              className={inputClass}
+          </FluentField>
+          <FluentField label="Employee ID">
+            <FluentInput
+              className="w-full"
               value={advancedForm.employeeId}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6620,10 +6621,10 @@ export function PayrollOperationsView() {
                 }))
               }
             />
-          </Field>
-          <Field label="Component code">
-            <input
-              className={inputClass}
+          </FluentField>
+          <FluentField label="Component code">
+            <FluentInput
+              className="w-full"
               value={advancedForm.componentCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6633,10 +6634,10 @@ export function PayrollOperationsView() {
               }
               list="payroll-component-codes"
             />
-          </Field>
-          <Field label="Amount">
-            <input
-              className={inputClass}
+          </FluentField>
+          <FluentField label="Amount">
+            <FluentInput
+              className="w-full"
               value={advancedForm.amount}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6646,8 +6647,8 @@ export function PayrollOperationsView() {
               }
               placeholder="0.00"
             />
-          </Field>
-          <Field label="Adjustment type">
+          </FluentField>
+          <FluentField label="Adjustment type">
             <FluentSelect
               ariaLabel="Adjustment type"
               className="w-full"
@@ -6667,10 +6668,10 @@ export function PayrollOperationsView() {
                 { value: "COMMISSION", label: "Commission" },
               ]}
             />
-          </Field>
-          <Field label="Effective period code">
-            <input
-              className={inputClass}
+          </FluentField>
+          <FluentField label="Effective period code">
+            <FluentInput
+              className="w-full"
               value={advancedForm.effectivePeriodCode}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6680,10 +6681,12 @@ export function PayrollOperationsView() {
               }
               placeholder="Optional"
             />
-          </Field>
-          <Field label="Reason" className="md:col-span-2">
+          </FluentField>
+          <FluentField label="Reason" className="md:col-span-2">
             <Textarea
-              className={textareaClass}
+              formatting
+              formattingHint
+              className="min-h-24"
               value={advancedForm.reason}
               onChange={(event) =>
                 setAdvancedForm((current) => ({
@@ -6693,7 +6696,7 @@ export function PayrollOperationsView() {
               }
               placeholder="Reason for the adjustment"
             />
-          </Field>
+          </FluentField>
         </div>
       );
     }
@@ -8983,33 +8986,45 @@ export function PayrollOperationsView() {
             {[
               {
                 label: "Active runs",
+                tone: "text-blue-600 dark:text-blue-400",
                 value: overviewStats.activeRuns,
                 hint: "Processing or waiting for approval",
                 icon: <ArrowClockwise20Regular aria-hidden="true" />,
               },
               {
                 label: "Open inputs",
+                tone: "text-orange-600 dark:text-orange-400",
                 value: overviewStats.openInputs,
                 hint: "Not yet approved",
                 icon: <DocumentBulletList20Regular aria-hidden="true" />,
               },
               {
                 label: "Enabled profiles",
+                tone: "text-emerald-600 dark:text-emerald-400",
                 value: overviewStats.enabledProfiles,
                 hint: "Employees included in payroll",
                 icon: <PersonMoney20Regular aria-hidden="true" />,
               },
               {
                 label: "Periods",
+                tone: "text-violet-600 dark:text-violet-400",
                 value: overviewStats.totalPeriods,
                 hint: "Generated pay periods",
                 icon: <CheckmarkCircle20Regular aria-hidden="true" />,
               },
             ].map((item) => (
-              <FluentCard key={item.label} className="min-h-32 p-4 shadow-sm">
+              <FluentCard key={item.label} className="relative isolate overflow-hidden min-h-32 p-4 shadow-sm">
+                <div aria-hidden="true" className={`pointer-events-none absolute inset-0 -z-10 overflow-hidden ${item.tone}`}>
+                  <div className="absolute -right-12 -top-16 size-56 rounded-full border-[28px] border-current opacity-[0.06]" />
+                  <div className="absolute right-6 top-8 size-28 rounded-full border border-current opacity-[0.12]" />
+                  <div className="absolute -bottom-10 right-20 h-40 w-20 rotate-[25deg] bg-current opacity-[0.035]" />
+                  <div className="absolute left-[55%] top-8 h-20 w-px rotate-[38deg] bg-current opacity-[0.12]" />
+                  <div className="absolute left-[58%] top-10 size-1.5 rounded-full bg-current opacity-[0.15]" />
+                  <div className="absolute left-[62%] top-16 size-1 rounded-full bg-current opacity-[0.12]" />
+                </div>
                 <FluentCardHeader
                   image={
-                    <span className="flex size-7 items-center justify-center text-primary">
+                    <span className={`flex size-7 items-center justify-center ${item.tone}`}>
                       {item.icon}
                     </span>
                   }
@@ -11510,6 +11525,8 @@ export function PayrollOperationsView() {
                 ? "Create or update an employee payroll profile."
                 : createMode === "period"
                   ? "Generate a pay period from a calendar."
+                  : createMode === "adjustment"
+                    ? "Add a payroll adjustment."
                   : `Add a ${createButtonLabel.replace(/^New /, "").toLowerCase()}.`}
             </DialogDescription>
           </DialogHeader>
@@ -11521,16 +11538,16 @@ export function PayrollOperationsView() {
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <button
+              <FluentButton
                 type="button"
-                className={secondaryButtonClass}
+                appearance="secondary"
                 onClick={() => setCreateOpen(false)}
               >
                 Cancel
-              </button>
-              <button
+              </FluentButton>
+              <FluentButton
                 type="button"
-                className={primaryButtonClass}
+                appearance="primary"
                 disabled={saving}
                 onClick={() => void onCreate()}
               >
@@ -11541,7 +11558,7 @@ export function PayrollOperationsView() {
                     : createMode === "period"
                       ? "Generate"
                       : "Create"}
-              </button>
+              </FluentButton>
             </div>
           </DialogFooter>
         </DialogPopup>

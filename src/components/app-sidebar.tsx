@@ -63,7 +63,6 @@ import {
   attendanceWorkspaceSectionTabGroups,
   employeeSectionTabGroups,
   fieldSectionTabGroups,
-  financeSectionTabGroups,
   insightsSectionTabGroups,
   leaveManagementSectionTabGroups,
   movementSectionTabGroups,
@@ -163,18 +162,21 @@ const ActiveInsightsIcon = DataBarVerticalAscending24Color
 
 const adminData: SidebarData = {
   navMain: [
+    { title: "Forms & Feedback", url: "/dashboard/forms-feedback", icon: ReportsIcon, activeIcon: ActiveReportsIcon },
     {
       title: "To do",
       url: "/dashboard/me/requests/actions",
       matchUrls: [
         "/dashboard/me/requests/actions",
         "/dashboard/attendance/correction-requests",
+        "/dashboard/employees/profile-update-approvals",
       ],
       icon: NotificationsIcon,
       activeIcon: ActiveNotificationsIcon,
       items: [
         { title: "Employee Requests", url: "/dashboard/me/requests/actions" },
         { title: "Correction Requests", url: "/dashboard/attendance/correction-requests" },
+        { title: "Profile Update Approvals", url: "/dashboard/employees/profile-update-approvals" },
       ],
     },
     {
@@ -262,6 +264,8 @@ const adminData: SidebarData = {
         "/dashboard/me/team/members",
         "/dashboard/me/team/attendance",
         "/dashboard/me/team/actions",
+        "/dashboard/team/movements",
+        "/dashboard/operations/recruitment",
       ],
       icon: EmployeesIcon,
       activeIcon: ActiveEmployeesIcon,
@@ -369,8 +373,46 @@ const adminData: SidebarData = {
       icon: FinanceIcon,
       activeIcon: ActiveFinanceIcon,
       items: [
-        { title: "Payroll", url: "/dashboard/operations/payroll" },
-        ...sidebarWorkspacesFromSections(financeSectionTabGroups),
+        {
+          title: "Payroll",
+          url: "/dashboard/operations/payroll",
+          matchUrls: [
+            "/dashboard/operations/payroll",
+            "/dashboard/finance/payroll",
+          ],
+          items: [
+            {
+              title: "Payroll setup & operations",
+              url: "/dashboard/operations/payroll",
+            },
+            {
+              title: "Payroll deductions",
+              url: "/dashboard/finance/payroll",
+            },
+          ],
+        },
+        {
+          title: "My finance",
+          url: "/dashboard/me/finance/payroll",
+          matchUrls: [
+            "/dashboard/me/finance/payroll",
+            "/dashboard/me/finance/applications",
+          ],
+        },
+        {
+          title: "Finance management",
+          url: "/dashboard/finance/overview",
+          matchUrls: [
+            "/dashboard/finance/overview",
+            "/dashboard/finance/products",
+            "/dashboard/finance/applications",
+            "/dashboard/finance/accounts",
+            "/dashboard/finance/servicing",
+            "/dashboard/finance/reports",
+            "/dashboard/finance/settings",
+            "/dashboard/finance/integrations",
+          ],
+        },
       ],
     },
     {
@@ -517,6 +559,7 @@ const adminSearchIndex = [
   { title: "Attendance / Attendance Operations / Mobile Punch Review", url: "/dashboard/attendance/mobile-punches", section: "Attendance Operations", keywords: ["attendance", "mobile", "punches", "check in", "check out"] },
   { title: "Attendance / Attendance Operations / Daily Summaries", url: "/dashboard/attendance/daily-summaries", section: "Attendance Operations", keywords: ["attendance", "daily", "summaries", "processed"] },
   { title: "Attendance / Attendance Operations / Recalculation Jobs", url: "/dashboard/attendance/recalculation-jobs", section: "Attendance Operations", keywords: ["attendance", "recalculation", "jobs", "processing"] },
+  { title: "Attendance / Attendance Operations / Exemptions", url: "/dashboard/attendance/exemptions", section: "Attendance Operations", keywords: ["attendance", "exempt", "exemption", "not tracked", "no device"] },
   { title: "Attendance / Attendance Operations / Unmatched Logs", url: "/dashboard/attendance/unmatched-logs", section: "Attendance Operations", keywords: ["attendance", "unmatched", "logs", "processing"] },
   { title: "Attendance / Attendance Operations / Device Sync Logs", url: "/dashboard/attendance/device-sync-logs", section: "Attendance Operations", keywords: ["attendance", "sync logs"] },
   { title: "Access Control / Doors", url: "/dashboard/access-control/doors", section: "Access Control", keywords: ["attendance", "doors", "access"] },
@@ -541,6 +584,9 @@ const adminSearchIndex = [
   { title: "Performance / Plans", url: "/dashboard/performance/plans", section: "Performance", keywords: ["performance", "plan", "kpi"] },
   { title: "Performance / Reviews", url: "/dashboard/performance/reviews", section: "Performance", keywords: ["performance", "review", "appeal", "moderation"] },
   { title: "Performance / Improvement", url: "/dashboard/performance/improvement", section: "Performance", keywords: ["performance", "pip", "improvement"] },
+  { title: "Performance / Development", url: "/dashboard/performance/development", section: "Performance", keywords: ["performance", "development plan", "idp", "training"] },
+  { title: "Performance / Calibration", url: "/dashboard/performance/calibration", section: "Performance", keywords: ["performance", "calibration", "compare", "department"] },
+  { title: "Employees / Recruitment", url: "/dashboard/operations/recruitment", section: "Employees", keywords: ["recruitment", "pipeline", "candidate", "hire", "letters"] },
   { title: "Probation / Overview", url: "/dashboard/probation/overview", section: "Probation", keywords: ["probation", "confirmation"] },
   { title: "Probation / Policies", url: "/dashboard/probation/policies", section: "Probation", keywords: ["probation", "policy"] },
   { title: "Probation / Cases", url: "/dashboard/probation/cases", section: "Probation", keywords: ["probation", "case", "confirmation"] },
@@ -553,7 +599,7 @@ const adminSearchIndex = [
   { title: "Finance / Applications", url: "/dashboard/finance/applications", section: "Finance", keywords: ["loan", "advance", "application"] },
   { title: "Finance / Accounts", url: "/dashboard/finance/accounts", section: "Finance", keywords: ["loan", "repayment", "disbursement"] },
   { title: "Finance / Servicing", url: "/dashboard/finance/servicing", section: "Finance", keywords: ["deferment", "reschedule", "penalty", "waiver", "write-off", "exit recovery"] },
-  { title: "Finance / Payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
+  { title: "Payroll / Payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
   { title: "Finance / Bank, ERP & migration", url: "/dashboard/finance/integrations", section: "Finance", keywords: ["bank", "erp", "journal", "payment file", "statement", "migration"] },
   { title: "Finance / Settings", url: "/dashboard/finance/settings", section: "Finance", keywords: ["sanction letter", "template", "delegation"] },
   { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
@@ -579,7 +625,7 @@ const adminSearchIndex = [
   { title: "Structure / Numbering", url: "/dashboard/structure/numbering", section: "Structure", keywords: ["employee number", "prefix"] },
   { title: "Insights / Sales field", url: "/dashboard/insights/sales-field", section: "Insights", keywords: ["sales", "field", "analytics"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "sso", "shortcuts"] },
-  { title: "Finance / Payroll", url: "/dashboard/operations/payroll", section: "Finance", keywords: ["payroll", "runs", "payslips", "salary", "banking"] },
+  { title: "Payroll / Setup & operations", url: "/dashboard/operations/payroll", section: "Finance", keywords: ["payroll", "setup", "runs", "payslips", "salary", "banking"] },
   { title: "Reports & Analytics", url: "/dashboard/operations/reports", section: "Operations", keywords: ["reports", "analytics", "attendance", "download", "xlsx", "csv", "pdf", "scheduled", "smtp", "templates"] },
   { title: "Scheduled Reporting", url: "/dashboard/operations/scheduled-reporting", section: "Operations", keywords: ["scheduled reporting", "templates", "schedules", "executions", "smtp"] },
   { title: "Current notifications", url: "/dashboard/operations/notifications", section: "Notifications", keywords: ["notifications", "inbox", "alerts", "read", "seen", "archive"] },
@@ -617,6 +663,9 @@ const employeeSearchIndex = [
   { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
   { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
   { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },
+  { title: "My Team / Movements", url: "/dashboard/team/movements", section: "Team", keywords: ["team", "movement", "transfer", "promotion", "manager"] },
+  { title: "Approvals / Attendance Corrections", url: "/dashboard/attendance/correction-requests", section: "Team", keywords: ["attendance", "correction", "approve", "team", "manager"] },
+  { title: "Approvals / Profile Updates", url: "/dashboard/employees/profile-update-approvals", section: "Team", keywords: ["profile", "update", "approve", "team", "manager"] },
   { title: "My Requests", url: "/dashboard/me/requests/actions", section: "Requests", keywords: ["request", "document", "resignation", "profile change"] },
   { title: "Structure", url: "/dashboard/structure/cost-centers", section: "Structure", keywords: ["cost center", "grade"] },
   { title: "Insights", url: "/dashboard/insights/hr", section: "Insights", keywords: ["dashboard", "hr"] },
@@ -673,6 +722,15 @@ function filterNavByPermissions(
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
+      if (accessMode === "employee" && item.title === "Performance management") {
+        return null
+      }
+      const roleAwareTitle =
+        accessMode === "employee" && item.title === "Attendance"
+          ? "My attendance"
+          : accessMode === "employee" && item.title === "Employees"
+            ? "My profile"
+            : item.title
       const hasChildren = Array.isArray(item.items) && item.items.length > 0
       const accessibleUrl = firstAccessibleNavUrl(
         item.url,
@@ -684,7 +742,11 @@ function filterNavByPermissions(
 
       if (!hasChildren) {
         if (!accessibleUrl) return null
-        return accessibleUrl === item.url ? item : { ...item, url: accessibleUrl }
+        return {
+          ...item,
+          title: roleAwareTitle,
+          ...(accessibleUrl === item.url ? {} : { url: accessibleUrl }),
+        }
       }
 
       const filteredItems: SidebarNavItem[] = filterNavByPermissions(
@@ -699,6 +761,7 @@ function filterNavByPermissions(
       }
       return {
         ...item,
+        title: roleAwareTitle,
         url: accessibleUrl ?? filteredItems[0]?.url ?? item.url,
         items: filteredItems,
       }

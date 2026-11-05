@@ -24,6 +24,9 @@ import {
 import { toast } from "@/components/ui/fluent-toast-store";
 import {
   Avatar,
+  Card as FluentCard,
+  Text as FluentText,
+  Badge as FluentBadge,
   Button,
   Checkbox,
   Field,
@@ -35,6 +38,8 @@ import {
   TagPickerInput,
   TagPickerList,
   TagPickerOption,
+  Tab,
+  TabList,
 } from "@fluentui/react-components";
 import {
   Add20Regular,
@@ -403,7 +408,42 @@ function PurposeRichTextEditor({
   );
 }
 
+function FinanceSectionHeader({ title, description, count, icon }: {
+  title: string;
+  description: string;
+  count: number | null;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
+      <span aria-hidden="true" className="shrink-0 text-primary [&_svg]:size-6">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      {count !== null ? <FluentBadge appearance="tint" color="brand" aria-label={`${count} ${title.toLowerCase()}`}>{count}</FluentBadge> : null}
+    </div>
+  );
+}
+
+function FinanceEmptyState({ title, description, icon }: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center gap-2 px-5 py-7 text-center">
+      <span aria-hidden="true" className="mb-1 text-primary/70 [&_svg]:size-10">{icon}</span>
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
 export function FinanceSelfView() {
+  const [financeTab, setFinanceTab] = React.useState("applications");
+  const financeTabsId = React.useId();
+  const [sortContainer, setSortContainer] = React.useState<HTMLDivElement | null>(null);
   const leaveIfForbidden = useLeaveIfForbidden();
   const session = React.useSyncExternalStore(
     subscribeSession,
@@ -1286,100 +1326,120 @@ export function FinanceSelfView() {
   );
 
   return (
-    <section className="space-y-4">
+    <section className="pb-8">
       <TalentDoodleSprites />
-      <div
-        className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
+      <div className={pageBleedClass}>
+      <FluentCard
+        className={`relative overflow-hidden !rounded-none !border-x-0 !border-y !border-border !bg-primary !p-0 shadow-sm`}
       >
-        <div className="relative overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-7 text-primary-foreground sm:px-8 sm:py-8">
-          <div className="finance-hero-drift pointer-events-none absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
-          <div className="finance-hero-orbit pointer-events-none absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
-          <div className="finance-hero-band pointer-events-none absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary-foreground/20" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-4 sm:gap-5">
-              <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" />
-              <div
-                className="h-12 w-px shrink-0 bg-primary-foreground/25"
-                aria-hidden="true"
-              />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-foreground/70">
-                  My finance
-                </p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  Loans and advances
-                </h1>
-                <p className="mt-1 text-sm text-primary-foreground/75">
-                  Apply and track your own finance requests.
-                </p>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90">
+          <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+          <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+          <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+          <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
+          <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
+          <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
+        </div>
+        <header className="relative flex flex-wrap items-center justify-between gap-5 px-5 py-5 text-primary-foreground sm:px-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <Wallet24Regular className="size-9 shrink-0 text-primary-foreground/90" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold tracking-tight text-primary-foreground sm:text-2xl">Loans &amp; advances</h1>
+                <FluentBadge
+                  appearance="ghost"
+                  color="informative"
+                  className="!gap-2 !rounded-none !px-1 !font-medium !text-primary-foreground"
+                  icon={<span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-current ring-[3px] ring-current/10" />}
+                >
+                  {applications.length ? `${applications.length} applications` : "Ready for your first application"}
+                </FluentBadge>
               </div>
+              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-primary-foreground/90">
+                <span>Welcome back,</span>
+                <span className="relative isolate inline-block break-words pb-1 text-xl font-semibold tracking-tight text-primary-foreground after:absolute after:inset-x-0 after:bottom-1 after:-z-10 after:h-2 after:-rotate-2 after:rounded-sm after:bg-primary-foreground/20 sm:text-2xl">
+                  {session.user?.fullName?.split(" ")[0] || "there"}
+                </span>
+              </p>
             </div>
-            <Button
-              appearance="transparent"
-              icon={
-                mounted && loading ? (
-                  <FluentLoadingIndicator className="size-4 animate-spin" />
-                ) : (
-                  <ArrowClockwise20Regular />
-                )
-              }
-              aria-label="Refresh my finance"
-              title="Refresh"
-              className="!min-w-0 !self-end !text-primary-foreground hover:!bg-primary-foreground/10 sm:!self-auto"
-              onClick={() => void load()}
-              disabled={mounted ? loading : undefined}
-            />
           </div>
-        </div>
-        <div className="grid bg-background sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            {
-              label: "Applications",
-              value: applications.length,
-              icon: DocumentBulletList24Regular,
-            },
-            {
-              label: "Available products",
-              value: products.length,
-              icon: AppsList24Regular,
-            },
-            {
-              label: "Open",
-              value: applications.filter(
-                (row) =>
-                  !["WITHDRAWN", "REJECTED", "CLOSED"].includes(
-                    readString(row, ["status"]).toUpperCase(),
-                  ),
-              ).length,
-              icon: CheckmarkCircle20Regular,
-            },
-            {
-              label: "Guarantee requests",
-              value: guarantorRequests.length,
-              icon: Wallet24Regular,
-            },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="flex items-center gap-3 border-b border-border px-5 py-4 last:border-b-0 sm:border-r sm:even:border-r-0 xl:border-b-0 xl:even:border-r xl:last:border-r-0"
-            >
-              <item.icon className="shrink-0 text-primary" />
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {item.label}
-                </p>
-                <p className="text-lg font-semibold text-foreground">
-                  {item.value}
-                </p>
+          <Button
+            appearance="subtle"
+            size="large"
+            className="!ml-auto !size-11 !min-w-11 !shrink-0 !text-primary-foreground hover:!bg-primary-foreground/10 disabled:!opacity-50 [&_svg]:!size-6"
+            aria-label={mounted && loading ? "Refreshing loans and advances" : "Refresh loans and advances"}
+            title="Refresh loans and advances"
+            aria-busy={mounted && loading}
+            icon={mounted && loading ? <FluentLoadingIndicator className="size-4 animate-spin" /> : <ArrowClockwise20Regular />}
+            disabled={mounted ? loading || !session.tokens?.accessToken : undefined}
+            onClick={() => void load()}
+          />
+        </header>
+      </FluentCard>
+
+      <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: "Applications", value: applications.length, detail: "Your finance requests", icon: DocumentBulletList24Regular, tone: "text-emerald-600 dark:text-emerald-400" },
+          { label: "Available products", value: products.length, detail: "Loans and advances to explore", icon: AppsList24Regular, tone: "text-sky-600 dark:text-sky-400" },
+          { label: "Open", value: applications.filter((row) => !["WITHDRAWN", "REJECTED", "CLOSED"].includes(readString(row, ["status"]).toUpperCase())).length, detail: "Applications being tracked", icon: CheckmarkCircle20Regular, tone: "text-amber-600 dark:text-amber-400" },
+          { label: "Guarantee requests", value: guarantorRequests.length, detail: "Requests from colleagues", icon: Wallet24Regular, tone: "text-rose-600 dark:text-rose-400" },
+        ].map((item) => (
+            <FluentCard key={item.label} className="relative isolate min-w-0 overflow-hidden !rounded-none !border-0 !border-b !border-r !border-border !gap-1 !px-5 !py-3 !shadow-none sm:!px-6">
+              <div aria-hidden="true" className={`pointer-events-none absolute inset-0 -z-10 overflow-hidden ${item.tone}`}>
+                <div className="absolute -right-12 -top-16 size-56 rounded-full border-[28px] border-current opacity-[0.06]" />
+                <div className="absolute right-6 top-8 size-28 rounded-full border border-current opacity-[0.12]" />
+                <div className="absolute -bottom-10 right-20 h-40 w-20 rotate-[25deg] bg-current opacity-[0.035]" />
+                <div className="absolute left-[55%] top-8 h-20 w-px rotate-[38deg] bg-current opacity-[0.12]" />
+                <div className="absolute left-[58%] top-10 size-1.5 rounded-full bg-current opacity-[0.15]" />
+                <div className="absolute left-[62%] top-16 size-1 rounded-full bg-current opacity-[0.12]" />
               </div>
-            </div>
-          ))}
+              <div className="flex items-center justify-between gap-3">
+                <FluentText size={200} weight="semibold" className="!text-muted-foreground">
+                  {item.label}
+                </FluentText>
+                <item.icon className={`size-5 ${item.tone}`} />
+              </div>
+              <FluentText size={500} weight="semibold" className="!my-0 !block !tracking-tight !text-foreground tabular-nums">
+                {item.value}
+              </FluentText>
+              <FluentText size={200} className="!mt-0 !block !text-muted-foreground">
+                {item.detail}
+              </FluentText>
+            </FluentCard>
+        ))}
+      </div>
+      </div>
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
         </div>
-        <div className="flex flex-col gap-3 border-t border-border bg-muted/20 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p className="text-sm text-muted-foreground">
-            Choose a product and submit a new application.
-          </p>
+      ) : null}
+      <div className={`${pageBleedClass} flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border py-2 pr-4 sm:pr-5`}>
+        <div className="max-w-full overflow-x-auto">
+        <TabList
+          aria-label="Loans and advances sections"
+          selectedValue={financeTab}
+          onTabSelect={(_event, data) => setFinanceTab(String(data.value))}
+          className="min-w-max"
+        >
+          {[
+            { key: "applications", label: "My applications", count: applications.length, icon: <DocumentBulletList24Regular /> },
+            { key: "guarantees", label: "Guarantee requests", count: guarantorRequests.length, icon: <Person20Regular /> },
+            { key: "loans", label: "My loans", count: accounts.length, icon: <Wallet24Regular /> },
+          ].map((tab) => (
+            <Tab key={tab.key} value={tab.key} icon={tab.icon}
+              id={`${financeTabsId}-${tab.key}-tab`}
+              aria-controls={`${financeTabsId}-${tab.key}-panel`}>
+              <span className="flex items-center gap-2">
+                {tab.label}
+                {!loading ? <FluentBadge size="small" appearance="tint" color={financeTab === tab.key ? "brand" : "subtle"}>{tab.count}</FluentBadge> : null}
+              </span>
+            </Tab>
+          ))}
+        </TabList>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <div ref={setSortContainer} />
           <Button
             appearance="primary"
             icon={<Add20Regular />}
@@ -1401,20 +1461,20 @@ export function FinanceSelfView() {
           </Button>
         </div>
       </div>
-      {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error}
-        </div>
-      ) : null}
       <div
+        role="tabpanel"
+        id={`${financeTabsId}-applications-panel`}
+        aria-labelledby={`${financeTabsId}-applications-tab`}
+        hidden={financeTab !== "applications"}
+        tabIndex={0}
         className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
       >
-        <div className="border-b border-border px-5 py-3 sm:px-8">
-          <h2 className="font-semibold text-foreground">My applications</h2>
-          <p className="text-sm text-muted-foreground">
-            Drafts and submitted requests appear here.
-          </p>
-        </div>
+        <FinanceSectionHeader
+          title="My applications"
+          description="Drafts and submitted requests appear here."
+          count={loading ? null : applications.length}
+          icon={<DocumentBulletList24Regular />}
+        />
         <ResizableTable
           title="My applications"
           data={applications}
@@ -1422,21 +1482,33 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={20}
           showExport={false}
-          showToolbar={false}
-          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
-          emptyContent="No applications yet. Select New application to get started."
+          showToolbar={true}
+          toolbarClassName="!mb-0"
+          sortIconOnly
+          frameClassName="!rounded-none !border-0 !shadow-none"
+          emptyContent={<FinanceEmptyState
+            title="Your next step starts here"
+            description="Select New application to explore products and send a request."
+            icon={<DocumentBulletList24Regular />}
+          />}
+          sortContainer={financeTab === "applications" ? sortContainer : null}
           storageKey="me-finance-applications"
         />
       </div>
       <div
+        role="tabpanel"
+        id={`${financeTabsId}-guarantees-panel`}
+        aria-labelledby={`${financeTabsId}-guarantees-tab`}
+        hidden={financeTab !== "guarantees"}
+        tabIndex={0}
         className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
       >
-        <div className="border-b border-border px-5 py-3 sm:px-8">
-          <h2 className="font-semibold text-foreground">Guarantee requests</h2>
-          <p className="text-sm text-muted-foreground">
-            Requests from colleagues who selected you as guarantor.
-          </p>
-        </div>
+        <FinanceSectionHeader
+          title="Guarantee requests"
+          description="Requests from colleagues who selected you as guarantor."
+          count={loading ? null : guarantorRequests.length}
+          icon={<Person20Regular />}
+        />
         <ResizableTable
           title="My guarantor requests"
           data={guarantorRequests}
@@ -1444,21 +1516,33 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={10}
           showExport={false}
-          showToolbar={false}
-          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
-          emptyContent="No guarantee requests are waiting for you."
+          showToolbar={true}
+          toolbarClassName="!mb-0"
+          sortIconOnly
+          frameClassName="!rounded-none !border-0 !shadow-none"
+          emptyContent={<FinanceEmptyState
+            title="You’re all caught up"
+            description="When a colleague asks you to be their guarantor, their request will appear here."
+            icon={<Person20Regular />}
+          />}
+          sortContainer={financeTab === "guarantees" ? sortContainer : null}
           storageKey="me-finance-guarantor-requests"
         />
       </div>
       <div
+        role="tabpanel"
+        id={`${financeTabsId}-loans-panel`}
+        aria-labelledby={`${financeTabsId}-loans-tab`}
+        hidden={financeTab !== "loans"}
+        tabIndex={0}
         className={`${pageBleedClass} overflow-hidden border-y border-border bg-background`}
       >
-        <div className="border-b border-border px-5 py-3 sm:px-8">
-          <h2 className="font-semibold text-foreground">My loans</h2>
-          <p className="text-sm text-muted-foreground">
-            Active accounts, balances, and statements.
-          </p>
-        </div>
+        <FinanceSectionHeader
+          title="My loans"
+          description="Active accounts, balances, and statements."
+          count={loading ? null : accounts.length}
+          icon={<Wallet24Regular />}
+        />
         <ResizableTable
           title="My loans"
           data={accounts}
@@ -1562,9 +1646,16 @@ export function FinanceSelfView() {
           loading={loading}
           itemsPerPage={10}
           showExport={false}
-          showToolbar={false}
-          frameClassName="!rounded-none !border-x-0 !border-b-0 !shadow-none"
-          emptyContent="You do not have any finance accounts yet."
+          showToolbar={true}
+          toolbarClassName="!mb-0"
+          sortIconOnly
+          frameClassName="!rounded-none !border-0 !shadow-none"
+          emptyContent={<FinanceEmptyState
+            title="Your loans, in one place"
+            description="Once you have an active loan, track its balance, monthly repayments, and statements here."
+            icon={<Wallet24Regular />}
+          />}
+          sortContainer={financeTab === "loans" ? sortContainer : null}
           storageKey="me-finance-accounts"
         />
       </div>

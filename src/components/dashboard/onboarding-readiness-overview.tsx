@@ -120,25 +120,47 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
         </Tooltip>
       </div>
       {error ? <MessageBar intent="error"><MessageBarBody><strong>Readiness unavailable</strong><p>{error} Activation is disabled until a fresh check succeeds.</p></MessageBarBody></MessageBar> : !readiness ? <Spinner label="Checking activation requirements…" /> : <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Onboarding stages">
+        <div className="grid overflow-hidden rounded-xl border border-border/80 bg-background shadow-sm sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-border/70" aria-label="Onboarding stages">
           {stages.map((stage) => {
             const items = visibleRequirements.filter((item) => item.required && stage.actions.includes(item.action))
             const remaining = items.filter((item) => !complete(item))
-            return <Card key={stage.label}><CardHeader image={remaining.length ? <Clock20Regular /> : <CheckmarkCircle20Regular />} header={<Text weight="semibold">{stage.label}</Text>} description={items.length ? remaining.length ? `${remaining.length} remaining` : "Required checks complete" : "No required checks"} /></Card>
+            const stageComplete = items.length > 0 && remaining.length === 0
+            const stageStatus = !items.length ? "No checks" : stageComplete ? "Complete" : `${remaining.length} left`
+            return <div
+              key={stage.label}
+              className="group flex min-w-0 items-center gap-3 border-b border-border/70 px-3 py-2.5 transition-colors last:border-b-0 hover:bg-muted/30 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0"
+            >
+              <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${stageComplete ? "bg-emerald-50 text-emerald-700" : remaining.length ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"}`} aria-hidden="true">
+                {stageComplete ? <CheckmarkCircle20Regular /> : <Clock20Regular />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold leading-5">{stage.label}</p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <span className={`text-xs font-medium ${stageComplete ? "text-emerald-700" : remaining.length ? "text-amber-700" : "text-muted-foreground"}`}>{stageStatus}</span>
+                  {items.length ? <span className="text-xs text-muted-foreground">{items.length - remaining.length}/{items.length}</span> : null}
+                </div>
+              </div>
+              <span className={`size-1.5 shrink-0 rounded-full ${stageComplete ? "bg-emerald-500" : remaining.length ? "bg-amber-500" : "bg-muted-foreground/40"}`} aria-hidden="true" />
+            </div>
           })}
         </div>
         {summaryTarget ? createPortal(summary, summaryTarget) : summary}
         <div className="min-w-0">
           <div className="flex min-w-0 flex-col gap-4">
-            {readiness.closed ? <MessageBar intent={readiness.request_status === "completed" ? "success" : "info"}><MessageBarBody><strong>{title}</strong><p>Employee status: {readiness.employee_status?.replaceAll("_", " ")}.</p><Button onClick={() => onNavigate("details", "employee-profile")}>Open employee profile</Button></MessageBarBody></MessageBar> : <MessageBar intent={outstanding.length === 0 ? "success" : "info"}><MessageBarBody><strong>{outstanding.length === 0 ? "All visible checks are satisfied" : "Next best action"}</strong><p>{outstanding[0] ? `${outstanding[0].label} · Responsible: ${outstanding[0].owner}` : canViewPayroll ? "Authorized HR can review and activate this employee." : "Additional restricted checks may remain for payroll or other authorized teams."}</p></MessageBarBody></MessageBar>}
-            {!readiness.closed ? <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">{Array.from(groups, ([group, requirements]) => <section key={group} className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-gradient-to-br from-background via-background to-muted/45 shadow-sm">
-              <header className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-4 py-3">
-                <div className="min-w-0"><h3 className="truncate text-sm font-semibold">{group}</h3><p className="text-xs text-muted-foreground">{requirements.length} outstanding</p></div>
-                <span className="size-2.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.12)]" aria-hidden="true" />
+            {readiness.closed ? <MessageBar intent={readiness.request_status === "completed" ? "success" : "info"}><MessageBarBody><strong>{title}</strong><p>Employee status: {readiness.employee_status?.replaceAll("_", " ")}.</p><Button onClick={() => onNavigate("details", "employee-profile")}>Open employee profile</Button></MessageBarBody></MessageBar> : null}
+            {!readiness.closed ? <div className="grid items-start gap-3 2xl:grid-cols-2">{Array.from(groups, ([group, requirements]) => <section key={group} className="min-w-0 overflow-hidden rounded-lg border border-border/80 bg-background shadow-sm">
+              <header className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-3 py-2">
+                <h3 className="min-w-0 truncate text-sm font-semibold">{group}</h3>
+                <Badge appearance="tint" color="warning" size="small">{requirements.length} open</Badge>
               </header>
-              <ul className="divide-y divide-border/70">{requirements.map((requirement) => <li key={requirement.id} className="min-w-0 px-4 py-3">
-                <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold leading-5">{requirement.label}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">Responsible: {requirement.owner}{requirement.due_date ? ` · Due ${new Date(requirement.due_date).toLocaleDateString()}` : ""}</p></div><Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"}>{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge></div>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5"><Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button><Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`}>Details</Button></Tooltip>{onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}</div>
+              <ul className="divide-y divide-border/70">{requirements.map((requirement) => <li key={requirement.id} className="min-w-0 px-3 py-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+                  <div className="mr-auto min-w-40 flex-1"><p className="truncate text-sm font-semibold leading-5">{requirement.label}</p><span className="sr-only">Responsible: {requirement.owner}</span>{requirement.due_date ? <p className="text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</p> : null}</div>
+                  <Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge>
+                  <Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button>
+                  <Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`}>Details</Button></Tooltip>
+                  {onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}
+                </div>
               </li>)}</ul>
             </section>)}</div> : null}
             <Button appearance="subtle" aria-expanded={showCompleted} onClick={() => setShowCompleted((value) => !value)}>{showCompleted ? "Hide completed requirements" : `Show completed requirements (${completed.length})`}</Button>

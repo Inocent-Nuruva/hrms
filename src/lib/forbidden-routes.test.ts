@@ -31,6 +31,15 @@ describe("forbidden route memory", () => {
     })
   }
 
+  it("keeps Forms & Feedback visible despite a previously remembered denial", () => {
+    stubSession()
+    window.sessionStorage.setItem("hrms.forbiddenRoutes.v3", JSON.stringify(["/dashboard/forms-feedback"]))
+    expect(canSeeDashboardPage("/dashboard/forms-feedback", ["forms_feedback:manage"], "admin")).toBe(true)
+    rememberForbiddenRoute("/dashboard/forms-feedback")
+    expect(isRememberedForbiddenRoute("/dashboard/forms-feedback")).toBe(false)
+    expect(canSeeDashboardPage("/dashboard/forms-feedback", [], "employee")).toBe(true)
+  })
+
   it("hides only the tab that failed, not sibling tabs", () => {
     stubSession()
     expect(canSeeDashboardPage("/dashboard/structure/grades", ["employee_grades:read"], "admin")).toBe(true)
@@ -95,17 +104,17 @@ describe("forbidden route memory", () => {
     expect(
       canSeeDashboardPage(
         "/dashboard/performance/setup",
-        ["view_company_dashboard"],
+        ["performance_periods:read"],
         "admin",
       ),
     ).toBe(true)
     expect(
       canSeeDashboardPage(
         "/dashboard/performance/setup",
-        ["view_company_dashboard"],
+        ["performance_periods:read"],
         "employee",
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("does not hide My pages after an API permission error", () => {
@@ -162,10 +171,10 @@ describe("forbidden route memory", () => {
     expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe("/dashboard/performance/overview")
+    ).toBe("/dashboard/me/performance/overview")
     expect(
       firstVisibleSiblingOrHome("/dashboard/performance/setup", ["performance:read"], "employee"),
-    ).toBe("/dashboard/performance/overview")
+    ).toBe("/dashboard/me/performance/overview")
     expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/probation/cases", ["probation:read"], "employee"),

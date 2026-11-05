@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { actionReference, defaultInboxFilters, filterAndGroupActions } from "./request-inbox-utils"
+import { actionReference, defaultInboxFilters, filterAndGroupActions, groupsForInboxTab } from "./request-inbox-utils"
 
 const actions = [
   { id: 1, sourceModule: "onboarding", actionType: "TASK", status: "OPEN", priority: "HIGH", title: "Provide laptop", dueAt: "2026-10-19T09:00:00Z", subject_employee: { id: 10, name: "Amina John", employee_no: "EMP-10", department: "Finance" } },
@@ -13,6 +13,15 @@ describe("request inbox grouping and filters", () => {
     expect(groups).toHaveLength(2)
     expect(groups[0].items.map((row) => row.id)).toEqual([1, 2])
     expect(groups[1].items.map((row) => row.id)).toEqual([3])
+  })
+  it("keeps completed requests beside the open ones for the same person on Pending", () => {
+    const groups = groupsForInboxTab([
+      ...actions,
+      { id: 11, sourceModule: "onboarding", actionType: "TASK", status: "COMPLETED", title: "Collect ID", subject_employee: { id: 10, name: "Amina John" } },
+      { id: 12, sourceModule: "onboarding", actionType: "TASK", status: "IN_PROGRESS", title: "Issue badge", subject_employee: { id: 10, name: "Amina John" } },
+    ], defaultInboxFilters)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].items.map((row) => row.id)).toEqual([1, 2, 11, 12])
   })
   it("combines search, priority, module, action and overdue filters", () => {
     const groups = filterAndGroupActions(actions, { ...defaultInboxFilters, search: "EMP-10", module: "onboarding", priority: "HIGH", kind: "TASK", due: "overdue" }, new Date("2026-10-20T10:00:00Z"))

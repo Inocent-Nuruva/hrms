@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Avatar as FluentAvatar,
+  Button as FluentButton,
   Field,
   Switch as FluentSwitch,
   TableCellLayout,
@@ -67,6 +68,8 @@ import { AUTH_STORAGE_KEYS } from "@/utils/constants";
 import { env } from "@/lib/env";
 import {
   Add16Regular,
+  Eye20Regular,
+  EyeOff20Regular,
   ArrowClockwise16Regular,
   PersonDelete16Regular,
 } from "@fluentui/react-icons";
@@ -431,6 +434,7 @@ export function EmployeesListView({
     employeeName: string;
   } | null>(null);
   const [temporaryPassword, setTemporaryPassword] = React.useState("");
+  const [showTemporaryPassword, setShowTemporaryPassword] = React.useState(false);
   const [passwordResetBusy, setPasswordResetBusy] = React.useState(false);
   const debouncedSearch = useDebouncedValue(query.search, 350);
   const lastFetchAtRef = React.useRef(0);
@@ -942,6 +946,7 @@ export function EmployeesListView({
         return;
       }
       setTemporaryPassword("");
+      setShowTemporaryPassword(false);
       setPasswordResetTarget({
         userId,
         employeeName: employeeDisplayName(row),
@@ -972,6 +977,7 @@ export function EmployeesListView({
       );
       setPasswordResetTarget(null);
       setTemporaryPassword("");
+      setShowTemporaryPassword(false);
     } catch (errorObject) {
       toast.error(
         errorObject instanceof Error
@@ -1554,6 +1560,7 @@ export function EmployeesListView({
           if (!open && !passwordResetBusy) {
             setPasswordResetTarget(null);
             setTemporaryPassword("");
+            setShowTemporaryPassword(false);
           }
         }}
       >
@@ -1569,14 +1576,25 @@ export function EmployeesListView({
           </AlertDialogHeader>
           <Field label="Temporary password" className="mt-4">
             <Input
-              type="password"
+              type={showTemporaryPassword ? "text" : "password"}
+              contentAfter={
+                <FluentButton
+                  appearance="transparent"
+                  size="small"
+                  type="button"
+                  icon={showTemporaryPassword ? <EyeOff20Regular /> : <Eye20Regular />}
+                  aria-label={showTemporaryPassword ? "Hide temporary password" : "Show temporary password"}
+                  title={showTemporaryPassword ? "Hide temporary password" : "Show temporary password"}
+                  onClick={() => setShowTemporaryPassword((visible) => !visible)}
+                />
+              }
               appearance="outline"
               value={temporaryPassword}
               onChange={(_event, data) => setTemporaryPassword(data.value)}
               minLength={8}
               autoComplete="new-password"
               placeholder="Enter a temporary password"
-              className="w-full"
+              className="password-reveal-managed w-full"
             />
           </Field>
           <AlertDialogFooter>

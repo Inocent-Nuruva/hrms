@@ -85,6 +85,7 @@ const STATUS_OPTIONS = [
   { value: "HALF_DAY", label: "Half day" },
   { value: "OFF_DAY", label: "Off day" },
   { value: "HOLIDAY", label: "Holiday" },
+  { value: "NOT_TRACKED", label: "Not tracked" },
   { value: "ON_LEAVE", label: "On leave" },
 ] as const
 

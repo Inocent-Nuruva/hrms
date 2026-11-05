@@ -3,6 +3,7 @@
 import { fluentPrompt } from "@/components/ui/fluent-dialog-service";
 
 import * as React from "react";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -3733,33 +3734,11 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                     </>
                   )}
                 </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={includeCredentialsOnAssign}
-                  onClick={() =>
-                    setIncludeCredentialsOnAssign((current) => !current)
-                  }
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-left text-sm text-slate-700"
-                >
-                  <span>
-                    Add credentials now after the employee is assigned to this
-                    device
-                  </span>
-                  <span
-                    className={`relative h-6 w-11 rounded-full transition ${
-                      includeCredentialsOnAssign
-                        ? "bg-slate-900"
-                        : "bg-slate-300"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition ${
-                        includeCredentialsOnAssign ? "left-[22px]" : "left-0.5"
-                      }`}
-                    />
-                  </span>
-                </button>
+                <Switch
+                  checked={includeCredentialsOnAssign}
+                  onChange={(_event, data) => setIncludeCredentialsOnAssign(data.checked)}
+                  label="Add credentials now after the employee is assigned to this device"
+                />
                 {includeCredentialsOnAssign ? (
                   <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
                     <div>
