@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   completeOnboardingTask: vi.fn(),
   completeOffboardingTask: vi.fn(),
   leaveRequestApprovalAction: vi.fn(),
+  getLeaveReviewContext: vi.fn().mockResolvedValue({ balance: null, overlapping_team_leave: [], attendance_last_30_days: { by_status: [] } }),
   reportMyActionItemIssue: vi.fn(),
   getOnboardingRequest: vi.fn(),
 }))
@@ -137,6 +138,20 @@ describe("grouped request review", () => {
     await writeComment("The bank details need correction.")
     await click("Return for correction")
     expect(api.rejectOnboardingRequest).toHaveBeenCalledWith("session-token", "20", { comments: "The bank details need correction." })
+  })
+  it("returns leave for correction instead of rejecting it", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceModule: "leave", sourceEntityType: "LEAVE_REQUEST", sourceEntityId: 30 }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    await writeComment("Please choose other dates.")
+    await click("Return for correction")
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "30", { action: "return_for_correction", comments: "Please choose other dates." })
+  })
+  it("rejects leave only through the explicit Reject action", async () => {
+    await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceModule: "leave", sourceEntityType: "LEAVE_REQUEST", sourceEntityId: 31 }]} loading={false} onRefresh={refresh} />))
+    await selectRequest()
+    await writeComment("Not possible this month.")
+    await click("Reject")
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "31", { action: "reject", comments: "Not possible this month." })
   })
   it("routes employee detail submissions to their required section-by-section review", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[{

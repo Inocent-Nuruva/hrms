@@ -176,6 +176,8 @@ export interface LeaveTypesQueryParams extends UsersQueryParams {
 export interface LeaveRequestsQueryParams extends UsersQueryParams {
   employee_id?: number;
   leave_type_id?: number;
+  department_id?: number;
+  manager_employee_id?: number;
   status?: string;
   from_date?: string;
   to_date?: string;
@@ -2015,6 +2017,15 @@ function buildLeaveRequestsQuery(params: LeaveRequestsQueryParams) {
   }
   if (typeof params.leave_type_id === "number" && params.leave_type_id > 0) {
     searchParams.set("leave_type_id", String(params.leave_type_id));
+  }
+  if (typeof params.department_id === "number" && params.department_id > 0) {
+    searchParams.set("department_id", String(params.department_id));
+  }
+  if (
+    typeof params.manager_employee_id === "number" &&
+    params.manager_employee_id > 0
+  ) {
+    searchParams.set("manager_employee_id", String(params.manager_employee_id));
   }
   if (params.status && params.status.trim()) {
     searchParams.set("status", params.status.trim());
@@ -4675,6 +4686,31 @@ export async function patchCostCenter(
 
 export async function deleteCostCenter(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/cost-centers/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/** Leave approval out-of-office cover. `all` = every delegation (HR). */
+export async function listLeaveDelegations(token: string, all = false) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/leave/delegations${all ? "?all=true" : ""}`,
+      { token },
+    ),
+  );
+}
+
+export async function createLeaveDelegation(token: string, data: AdminRecord) {
+  return adminRequest<unknown>("/api/leave/delegations", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function cancelLeaveDelegation(token: string, id: string | number) {
+  return adminRequest<unknown>(`/api/leave/delegations/${id}`, {
     method: "DELETE",
     token,
   });
@@ -10147,6 +10183,69 @@ export async function getLeaveRequest(token: string, id: string | number) {
     token,
   });
   return normalizeLeaveRequestDetail(payload);
+}
+
+/** Balance, overlapping team leave and recent attendance for an approver. */
+export async function getLeaveReviewContext(token: string, id: string | number) {
+  return normalizeSingle(
+    await adminRequest<unknown>(`/api/leave/requests/${id}/review-context`, {
+      token,
+    }),
+  );
+}
+
+/** Shorten approved leave; unused days go back to the balance. */
+export async function endLeaveEarly(
+  token: string,
+  id: string | number,
+  data: { new_end_date: string; reason?: string },
+) {
+  return adminRequest<unknown>(`/api/leave/requests/${id}/end-early`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Server-built leave report as an Excel or CSV file. */
+export async function downloadLeaveReport(
+  token: string,
+  type: "balances" | "taken" | "pending" | "by-department",
+  format: "xlsx" | "csv",
+  params: Record<string, string | number | undefined> = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const query = new URLSearchParams({ format });
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const response = await fetch(
+    buildUrl(`/api/leave/reports/${type}?${query.toString()}`),
+    {
+      headers: { Authorization: `Bearer ${token}`, accept: "*/*" },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(extractMessage(payload, response.status));
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return {
+    blob: await response.blob(),
+    filename: match?.[1] ?? `leave-${type}.${format}`,
+  };
+}
+
+/** Same decision for several requests; returns a per-request result. */
+export async function bulkLeaveApprovalAction(token: string, data: AdminRecord) {
+  return normalizeSingle(
+    await adminRequest<unknown>("/api/leave/requests/bulk-approval-action", {
+      method: "POST",
+      token,
+      body: data,
+    }),
+  );
 }
 
 export async function leaveRequestApprovalAction(

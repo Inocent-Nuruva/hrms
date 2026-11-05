@@ -136,6 +136,7 @@ import {
   submitMyLeaveRequest,
   updateMyLeaveRequest,
   resubmitMyLeaveRequest,
+  endLeaveEarly,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
   listSelectableAvatarsForMe,
@@ -169,6 +170,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
+import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -6899,6 +6901,29 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }
 
+  const onEndLeaveEarly = async (id: number, row: AdminRecord) => {
+    if (!token) return
+    const end = String(row.end_date ?? "").slice(0, 10)
+    const suggested = new Date().toISOString().slice(0, 10)
+    const newEnd = window.prompt(
+      `New last day of leave (YYYY-MM-DD, before ${end}). Unused days return to your balance.`,
+      suggested,
+    )
+    if (!newEnd) return
+    setLoading(true)
+    setMessage(null)
+    setActionErrorMessage(null)
+    try {
+      await endLeaveEarly(token, id, { new_end_date: newEnd.trim() })
+      setMessage("Leave shortened. Unused days were returned to your balance.")
+      await loadData()
+    } catch (errorObject) {
+      setActionErrorMessage(errorObject instanceof Error ? errorObject.message : "Could not end leave early.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const openEditLeaveRequest = (id: number, row: AdminRecord) => {
     const readDate = (value: unknown) => (typeof value === "string" ? value.slice(0, 10) : "")
     const readTime = (value: unknown, fallback: string) =>
@@ -7159,6 +7184,11 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 "approved",
               ].includes(status)
               const canEdit = status === "draft" || status === "returned_for_correction"
+              const today = new Date().toISOString().slice(0, 10)
+              const canEndEarly =
+                status === "approved" &&
+                String(row.start_date ?? "").slice(0, 10) <= today &&
+                String(row.end_date ?? "").slice(0, 10) > today
               const statusMeta = resolveLeaveStatusMeta(status)
               const leaveType =
                 readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
@@ -7204,6 +7234,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                     <div className="flex justify-end gap-1">
                       {id ? <FluentButton appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`View workflow for ${slipId}`} title="View approval progress" disabled={loading} onClick={() => openLeaveWorkflowDialog(id, row)} /> : null}
                       {id ? <FluentButton appearance="subtle" size="small" icon={<DocumentPdf20Regular />} aria-label={`Download PDF for ${slipId}`} title="Download request PDF" disabled={loading} onClick={() => void onDownloadPdf(id)} /> : null}
+                      {id && canEndEarly ? <FluentButton appearance="subtle" size="small" disabled={loading} onClick={() => void onEndLeaveEarly(id, row)}>End early</FluentButton> : null}
                       {id && canEdit ? <FluentButton appearance={status === "returned_for_correction" ? "primary" : "subtle"} size="small" icon={<Edit20Regular />} disabled={loading} onClick={() => openEditLeaveRequest(id, row)}>{status === "returned_for_correction" ? "Edit & resubmit" : "Edit"}</FluentButton> : null}
                       {id && status === "draft" ? <FluentButton appearance="primary" size="small" icon={<Send20Regular />} disabled={loading} onClick={() => void onSubmitRequest(id)}>Submit</FluentButton> : null}
                       {id && canCancel ? <FluentButton appearance="subtle" size="small" icon={<Dismiss20Regular />} aria-label={status === "draft" ? `Discard ${slipId}` : `Cancel ${slipId}`} title={status === "draft" ? "Discard draft" : "Cancel request"} disabled={loading} onClick={() => openCancelDialog(id)} /> : null}
@@ -7219,6 +7250,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         ) : null}
 
         {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        <LeaveDelegationsPanel token={token} mode="self" />
       </motion.section>
     )
   }

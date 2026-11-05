@@ -99,6 +99,7 @@ import {
   listLeaveHolidays,
   listLeavePolicies,
   listLeaveRequests,
+  bulkLeaveApprovalAction,
   listAllLeaveRequests,
   listAllLeaveTypes,
   listLeaveWorkflowSteps,
@@ -129,6 +130,8 @@ import {
 } from "@/lib/leave-balance-groups";
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
 import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
+import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
+import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
 import {
   leavePolicyRecordToForm,
   leavePolicyTypeCarryForwardPayload,
@@ -183,6 +186,8 @@ type WorkflowCreateDraft = {
     leave_type_id: string;
     status: string;
     is_default: string;
+    reminder_after_days?: string;
+    escalate_after_days?: string;
   };
   steps: AdminRecord[];
   stage: "details" | "path";
@@ -332,6 +337,7 @@ function createEmptyLeaveTypeForm() {
     allow_deferred_attachment: "false",
     attachment_grace_days: "3",
     is_carry_forward_allowed: "false",
+    sandwich_rule: "false",
     max_carry_forward_days: "0",
     max_days_per_year: "0",
     gender_restriction: "any",
@@ -415,7 +421,7 @@ function formatTransactionType(value: string) {
 
 const TAB_LOOKUP_REQUIREMENTS: Record<LeaveTab, LeaveLookupKey[]> = {
   types: [],
-  requests: ["employees", "types"],
+  requests: ["employees", "types", "departments"],
   "team-calendar": [],
   balances: ["employees", "types"],
   transactions: ["employees", "types"],
@@ -1310,6 +1316,10 @@ export function LeaveManagementView({
     mode: "any",
   });
   const canReadLeaveReports = canReadBalances || canReadRequests;
+  const canBulkDecide = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_requests:approve"],
+    mode: "any",
+  });
   const canAdjustBalances = canPerformPermission(actor.permissionLabels, {
     permissions: [
       "leave_balances:update",
@@ -1389,6 +1399,35 @@ export function LeaveManagementView({
   const [evidenceDeadline, setEvidenceDeadline] = React.useState("");
   const [evidenceReason, setEvidenceReason] = React.useState("");
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all");
+  // Server-side request list: filters, paging and bulk selection.
+  const [requestFilters, setRequestFilters] = React.useState({
+    department_id: "",
+    manager_employee_id: "",
+    leave_type_id: "",
+    from_date: "",
+    to_date: "",
+  });
+  const [requestPage, setRequestPage] = React.useState(1);
+  const [requestMeta, setRequestMeta] = React.useState<{
+    total: number | null;
+    totalPages: number | null;
+  }>({ total: null, totalPages: null });
+  const [selectedRequestIds, setSelectedRequestIds] = React.useState<string[]>(
+    [],
+  );
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const requestQueryRef = React.useRef({
+    page: 1,
+    status: "all",
+    search: "",
+    filters: {
+      department_id: "",
+      manager_employee_id: "",
+      leave_type_id: "",
+      from_date: "",
+      to_date: "",
+    },
+  });
   const [transactionSearch, setTransactionSearch] = React.useState("");
   const [transactionTypeFilter, setTransactionTypeFilter] =
     React.useState("all");
@@ -1594,6 +1633,8 @@ export function LeaveManagementView({
     leave_type_id: "",
     status: "active",
     is_default: "false",
+    reminder_after_days: "",
+    escalate_after_days: "",
   });
 
   const [workflowStepForm, setWorkflowStepForm] = React.useState({
@@ -1913,6 +1954,13 @@ export function LeaveManagementView({
     [loadLookups],
   );
 
+  requestQueryRef.current = {
+    page: requestPage,
+    status: requestStatusFilter,
+    search: requestSearch,
+    filters: requestFilters,
+  };
+
   const reloadAll = React.useCallback(
     async (targetTab: LeaveTab = tab, force = false) => {
       const token = readStoredToken();
@@ -1939,13 +1987,35 @@ export function LeaveManagementView({
             break;
           }
           case "requests": {
+            const query = requestQueryRef.current;
+            // Evidence and routing views filter the current page client-side.
+            const clientOnlyStatus = [
+              "all",
+              "evidence_overdue",
+              "evidence_pending",
+              "routing_required",
+            ].includes(query.status);
+            const toId = (value: string) =>
+              value ? Number(value) : undefined;
             const result = await listLeaveRequests(token, {
-              page: 1,
-              limit: 100,
+              page: query.page,
+              limit: 25,
               sortBy: "created_at",
               sortOrder: "DESC",
+              status: clientOnlyStatus ? undefined : query.status,
+              search: query.search.trim() || undefined,
+              department_id: toId(query.filters.department_id),
+              manager_employee_id: toId(query.filters.manager_employee_id),
+              leave_type_id: toId(query.filters.leave_type_id),
+              from_date: query.filters.from_date || undefined,
+              to_date: query.filters.to_date || undefined,
             });
             setRequests(result.rows);
+            setRequestMeta({
+              total: result.total ?? null,
+              totalPages: result.totalPages ?? null,
+            });
+            setSelectedRequestIds([]);
             break;
           }
           case "team-calendar": {
@@ -2041,6 +2111,86 @@ export function LeaveManagementView({
     void reloadAll(tab, false);
   }, [reloadAll, tab]);
 
+  // Filters change the result set, so they restart at page 1.
+  React.useEffect(() => {
+    setRequestPage(1);
+  }, [requestFilters, requestSearch, requestStatusFilter]);
+
+  const requestReloadKey = JSON.stringify([
+    requestPage,
+    requestFilters,
+    requestStatusFilter,
+  ]);
+  const lastRequestReloadKey = React.useRef(requestReloadKey);
+  const lastRequestSearch = React.useRef(requestSearch);
+  React.useEffect(() => {
+    if (tab !== "requests") return;
+    const searchChanged = lastRequestSearch.current !== requestSearch;
+    if (!searchChanged && lastRequestReloadKey.current === requestReloadKey)
+      return;
+    lastRequestReloadKey.current = requestReloadKey;
+    lastRequestSearch.current = requestSearch;
+    // Debounce typing; filters and paging reload immediately.
+    const timer = window.setTimeout(
+      () => void reloadAll("requests", true),
+      searchChanged ? 400 : 0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [reloadAll, requestReloadKey, requestSearch, tab]);
+
+  const runBulkDecision = React.useCallback(
+    async (action: "approve" | "reject") => {
+      const token = readStoredToken();
+      if (!token || selectedRequestIds.length === 0) return;
+      let comments: string | undefined;
+      if (action === "reject") {
+        const reason = window.prompt(
+          `Reason for rejecting ${selectedRequestIds.length} request(s):`,
+        );
+        if (!reason?.trim()) return;
+        comments = reason.trim();
+      } else if (
+        !window.confirm(`Approve ${selectedRequestIds.length} request(s)?`)
+      ) {
+        return;
+      }
+      setBulkBusy(true);
+      try {
+        const result = await bulkLeaveApprovalAction(token, {
+          ids: selectedRequestIds.map(Number),
+          action,
+          comments,
+        });
+        const failed = Number(result?.failed ?? 0);
+        const succeeded = Number(result?.succeeded ?? 0);
+        if (failed) {
+          const firstErrors = (
+            Array.isArray(result?.results) ? result.results : []
+          )
+            .filter((row: AdminRecord) => !row.ok)
+            .slice(0, 3)
+            .map((row: AdminRecord) => `#${String(row.id)}: ${String(row.error)}`)
+            .join("\n");
+          showErrorAlert(
+            `${succeeded} done, ${failed} could not be processed.\n${firstErrors}`,
+          );
+        } else {
+          showSuccessAlert(`${succeeded} request(s) ${action === "approve" ? "approved" : "rejected"}.`);
+        }
+        await reloadAll("requests", true);
+      } catch (errorObject) {
+        showErrorAlert(
+          errorObject instanceof Error
+            ? errorObject.message
+            : "Bulk decision failed.",
+        );
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [reloadAll, selectedRequestIds],
+  );
+
   const resetTypeForm = React.useCallback(() => {
     setTypeForm(createEmptyLeaveTypeForm());
     setEditingLeaveTypeRow(null);
@@ -2079,6 +2229,7 @@ export function LeaveManagementView({
       is_carry_forward_allowed: readBoolean(row, ["is_carry_forward_allowed"])
         ? "true"
         : "false",
+      sandwich_rule: readBoolean(row, ["sandwich_rule"]) ? "true" : "false",
       // Blank = no cap (stored as null); 0 = nothing carries forward.
       max_carry_forward_days:
         readDisplayValue(row, ["max_carry_forward_days"]) === "-"
@@ -3038,6 +3189,7 @@ export function LeaveManagementView({
           typeForm.allow_deferred_attachment === "true",
         attachment_grace_days: Number(typeForm.attachment_grace_days),
         is_carry_forward_allowed: typeForm.is_carry_forward_allowed === "true",
+        sandwich_rule: typeForm.sandwich_rule === "true",
         max_carry_forward_days: carryDays,
         max_days_per_year: maxDays,
         gender_restriction: typeForm.gender_restriction,
@@ -3976,6 +4128,12 @@ export function LeaveManagementView({
           leave_type_id: Number(workflowForm.leave_type_id),
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
+          reminder_after_days: workflowForm.reminder_after_days
+            ? Number(workflowForm.reminder_after_days)
+            : null,
+          escalate_after_days: workflowForm.escalate_after_days
+            ? Number(workflowForm.escalate_after_days)
+            : null,
           steps: workflowSteps.map((row) =>
             buildWorkflowStepPayload({
               approval_level: String(readNumber(row, ["approval_level"]) ?? 1),
@@ -4008,6 +4166,12 @@ export function LeaveManagementView({
           leave_type_id: Number(workflowForm.leave_type_id),
           status: workflowForm.status,
           is_default: workflowForm.is_default === "true",
+          reminder_after_days: workflowForm.reminder_after_days
+            ? Number(workflowForm.reminder_after_days)
+            : null,
+          escalate_after_days: workflowForm.escalate_after_days
+            ? Number(workflowForm.escalate_after_days)
+            : null,
         });
       }
       setWorkflowForm({
@@ -4015,6 +4179,8 @@ export function LeaveManagementView({
         leave_type_id: "",
         status: "active",
         is_default: "false",
+        reminder_after_days: "",
+        escalate_after_days: "",
       });
       setEditingWorkflowId(null);
       setSelectedWorkflowId("");
@@ -4054,6 +4220,8 @@ export function LeaveManagementView({
           leave_type_id: draft.form.leave_type_id ?? "",
           status: draft.form.status === "inactive" ? "inactive" : "active",
           is_default: draft.form.is_default === "true" ? "true" : "false",
+          reminder_after_days: draft.form.reminder_after_days ?? "",
+          escalate_after_days: draft.form.escalate_after_days ?? "",
         });
         setWorkflowSteps(Array.isArray(draft.steps) ? draft.steps : []);
         setWorkflowStartStage(draft.stage === "path" ? "path" : "details");
@@ -4064,6 +4232,8 @@ export function LeaveManagementView({
           leave_type_id: "",
           status: "active",
           is_default: "false",
+          reminder_after_days: "",
+          escalate_after_days: "",
         });
         setWorkflowStartStage("details");
       }
@@ -4095,6 +4265,8 @@ export function LeaveManagementView({
           ? "inactive"
           : "active",
       is_default: readBoolean(row, ["is_default"]) ? "true" : "false",
+      reminder_after_days: String(readNumber(row, ["reminder_after_days"]) ?? ""),
+      escalate_after_days: String(readNumber(row, ["escalate_after_days"]) ?? ""),
     });
     setSelectedWorkflowId(String(workflowId));
     setWorkflowStartStage("path");
@@ -5271,6 +5443,136 @@ export function LeaveManagementView({
                 </>
               }
               data={filteredRequests}
+              getRowId={(row) => String(readNumber(row, ["id"]) ?? "")}
+              page={requestPage}
+              totalPages={requestMeta.totalPages}
+              totalItems={requestMeta.total}
+              onPageChange={setRequestPage}
+              showCheckboxes={canBulkDecide}
+              selectedRowIds={selectedRequestIds}
+              onSelectedRowIdsChange={setSelectedRequestIds}
+              filterCount={
+                Object.values(requestFilters).filter(Boolean).length
+              }
+              filterContent={
+                <div className="grid w-72 gap-2 text-xs">
+                  <label className="grid gap-1">
+                    <span className="font-medium">Department</span>
+                    <FluentSelect
+                      ariaLabel="Filter by department"
+                      size="small"
+                      value={requestFilters.department_id}
+                      onChange={(value) =>
+                        setRequestFilters((prev) => ({ ...prev, department_id: value }))
+                      }
+                      options={[
+                        { value: "", label: "All departments" },
+                        ...departments.map((row) => ({
+                          value: String(row.id),
+                          label: readString(row, ["name"]) || `#${String(row.id)}`,
+                        })),
+                      ]}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="font-medium">Manager</span>
+                    <FluentSelect
+                      ariaLabel="Filter by manager"
+                      size="small"
+                      value={requestFilters.manager_employee_id}
+                      onChange={(value) =>
+                        setRequestFilters((prev) => ({ ...prev, manager_employee_id: value }))
+                      }
+                      options={[
+                        { value: "", label: "Any manager" },
+                        ...employees.map((row) => ({
+                          value: String(row.id),
+                          label: employeeLabel(readNumber(row, ["id"])),
+                        })),
+                      ]}
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="font-medium">Leave type</span>
+                    <FluentSelect
+                      ariaLabel="Filter by leave type"
+                      size="small"
+                      value={requestFilters.leave_type_id}
+                      onChange={(value) =>
+                        setRequestFilters((prev) => ({ ...prev, leave_type_id: value }))
+                      }
+                      options={[{ value: "", label: "All leave types" }, ...leaveTypeOptions]}
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="grid gap-1">
+                      <span className="font-medium">From</span>
+                      <input
+                        type="date"
+                        className="h-8 rounded-md border border-border bg-background px-2"
+                        value={requestFilters.from_date}
+                        onChange={(event) =>
+                          setRequestFilters((prev) => ({ ...prev, from_date: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium">To</span>
+                      <input
+                        type="date"
+                        className="h-8 rounded-md border border-border bg-background px-2"
+                        value={requestFilters.to_date}
+                        onChange={(event) =>
+                          setRequestFilters((prev) => ({ ...prev, to_date: event.target.value }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-left font-medium text-primary hover:underline"
+                    onClick={() =>
+                      setRequestFilters({
+                        department_id: "",
+                        manager_employee_id: "",
+                        leave_type_id: "",
+                        from_date: "",
+                        to_date: "",
+                      })
+                    }
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              }
+              toolbarSummary={
+                selectedRequestIds.length ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs">
+                    <span className="font-medium">
+                      {selectedRequestIds.length} selected
+                    </span>
+                    <Button
+                      appearance="primary"
+                      size="small"
+                      disabled={bulkBusy}
+                      onClick={() => void runBulkDecision("approve")}
+                    >
+                      Approve selected
+                    </Button>
+                    <Button
+                      appearance="secondary"
+                      size="small"
+                      disabled={bulkBusy}
+                      onClick={() => void runBulkDecision("reject")}
+                    >
+                      Reject selected
+                    </Button>
+                    <span className="text-muted-foreground">
+                      Each request is checked individually; ones you cannot act on are reported back.
+                    </span>
+                  </div>
+                ) : undefined
+              }
               onRowSelect={(_, row) => {
                 if (row) {
                   void openLeaveRequestDetails(row);
@@ -5476,7 +5778,6 @@ export function LeaveManagementView({
                   },
                 },
               ]}
-              itemsPerPage={15}
               loading={loading}
               showExport={false}
               storageKey="leave-requests-v3"
@@ -6550,6 +6851,18 @@ export function LeaveManagementView({
                     label="Carry unused days"
                     description="Unused days can move into the next year instead of expiring."
                   />
+                  <MarkCheckbox
+                    className="md:col-span-2"
+                    checked={typeForm.sandwich_rule === "true"}
+                    onCheckedChange={(checked) =>
+                      setTypeForm((prev) => ({
+                        ...prev,
+                        sandwich_rule: checked ? "true" : "false",
+                      }))
+                    }
+                    label="Count days in between (sandwich rule)"
+                    description="Weekends and holidays that fall between two leave days are counted as leave."
+                  />
                   {typeForm.requires_attachment === "true" ? (
                     <>
                       <MarkCheckbox
@@ -7372,6 +7685,10 @@ export function LeaveManagementView({
       </Dialog>
 
       {tab === "reports" ? (
+        <LeaveReportDownloads token={readStoredToken()} />
+      ) : null}
+
+      {tab === "reports" ? (
         <section className="space-y-4 rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm md:p-6">
           <div>
             <h2 className="text-lg font-semibold">Leave reports</h2>
@@ -8063,6 +8380,10 @@ export function LeaveManagementView({
             canEdit={canUpdateWorkflows}
           />
 
+          {canUpdateWorkflows ? (
+            <LeaveDelegationsPanel token={readStoredToken()} mode="hr" />
+          ) : null}
+
           <LeaveWorkflowEditorSheet
             open={workflowSheetOpen}
             mode={editingWorkflowId === null ? "create" : "edit"}
@@ -8098,6 +8419,8 @@ export function LeaveManagementView({
                 leave_type_id: "",
                 status: "active",
                 is_default: "false",
+                reminder_after_days: "",
+                escalate_after_days: "",
               });
               setWorkflowSteps([]);
               setWorkflowStartStage("details");

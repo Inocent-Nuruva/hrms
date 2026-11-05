@@ -22,6 +22,7 @@ import { formatDate, prettify, readString, rowId, StatusChip } from "./talent-vi
 import { useActionInboxLiveRefresh } from "@/hooks/use-action-inbox-live-refresh"
 import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, groupsForInboxTab, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
 import { cn } from "@/lib/utils"
+import { LeaveReviewContext } from "@/components/leave/leave-review-context"
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -175,11 +176,11 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       [groupKey]: !(current[groupKey] ?? true),
     }))
   }
-  async function submit(mode: "approve" | "reject" | "complete" | "issue") {
+  async function submit(mode: "approve" | "reject" | "return" | "complete" | "issue") {
     if (!selected || !reference || busy) return
     const token = readStoredSessionTokens().accessToken
     if (!token) { setError("Please sign in again."); return }
-    if ((mode === "issue" || mode === "reject") && !comment.trim()) {
+    if ((mode === "issue" || mode === "reject" || mode === "return") && !comment.trim()) {
       setError("Explain the reason in the comment before continuing.")
       return
     }
@@ -208,11 +209,14 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       } else if (reference.type === "OFFBOARDING_REQUEST") {
         await (mode === "approve" ? approveOffboardingRequest : rejectOffboardingRequest)(token, reference.requestId, { comments })
       } else if (reference.type === "LEAVE_REQUEST") {
-        await leaveRequestApprovalAction(token, reference.requestId, { action: mode, comments })
+        await leaveRequestApprovalAction(token, reference.requestId, {
+          action: mode === "return" ? "return_for_correction" : mode,
+          comments,
+        })
       } else {
         throw new Error("Open the full request to review this action.")
       }
-      toast.success(onboardingActionMessage(onboardingResult, mode === "issue" ? "Issue saved and sent to HR. The item remains open." : mode === "complete" ? "Checklist item completed." : mode === "approve" ? "Request approved." : "Request declined."))
+      toast.success(onboardingActionMessage(onboardingResult, mode === "issue" ? "Issue saved and sent to HR. The item remains open." : mode === "complete" ? "Checklist item completed." : mode === "approve" ? "Request approved." : mode === "return" ? "Request returned to the employee for correction." : "Request declined."))
       setComment("")
       setEvidenceId("")
       if (mode !== "issue") setSettledId(selectedId)
@@ -380,6 +384,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   {context.start_date ? <div><dt className="font-medium">Requested period</dt><dd className="mt-1 text-muted-foreground">{formatDate(context.start_date)} – {formatDate(context.end_date)}</dd></div> : null}
                 </dl> : null}
               </section> : null}
+              {reference?.type === "LEAVE_REQUEST" && reference.requestId ? <LeaveReviewContext token={readStoredSessionTokens().accessToken ?? null} leaveRequestId={reference.requestId} /> : null}
               {requiresDetailedReview ? <section className="overflow-hidden rounded-xl border bg-card">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                   <div>
@@ -416,12 +421,16 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   <FluentSelect label="Supporting document" value={evidenceId} onChange={setEvidenceId} disabled={busy || documentsLoading} placeholder={documentsLoading ? "Loading documents…" : "Select an attached document"} options={documents.map((document) => ({ value: rowId(document), label: readString(document, ["title", "name", "file_name", "document_type"], "Supporting document") }))} />
                   {documentsError || (!documentsLoading && documents.length === 0) ? <p className="text-sm text-muted-foreground">{documentsError || "No supporting documents are attached. Open the full request or ask HR to attach the required evidence."}</p> : null}
                 </div> : null}
-                {!requiresDetailedReview ? <Field label={isApproval ? "Decision note" : isReminder ? "Issue or follow-up note" : "Completion note or blocker"} hint={isApproval ? "Required when declining. Add a note when approval needs useful context." : isReminder ? "Explain the blocker or follow-up needed before reporting this issue to HR." : "Describe what was completed, or explain the blocker before reporting an issue."}>
+                {!requiresDetailedReview ? <Field label={isApproval ? "Decision note" : isReminder ? "Issue or follow-up note" : "Completion note or blocker"} hint={isApproval ? "Required when returning or declining. Add a note when approval needs useful context." : isReminder ? "Explain the blocker or follow-up needed before reporting this issue to HR." : "Describe what was completed, or explain the blocker before reporting an issue."}>
                   <Textarea aria-label="Comment or reason" value={comment} maxLength={1000} onChange={(event) => setComment(event.target.value)} disabled={busy} placeholder={isApproval ? "Add context for your approval, or explain what must be corrected…" : isReminder ? "Explain why the report is still missing or what support is required…" : "Summarize the completed work or explain what is preventing completion…"} />
                 </Field> : null}
                 {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
                 <div className="flex flex-wrap gap-2">
-                  {isApproval && !requiresDetailedReview ? <><Button disabled={!canAct || busy || loading} onClick={() => void submit("approve")}>Approve and continue</Button><Button variant="outline" disabled={!canAct || busy || loading} onClick={() => void submit("reject")}>Return for correction</Button></> : null}
+                  {isApproval && !requiresDetailedReview ? <>
+                    <Button disabled={!canAct || busy || loading} onClick={() => void submit("approve")}>Approve and continue</Button>
+                    {reference?.type === "LEAVE_REQUEST" ? <Button variant="outline" disabled={!canAct || busy || loading} onClick={() => void submit("return")}>Return for correction</Button> : null}
+                    <Button variant="outline" disabled={!canAct || busy || loading} onClick={() => void submit("reject")}>{reference?.type === "LEAVE_REQUEST" ? "Reject" : "Return for correction"}</Button>
+                  </> : null}
                   {isTask ? <Button disabled={!canAct || busy || loading} onClick={() => void submit("complete")}>Mark item complete</Button> : null}
                   {!requiresDetailedReview ? <Button variant="outline" disabled={busy || loading} onClick={() => void submit("issue")}>{busy ? "Saving…" : "Report issue to HR"}</Button> : null}
                 </div>
