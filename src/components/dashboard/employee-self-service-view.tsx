@@ -82,6 +82,7 @@ import {
   DocumentPdf20Regular,
   Eye20Regular,
   Send20Regular,
+  Edit20Regular,
   Dismiss20Regular,
   Save20Regular,
 } from "@fluentui/react-icons"
@@ -133,6 +134,8 @@ import {
   getMyPayslip,
   getMyPayrollSummary,
   submitMyLeaveRequest,
+  updateMyLeaveRequest,
+  resubmitMyLeaveRequest,
   uploadMyProfilePhoto,
   selectMyProfileAvatar,
   listSelectableAvatarsForMe,
@@ -165,6 +168,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
+import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -799,10 +803,38 @@ function resolveLeaveStatusMeta(value: unknown) {
     }
   }
 
-  if (["pending", "submitted", "in_review", "under_review"].includes(normalized)) {
+  if (normalized === "returned_for_correction") {
+    return {
+      key: "returned" as const,
+      label: "Returned",
+      badgeClassName: "bg-orange-500/12 text-orange-800 dark:text-orange-300",
+      helperText: "Needs your changes — edit and resubmit",
+      textClassName: "text-orange-700 dark:text-orange-300",
+      barClassName: "bg-orange-500",
+      chipClassName: "bg-orange-500/10 text-orange-800 dark:text-orange-300",
+    }
+  }
+
+  if (
+    [
+      "pending",
+      "submitted",
+      "in_review",
+      "under_review",
+      "pending_department_manager",
+      "pending_hr",
+    ].includes(normalized)
+  ) {
     return {
       key: "pending" as const,
-      label: raw.replace(/_/g, " ") || "Pending",
+      label:
+        normalized === "pending_department_manager"
+          ? "Pending manager"
+          : normalized === "pending_hr"
+            ? "Pending HR"
+            : normalized === "in_review"
+              ? "Pending management"
+              : raw.replace(/_/g, " ") || "Pending",
       badgeClassName: "bg-amber-500/12 text-amber-800 dark:text-amber-300",
       helperText: "Awaiting review",
       textClassName: "text-amber-700 dark:text-amber-300",
@@ -6344,6 +6376,12 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     reason: "",
   })
   const [leaveAttachmentFile, setLeaveAttachmentFile] = React.useState<File | null>(null)
+  // Set while the dialog edits an existing draft or returned request.
+  const [editingLeaveRequest, setEditingLeaveRequest] = React.useState<{
+    id: number
+    status: string
+    returnReason: string
+  } | null>(null)
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
   const activeTab = tab
@@ -6360,7 +6398,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     for (const row of requests) {
       const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
       if (meta.key === "draft") counts.draft += 1
-      else if (meta.key === "pending") counts.pending += 1
+      else if (meta.key === "pending" || meta.key === "returned") counts.pending += 1
       else if (meta.key === "approved") counts.approved += 1
       else if (meta.key === "rejected") counts.rejected += 1
       else if (meta.key === "cancelled") counts.cancelled += 1
@@ -6372,7 +6410,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     if (!leaveRequestStatusFilter) return requests
     return requests.filter((row) => {
       const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
-      return meta.key === leaveRequestStatusFilter
+      return (
+        meta.key === leaveRequestStatusFilter ||
+        (leaveRequestStatusFilter === "pending" && meta.key === "returned")
+      )
     })
   }, [leaveRequestStatusFilter, requests])
 
@@ -6726,6 +6767,45 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     setActionErrorMessage(null)
 
     try {
+      if (editingLeaveRequest) {
+        const requestId = editingLeaveRequest.id
+        await updateMyLeaveRequest(token, requestId, {
+          leave_type_id: Number(requestForm.leave_type_id),
+          duration_type: requestForm.duration_type,
+          start_date: requestForm.start_date,
+          end_date: requestForm.end_date,
+          ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
+          ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
+          reason: requestForm.reason.trim() || "Draft",
+        })
+        if (leaveAttachmentFile) {
+          await uploadMyLeaveRequestDocument(token, requestId, leaveAttachmentFile)
+        }
+        if (submit) {
+          if (editingLeaveRequest.status === "returned_for_correction") {
+            await resubmitMyLeaveRequest(token, requestId)
+          } else {
+            await submitMyLeaveRequest(token, requestId)
+          }
+        }
+        setEditingLeaveRequest(null)
+        setRequestForm({
+          leave_type_id: "",
+          duration_type: "FULL_DAY",
+          start_date: "",
+          end_date: "",
+          half_day_session: "FIRST_HALF",
+          start_time: "09:00",
+          end_time: "13:00",
+          reason: "",
+        })
+        setLeaveAttachmentFile(null)
+        setMessage(submit ? "Leave request updated and sent for approval." : "Leave request changes saved.")
+        setRequestDialogOpen(false)
+        await loadData()
+        return
+      }
+
       // Create as draft only when explicitly requested. Submit sends submit:true so
       // the API creates the request in the approval workflow, not as a draft.
       const payload = await createMyLeaveRequest(token, {
@@ -6791,6 +6871,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }, [
     availableLeaveTypes.length,
+    editingLeaveRequest,
     employeeId,
     leaveSubmissionBalanceError,
     loadData,
@@ -6815,6 +6896,49 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setActionErrorMessage(text)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openEditLeaveRequest = (id: number, row: AdminRecord) => {
+    const readDate = (value: unknown) => (typeof value === "string" ? value.slice(0, 10) : "")
+    const readTime = (value: unknown, fallback: string) =>
+      typeof value === "string" && value ? value.slice(0, 5) : fallback
+    setEditingLeaveRequest({
+      id,
+      status: readString(row, ["status"], "draft").toLowerCase(),
+      returnReason: readString(row, ["return_reason"], ""),
+    })
+    setRequestForm({
+      leave_type_id: String(
+        readNumber(row, ["leave_type_id"]) ?? readNumber(asRecord(row.leave_type), ["id"]) ?? ""
+      ),
+      duration_type: readString(row, ["duration_type"], "FULL_DAY"),
+      start_date: readDate(row.start_date),
+      end_date: readDate(row.end_date),
+      half_day_session: readString(row, ["half_day_session"], "FIRST_HALF"),
+      start_time: readTime(row.start_time, "09:00"),
+      end_time: readTime(row.end_time, "13:00"),
+      reason: readString(row, ["reason"], "") === "-" ? "" : readString(row, ["reason"], ""),
+    })
+    setLeaveAttachmentFile(null)
+    setRequestDialogOpen(true)
+  }
+
+  const closeRequestDialog = (open: boolean) => {
+    setRequestDialogOpen(open)
+    if (!open && editingLeaveRequest) {
+      setEditingLeaveRequest(null)
+      setRequestForm({
+        leave_type_id: "",
+        duration_type: "FULL_DAY",
+        start_date: "",
+        end_date: "",
+        half_day_session: "FIRST_HALF",
+        start_time: "09:00",
+        end_time: "13:00",
+        reason: "",
+      })
+      setLeaveAttachmentFile(null)
     }
   }
 
@@ -7024,7 +7148,17 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                   {filteredLeaveRequests.map((row, index) => {
               const id = readNumber(row, ["id"])
               const status = readString(row, ["status"], "pending").toLowerCase()
-              const canCancel = ["pending", "draft"].includes(status)
+              // The API enforces policy cutoffs and start dates for approved leave.
+              const canCancel = [
+                "pending",
+                "draft",
+                "pending_department_manager",
+                "pending_hr",
+                "in_review",
+                "returned_for_correction",
+                "approved",
+              ].includes(status)
+              const canEdit = status === "draft" || status === "returned_for_correction"
               const statusMeta = resolveLeaveStatusMeta(status)
               const leaveType =
                 readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
@@ -7070,6 +7204,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                     <div className="flex justify-end gap-1">
                       {id ? <FluentButton appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`View workflow for ${slipId}`} title="View approval progress" disabled={loading} onClick={() => openLeaveWorkflowDialog(id, row)} /> : null}
                       {id ? <FluentButton appearance="subtle" size="small" icon={<DocumentPdf20Regular />} aria-label={`Download PDF for ${slipId}`} title="Download request PDF" disabled={loading} onClick={() => void onDownloadPdf(id)} /> : null}
+                      {id && canEdit ? <FluentButton appearance={status === "returned_for_correction" ? "primary" : "subtle"} size="small" icon={<Edit20Regular />} disabled={loading} onClick={() => openEditLeaveRequest(id, row)}>{status === "returned_for_correction" ? "Edit & resubmit" : "Edit"}</FluentButton> : null}
                       {id && status === "draft" ? <FluentButton appearance="primary" size="small" icon={<Send20Regular />} disabled={loading} onClick={() => void onSubmitRequest(id)}>Submit</FluentButton> : null}
                       {id && canCancel ? <FluentButton appearance="subtle" size="small" icon={<Dismiss20Regular />} aria-label={status === "draft" ? `Discard ${slipId}` : `Cancel ${slipId}`} title={status === "draft" ? "Discard draft" : "Cancel request"} disabled={loading} onClick={() => openCancelDialog(id)} /> : null}
                     </div>
@@ -7137,6 +7272,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentCard>
           ))}
         </div> : null}
+        {balances.length > 0 ? <LeaveAccrualProjectionCard token={token} /> : null}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {balances.map((row, index) => (
             <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">
@@ -7367,15 +7503,24 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       <div className="flex-1 min-h-0 relative">
         {tabContent}
       </div>
-      <FluentDialog open={requestDialogOpen} onOpenChange={(_event, data) => setRequestDialogOpen(data.open)}>
+      <FluentDialog open={requestDialogOpen} onOpenChange={(_event, data) => closeRequestDialog(data.open)}>
         <FluentDialogSurface className="w-[min(680px,96vw)]">
           <FluentDialogBody className="min-h-0">
             <FluentDialogTitle action={
-              <FluentButton appearance="subtle" aria-label="Close leave request" icon={<Dismiss20Regular />} onClick={() => setRequestDialogOpen(false)} />
-            }>Request leave</FluentDialogTitle>
+              <FluentButton appearance="subtle" aria-label="Close leave request" icon={<Dismiss20Regular />} onClick={() => closeRequestDialog(false)} />
+            }>{editingLeaveRequest ? "Edit leave request" : "Request leave"}</FluentDialogTitle>
             <FluentText as="p" size={300} className="text-muted-foreground">
-              Choose the leave type and dates. Submit for approval now, or save a draft to finish later.
+              {editingLeaveRequest?.status === "returned_for_correction"
+                ? "Your approver returned this request. Update it and resubmit for approval."
+                : editingLeaveRequest
+                  ? "Update your draft, then save it or submit it for approval."
+                  : "Choose the leave type and dates. Submit for approval now, or save a draft to finish later."}
             </FluentText>
+            {editingLeaveRequest?.returnReason && editingLeaveRequest.returnReason !== "-" ? (
+              <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300">
+                <span className="font-medium">Reason returned:</span> {editingLeaveRequest.returnReason}
+              </div>
+            ) : null}
             <FluentDialogContent className="grid max-h-[65vh] min-h-0 gap-4 overflow-y-auto py-4 pr-1">
             <FluentField label="Leave type">
               <FluentDropdown
@@ -7461,9 +7606,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentField>
             </FluentDialogContent>
             <FluentDialogActions position="end">
-              <FluentButton appearance="secondary" onClick={() => setRequestDialogOpen(false)}>Close</FluentButton>
-              <FluentButton appearance="secondary" icon={<Save20Regular />} onClick={() => void onRequestLeave(false)} disabled={loading || availableLeaveTypes.length === 0}>{loading ? "Saving…" : "Save draft"}</FluentButton>
-              <FluentButton appearance="primary" icon={<Send20Regular />} onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}>{loading ? "Submitting…" : "Submit request"}</FluentButton>
+              <FluentButton appearance="secondary" onClick={() => closeRequestDialog(false)}>Close</FluentButton>
+              <FluentButton appearance="secondary" icon={<Save20Regular />} onClick={() => void onRequestLeave(false)} disabled={loading || availableLeaveTypes.length === 0}>{loading ? "Saving…" : editingLeaveRequest ? "Save changes" : "Save draft"}</FluentButton>
+              <FluentButton appearance="primary" icon={<Send20Regular />} onClick={() => void onRequestLeave(true)} disabled={loading || availableLeaveTypes.length === 0 || Boolean(leaveSubmissionBalanceError)}>{loading ? "Submitting…" : editingLeaveRequest?.status === "returned_for_correction" ? "Save & resubmit" : "Submit request"}</FluentButton>
             </FluentDialogActions>
           </FluentDialogBody>
         </FluentDialogSurface>

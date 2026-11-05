@@ -4680,6 +4680,63 @@ export async function deleteCostCenter(token: string, id: string | number) {
   });
 }
 
+/** HR rules that add a management approval after HR for matching leave. */
+export async function listLeaveManagementRules(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/leave/management-approval-rules", {
+      token,
+    }),
+  );
+}
+
+export async function saveLeaveManagementRule(
+  token: string,
+  data: AdminRecord,
+  id?: string | number,
+) {
+  return adminRequest<unknown>(
+    id === undefined
+      ? "/api/leave/management-approval-rules"
+      : `/api/leave/management-approval-rules/${id}`,
+    { method: id === undefined ? "POST" : "PATCH", token, body: data },
+  );
+}
+
+export async function deactivateLeaveManagementRule(
+  token: string,
+  id: string | number,
+) {
+  return adminRequest<unknown>(`/api/leave/management-approval-rules/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+/** Accrued / available / pending / used / projected leave for a period. */
+export async function getLeaveBalanceProjection(
+  token: string,
+  params: {
+    employee_id?: number;
+    leave_type_id?: number;
+    as_of?: string;
+    period?: "day" | "week" | "month" | "year";
+    self?: boolean;
+  },
+) {
+  const query = new URLSearchParams();
+  if (params.employee_id) query.set("employee_id", String(params.employee_id));
+  if (params.leave_type_id)
+    query.set("leave_type_id", String(params.leave_type_id));
+  if (params.as_of) query.set("as_of", params.as_of);
+  if (params.period) query.set("period", params.period);
+  const base = params.self
+    ? "/api/me/leave/balances/projection"
+    : "/api/leave/balances/projection";
+  return normalizeSingle(
+    await adminRequest<unknown>(`${base}?${query.toString()}`, { token }),
+  );
+}
+
 export async function listLeaveTypes(
   token: string,
   params: LeaveTypesQueryParams = {},
@@ -9990,6 +10047,32 @@ export async function submitMyLeaveRequest(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/me/leave/requests/${id}/submit`, {
     method: "POST",
     token,
+  });
+}
+
+/** Edit a draft or returned leave request (days are recalculated server-side). */
+export async function updateMyLeaveRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+/** Resubmit a leave request that an approver returned for correction. */
+export async function resubmitMyLeaveRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(`/api/me/leave/requests/${id}/resubmit`, {
+    method: "POST",
+    token,
+    body: data,
   });
 }
 

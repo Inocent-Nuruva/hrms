@@ -128,8 +128,10 @@ import {
   type LeaveBalanceEmployeeGroup,
 } from "@/lib/leave-balance-groups";
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
+import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
 import {
   leavePolicyRecordToForm,
+  leavePolicyTypeCarryForwardPayload,
   type LeavePolicyFormValue,
 } from "@/lib/leave-policy-form";
 import { cn } from "@/lib/utils";
@@ -709,13 +711,21 @@ type SearchableOption = {
   label: string;
 };
 
+const LEAVE_WORKFLOW_STATUS_LABELS: Record<string, string> = {
+  pending_department_manager: "Pending manager",
+  pending_hr: "Pending HR",
+  in_review: "Pending management",
+  returned_for_correction: "Returned",
+};
+
 function StatusIndicator({ status }: { status: string }) {
   const normalized = status.trim().toLowerCase();
   const label =
-    status
+    LEAVE_WORKFLOW_STATUS_LABELS[normalized] ??
+    (status
       .replace(/[_-]+/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase())
-      .trim() || "—";
+      .trim() || "—");
 
   const tone = ["active", "approved", "completed", "present"].includes(
     normalized,
@@ -729,6 +739,9 @@ function StatusIndicator({ status }: { status: string }) {
             "pending",
             "submitted",
             "in_review",
+            "pending_department_manager",
+            "pending_hr",
+            "returned_for_correction",
             "draft",
             "probation",
             "suspended",
@@ -2066,9 +2079,10 @@ export function LeaveManagementView({
       is_carry_forward_allowed: readBoolean(row, ["is_carry_forward_allowed"])
         ? "true"
         : "false",
+      // Blank = no cap (stored as null); 0 = nothing carries forward.
       max_carry_forward_days:
         readDisplayValue(row, ["max_carry_forward_days"]) === "-"
-          ? "0"
+          ? ""
           : readDisplayValue(row, ["max_carry_forward_days"]),
       max_days_per_year:
         readDisplayValue(row, ["max_days_per_year"]) === "-"
@@ -2963,7 +2977,10 @@ export function LeaveManagementView({
     const name = typeForm.name.trim();
     const code = typeForm.code.trim().toUpperCase();
     const maxDays = Number(typeForm.max_days_per_year || "0");
-    const carryDays = Number(typeForm.max_carry_forward_days || "0");
+    const carryDays =
+      typeForm.max_carry_forward_days.trim() === ""
+        ? null
+        : Number(typeForm.max_carry_forward_days);
     const graceDays = Number(typeForm.attachment_grace_days || "3");
     if (!name || !code) {
       const message = "Leave type name and code are required.";
@@ -2986,7 +3003,7 @@ export function LeaveManagementView({
       return;
     }
     if (
-      [maxDays, carryDays].some(
+      [maxDays, carryDays ?? 0].some(
         (value) =>
           !Number.isFinite(value) ||
           value < 0 ||
@@ -3769,6 +3786,7 @@ export function LeaveManagementView({
           maximum_accumulation_days: optionalNumber(
             row.maximum_accumulation_days,
           ),
+          ...leavePolicyTypeCarryForwardPayload(row),
         })),
       };
       if (editingPolicyId === null) {
@@ -4873,7 +4891,9 @@ export function LeaveManagementView({
       label: "Unused days",
       value:
         typeForm.is_carry_forward_allowed === "true"
-          ? `Move to next year · up to ${Number(typeForm.max_carry_forward_days) || 0} days`
+          ? typeForm.max_carry_forward_days.trim() === ""
+            ? "Move to next year · no cap"
+            : `Move to next year · up to ${Number(typeForm.max_carry_forward_days) || 0} days`
           : "Expire at year end",
     },
     {
@@ -4961,7 +4981,7 @@ export function LeaveManagementView({
                   { value: "evidence_pending", label: "Evidence pending" },
                   { value: "draft", label: "draft" },
                   { value: "submitted", label: "submitted" },
-                  { value: "in_review", label: "in_review" },
+                  { value: "in_review", label: "Management review" },
                   { value: "approved", label: "approved" },
                   { value: "rejected", label: "rejected" },
                   { value: "cancelled", label: "cancelled" },
@@ -5212,7 +5232,7 @@ export function LeaveManagementView({
                       { value: "evidence_pending", label: "Evidence pending" },
                       { value: "draft", label: "draft" },
                       { value: "submitted", label: "submitted" },
-                      { value: "in_review", label: "in_review" },
+                      { value: "in_review", label: "Management review" },
                       { value: "approved", label: "approved" },
                       { value: "rejected", label: "rejected" },
                       { value: "cancelled", label: "cancelled" },
@@ -6569,11 +6589,12 @@ export function LeaveManagementView({
                   {typeForm.is_carry_forward_allowed === "true" ? (
                     <LeaveTypeField
                       label="Days that can move forward"
-                      help="The most unused days an employee can keep for next year."
+                      help="The most unused days an employee can keep for next year. Leave blank for no cap. Policies can set expiry and stricter rules per employee group."
                     >
                       <input
                         type="number"
                         min={0}
+                        placeholder="No cap"
                         className={leaveTypeControlClass}
                         value={typeForm.max_carry_forward_days}
                         onChange={(event) =>
@@ -8035,6 +8056,11 @@ export function LeaveManagementView({
                 </div>
               ) : null
             }
+          />
+
+          <LeaveManagementRulesPanel
+            token={readStoredToken()}
+            canEdit={canUpdateWorkflows}
           />
 
           <LeaveWorkflowEditorSheet
