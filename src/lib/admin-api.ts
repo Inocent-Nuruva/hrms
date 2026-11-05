@@ -14862,8 +14862,9 @@ export async function submitMyProfileUpdateRequest(
  * Keep to values the HR approvals endpoint typically accepts (avoid draft — self-service only).
  */
 const PROFILE_UPDATE_HISTORY_STATUSES = [
-  "submitted",
-  "pending",
+  "pending_manager_approval",
+  "pending_hr_approval",
+  "returned_for_correction",
   "approved",
   "rejected",
   "cancelled",
@@ -15148,9 +15149,70 @@ export async function rejectHrProfileUpdateRequest(
   );
 }
 
+export async function returnHrProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/profile-updates/${id}/return`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function updateMyProfileUpdateRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(`/api/me/profile-update-requests/${id}`, {
+    method: "PATCH",
+    token,
+    body: data,
+  });
+}
+
+export async function updateMyAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord,
+) {
+  return adminRequest<unknown>(
+    `/api/me/attendance/correction-requests/${id}`,
+    {
+      method: "PATCH",
+      token,
+      body: data,
+    },
+  );
+}
+
+export async function returnHrAttendanceCorrectionRequest(
+  token: string,
+  id: string | number,
+  data: AdminRecord = {},
+) {
+  return adminRequest<unknown>(
+    `/api/hr/self-service/approvals/attendance-corrections/${id}/return`,
+    {
+      method: "POST",
+      token,
+      body: data,
+    },
+  );
+}
+
 export async function listHrAttendanceCorrectionApprovalRequests(
   token: string,
-  params: SelfServiceRequestQueryParams & { employee_id?: number } = {},
+  params: SelfServiceRequestQueryParams & {
+    employee_id?: number;
+    department_id?: number;
+    manager_employee_id?: number;
+  } = {},
 ): Promise<PaginatedUsersResult> {
   const fallbackPage = params.page && params.page > 0 ? params.page : 1;
   const fallbackLimit = params.limit && params.limit > 0 ? params.limit : 20;
@@ -15161,6 +15223,12 @@ export async function listHrAttendanceCorrectionApprovalRequests(
 
   if (params.employee_id !== undefined) {
     query.set("employee_id", String(params.employee_id));
+  }
+  if (params.department_id !== undefined) {
+    query.set("department_id", String(params.department_id));
+  }
+  if (params.manager_employee_id !== undefined) {
+    query.set("manager_employee_id", String(params.manager_employee_id));
   }
   if (params.status) {
     query.set("status", params.status);

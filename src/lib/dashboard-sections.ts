@@ -41,6 +41,7 @@ const employeeOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
         title: "Salary approvals",
         url: "/dashboard/employees/salary-approvals",
       },
+      { title: "Recruitment", url: "/dashboard/operations/recruitment" },
     ],
   },
 ];
@@ -190,6 +191,10 @@ export const employeeAttendanceSectionTabGroups: DashboardSectionTabGroup[] = [
       },
       { title: "My Schedule", url: "/dashboard/attendance/schedule-preview" },
       {
+        title: "Correction Requests",
+        url: "/dashboard/attendance/corrections",
+      },
+      {
         title: "Work-from-home Requests",
         url: "/dashboard/attendance/work-from-home-requests",
       },
@@ -265,7 +270,9 @@ const performanceOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/performance/overview" },
       { title: "Setup", url: "/dashboard/performance/setup" },
       { title: "Plans", url: "/dashboard/performance/plans" },
+      { title: "Development", url: "/dashboard/performance/development" },
       { title: "Reviews", url: "/dashboard/performance/reviews" },
+      { title: "Calibration", url: "/dashboard/performance/calibration" },
       { title: "Improvement", url: "/dashboard/performance/improvement" },
     ],
   },
@@ -461,7 +468,9 @@ export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Overview", url: "/dashboard/performance/overview" },
       { title: "Setup", url: "/dashboard/performance/setup" },
       { title: "Plans", url: "/dashboard/performance/plans" },
+      { title: "Development", url: "/dashboard/performance/development" },
       { title: "Reviews", url: "/dashboard/performance/reviews" },
+      { title: "Calibration", url: "/dashboard/performance/calibration" },
       { title: "Improvement", url: "/dashboard/performance/improvement" },
       { title: "Reports", url: "/dashboard/performance/reports" },
     ],
@@ -554,6 +563,7 @@ export const selfTeamSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Attendance", url: "/dashboard/me/team/attendance" },
       { title: "Activity summary", url: "/dashboard/me/team/activity-summary" },
       { title: "Actions", url: "/dashboard/me/team/actions" },
+      { title: "Movements", url: "/dashboard/team/movements" },
     ],
   },
 ];

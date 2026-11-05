@@ -662,7 +662,15 @@ export async function notifySubmittedRequestApprovers(
 ) {
   // Leave and onboarding notifications are sequenced by the backend alongside tasks.
   // A client fallback must not broadcast to future approvers or unrelated HR users.
-  if (options.kind === "onboarding_request" || options.kind === "leave_request") return 0
+  // These kinds are notified server-side to the correct workflow stage.
+  if (
+    options.kind === "onboarding_request" ||
+    options.kind === "leave_request" ||
+    options.kind === "attendance_correction_request" ||
+    options.kind === "profile_update_request"
+  ) {
+    return 0
+  }
   const config = NOTIFICATION_CONFIG[options.kind]
   const senderCompanyUserId = readCurrentCompanyUserId(options.token)
 

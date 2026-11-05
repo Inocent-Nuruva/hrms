@@ -3,7 +3,7 @@
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { CheckCircle2, Filter, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle2, Filter, RefreshCw, Undo2, XCircle } from "lucide-react";
 import { CheckmarkCircle20Filled, MailInboxRegular } from "@fluentui/react-icons"
 import { DatePickerPresets } from "@/components/ui/date-picker-presets"
 import { Badge } from "@/components/ui/badge"
@@ -32,13 +32,26 @@ import {
   listHrAttendanceCorrectionApprovalRequests,
   listEmployees,
   listUsers,
+  listDepartments,
   rejectHrAttendanceCorrectionRequest,
+  returnHrAttendanceCorrectionRequest,
   type AdminRecord,
 } from "@/lib/admin-api"
+import {
+  SELF_SERVICE_REVIEW_STATUS_OPTIONS,
+  SelfServiceApprovalTimeline,
+  canReviewSelfServiceRequest,
+  getSelfServiceStatusMeta,
+  isFinalApproval,
+  reviewStatusFilterToQuery,
+} from "@/components/dashboard/self-service-approval-timeline"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import { cn } from "@/lib/utils"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { useForbiddenRouteGuard } from "@/hooks/use-forbidden-route-guard"
+import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -225,6 +238,10 @@ function getRequestId(row: AdminRecord | null) {
 function getStatusMeta(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : ""
   const normalized = raw.toLowerCase()
+  const workflowMeta = getSelfServiceStatusMeta(normalized)
+  if (workflowMeta) {
+    return workflowMeta
+  }
 
   if (normalized === "approved") {
     return {
@@ -502,10 +519,20 @@ function getRequestTitle(row: AdminRecord | null) {
   )
 }
 
-function extractCorrectionRows(row: AdminRecord | null): ChangeRow[] {
-  if (!row) {
+function extractCorrectionRows(source: AdminRecord | null): ChangeRow[] {
+  if (!source) {
     return []
   }
+  // Values captured at submission take precedence as the "current" side.
+  const snapshot = asRecord(source.original_snapshot)
+  const row: AdminRecord = snapshot
+    ? {
+        ...source,
+        original_check_in_at: snapshot.check_in_at,
+        original_check_out_at: snapshot.check_out_at,
+        original_status: snapshot.attendance_status,
+      }
+    : source
 
   const pairs: Array<{
     field: string
@@ -610,6 +637,11 @@ function MetaChip({ label, value }: { label: string; value: string }) {
 }
 
 export function HrAttendanceCorrectionApprovalsView() {
+  const actor = useDashboardActor()
+  useForbiddenRouteGuard(
+    actor.ready &&
+      canAccessDashboardRoute("/dashboard/attendance/correction-requests", actor.permissionLabels, actor.accessMode)
+  )
   const searchParams = useSearchParams()
   const highlightedRequestId = React.useMemo(
     () =>
@@ -623,7 +655,10 @@ export function HrAttendanceCorrectionApprovalsView() {
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
   const [selectedRequestId, setSelectedRequestId] = React.useState("")
   const [selectedRequestDetail, setSelectedRequestDetail] = React.useState<AdminRecord | null>(null)
-  const [statusFilter, setStatusFilter] = React.useState("all")
+  const [statusFilter, setStatusFilter] = React.useState("queue")
+  const [departmentFilter, setDepartmentFilter] = React.useState("all")
+  const [managerFilter, setManagerFilter] = React.useState("all")
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
   const [dateFrom, setDateFrom] = React.useState("")
   const [dateTo, setDateTo] = React.useState("")
   const [decisionComment, setDecisionComment] = React.useState("")
@@ -631,7 +666,9 @@ export function HrAttendanceCorrectionApprovalsView() {
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [detailLoading, setDetailLoading] = React.useState(false)
-  const [actionLoading, setActionLoading] = React.useState<"approve" | "reject" | null>(null)
+  const [actionLoading, setActionLoading] = React.useState<
+    "approve" | "reject" | "return" | null
+  >(null)
   const [filtersOpen, setFiltersOpen] = React.useState(false)
 
   const selectedListRequest = React.useMemo(
@@ -910,11 +947,15 @@ export function HrAttendanceCorrectionApprovalsView() {
     setLoading(true)
     setError(null)
     try {
-      const [result, employeesResult] = await Promise.all([
+      const [result, employeesResult, departmentsResult] = await Promise.all([
         listHrAttendanceCorrectionApprovalRequests(token, {
           page: 1,
           limit: 100,
-          status: statusFilter === "all" ? undefined : statusFilter,
+          status: reviewStatusFilterToQuery(statusFilter),
+          department_id:
+            departmentFilter === "all" ? undefined : Number(departmentFilter),
+          manager_employee_id:
+            managerFilter === "all" ? undefined : Number(managerFilter),
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
         }),
@@ -924,7 +965,11 @@ export function HrAttendanceCorrectionApprovalsView() {
           sortBy: "created_at",
           sortOrder: "DESC",
         }).catch(() => ({ rows: [] as AdminRecord[], total: null })),
+        listDepartments(token, { page: 1, limit: 200 }, { cacheTtlMs: 60_000 }).catch(
+          () => ({ rows: [] as AdminRecord[], total: null })
+        ),
       ])
+      setDepartments(departmentsResult.rows ?? [])
       const requestRows = result.rows
       // List API returns only employee_id — resolve names via directory + per-id fetch.
       const resolvedEmployees = await resolveEmployeesForRequests(
@@ -978,14 +1023,14 @@ export function HrAttendanceCorrectionApprovalsView() {
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, loadRequestDetail, statusFilter])
+  }, [dateFrom, dateTo, departmentFilter, loadRequestDetail, managerFilter, statusFilter])
 
   React.useEffect(() => {
     void loadRequests()
   }, [loadRequests])
 
   const handleDecision = React.useCallback(
-    async (action: "approve" | "reject") => {
+    async (action: "approve" | "reject" | "return") => {
       const token = readStoredToken()
       if (!token || !activeRequest) {
         const message = "Authentication required. Please log in again."
@@ -1000,8 +1045,11 @@ export function HrAttendanceCorrectionApprovalsView() {
       }
 
       const note = decisionComment.trim()
-      if (action === "reject" && !note) {
-        const message = "Add a rejection reason before declining this request."
+      if (action !== "approve" && !note) {
+        const message =
+          action === "reject"
+            ? "Add a rejection reason before declining this request."
+            : "Explain what the employee must correct before returning this request."
         setError(message)
         setFeedback(message)
         showErrorAlert(message)
@@ -1012,8 +1060,9 @@ export function HrAttendanceCorrectionApprovalsView() {
       setError(null)
       setFeedback(null)
       try {
+        const finalApproval = isFinalApproval(activeRequest)
         const body = {
-          comment: note || (action === "approve" ? "Approved by HR" : "Rejected by HR"),
+          comment: note || (finalApproval ? "Approved by HR" : "Approved by manager"),
           metadata: {
             reviewed_from: "HR_PORTAL",
           },
@@ -1021,14 +1070,20 @@ export function HrAttendanceCorrectionApprovalsView() {
 
         if (action === "approve") {
           await approveHrAttendanceCorrectionRequest(token, requestId, body)
-        } else {
+        } else if (action === "reject") {
           await rejectHrAttendanceCorrectionRequest(token, requestId, body)
+        } else {
+          await returnHrAttendanceCorrectionRequest(token, requestId, body)
         }
 
         const successMessage =
           action === "approve"
-            ? "Attendance correction approved and applied to the daily summary."
-            : "Attendance correction request rejected."
+            ? finalApproval
+              ? "Attendance correction approved and applied to the daily summary."
+              : "Attendance correction approved and forwarded to HR for final approval."
+            : action === "reject"
+              ? "Attendance correction request rejected."
+              : "Attendance correction request returned to the employee."
         setFeedback(successMessage)
         setDecisionComment("")
         showSuccessAlert(successMessage)
@@ -1055,14 +1110,21 @@ export function HrAttendanceCorrectionApprovalsView() {
 
   const activeFilterCount = React.useMemo(() => {
     let count = 0
-    if (statusFilter !== "all") count += 1
+    if (statusFilter !== "queue") count += 1
+    if (departmentFilter !== "all") count += 1
+    if (managerFilter !== "all") count += 1
     if (dateFrom.trim()) count += 1
     if (dateTo.trim()) count += 1
     return count
-  }, [dateFrom, dateTo, statusFilter])
+  }, [dateFrom, dateTo, departmentFilter, managerFilter, statusFilter])
+
+  const canDecide = canReviewSelfServiceRequest(activeRequest)
+  const finalApproval = isFinalApproval(activeRequest)
 
   const resetFilters = React.useCallback(() => {
-    setStatusFilter("all")
+    setStatusFilter("queue")
+    setDepartmentFilter("all")
+    setManagerFilter("all")
     setDateFrom("")
     setDateTo("")
     setFeedback(null)
@@ -1151,12 +1213,51 @@ export function HrAttendanceCorrectionApprovalsView() {
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        <SelectItem value="submitted">Submitted</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        {SELF_SERVICE_REVIEW_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="grid min-w-0 gap-0.5 text-[10px]">
+                    <span className="font-medium text-slate-600 dark:text-slate-300">Department</span>
+                    <Select
+                      value={departmentFilter}
+                      onValueChange={(value) => setDepartmentFilter(value ?? "all")}
+                    >
+                      <SelectTrigger className="h-7 w-full text-[11px]">
+                        <SelectValue placeholder="Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All departments</SelectItem>
+                        {departments.map((department) => (
+                          <SelectItem key={String(department.id)} value={String(department.id)}>
+                            {readString(department, ["name"], `Department ${String(department.id)}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="grid min-w-0 gap-0.5 text-[10px]">
+                    <span className="font-medium text-slate-600 dark:text-slate-300">Manager</span>
+                    <Select
+                      value={managerFilter}
+                      onValueChange={(value) => setManagerFilter(value ?? "all")}
+                    >
+                      <SelectTrigger className="h-7 w-full text-[11px]">
+                        <SelectValue placeholder="Manager" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All managers</SelectItem>
+                        {employees.map((employee) => (
+                          <SelectItem key={String(employee.id)} value={String(employee.id)}>
+                            {[employee.first_name, employee.last_name]
+                              .filter(Boolean)
+                              .join(" ") || `Employee ${String(employee.id)}`}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </label>
@@ -1372,7 +1473,25 @@ export function HrAttendanceCorrectionApprovalsView() {
                     label="Req. status"
                     value={readString(activeRequest, ["requested_status", "new_status"], "—")}
                   />
+                  <MetaChip
+                    label="Department"
+                    value={readString(activeRequest, ["department_name"], "—")}
+                  />
+                  <MetaChip
+                    label="Manager decision"
+                    value={
+                      activeRequest.manager_reviewed_at
+                        ? `Approved ${formatDateTime(activeRequest.manager_reviewed_at)}`
+                        : "—"
+                    }
+                  />
                 </div>
+                {typeof activeRequest.manager_review_comment === "string" &&
+                activeRequest.manager_review_comment.trim() ? (
+                  <p className="rounded-md border border-border bg-muted/15 px-2.5 py-1.5 text-xs text-muted-foreground">
+                    Manager note: {activeRequest.manager_review_comment}
+                  </p>
+                ) : null}
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
@@ -1409,21 +1528,28 @@ export function HrAttendanceCorrectionApprovalsView() {
                   )}
                 </div>
 
+                <SelfServiceApprovalTimeline history={activeRequest.approval_history} />
+
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-foreground">HR note</p>
+                  <p className="text-xs font-semibold text-foreground">
+                    {finalApproval ? "HR note" : "Reviewer note"}
+                  </p>
                   <Textarea
                     className="min-h-16 rounded-lg border border-border px-2.5 py-1.5 text-xs"
                     placeholder={
-                      statusMeta.terminal
-                        ? "This request is already closed."
-                        : "Note for approval or rejection…"
+                      canDecide
+                        ? "Note for approval, rejection or return…"
+                        : "This request is not awaiting your decision."
                     }
                     value={decisionComment}
                     onChange={(event) => setDecisionComment(event.target.value)}
-                    disabled={statusMeta.terminal || actionLoading !== null}
+                    disabled={!canDecide || actionLoading !== null}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Approve applies to the daily summary. Reject requires a clear reason.
+                    {finalApproval
+                      ? "Final approval applies the correction to the daily summary."
+                      : "Approval forwards the request to HR for final approval."}{" "}
+                    Reject and return require a clear reason.
                   </p>
                 </div>
               </>
@@ -1436,20 +1562,33 @@ export function HrAttendanceCorrectionApprovalsView() {
                 type="button"
                 className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-xs font-semibold !text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void handleDecision("approve")}
-                disabled={statusMeta.terminal || actionLoading !== null}
+                disabled={!canDecide || actionLoading !== null}
               >
                 {actionLoading === "approve" ? (
                   <FluentLoadingIndicator className="size-3.5 animate-spin" />
                 ) : (
                   <CheckCircle2 className="size-3.5" />
                 )}
-                Approve
+                {finalApproval ? "Final approve" : "Approve"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-300 bg-background px-3 text-xs font-semibold text-orange-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-900/50 dark:text-orange-300 dark:hover:bg-orange-950/40"
+                onClick={() => void handleDecision("return")}
+                disabled={!canDecide || actionLoading !== null}
+              >
+                {actionLoading === "return" ? (
+                  <FluentLoadingIndicator className="size-3.5 animate-spin" />
+                ) : (
+                  <Undo2 className="size-3.5" />
+                )}
+                Return
               </button>
               <button
                 type="button"
                 className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-background px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-300 dark:hover:bg-rose-950/40"
                 onClick={() => void handleDecision("reject")}
-                disabled={statusMeta.terminal || actionLoading !== null}
+                disabled={!canDecide || actionLoading !== null}
               >
                 {actionLoading === "reject" ? (
                   <FluentLoadingIndicator className="size-3.5 animate-spin" />

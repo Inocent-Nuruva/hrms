@@ -36,12 +36,16 @@ describe("attendance section selection", () => {
     )
   })
 
-  it("keeps correction requests out of Attendance navigation", () => {
+  it("lists my correction requests under My attendance and keeps the review queue in To do", () => {
     const urls = attendanceWorkspaceSectionTabGroups.flatMap((group) =>
       group.items.map((item) => item.url),
     )
+    // The reviewer queue lives under the sidebar "To do" approvals menu.
     expect(urls).not.toContain("/dashboard/attendance/correction-requests")
-    expect(urls).not.toContain("/dashboard/attendance/corrections")
+    expect(attendanceWorkspaceSectionTabGroups[0]?.items).toContainEqual({
+      title: "Correction Requests",
+      url: "/dashboard/attendance/corrections",
+    })
   })
 })
 
@@ -118,6 +122,7 @@ describe("employee section navigation", () => {
         title: "Salary approvals",
         url: "/dashboard/employees/salary-approvals",
       },
+      { title: "Recruitment", url: "/dashboard/operations/recruitment" },
     ])
   })
 
