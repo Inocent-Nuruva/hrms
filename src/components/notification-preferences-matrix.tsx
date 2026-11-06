@@ -44,6 +44,7 @@ const GROUPS: Array<{ title: string; types: NotificationPreferenceType[] }> = [
       "ONBOARDING_TASK_OVERDUE",
       "ONBOARDING_APPROVAL_REMINDER",
       "ONBOARDING_COMPLETED",
+      "ONBOARDING_CANCELLED",
     ],
   },
   {
