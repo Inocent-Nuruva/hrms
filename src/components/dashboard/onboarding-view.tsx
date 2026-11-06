@@ -4,6 +4,18 @@ import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicat
 import { DateInput } from "@/components/ui/date-input";
 import { onboardingStepAssignmentPayload } from "@/lib/onboarding-step-assignment";
 import { onboardingStepProgress } from "@/lib/onboarding-step-progress";
+import { normalizeOnboardingWorkspaceTab } from "@/lib/onboarding-workspace-link";
+import { OnboardingDeviceProvisioningStatus } from "@/components/dashboard/onboarding-device-provisioning-status";
+import {
+  OnboardingTaskReassignDialog,
+  type OnboardingTaskReassignTarget,
+  type OnboardingTaskReassignment,
+} from "@/components/dashboard/onboarding-task-reassign-dialog";
+import {
+  OnboardingDocumentEditDialog,
+  type OnboardingDocumentEditTarget,
+  type OnboardingDocumentUpdate,
+} from "@/components/dashboard/onboarding-document-edit-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { DateTimeInput } from "@/components/ui/date-time-input";
 import {
@@ -44,6 +56,7 @@ import {
   ShieldAlert,
   Trash2,
   X,
+  RotateCcw,
 } from "lucide-react";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import {
@@ -81,7 +94,9 @@ import {
   createOnboardingWorkflowStep,
   delegateOnboardingApproval,
   deleteOnboardingDocument,
-  deleteOnboardingRequest,
+  reopenOnboardingRequest,
+  reassignOnboardingTask,
+  updateOnboardingDocument,
   deleteOnboardingWorkflow,
   deleteOnboardingWorkflowStep,
   downloadEmployeeDocument,
@@ -804,7 +819,12 @@ function toTimestamp(value: unknown) {
 }
 
 type RequestAction =
-  "submit" | "approve" | "reject" | "cancel" | "complete" | "delete";
+  | "submit"
+  | "approve"
+  | "reject"
+  | "cancel"
+  | "complete"
+  | "reopen";
 
 type OnboardingWorkflowStepDraft = {
   id?: number;
@@ -1164,6 +1184,7 @@ const REQUEST_STATUS_FILTER_OPTIONS = [
   "active",
   "in_progress",
   "approved",
+  "activation_failed",
   "rejected",
   "cancelled",
   "completed",
@@ -1306,7 +1327,7 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
       action === "reject" ||
       action === "cancel" ||
       action === "complete" ||
-      action === "delete"
+      action === "reopen"
     ) {
       picked.add(action);
     }
@@ -1362,16 +1383,20 @@ function parseAllowedActions(row: AdminRecord): Set<RequestAction> {
       picked.add("reject");
       picked.add("cancel");
     } else if (
-      ["ready_for_activation", "activating", "approved", "processing"].includes(
-        status,
-      )
+      [
+        "ready_for_activation",
+        "activating",
+        "activation_failed",
+        "approved",
+        "processing",
+      ].includes(status)
     ) {
       picked.add("complete");
       picked.add("cancel");
     } else if (status === "rejected") {
-      picked.add("delete");
+      picked.add("reopen");
     } else if (status === "cancelled" || status === "completed") {
-      picked.add("delete");
+      // Closed requests have no further actions.
     } else if (status && status !== PENDING_ONBOARDING_STATUS) {
       // Unknown non-empty status: still allow cancel when not terminal.
       if (!["completed", "cancelled", "rejected"].includes(status)) {
@@ -1396,7 +1421,11 @@ function statusBadgeClass(status: string) {
   if (value === "completed" || value === "approved") {
     return "bg-emerald-100 text-emerald-700";
   }
-  if (value === "cancelled" || value === "rejected") {
+  if (
+    value === "cancelled" ||
+    value === "rejected" ||
+    value === "activation_failed"
+  ) {
     return "bg-rose-100 text-rose-700";
   }
   if (value === "active" || value === "in_progress" || value === "processing") {
@@ -1573,8 +1602,19 @@ export function OnboardingView() {
   const requestedTab = searchParams?.get("tab") ?? "";
   const actor = useDashboardActor();
   const actorPermissions = actor.permissionLabels;
+  // HR staff are often not "admins" (role name / shell mode), so decide by the
+  // HR-only onboarding permissions. Self-service roles only hold read/update.
+  const hasHrOnboardingAccess = canPerformPermission(actorPermissions, {
+    permissions: [
+      "onboarding_requests:create",
+      "onboarding_requests:approve",
+      "onboarding_requests:complete",
+      "onboarding_requests:cancel",
+      "onboarding_workflows:read",
+    ],
+  });
   const isEmployeeMode = actor.ready
-    ? actor.accessMode === "employee" || !actor.isAdmin
+    ? !actor.isAdmin && !hasHrOnboardingAccess
     : false;
   const canViewOnboardingRequests = React.useMemo(
     () =>
@@ -1607,6 +1647,31 @@ export function OnboardingView() {
   );
   const canReadOnboardingTasks = React.useMemo(
     () => canPerformPermission(actorPermissions, "onboarding_tasks:read"),
+    [actorPermissions],
+  );
+  // Mirror the backend route permissions so users never see actions that 403.
+  const canCreateOnboardingDocuments = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_documents:create"),
+    [actorPermissions],
+  );
+  const canVerifyOnboardingDocuments = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_documents:verify"),
+    [actorPermissions],
+  );
+  const canDeleteOnboardingDocuments = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_documents:delete"),
+    [actorPermissions],
+  );
+  const canCreateOnboardingTasks = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_tasks:create"),
+    [actorPermissions],
+  );
+  const canUpdateOnboardingTasks = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_tasks:update"),
+    [actorPermissions],
+  );
+  const canUpdateOnboardingDocuments = React.useMemo(
+    () => canPerformPermission(actorPermissions, "onboarding_documents:update"),
     [actorPermissions],
   );
   const canReadRoles = React.useMemo(
@@ -4223,11 +4288,31 @@ export function OnboardingView() {
       );
       return;
     }
-    if (action === "delete" && !canUpdateOnboardingRequests) {
+    if (action === "reopen" && !canUpdateOnboardingRequests) {
       showErrorAlert(
-        "You do not have permission to delete onboarding requests.",
+        "You do not have permission to reopen onboarding requests.",
       );
       return;
+    }
+    let reopenReason = "";
+    if (action === "reopen") {
+      const answer = await fluentPrompt(
+        "Reopen this rejected request as a draft? Optionally note what changed.",
+      );
+      if (answer === null) return;
+      reopenReason = answer.trim();
+    }
+    let cancelReason = "";
+    if (action === "cancel") {
+      const answer = await fluentPrompt(
+        "Why is this onboarding request being cancelled? Approvers and task owners will see this reason.",
+      );
+      if (answer === null) return;
+      cancelReason = answer.trim();
+      if (!cancelReason) {
+        showErrorAlert("Enter a reason to cancel the onboarding request.");
+        return;
+      }
     }
 
     const token = readStoredToken();
@@ -4271,12 +4356,16 @@ export function OnboardingView() {
         });
       } else if (action === "cancel") {
         await cancelOnboardingRequest(token, requestId, {
-          reason: "Cancelled by admin",
+          reason: cancelReason,
         });
       } else if (action === "complete") {
         await completeOnboardingRequest(token, requestId);
-      } else if (action === "delete") {
-        await deleteOnboardingRequest(token, requestId);
+      } else if (action === "reopen") {
+        await reopenOnboardingRequest(
+          token,
+          requestId,
+          reopenReason ? { reason: reopenReason } : {},
+        );
       }
 
       if (action === "approve") {
@@ -4290,12 +4379,12 @@ export function OnboardingView() {
         showSuccessAlert(
           "Onboarding request submitted. It can now be approved.",
         );
-      } else {
+      } else if (action === "reopen") {
         showSuccessAlert(
-          action === "delete"
-            ? "Onboarding request removed from list."
-            : `Onboarding request ${action}d successfully.`,
+          "Request reopened as a draft. Review it and submit to restart approvals.",
         );
+      } else {
+        showSuccessAlert(`Onboarding request ${action}d successfully.`);
       }
       await reloadAll(activeTab, true);
       if (requestDetailsOpen && readCurrentRequestId() === requestId) {
@@ -5023,7 +5112,7 @@ export function OnboardingView() {
   }
 
   async function submitRequestDocument() {
-    if (!canUpdateOnboardingRequests) {
+    if (!canCreateOnboardingDocuments) {
       showErrorAlert(
         "You do not have permission to manage onboarding documents.",
       );
@@ -5144,7 +5233,7 @@ export function OnboardingView() {
     documentRow: AdminRecord,
     isVerified: boolean,
   ) {
-    if (!canUpdateOnboardingRequests) {
+    if (!canVerifyOnboardingDocuments) {
       showErrorAlert(
         "You do not have permission to verify onboarding documents.",
       );
@@ -5188,7 +5277,7 @@ export function OnboardingView() {
   }
 
   async function rejectRequestDocument(documentRow: AdminRecord) {
-    if (!canUpdateOnboardingRequests) return;
+    if (!canVerifyOnboardingDocuments) return;
     const reason = (
       await fluentPrompt("Why is this document being returned for correction?")
     )?.trim();
@@ -5224,7 +5313,7 @@ export function OnboardingView() {
   }
 
   async function removeRequestDocument(documentRow: AdminRecord) {
-    if (!canUpdateOnboardingRequests) {
+    if (!canDeleteOnboardingDocuments) {
       showErrorAlert(
         "You do not have permission to delete onboarding documents.",
       );
@@ -5259,7 +5348,7 @@ export function OnboardingView() {
   }
 
   async function submitRequestTask() {
-    if (!canUpdateOnboardingRequests) {
+    if (!canCreateOnboardingTasks) {
       showErrorAlert("You do not have permission to manage onboarding tasks.");
       return;
     }
@@ -5330,6 +5419,118 @@ export function OnboardingView() {
     }
   }
 
+  const [taskToReassign, setTaskToReassign] = React.useState<
+    (OnboardingTaskReassignTarget & { id: number }) | null
+  >(null);
+  const [documentToEdit, setDocumentToEdit] = React.useState<
+    (OnboardingDocumentEditTarget & { id: number }) | null
+  >(null);
+
+  const reassignUserOptions = React.useMemo(
+    () =>
+      users.flatMap((row) => {
+        const userId = preferredAssigneeId(row);
+        if (userId === null) return [];
+        return [
+          {
+            value: String(userId),
+            label: personDisplayName(row) || `User #${userId}`,
+          },
+        ];
+      }),
+    [users],
+  );
+  const reassignDepartmentOptions = React.useMemo(
+    () =>
+      departments.flatMap((row) => {
+        const departmentId = readNumber(row, ["id", "department_id"]);
+        if (departmentId === null) return [];
+        return [
+          {
+            value: String(departmentId),
+            label: resolveOptionLabel(
+              departments,
+              departmentId,
+              ["id", "department_id"],
+              ["name", "title"],
+            ),
+          },
+        ];
+      }),
+    [departments],
+  );
+
+  function openTaskReassignment(taskRow: AdminRecord) {
+    const taskId = readNumber(taskRow, ["id", "task_id"]);
+    if (!canUpdateOnboardingTasks || taskId === null) return;
+    void ensureLookups(["users", "departments"]);
+    setTaskToReassign({
+      id: taskId,
+      title: readString(taskRow, ["title", "name", "task_title"], ""),
+      assignedUserId: readNumber(taskRow, ["assigned_company_user_id"]),
+      assignedDepartmentId: readNumber(taskRow, ["assigned_department_id"]),
+      dueDate: readString(taskRow, ["due_date"], "").slice(0, 10),
+    });
+  }
+
+  async function saveTaskReassignment(payload: OnboardingTaskReassignment) {
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    if (!token || requestId === null || !taskToReassign) return;
+    setSaving(true);
+    try {
+      await reassignOnboardingTask(token, requestId, taskToReassign.id, payload);
+      showSuccessAlert("Task reassigned. The new owner has been notified.");
+      setTaskToReassign(null);
+      await reloadCurrentRequestActivity(requestId);
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to reassign task.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDocumentEdit(documentRow: AdminRecord) {
+    const documentId = readNumber(documentRow, ["id", "document_id"]);
+    if (!canUpdateOnboardingDocuments || documentId === null) return;
+    setDocumentToEdit({
+      id: documentId,
+      title: readString(documentRow, ["title", "name", "file_name"], ""),
+      description: readString(documentRow, ["description"], ""),
+      expiryDate: readString(documentRow, ["expiry_date"], "").slice(0, 10),
+    });
+  }
+
+  async function saveDocumentEdit(payload: OnboardingDocumentUpdate) {
+    const token = readStoredToken();
+    const requestId = readCurrentRequestId();
+    if (!token || requestId === null || !documentToEdit) return;
+    setSaving(true);
+    try {
+      await updateOnboardingDocument(
+        token,
+        requestId,
+        documentToEdit.id,
+        payload,
+      );
+      showSuccessAlert("Document details updated.");
+      setDocumentToEdit(null);
+      await reloadCurrentRequestActivity(requestId);
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update document.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function completeRequestTask(taskRow: AdminRecord) {
     if (!canUpdateOnboardingRequests && !canCompleteOnboardingRequests) {
       showErrorAlert(
@@ -5367,7 +5568,7 @@ export function OnboardingView() {
   }
 
   function openApprovalAssignmentDialog(approvalRow: AdminRecord) {
-    if (!canUpdateOnboardingRequests) {
+    if (!canUpdateOnboardingRequests || !canApproveOnboardingRequests) {
       showErrorAlert(
         "You do not have permission to change onboarding approvers.",
       );
@@ -5462,13 +5663,8 @@ export function OnboardingView() {
       url.searchParams.set("request_id", String(requestId));
       window.history.replaceState(null, "", url);
       if (switchingRequest) {
-        const initialTab = url.searchParams.get("workspace_tab") ?? "overview";
         setWorkspaceTab(
-          ["overview", "details", "payroll", "tasks", "activity"].includes(
-            initialTab,
-          )
-            ? initialTab
-            : "overview",
+          normalizeOnboardingWorkspaceTab(url.searchParams.get("workspace_tab")),
         );
         dirtyReviewKeys.current.clear();
         reviewDraftVersions.current = {};
@@ -5832,10 +6028,11 @@ export function OnboardingView() {
       !isCancelled &&
       !isCompleted &&
       allowedActions.has("complete");
-    const canDelete =
+    const canReopen =
       !pendingEmployee &&
       canUpdateOnboardingRequests &&
-      allowedActions.has("delete");
+      requestStatus === "rejected" &&
+      allowedActions.has("reopen");
     const canChangeWorkflow =
       !pendingEmployee &&
       canUpdateOnboardingRequests &&
@@ -5942,18 +6139,19 @@ export function OnboardingView() {
             Complete
           </Button>
         ) : null}
-        {canDelete ? (
+        {canReopen ? (
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 px-2 text-[11px] text-rose-600"
-            title="Delete"
-            aria-label="Delete"
+            className="h-7 px-2 text-[11px]"
+            title="Reopen as draft"
+            aria-label="Reopen as draft"
             disabled={saving}
-            onClick={() => void runRequestAction(requestId, "delete")}
+            onClick={() => void runRequestAction(requestId, "reopen")}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reopen
           </Button>
         ) : null}
         {canChangeWorkflow ? (
@@ -5974,7 +6172,7 @@ export function OnboardingView() {
         !canReject &&
         !canCancel &&
         !canComplete &&
-        !canDelete &&
+        !canReopen &&
         !canChangeWorkflow ? (
           <span className="text-[11px] text-muted-foreground">No actions</span>
         ) : null}
@@ -7982,6 +8180,15 @@ export function OnboardingView() {
                           onActivity={() => setWorkspaceTab("activity")}
                         />
                       </div>
+                      <div className="mb-4 empty:hidden">
+                        <OnboardingDeviceProvisioningStatus
+                          key={readCurrentRequestId()}
+                          token={readStoredToken() ?? ""}
+                          requestId={readCurrentRequestId()!}
+                          canRetry={canCompleteOnboardingRequests}
+                          refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}`}
+                        />
+                      </div>
                       <OnboardingReadinessOverview
                         key={readCurrentRequestId()}
                         token={readStoredToken() ?? ""}
@@ -9056,6 +9263,7 @@ export function OnboardingView() {
                                 </p>
                               ) : null}
                               {canUpdateOnboardingRequests &&
+                              canApproveOnboardingRequests &&
                               approval.status.toLowerCase() === "pending" &&
                               approval.isCurrent ? (
                                 <button
@@ -9351,7 +9559,7 @@ export function OnboardingView() {
                         <p className="text-sm font-semibold text-slate-900">
                           Documents
                         </p>
-                        {canUpdateOnboardingRequests ? (
+                        {canCreateOnboardingDocuments ? (
                           <Button
                             type="button"
                             variant="outline"
@@ -9609,9 +9817,25 @@ export function OnboardingView() {
                                         )}
                                         {canPreview ? "View" : "Download"}
                                       </Button>
-                                      {canUpdateOnboardingRequests &&
+                                      {(canVerifyOnboardingDocuments ||
+                                        canDeleteOnboardingDocuments ||
+                                        canUpdateOnboardingDocuments) &&
                                       source === "onboarding" ? (
                                         <>
+                                          {canUpdateOnboardingDocuments ? (
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              className="h-7 px-2 text-[11px]"
+                                              onClick={() =>
+                                                openDocumentEdit(documentRow)
+                                              }
+                                              disabled={saving}
+                                            >
+                                              Edit
+                                            </Button>
+                                          ) : null}
+                                          {canVerifyOnboardingDocuments ? (
                                           <Button
                                             type="button"
                                             variant="outline"
@@ -9628,7 +9852,9 @@ export function OnboardingView() {
                                               ? "Mark unverified"
                                               : "Verify"}
                                           </Button>
-                                          {!isVerified ? (
+                                          ) : null}
+                                          {canVerifyOnboardingDocuments &&
+                                          !isVerified ? (
                                             <Button
                                               type="button"
                                               variant="outline"
@@ -9643,6 +9869,7 @@ export function OnboardingView() {
                                               Return for correction
                                             </Button>
                                           ) : null}
+                                          {canDeleteOnboardingDocuments ? (
                                           <Button
                                             type="button"
                                             variant="outline"
@@ -9656,6 +9883,7 @@ export function OnboardingView() {
                                           >
                                             Delete
                                           </Button>
+                                          ) : null}
                                         </>
                                       ) : null}
                                     </div>
@@ -9711,7 +9939,7 @@ export function OnboardingView() {
                         <p className="text-sm font-semibold text-slate-900">
                           Tasks
                         </p>
-                        {canUpdateOnboardingRequests ? (
+                        {canCreateOnboardingTasks ? (
                           <Button
                             type="button"
                             className="h-8 px-3 text-xs"
@@ -10111,6 +10339,20 @@ export function OnboardingView() {
                                         : "Pending"}
                                     </p>
                                   </div>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                  {!isTaskClosed && canUpdateOnboardingTasks ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[11px]"
+                                      onClick={() =>
+                                        openTaskReassignment(taskRow)
+                                      }
+                                      disabled={saving}
+                                    >
+                                      Reassign
+                                    </Button>
+                                  ) : null}
                                   {!isTaskClosed &&
                                   (canUpdateOnboardingRequests ||
                                     canCompleteOnboardingRequests) ? (
@@ -10130,6 +10372,7 @@ export function OnboardingView() {
                                         : "Complete task"}
                                     </Button>
                                   ) : null}
+                                  </div>
                                 </div>
                                 <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-3">
                                   <div>
@@ -11902,6 +12145,20 @@ export function OnboardingView() {
           </Dialog>
         </div>
       ) : null}
+      <OnboardingTaskReassignDialog
+        target={taskToReassign}
+        userOptions={reassignUserOptions}
+        departmentOptions={reassignDepartmentOptions}
+        saving={saving}
+        onClose={() => setTaskToReassign(null)}
+        onSubmit={(payload) => void saveTaskReassignment(payload)}
+      />
+      <OnboardingDocumentEditDialog
+        target={documentToEdit}
+        saving={saving}
+        onClose={() => setDocumentToEdit(null)}
+        onSubmit={(payload) => void saveDocumentEdit(payload)}
+      />
     </section>
   );
 }

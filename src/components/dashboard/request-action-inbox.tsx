@@ -22,6 +22,7 @@ import { formatDate, prettify, readString, rowId, StatusChip } from "./talent-vi
 import { useActionInboxLiveRefresh } from "@/hooks/use-action-inbox-live-refresh"
 import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActions, groupsForInboxTab, isOpenAction, recordValue, type InboxFilters } from "./request-inbox-utils"
 import { cn } from "@/lib/utils"
+import { onboardingRequestHref } from "@/lib/onboarding-workspace-link"
 import { LeaveReviewContext } from "@/components/leave/leave-review-context"
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -97,7 +98,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const safeActionUrl = actionUrl.startsWith("/") && !actionUrl.startsWith("//")
     ? actionUrl
     : requiresDetailedReview && requestId
-      ? `/dashboard/employees/onboarding?request_id=${requestId}&workspace_tab=employee-details`
+      ? onboardingRequestHref(requestId, "details")
       : ""
   const sourceModule = prettify(readString(selected, ["sourceModule", "source_module"], "Request"))
   const priority = prettify(readString(selected, ["priority"], "MEDIUM"))

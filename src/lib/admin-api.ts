@@ -325,6 +325,7 @@ export type NotificationPreferenceType =
   | "ONBOARDING_TASK_OVERDUE"
   | "ONBOARDING_APPROVAL_REMINDER"
   | "ONBOARDING_COMPLETED"
+  | "ONBOARDING_CANCELLED"
   | "OFFBOARDING_SUBMITTED"
   | "OFFBOARDING_APPROVAL_REQUIRED"
   | "OFFBOARDING_APPROVED"
@@ -11196,25 +11197,15 @@ export async function reviewOnboardingEmployeeDetails(
   );
 }
 
-export async function reactivateOnboardingRequest(
+export async function reopenOnboardingRequest(
   token: string,
   id: string | number,
+  data: { reason?: string } = {},
 ) {
-  return adminRequest<unknown>(`/api/onboarding/requests/${id}`, {
-    method: "PATCH",
+  return adminRequest<unknown>(`/api/onboarding/requests/${id}/reopen`, {
+    method: "POST",
     token,
-    body: {
-      status: "active",
-    },
-  });
-}
-
-export async function deleteOnboardingRequest(
-  token: string,
-  id: string | number,
-) {
-  return cancelOnboardingRequest(token, id, {
-    reason: "Cancelled by admin",
+    body: data,
   });
 }
 
@@ -11447,6 +11438,11 @@ export type OnboardingReadiness = {
   ready_to_activate: boolean;
   closed: boolean;
   blocker_count: number;
+  activation_failure?: {
+    message: string;
+    failed_at: string;
+    attempted_by_company_user_id: number | null;
+  } | null;
   completed_required: number;
   total_required: number;
   next_action: OnboardingReadinessRequirement | null;
@@ -11461,6 +11457,42 @@ export async function getOnboardingReadiness(
     `/api/onboarding/requests/${requestId}/readiness`,
     { token },
   );
+}
+
+export type OnboardingDeviceProvisioningStatus = {
+  id: number;
+  status: "pending" | "processing" | "completed" | "failed" | "skipped";
+  attempt_count: number;
+  max_attempts: number;
+  exhausted: boolean;
+  last_error: string | null;
+  next_retry_at: string | null;
+  failed_at: string | null;
+  completed_at: string | null;
+  device_count: number;
+};
+
+export async function getOnboardingDeviceProvisioning(
+  token: string,
+  requestId: string | number,
+) {
+  return adminRequest<{ data: OnboardingDeviceProvisioningStatus | null }>(
+    `/api/onboarding/requests/${requestId}/device-provisioning`,
+    { token },
+  );
+}
+
+export async function retryOnboardingDeviceProvisioning(
+  token: string,
+  requestId: string | number,
+) {
+  return adminRequest<{
+    message: string;
+    data: OnboardingDeviceProvisioningStatus | null;
+  }>(`/api/onboarding/requests/${requestId}/device-provisioning/retry`, {
+    method: "POST",
+    token,
+  });
 }
 
 export type OnboardingOverviewRow = {
