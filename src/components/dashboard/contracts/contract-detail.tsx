@@ -297,7 +297,13 @@ function DraftEditor({
           <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             <p className="font-medium">Fill these in before sending:</p>
             <p className="text-xs">{missing.map((key) => key.replace(/_/g, " ")).join(", ")}</p>
-            <p className="mt-1 text-xs">Company details are set in Contracts → Settings.</p>
+            <p className="mt-1 text-xs">
+              Company fields are set under{" "}
+              <Link href="/dashboard/employees/contracts?tab=company" className="font-medium underline">
+                Contracts → Company details
+              </Link>
+              .
+            </p>
           </div>
         ) : null}
         <div className="flex flex-wrap gap-2">
