@@ -623,6 +623,68 @@ export interface EmployeeStatusPayload {
   exit_date?: string;
   exit_reason?: string;
   notes?: string;
+  /** Work schedule assigned as part of an activation. */
+  schedule?: {
+    mode: "shift" | "timetable";
+    id: number;
+    effective_from?: string;
+  };
+  /** Only when activating from onboarding. */
+  activation?: {
+    leave_policy_id?: number;
+    attendance_policy_id?: number;
+  };
+  suspension?: {
+    reason: string;
+    start_date?: string;
+    expected_end_date?: string | null;
+    pay_status: "paid" | "unpaid" | "partial";
+    pause_attendance?: boolean;
+    disable_login?: boolean;
+    notify_manager?: boolean;
+  };
+  exit?: {
+    exit_date: string;
+    last_working_day: string;
+    reason: "resignation" | "termination" | "end_of_contract" | "retirement" | "other";
+    reason_details?: string;
+    rehire_eligible?: boolean;
+    end_schedule?: boolean;
+    completed_step_ids?: number[];
+  };
+}
+
+export type StatusRequirementState = "complete" | "needs_input" | "optional";
+
+export interface StatusRequirement {
+  key: string;
+  label: string;
+  required: boolean;
+  state: StatusRequirementState;
+  description?: string;
+  current?: unknown;
+  default?: unknown;
+  options?: unknown;
+}
+
+export interface EmployeeStatusRequirements {
+  employee_id: number;
+  current_status: EmployeeStatusValue;
+  target_status: EmployeeStatusValue;
+  allowed_targets: EmployeeStatusValue[];
+  path: "direct" | "onboarding_completion" | "offboarding_with_status" | "offboarding_request";
+  path_note: string | null;
+  blocking: Array<{ key: string; label: string; link?: string }>;
+  requirements: StatusRequirement[];
+  context: {
+    hire_date: string | null;
+    branch_id: number | null;
+    department_id: number | null;
+    onboarding_request_id: number | null;
+    can_force_exit: boolean;
+    today: string;
+    final_status_by_exit_reason: Record<string, EmployeeStatusValue> | null;
+  };
 }
 
 export interface EmployeeAssignmentPayload {
@@ -16574,11 +16636,73 @@ export async function patchEmployeeStatus(
     normalizedPayload.exit_reason = trimmedExitReason || undefined;
   }
 
+  if (data.schedule) normalizedPayload.schedule = data.schedule;
+  if (data.activation) normalizedPayload.activation = data.activation;
+  if (data.suspension) normalizedPayload.suspension = data.suspension;
+  if (data.exit) normalizedPayload.exit = data.exit;
+
   return adminRequest<unknown>(`/api/employees/${employeeId}/status`, {
     method: "PATCH",
     token,
     body: normalizedPayload,
   });
+}
+
+/** Prerequisites, their state and defaults for moving an employee to `target`. */
+export async function getEmployeeStatusRequirements(
+  token: string,
+  employeeId: string | number,
+  target: EmployeeStatusValue,
+  signal?: AbortSignal,
+): Promise<EmployeeStatusRequirements> {
+  const response = await adminRequest<unknown>(
+    `/api/employees/${employeeId}/status-requirements?target=${encodeURIComponent(target)}`,
+    { token, signal },
+  );
+  const record = asRecord(response);
+  const data = asRecord(record?.data) ?? record;
+  return data as unknown as EmployeeStatusRequirements;
+}
+
+export interface EmploymentEventRecord {
+  id: number
+  event_type: string
+  effective_date: string
+  title: string
+  description: string | null
+  source_module: string | null
+  old_values: Record<string, unknown> | null
+  new_values: Record<string, unknown> | null
+  created_by_company_user_id: number | null
+  created_by_name?: string | null
+  created_at: string
+}
+
+/** Append-only employment timeline (status changes, activation, exits...). */
+export async function listEmployeeEmploymentHistory(
+  token: string,
+  employeeId: string | number,
+): Promise<EmploymentEventRecord[]> {
+  const response = await adminRequest<unknown>(`/api/employees/${employeeId}/employment-history`, { token })
+  const record = asRecord(response)
+  const list = Array.isArray(response)
+    ? response
+    : Array.isArray(record?.data)
+      ? record.data
+      : []
+  return list as EmploymentEventRecord[]
+}
+
+/** Field-level errors (`field_errors`) returned by the status endpoint, if any. */
+export function readStatusFieldErrors(error: unknown): Record<string, string> {
+  const payload = asRecord((error as { payload?: unknown } | null)?.payload);
+  const fieldErrors = asRecord(payload?.field_errors);
+  if (!fieldErrors) return {};
+  return Object.fromEntries(
+    Object.entries(fieldErrors).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
 }
 
 /** Archive an employee profile through the documented employee DELETE endpoint. */

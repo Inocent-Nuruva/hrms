@@ -59,10 +59,8 @@ import {
   downloadEmployeeDocument,
   downloadEmploymentLetter,
   downloadEmployeeLetterPreview,
-  EMPLOYEE_STATUS_VALUES,
   fileToBase64UploadDto,
   getEmployeeById,
-  getEmployeeAttendanceAssignmentPresence,
   isEmployeeStatusValue,
   listBranches,
   listCostCenters,
@@ -80,7 +78,6 @@ import {
   patchEmployeeById,
   patchEmployeeAssignment,
   patchEmployeePosition,
-  patchEmployeeStatus,
   patchEmployeeSectionItem,
   removeEmployeeLinkedAccount,
   submitEmployeeMovement,
@@ -93,6 +90,8 @@ import {
 } from "@/lib/admin-api"
 import { cn } from "@/lib/utils"
 import { pageBleedClass } from "@/components/dashboard/talent-visuals"
+import { EmployeeStatusDialog } from "@/components/dashboard/employee-status-dialog"
+import { EmployeeStatusHistorySection } from "@/components/dashboard/employee-status-history"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   filterEmployeesByDirectorySearch,
@@ -105,78 +104,9 @@ const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 const EMPLOYEE_STATUS_REFRESH_KEY = "hrms.employees.status.updatedAt"
 const EMPLOYEE_STATUS_REFRESH_EVENT = "hrms:employee-status-updated"
 
-type EmployeeStatusFormState = {
-  employment_status: EmployeeStatusPayload["employment_status"]
-  effective_date: string
-  exit_date: string
-  exit_reason: string
-  notes: string
-}
-
 function normalizeEmployeeStatus(value: unknown): EmployeeStatusPayload["employment_status"] {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : ""
   return isEmployeeStatusValue(normalized) ? normalized : "active"
-}
-
-function readEmployeeStatusForm(employee: AdminRecord): EmployeeStatusFormState {
-  const status = normalizeEmployeeStatus(employee.employment_status ?? employee.status)
-  const exitDate = readString(employee, ["exit_date"]) === "-" ? "" : readString(employee, ["exit_date"])
-  const exitReason = readString(employee, ["exit_reason"]) === "-" ? "" : readString(employee, ["exit_reason"])
-  const notes = readString(employee, ["notes"]) === "-" ? "" : readString(employee, ["notes"])
-
-  return {
-    employment_status: status,
-    effective_date: new Date().toISOString().slice(0, 10),
-    exit_date: status === "exited" ? exitDate : "",
-    exit_reason: status === "exited" ? exitReason : "",
-    notes,
-  }
-}
-
-function validateStatusForm(form: EmployeeStatusFormState) {
-  if (!isEmployeeStatusValue(form.employment_status)) {
-    return "Please select a valid employment status."
-  }
-
-  const effectiveDate = form.effective_date.trim()
-  if (!effectiveDate) {
-    return "Effective date is required."
-  }
-  const effectiveParsed = new Date(effectiveDate)
-  if (Number.isNaN(effectiveParsed.getTime())) {
-    return "Effective date is invalid."
-  }
-
-  const notes = form.notes.trim()
-  if ((form.employment_status === "suspended" || form.employment_status === "terminated") && notes.length < 3) {
-    return "Please provide at least 3 characters of notes for suspended or terminated status."
-  }
-
-  if (form.employment_status === "exited") {
-    const exitReason = form.exit_reason.trim()
-    if (exitReason.length < 3) {
-      return "Exit reason must be at least 3 characters."
-    }
-
-    const exitDate = form.exit_date.trim()
-    if (!exitDate) {
-      return "Exit date is required for exited status."
-    }
-
-    const parsed = new Date(exitDate)
-    if (Number.isNaN(parsed.getTime())) {
-      return "Exit date is invalid."
-    }
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    parsed.setHours(0, 0, 0, 0)
-    if (parsed.getTime() > today.getTime()) {
-      return "Exit date cannot be in the future."
-    }
-  }
-
-  return null
 }
 
 function readStoredToken() {
@@ -982,6 +912,7 @@ function routeKeyToSectionTitle(routeKey: string | null | undefined) {
       departments: "Departments",
       positions: "Positions",
       movements: "Movements",
+      status_history: "Status History",
       academic_qualifications: "Academic Qualifications",
       professional_qualifications: "Professional Qualifications",
       experience_details: "Experience Details",
@@ -1708,6 +1639,7 @@ const PROFILE_SECTION_DEFS: Array<{
   { title: "Departments", tabLabel: "Depts", keys: ["departments", "department_assignments", "departmentAssignments"] },
   { title: "Positions", tabLabel: "Positions", keys: ["position_assignments", "positionAssignments"] },
   { title: "Movements", tabLabel: "Movements", keys: ["employee_movements", "employeeMovements"] },
+  { title: "Status History", tabLabel: "History", keys: [] },
   { title: "Academic Qualifications", tabLabel: "Academic", keys: ["academic_qualifications", "academicQualifications"] },
   { title: "Professional Qualifications", tabLabel: "Professional", keys: ["professional_qualifications", "professionalQualifications"] },
   { title: "Experience Details", tabLabel: "Experience", keys: ["experience_details", "experienceDetails"] },
@@ -1881,6 +1813,8 @@ function ProfileSectionsTabs({
                     onMutated={onMutated}
                     requestedRouteKey={requestedRouteKey}
                   />
+                ) : active.title === "Status History" ? (
+                  <EmployeeStatusHistorySection employeeId={employeeId} token={readStoredToken()} />
                 ) : active.title === "Letters" ? (
                   <EmployeeLettersSection employeeId={employeeId} />
                 ) : (
@@ -4742,18 +4676,6 @@ export function EmployeeProfilePage({
   const [costCenterOptions, setCostCenterOptions] = React.useState<AdminRecord[]>([])
   const [organizationOptionsLoading, setOrganizationOptionsLoading] = React.useState(false)
   const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
-  const [statusSubmitting, setStatusSubmitting] = React.useState(false)
-  const [statusError, setStatusError] = React.useState<string | null>(null)
-  const [attendanceAssignmentCheck, setAttendanceAssignmentCheck] = React.useState<
-    "idle" | "loading" | "found" | "missing" | "unknown"
-  >("idle")
-  const [statusForm, setStatusForm] = React.useState<EmployeeStatusFormState>({
-    employment_status: "active",
-    effective_date: new Date().toISOString().slice(0, 10),
-    exit_date: "",
-    exit_reason: "",
-    notes: "",
-  })
   const [profileSearchOpen, setProfileSearchOpen] = React.useState(false)
   const [profileSearch, setProfileSearch] = React.useState("")
   const [profileSearchResults, setProfileSearchResults] = React.useState<AdminRecord[]>([])
@@ -4762,14 +4684,6 @@ export function EmployeeProfilePage({
   const currentEmployeeStatus = employee
     ? normalizeEmployeeStatus(employee.employment_status ?? employee.status)
     : "active"
-  const supportsExitDetails = ["resigned", "terminated", "retired", "deceased", "exited"].includes(
-    statusForm.employment_status,
-  )
-  const blocksDirectOnboardingExit =
-    currentEmployeeStatus === "onboarding" &&
-    ["terminated", "exited"].includes(statusForm.employment_status)
-  const activatingFromOnboarding =
-    currentEmployeeStatus === "onboarding" && statusForm.employment_status === "active"
   const requestedSectionTitle = React.useMemo(
     () => routeKeyToSectionTitle(requestedMissingItem),
     [requestedMissingItem]
@@ -5288,25 +5202,7 @@ export function EmployeeProfilePage({
             </FluentButton>
             <FluentButton
               appearance="secondary"
-              onClick={() => {
-                setStatusForm(readEmployeeStatusForm(employee))
-                setStatusError(null)
-                const employeeId = readNumber(employee.id)
-                const token = readStoredToken()
-                if (employeeId === null || !token) {
-                  setAttendanceAssignmentCheck("unknown")
-                } else {
-                  setAttendanceAssignmentCheck("loading")
-                  void getEmployeeAttendanceAssignmentPresence(token, employeeId)
-                    .then((result) => {
-                      setAttendanceAssignmentCheck(result.hasAssignment ? "found" : "missing")
-                    })
-                    .catch(() => {
-                      setAttendanceAssignmentCheck("unknown")
-                    })
-                }
-                setStatusDialogOpen(true)
-              }}
+              onClick={() => setStatusDialogOpen(true)}
             >
               Update Status
             </FluentButton>
@@ -5412,172 +5308,22 @@ export function EmployeeProfilePage({
           )
         })()}
 
-      <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Update Employee Status</AlertDialogTitle>
-            <AlertDialogDescription>Update lifecycle status and optional exit details.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <label className="grid gap-1 md:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Employment Status</span>
-              <FluentSelect
-                ariaLabel="Employment Status"
-                value={statusForm.employment_status}
-                onChange={(value) =>
-                  setStatusForm((prev) => {
-                    const nextStatus = normalizeEmployeeStatus(value)
-                    if (["resigned", "terminated", "retired", "deceased", "exited"].includes(nextStatus)) {
-                      return { ...prev, employment_status: nextStatus }
-                    }
-                    return {
-                      ...prev,
-                      employment_status: nextStatus,
-                      exit_date: "",
-                      exit_reason: "",
-                    }
-                  })
-                }
-                options={EMPLOYEE_STATUS_VALUES.map((value) => ({ value, label: value }))}
-              />
-            </label>
-            <label className="grid min-w-0 gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Effective Date</span>
-              <DatePickerPresets
-                value={statusForm.effective_date}
-                onChange={(value) => setStatusForm((prev) => ({ ...prev, effective_date: value }))}
-              />
-            </label>
-            <label className={`grid min-w-0 gap-1 ${supportsExitDetails ? "" : "opacity-60"}`}>
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exit Date</span>
-              {supportsExitDetails ? (
-                <DatePickerPresets
-                  value={statusForm.exit_date}
-                  onChange={(value) => setStatusForm((prev) => ({ ...prev, exit_date: value }))}
-                />
-              ) : (
-                <input
-                  value=""
-                  readOnly
-                  disabled
-                  placeholder="For exit or termination statuses"
-                  className="h-10 w-full rounded-md border border-slate-300 bg-slate-100 px-3 text-xs text-slate-500"
-                />
-              )}
-            </label>
-            <label className={`grid min-w-0 gap-1 ${supportsExitDetails ? "" : "opacity-60"}`}>
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Exit Reason</span>
-              <input
-                value={statusForm.exit_reason}
-                onChange={(event) => setStatusForm((prev) => ({ ...prev, exit_reason: event.target.value }))}
-                disabled={!supportsExitDetails}
-                placeholder={supportsExitDetails ? "" : "For exit or termination statuses"}
-                className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:bg-slate-100 disabled:text-xs disabled:text-slate-500"
-              />
-            </label>
-            <label className="grid gap-1 md:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notes</span>
-              <Textarea
-                value={statusForm.notes}
-                onChange={(event) => setStatusForm((prev) => ({ ...prev, notes: event.target.value }))}
-                className="min-h-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          {blocksDirectOnboardingExit ? (
-            <div className="border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              An onboarding employee cannot move directly to {statusForm.employment_status}. Use the
-              employee removal action to archive the profile, or finish/cancel onboarding first.
-            </div>
-          ) : null}
-          {activatingFromOnboarding ? (
-            <div
-              className={cn(
-                "space-y-2 border px-3 py-2 text-sm",
-                attendanceAssignmentCheck === "found"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border-amber-200 bg-amber-50 text-amber-800"
-              )}
-            >
-              {attendanceAssignmentCheck === "loading" ? (
-                <p>Checking this employee&apos;s attendance assignment...</p>
-              ) : attendanceAssignmentCheck === "found" ? (
-                <p>Attendance assignment found. You can continue with activation.</p>
-              ) : attendanceAssignmentCheck === "unknown" ? (
-                <p>The attendance assignment could not be verified right now. It will be checked when you save.</p>
-              ) : (
-                <>
-                  <p>Activation requires an active shift or timetable assignment.</p>
-                  <div className="flex flex-wrap gap-3 font-medium">
-                    <Link href="/dashboard/attendance/shift-assignments" className="text-primary hover:underline">
-                      Assign a shift
-                    </Link>
-                    <Link href="/dashboard/attendance/employee-timetables" className="text-primary hover:underline">
-                      Assign a timetable
-                    </Link>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : null}
-          {statusError ? <p className="text-sm text-rose-600">{statusError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <button
-              type="button"
-              disabled={
-                statusSubmitting ||
-                readNumber(employee.id) === null ||
-                blocksDirectOnboardingExit
-              }
-              className="rounded-md bg-primary px-3 py-2 text-sm font-medium !text-white disabled:opacity-50"
-              onClick={async () => {
-                const employeeId = readNumber(employee.id)
-                const token = readStoredToken()
-                if (employeeId === null || !token) {
-                  return
-                }
-                const validationError = validateStatusForm(statusForm)
-                if (validationError) {
-                  setStatusError(validationError)
-                  return
-                }
-
-                const payload: EmployeeStatusPayload = {
-                  employment_status: statusForm.employment_status,
-                  effective_date: statusForm.effective_date.trim(),
-                  exit_date: supportsExitDetails ? statusForm.exit_date.trim() || undefined : undefined,
-                  exit_reason: supportsExitDetails ? statusForm.exit_reason.trim() || undefined : undefined,
-                  notes: statusForm.notes.trim() || undefined,
-                }
-                setStatusSubmitting(true)
-                setStatusError(null)
-                try {
-                  await patchEmployeeStatus(token, employeeId, payload)
-                  if (typeof window !== "undefined") {
-                    window.localStorage.setItem(EMPLOYEE_STATUS_REFRESH_KEY, String(Date.now()))
-                    window.dispatchEvent(new CustomEvent(EMPLOYEE_STATUS_REFRESH_EVENT))
-                  }
-                  setStatusDialogOpen(false)
-                  await fetchEmployee()
-                } catch (errorObject) {
-                  const message =
-                    errorObject instanceof Error ? errorObject.message : "Failed to update status."
-                  setStatusError(
-                    /attendance setup is incomplete/i.test(message)
-                      ? "Attendance setup is incomplete. Assign a shift or timetable, then try activation again."
-                      : message,
-                  )
-                } finally {
-                  setStatusSubmitting(false)
-                }
-              }}
-            >
-              {statusSubmitting ? "Saving..." : "Save"}
-            </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <EmployeeStatusDialog
+        open={statusDialogOpen}
+        onOpenChange={setStatusDialogOpen}
+        token={readStoredToken()}
+        employeeId={readNumber(employee.id) ?? 0}
+        employeeName={employeeDisplayNameFromLinkedUser(employee)}
+        currentStatus={currentEmployeeStatus}
+        currentNotes={readString(employee, ["notes"]) === "-" ? "" : readString(employee, ["notes"])}
+        onSaved={async () => {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(EMPLOYEE_STATUS_REFRESH_KEY, String(Date.now()))
+            window.dispatchEvent(new CustomEvent(EMPLOYEE_STATUS_REFRESH_EVENT))
+          }
+          await fetchEmployee()
+        }}
+      />
 
       <Sheet open={identityDialogOpen} onOpenChange={setIdentityDialogOpen}>
         <SheetContent
