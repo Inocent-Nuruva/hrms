@@ -376,3 +376,46 @@ export function saveBlob(blob: Blob, fileName: string) {
 export function errorMessage(cause: unknown, fallback: string) {
   return cause instanceof Error && cause.message ? cause.message : fallback
 }
+
+export type ContractField = { key: string; automatic: string; override: string | null; value: string; used: boolean }
+export const getContractFields = (token: string, id: number) => adminRequest<ContractField[]>(`${BASE}/${id}/fields`, { token })
+
+/** Plain-language names for template fields. */
+export const CONTRACT_FIELD_LABELS: Record<string, string> = {
+  company_legal_name: "Company legal name",
+  company_address: "Company address",
+  company_registration_number: "Company registration number",
+  company_tin: "Company TIN",
+  employee_name: "Employee full name",
+  employee_number: "Employee number",
+  employee_dob: "Date of birth",
+  employee_age: "Age",
+  employee_sex: "Sex",
+  employee_address: "Employee address",
+  employee_id_number: "ID number (NIDA / passport)",
+  employee_phone: "Employee phone",
+  employee_email: "Employee email",
+  place_of_recruitment: "Place of recruitment",
+  work_location: "Place of work",
+  job_title: "Job title",
+  department: "Department",
+  reporting_manager: "Reports to",
+  job_description: "Job description",
+  contract_type: "Contract type",
+  start_date: "Start date",
+  end_date: "End date",
+  probation_months: "Probation (months)",
+  hours_of_work: "Hours of work",
+  salary: "Basic salary",
+  currency: "Currency",
+  pay_frequency: "Pay frequency",
+  remuneration_method: "Payment method",
+  benefits: "Allowances and benefits",
+  annual_leave_days: "Annual leave days",
+  notice_period: "Notice period",
+  governing_law: "Governing law",
+  reference_no: "Contract reference",
+  signatory_name: "Company signatory name",
+  signatory_title: "Company signatory title",
+  issue_date: "Issue date",
+}

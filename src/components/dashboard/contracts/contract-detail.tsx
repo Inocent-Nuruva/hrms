@@ -16,6 +16,8 @@ import {
   fetchContractFile,
   fileToBase64,
   getContract,
+  getContractFields,
+  type ContractField,
   listSignatories,
   previewContract,
   reassignContractSignatory,
@@ -31,6 +33,7 @@ import {
 import { cn } from "@/lib/utils"
 
 import { ClausesEditor } from "./contract-settings"
+import { ContractFieldsPanel } from "./contract-fields-panel"
 import { ContractSigningPanel } from "./contract-signing-panel"
 import {
   CONTRACT_TYPE_LABELS,
@@ -115,7 +118,19 @@ function DraftEditor({
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
   const [dirty, setDirty] = React.useState(false)
+  const [fields, setFields] = React.useState<ContractField[]>([])
+  const [fieldEdits, setFieldEdits] = React.useState<Record<string, string>>({})
   const attachInput = React.useRef<HTMLInputElement | null>(null)
+
+  // Reload field values whenever the saved draft changes.
+  React.useEffect(() => {
+    getContractFields(token, contract.id)
+      .then((rows) => {
+        setFields(rows)
+        setFieldEdits({})
+      })
+      .catch(() => undefined)
+  }, [token, contract.id, contract.updatedAt])
 
   React.useEffect(() => () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -149,6 +164,7 @@ function DraftEditor({
         remuneration_method: form.remuneration_method,
         benefits: form.benefits,
         sections,
+        ...(Object.keys(fieldEdits).length ? { field_overrides: fieldEdits } : {}),
         ...(form.assigned_signatory_id ? { assigned_signatory_id: Number(form.assigned_signatory_id) } : {}),
       })
       setDirty(false)
@@ -280,6 +296,16 @@ function DraftEditor({
             <textarea className="min-h-12 rounded-md border border-border px-2.5 py-1.5 text-sm" value={form.benefits} onChange={text("benefits")} />
           </Field>
         </section>
+        {fields.length ? (
+          <ContractFieldsPanel
+            fields={fields}
+            overrides={fieldEdits}
+            onChange={(key, value) => {
+              setFieldEdits((current) => ({ ...current, [key]: value }))
+              setDirty(true)
+            }}
+          />
+        ) : null}
         <section className="grid gap-3 rounded-lg border border-border p-4">
           <h3 className="text-base font-semibold">Clauses</h3>
           <ClausesEditor
