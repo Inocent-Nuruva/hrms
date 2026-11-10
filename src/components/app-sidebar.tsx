@@ -259,6 +259,7 @@ const adminData: SidebarData = {
         "/dashboard/me/requests/resignation",
         "/dashboard/me/onboarding",
         "/dashboard/me/offboarding",
+        "/dashboard/me/contracts",
         "/dashboard/me/team",
         "/dashboard/me/team/overview",
         "/dashboard/me/team/members",
@@ -677,6 +678,7 @@ const employeeSearchIndex = [
   { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
   { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
+  { title: "My contracts", url: "/dashboard/me/contracts", section: "Employees", keywords: ["contract", "sign", "employment"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "shortcuts", "sso"] },
 ]

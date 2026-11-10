@@ -20,6 +20,7 @@ export const SUPPORT_PAGES: SupportPage[] = [
   { title: "My team", url: "/dashboard/me/team/overview", hint: "People who report to you", keywords: ["team", "direct reports"], audience: "self" },
   { title: "My requests", url: "/dashboard/me/requests/actions", hint: "Approvals waiting on you", keywords: ["request", "approval", "pending"], audience: "self" },
   { title: "Onboarding", url: "/dashboard/me/onboarding", hint: "Your joining checklist", keywords: ["onboarding", "joining", "new hire"], audience: "self" },
+  { title: "My contracts", url: "/dashboard/me/contracts", hint: "View and sign your employment contracts", keywords: ["contract", "sign", "employment"], audience: "self" },
   { title: "Offboarding", url: "/dashboard/me/offboarding", hint: "Your exit checklist", keywords: ["offboarding", "exit", "resign"], audience: "self" },
   { title: "Settings", url: "/dashboard/settings", hint: "Password, two-factor, devices, and notification preferences", keywords: ["settings", "password", "2fa", "two-factor", "mfa", "device", "notification", "alert"] },
   { title: "Help", url: "/dashboard/help", hint: "Shortcuts and pages you can open", keywords: ["help", "shortcut"] },

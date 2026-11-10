@@ -65,6 +65,7 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Resignation", url: "/dashboard/me/requests/resignation" },
       { title: "Onboarding", url: "/dashboard/me/onboarding" },
       { title: "Offboarding", url: "/dashboard/me/offboarding" },
+      { title: "My contracts", url: "/dashboard/me/contracts" },
       { title: "Team overview", url: "/dashboard/me/team/overview" },
       { title: "Team members", url: "/dashboard/me/team/members" },
       { title: "Team attendance", url: "/dashboard/me/team/attendance" },

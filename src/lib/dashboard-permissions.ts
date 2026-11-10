@@ -1033,6 +1033,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/requests/resignation": null,
   "/dashboard/me/onboarding": null,
   "/dashboard/me/offboarding": null,
+  "/dashboard/me/contracts": null,
   "/dashboard/me/leave": null,
   "/dashboard/me/leave/requests": null,
   "/dashboard/me/leave/balances": null,

@@ -1,7 +1,7 @@
 "use client"
 import { onboardingActionMessage } from "@/lib/onboarding-action-feedback"
 import { OnboardingEmployeeMessages } from "./onboarding-workspace-collaboration"
-import { Card, CardHeader, Checkbox, Text, Button as FluentButton } from "@fluentui/react-components"
+import { Card, CardHeader, Text, Button as FluentButton } from "@fluentui/react-components"
 import { DocumentPdf20Regular, Signature20Regular } from "@fluentui/react-icons"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
@@ -38,7 +38,6 @@ import {
   listOnboardingDocuments,
   listOnboardingTasks,
   listEmploymentContracts,
-  signEmploymentContract,
   submitMyOnboardingDetails,
   uploadMyOnboardingDocument,
   type AdminRecord,
@@ -82,8 +81,6 @@ export function OnboardingSelfView() {
   const [taskFilter, setTaskFilter] = React.useState("all")
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
   const [contracts, setContracts] = React.useState<AdminRecord[]>([])
-  const [signedName, setSignedName] = React.useState("")
-  const [signatureConsent, setSignatureConsent] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [mounted, setMounted] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -282,23 +279,6 @@ export function OnboardingSelfView() {
     }
   }
 
-  async function signContract(contractId: number) {
-    const access = token()
-    if (!access || !signedName.trim()) return
-    setBusy("contract")
-    try {
-      await signEmploymentContract(access, contractId, signedName.trim())
-      setSignedName("")
-      setSignatureConsent(false)
-      toast.success("Contract signed")
-      await load()
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Contract could not be signed")
-    } finally {
-      setBusy("")
-    }
-  }
-
   async function sendCorrectedDetailsToHr() {
     const access = token()
     const requestId = rowId(selected)
@@ -488,13 +468,10 @@ export function OnboardingSelfView() {
                     <StatusChip value={readString(contract, ["status"])} />
                   </div>
                   {contract.documentId ? <FluentButton className="mt-3" appearance="secondary" icon={<DocumentPdf20Regular />} onClick={() => void openContract(Number(contract.id))}>Review contract PDF</FluentButton> : null}
-                  {readString(contract, ["status"]) === "PENDING_EMPLOYEE_SIGNATURE" && contract.documentId ? <div className="mt-4 rounded-xl border border-[#bdd7f0] bg-gradient-to-br from-[#f5faff] to-[#eaf4ff] p-4 dark:border-slate-700 dark:from-slate-900 dark:to-slate-800">
-                    <div className="flex items-start gap-3"><span className="rounded-lg bg-[#dceeff] p-2 text-[#0f6cbd] dark:bg-[#12395c]"><Signature20Regular /></span><div><h3 className="text-sm font-semibold">Apply digital signature</h3><p className="mt-1 text-xs text-muted-foreground">Review the PDF, type your legal name exactly as shown on your employee record, then confirm your consent.</p></div></div>
-                    <label className="mt-4 block space-y-1.5 text-xs font-medium text-muted-foreground"><span>Legal name</span><input className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground" autoComplete="name" value={signedName} onChange={(event) => setSignedName(event.target.value)} /></label>
-                    {signedName.trim() ? <div className="mt-3 rounded-md border border-dashed border-[#7aa7d1] bg-background/80 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Signature preview</p><p className="mt-1 text-xl italic text-foreground" style={{ fontFamily: "cursive" }}>{signedName.trim()}</p></div> : null}
-                    <Checkbox className="mt-3" checked={signatureConsent} onChange={(_, data) => setSignatureConsent(data.checked === true)} label="I have reviewed this contract and agree that this digital signature is legally binding." />
-                    <FluentButton className="mt-4" appearance="primary" icon={<Signature20Regular />} disabled={!signedName.trim() || !signatureConsent || busy === "contract"} onClick={() => void signContract(Number(contract.id))}>{busy === "contract" ? "Applying signature…" : "Sign and accept contract"}</FluentButton>
-                  </div> : null}
+                  {["PENDING_EMPLOYEE_SIGNATURE", "ISSUED"].includes(readString(contract, ["status"])) ? <Link href={`/dashboard/me/contracts/${String(contract.id)}`} className="mt-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                    <Signature20Regular /> Contract awaiting your signature → Open
+                  </Link> : null}
+                  {readString(contract, ["status"]) === "PENDING_HR_SIGNATURE" ? <p className="mt-2 text-xs text-muted-foreground">The company signs first; you will be asked to sign next.</p> : null}
                 </div>)}
               </section> : null}
 

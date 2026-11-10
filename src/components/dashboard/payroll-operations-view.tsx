@@ -151,6 +151,11 @@ import { Badge } from "@/components/ui/badge";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import { ResizableTable, type Column } from "@/components/ui/resizable-table";
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
+import {
+  PayrollContractWarningsDialog,
+  contractWarningsCleared,
+} from "@/components/dashboard/contracts/payroll-contract-warnings-dialog";
+import type { PayrollContractWarnings } from "@/lib/contracts-api";
 
 type PayrollTab =
   | "overview"
@@ -2076,6 +2081,9 @@ export function PayrollOperationsView() {
   const [processAuthenticatorCode, setProcessAuthenticatorCode] =
     React.useState("");
   const [lockingRunId, setLockingRunId] = React.useState("");
+  const [contractWarnings, setContractWarnings] =
+    React.useState<PayrollContractWarnings | null>(null);
+  const pendingLockRow = React.useRef<AdminRecord | null>(null);
   const [validatingRunId, setValidatingRunId] = React.useState("");
   const [paidRunId, setPaidRunId] = React.useState("");
   const [simulatingPaymentRunId, setSimulatingPaymentRunId] =
@@ -4225,10 +4233,19 @@ export function PayrollOperationsView() {
     }
   }
 
-  async function onLockRun(row: AdminRecord) {
+  async function onLockRun(row: AdminRecord, acknowledged = false) {
     const token = readStoredToken();
     const id = rowId(row);
     if (!token || !id) return;
+    // Contract warnings never block pay but must be acknowledged first.
+    if (!acknowledged) {
+      const pending = await contractWarningsCleared(token, Number(id));
+      if (pending) {
+        pendingLockRow.current = row;
+        setContractWarnings(pending);
+        return;
+      }
+    }
     setLockingRunId(id);
     try {
       await lockPayrollRun(token, id);
@@ -8911,6 +8928,17 @@ export function PayrollOperationsView() {
 
   return (
     <div className="w-full space-y-5 pb-6">
+      <PayrollContractWarningsDialog
+        token={readStoredToken() ?? ""}
+        warnings={contractWarnings}
+        onClose={() => setContractWarnings(null)}
+        onAcknowledged={() => {
+          setContractWarnings(null);
+          const row = pendingLockRow.current;
+          pendingLockRow.current = null;
+          if (row) void onLockRun(row, true);
+        }}
+      />
       <section>
         <header className="flex min-h-14 items-center gap-3 border-b border-border/70 px-1 pb-3">
           <PersonMoney20Regular

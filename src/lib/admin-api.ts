@@ -14025,55 +14025,6 @@ export async function downloadEmployeeLetterPreview(
   return new Blob([bytes], { type: "application/pdf" });
 }
 
-export async function signEmploymentContract(
-  token: string,
-  contractId: number,
-  signedName: string,
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/employment-contracts/${contractId}/sign`,
-    {
-      method: "POST",
-      token,
-      body: { signed_name: signedName },
-      dedupe: false,
-    },
-  );
-  return normalizeSingle(payload);
-}
-
-export async function issueEmploymentContract(
-  token: string,
-  body: Record<string, unknown>,
-) {
-  return normalizeSingle(
-    await adminRequest<unknown>("/api/employment-contracts", {
-      method: "POST",
-      token,
-      body,
-      dedupe: false,
-    }),
-  );
-}
-
-export async function attachEmploymentContract(
-  token: string,
-  contractId: number,
-  file: Record<string, unknown>,
-) {
-  return normalizeSingle(
-    await adminRequest<unknown>(
-      `/api/employment-contracts/${contractId}/document`,
-      {
-        method: "POST",
-        token,
-        body: file,
-        dedupe: false,
-      },
-    ),
-  );
-}
-
 export async function getEmployeeById(id: string | number, token: string) {
   const payload = await adminRequest<unknown>(`/api/employees/${id}`, {
     token,

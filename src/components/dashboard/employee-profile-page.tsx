@@ -92,6 +92,9 @@ import { cn } from "@/lib/utils"
 import { pageBleedClass } from "@/components/dashboard/talent-visuals"
 import { EmployeeStatusDialog } from "@/components/dashboard/employee-status-dialog"
 import { EmployeeStatusHistorySection } from "@/components/dashboard/employee-status-history"
+import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
 import {
   filterEmployeesByDirectorySearch,
@@ -913,6 +916,7 @@ function routeKeyToSectionTitle(routeKey: string | null | undefined) {
       positions: "Positions",
       movements: "Movements",
       status_history: "Status History",
+      contracts: "Contracts",
       academic_qualifications: "Academic Qualifications",
       professional_qualifications: "Professional Qualifications",
       experience_details: "Experience Details",
@@ -1632,6 +1636,7 @@ const PROFILE_SECTION_DEFS: Array<{
   { title: "Contacts", tabLabel: "Contacts", keys: ["contacts", "contact_details", "contactDetails"] },
   { title: "Documents", tabLabel: "Documents", keys: ["documents", "employee_documents", "employeeDocuments"] },
   { title: "Letters", tabLabel: "Letters", keys: [] },
+  { title: "Contracts", tabLabel: "Contracts", keys: [] },
   { title: "Addresses", tabLabel: "Addresses", keys: ["addresses", "address_details", "addressDetails"] },
   { title: "Relatives", tabLabel: "Relatives", keys: ["relatives", "next_of_kin", "nextOfKin"] },
   { title: "Identifications", tabLabel: "IDs", keys: ["identifications", "identification_documents", "identificationDocuments"] },
@@ -1706,6 +1711,10 @@ function ProfileSectionsTabs({
       }),
     [employee]
   )
+
+  const actor = useDashboardActor()
+  const canManageContracts = canPerformPermission(actor.permissionLabels, "employment_contracts:manage")
+  const fullName = `${String(employee.first_name ?? "")} ${String(employee.last_name ?? "")}`.trim()
 
   const requestedTitle = routeKeyToSectionTitle(requestedRouteKey)
   const [activeTitle, setActiveTitle] = React.useState(
@@ -1815,6 +1824,8 @@ function ProfileSectionsTabs({
                   />
                 ) : active.title === "Status History" ? (
                   <EmployeeStatusHistorySection employeeId={employeeId} token={readStoredToken()} />
+                ) : active.title === "Contracts" ? (
+                  <EmploymentContractsView employee={{ id: employeeId, full_name: fullName }} canManage={canManageContracts} />
                 ) : active.title === "Letters" ? (
                   <EmployeeLettersSection employeeId={employeeId} />
                 ) : (

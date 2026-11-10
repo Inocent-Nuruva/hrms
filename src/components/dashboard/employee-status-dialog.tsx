@@ -214,6 +214,10 @@ function computeItemStatuses(form: FormState, requirements: EmployeeStatusRequir
   const done = (ok: boolean): StatusRequirementState => (ok ? "complete" : "needs_input")
 
   if (target === "active") {
+    const contract = findRequirement(requirements, "contract")
+    if (contract) {
+      items.push({ key: "contract", label: contract.label, required: true, state: done(contract.state === "complete") })
+    }
     const schedule = findRequirement(requirements, "work_schedule")
     if (schedule) {
       const hasCurrent = Boolean(asRecord(schedule.current))
@@ -812,7 +816,7 @@ export function EmployeeStatusDialog({
                           description="These can't be completed in this dialog. Update Status stays disabled until they're done."
                         >
                           <ul className="grid gap-1 text-sm">
-                            {blocking.map((row) => (
+                            {blocking.filter((row) => row.key !== "contract").map((row) => (
                               <li key={row.key} className="flex flex-wrap items-center gap-x-2">
                                 <span className="text-slate-700">• {row.label}</span>
                                 {row.link ? (
@@ -975,9 +979,33 @@ function ActivationFields({
   const probation = findRequirement(requirements, "probation_end_date")
   const list = form.schedule.mode === "shift" ? scheduleOptions.shifts : scheduleOptions.timetables
   const scheduleError = fieldErrors["schedule.id"] ?? fieldErrors.schedule
+  const contract = findRequirement(requirements, "contract")
+  const contractCurrent = asRecord(contract?.current)
 
   return (
     <>
+      {contract ? (
+        <RequirementCard
+          state={contract.state === "complete" && !fieldErrors.contract ? "complete" : "needs_input"}
+          required
+          title="Employment contract"
+          description={contract.description}
+        >
+          {contractCurrent ? (
+            <p className="rounded-md bg-white/70 px-2 py-1.5 text-sm text-slate-700">
+              <span className="font-medium">{String(contractCurrent.reference_no ?? "")}</span> · from{" "}
+              {String(contractCurrent.start_date ?? "")}
+              {contractCurrent.end_date ? ` to ${String(contractCurrent.end_date)}` : " (no end date)"}
+            </p>
+          ) : typeof contract.default === "string" ? (
+            <Link href={contract.default} className="text-sm font-medium text-primary hover:underline">
+              Open contracts
+            </Link>
+          ) : null}
+          <FieldError message={fieldErrors.contract} />
+        </RequirementCard>
+      ) : null}
+
       {schedule ? (
         <RequirementCard
           state={scheduleError ? "needs_input" : scheduleState}
