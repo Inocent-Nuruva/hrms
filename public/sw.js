@@ -1,5 +1,5 @@
-const STATIC_CACHE = "hrms-static-v2";
-const RUNTIME_CACHE = "hrms-runtime-v2";
+const STATIC_CACHE = "hrms-static-v3";
+const RUNTIME_CACHE = "hrms-runtime-v3";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/offline", "/login", "/manifest.webmanifest", "/icon.png", "/apple-icon.png", "/favicon.ico"];
 
@@ -37,22 +37,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Never share user-specific responses between sessions on the same device.
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/") ||
+      url.pathname === "/uploads" || url.pathname.startsWith("/uploads/") ||
+      url.pathname.startsWith("/socket.io") || request.headers.has("Authorization")) {
+    return;
+  }
+
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) {
-            return cached;
-          }
-          return caches.match(OFFLINE_URL);
-        })
+      fetch(request).catch(() => caches.match(OFFLINE_URL))
     );
+    return;
+  }
+
+  // Only immutable build assets are safe to cache without session isolation.
+  if (!url.pathname.startsWith("/_next/static/")) {
     return;
   }
 

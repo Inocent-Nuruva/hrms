@@ -87,7 +87,6 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
   const page = Math.min(pagination.filterKey === filterKey ? pagination.page : 1, pageCount)
   const groups = groupOnboardingOverview(visible)
-  const groupCounts = new Map(groups.map(([stage, requests]) => [stage, requests.length]))
   const pageRows = groups.flatMap(([, requests]) => requests).slice((page - 1) * pageSize, page * pageSize)
   const choices = (values: string[], label: string) => [
     { value: "", label },
@@ -238,57 +237,46 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
           <>
             <p role="status">{visible.length} of {rows.length} open requests · {rows.filter((row) => row.readiness.ready_to_activate).length} ready for activation · {rows.filter((row) => row.overdue).length} overdue</p>
             {visible.length === 0 ? <p>No open requests match these filters.</p> : null}
-            {groupOnboardingOverview(pageRows).map(([stage, requests]) => (
-              <section key={stage} aria-label={stage} className="flex flex-col gap-2">
-                <h3 className="font-semibold">{stage} ({groupCounts.get(stage)})</h3>
-                <ul className="flex flex-col gap-2" aria-label={`${stage} employees`}>
-                  {requests.map((row) => {
+            {pageRows.length ? <div className="max-w-full overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+                <caption className="sr-only">Open onboarding requests and their next required actions</caption>
+                <thead className="bg-muted/50 text-xs text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="sticky left-0 z-10 min-w-52 bg-muted px-4 py-3 font-semibold">Employee</th>
+                    <th scope="col" className="min-w-36 px-3 py-3 font-semibold">Stage</th>
+                    <th scope="col" className="min-w-32 px-3 py-3 font-semibold">Readiness</th>
+                    <th scope="col" className="min-w-48 px-3 py-3 font-semibold">Next required action</th>
+                    <th scope="col" className="min-w-28 px-3 py-3 font-semibold">Responsible</th>
+                    <th scope="col" className="min-w-32 px-3 py-3 font-semibold">Status</th>
+                    <th scope="col" className="min-w-52 px-4 py-3 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pageRows.map((row) => {
                     const nextAction = row.readiness.next_action ?? row.blockers[0]
-                    return (
-                      <li key={row.id} className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-shadow hover:shadow-md">
-                        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 text-muted-foreground">
-                              {employeePhotos[row.employee_id] ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={employeePhotos[row.employee_id]} alt={`${row.employee_name || row.employee_no} profile`} className="size-full object-cover" />
-                              ) : <Person20Regular />}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-foreground" title={row.employee_name || row.employee_no}>{row.employee_name || row.employee_no}</p>
-                              <p className="truncate text-xs text-muted-foreground" title={`${row.employee_no} · ${row.department} · ${row.onboarding_no}`}>{row.employee_no} · {row.department}</p>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-2">
-                            <FluentBadge appearance="outline">{row.stage}</FluentBadge>
-                            {row.overdue ? <FluentBadge appearance="tint" color="warning">Overdue</FluentBadge> : null}
-                            {row.attention_reasons?.length ? <Tooltip relationship="description" content={row.attention_reasons.join(" · ")}><FluentBadge appearance="outline" color="warning" tabIndex={0}>Needs attention</FluentBadge></Tooltip> : null}
-                          </div>
+                    return <tr key={row.id} className="hover:bg-muted/30">
+                      <th scope="row" className="sticky left-0 z-10 bg-background px-4 py-3 text-left font-normal">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 text-muted-foreground">
+                            {employeePhotos[row.employee_id] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={employeePhotos[row.employee_id]} alt="" className="size-full object-cover" />
+                            ) : <Person20Regular />}
+                          </span>
+                          <span className="min-w-0"><span className="block truncate font-semibold text-foreground" title={row.employee_name || row.employee_no}>{row.employee_name || row.employee_no}</span><span className="block truncate text-xs text-muted-foreground" title={`${row.employee_no} · ${row.department} · ${row.onboarding_no}`}>{row.employee_no} · {row.department}</span></span>
                         </div>
-                        <div className="grid gap-4 border-t border-border px-4 py-3 sm:grid-cols-[minmax(180px,0.7fr)_minmax(260px,1.3fr)_auto] sm:items-center">
-                          <div className="min-w-0 space-y-1.5">
-                            <div className="flex items-center justify-between gap-2 text-xs"><span className="font-medium">Readiness</span><span className="tabular-nums text-muted-foreground">{row.readiness.completed_required}/{row.readiness.total_required}</span></div>
-                            <ProgressBar value={row.readiness.total_required ? row.readiness.completed_required / row.readiness.total_required : 0} thickness="medium" />
-                          </div>
-                          <div className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/35 px-3 py-2">
-                            <ArrowRight20Regular className="shrink-0 text-muted-foreground" />
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Next required action</p>
-                              <p className="truncate text-xs font-medium" title={nextAction ? `${nextAction.label} · Responsible: ${nextAction.owner}` : "Ready for authorized HR to review and activate"}>{nextAction ? nextAction.label : "Ready for HR activation"}</p>
-                              {nextAction ? <p className="truncate text-[11px] text-muted-foreground">Responsible: {nextAction.owner}</p> : null}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton>
-                            <FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton>
-                          </div>
-                        </div>
-                      </li>
-                    )
+                      </th>
+                      <td className="px-3 py-3"><FluentBadge appearance="outline">{row.stage}</FluentBadge></td>
+                      <td className="px-3 py-3"><div className="space-y-1.5"><span className="tabular-nums text-muted-foreground">{row.readiness.completed_required}/{row.readiness.total_required}</span><ProgressBar value={row.readiness.total_required ? row.readiness.completed_required / row.readiness.total_required : 0} thickness="medium" /></div></td>
+                      <td className="px-3 py-3 font-medium" title={nextAction?.label ?? "Ready for authorized HR to review and activate"}>{nextAction?.label ?? "Ready for HR activation"}</td>
+                      <td className="px-3 py-3 text-muted-foreground">{nextAction?.owner ?? "HR"}</td>
+                      <td className="px-3 py-3"><div className="flex flex-col items-start gap-1">{row.overdue ? <FluentBadge appearance="tint" color="warning">Overdue</FluentBadge> : null}{row.attention_reasons?.length ? <Tooltip relationship="description" content={row.attention_reasons.join(" · ")}><FluentBadge appearance="outline" color="warning" tabIndex={0}>Needs attention</FluentBadge></Tooltip> : null}{!row.overdue && !row.attention_reasons?.length ? <span className="text-muted-foreground">—</span> : null}</div></td>
+                      <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton><FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton></div></td>
+                    </tr>
                   })}
-                </ul>
-              </section>
-            ))}
+                </tbody>
+              </table>
+            </div> : null}
             {visible.length > pageSize ? <nav aria-label="Onboarding results pages" className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
               <p role="status" className="text-xs text-muted-foreground">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, visible.length)} of {visible.length} · Page {page} of {pageCount}</p>
               <div className="flex gap-2">

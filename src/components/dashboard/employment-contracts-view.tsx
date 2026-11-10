@@ -177,12 +177,12 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
         remuneration_method: form.remuneration_method,
         benefits: form.benefits,
       })
-      toast.success("Contract version issued")
+      toast.success("Contract draft created")
       setShowForm(false)
       setForm({})
       await refresh(employeeId)
       setContractedEmployeeIds((current) => current ? new Set(current).add(employeeId) : current)
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Contract could not be issued") }
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Contract draft could not be created") }
     finally { setBusy(false) }
   }
 
@@ -285,13 +285,13 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
               <div className="rounded-lg bg-[#e5f1fb] p-2 text-[#0f6cbd] dark:bg-[#12395c]"><DocumentPdf20Regular /></div>
               <div>
                 <p className="font-semibold">Version {String(contract.version)} · {String(contract.contractType).replaceAll("_", " ")}</p>
-                <p className="text-xs text-muted-foreground">{String(contract.startDate)}{contract.endDate ? ` to ${String(contract.endDate)}` : ""} · {String(contract.status)}</p>
-                {hasDocument && contract.status === "ISSUED" ? <p className="mt-1 text-xs font-medium text-[#8a6100]">PDF attached · awaiting employee signature</p> : null}
+                <p className="text-xs text-muted-foreground">{String(contract.startDate)}{contract.endDate ? ` to ${String(contract.endDate)}` : ""} · {String(contract.status).replaceAll("_", " ").toLowerCase()}</p>
+                {hasDocument && contract.status === "PENDING_EMPLOYEE_SIGNATURE" ? <p className="mt-1 text-xs font-medium text-[#8a6100]">PDF attached · awaiting employee signature</p> : null}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {hasDocument ? <FluentButton appearance="secondary" icon={<Open20Regular />} onClick={() => void open(contractId)}>Open current PDF</FluentButton> : null}
-              {canManage && contract.status === "ISSUED" ? <>
+              {canManage && (contract.status === "DRAFT" || contract.status === "PENDING_EMPLOYEE_SIGNATURE") ? <>
                 <FluentButton appearance="primary" icon={<ArrowUpload20Regular />} disabled={busy} onClick={() => document.getElementById(`contract-pdf-${contractId}`)?.click()}>
                   {hasDocument ? "Reattach PDF" : "Attach PDF"}
                 </FluentButton>
@@ -313,7 +313,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
     </section> : null}
 
     {showForm ? <form onSubmit={(event) => void issue(event)} className="border-t py-4">
-      <div className="mb-4 flex items-center justify-between"><h3 className="text-sm font-semibold">Issue contract</h3><Button type="button" size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button></div>
+      <div className="mb-4 flex items-center justify-between"><h3 className="text-sm font-semibold">New contract draft</h3><Button type="button" size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field title="Contract type"><FluentSelect ariaLabel="Contract type" className="w-full" value={form.contract_type ?? ""} onChange={(value) => set("contract_type", value)} options={[{ value: "UNSPECIFIED", label: "Unspecified term" }, { value: "FIXED_TERM", label: "Fixed term" }, { value: "SPECIFIC_TASK", label: "Specific task" }]} /></Field>
         <Field title="Start date"><DateInput required value={form.start_date ?? ""} onChange={(event) => set("start_date", event.target.value)} /></Field>
@@ -328,7 +328,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
         <div className="sm:col-span-2 lg:col-span-3"><Field title="Job description"><Textarea required className={fieldClass} rows={3} value={form.job_description ?? ""} onChange={(event) => set("job_description", event.target.value)} /></Field></div>
         <div className="sm:col-span-2 lg:col-span-3"><Field title="Benefits"><Textarea required className={fieldClass} rows={2} value={form.benefits ?? ""} onChange={(event) => set("benefits", event.target.value)} /></Field></div>
       </div>
-      <Button type="submit" className="mt-4" disabled={busy}>{busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null} Issue version</Button>
+      <Button type="submit" className="mt-4" disabled={busy}>{busy ? <FluentLoadingIndicator className="size-4 animate-spin" /> : null} Create draft</Button>
     </form> : null}
   </div>
 }
