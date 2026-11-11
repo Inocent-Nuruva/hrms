@@ -377,7 +377,20 @@ export function errorMessage(cause: unknown, fallback: string) {
   return cause instanceof Error && cause.message ? cause.message : fallback
 }
 
-export type ContractField = { key: string; automatic: string; override: string | null; value: string; used: boolean }
+export type ContractField = {
+  key: string
+  automatic: string
+  override: string | null
+  value: string
+  used: boolean
+  /** Where a live draft took the value from, e.g. "Probation policy: Standard". */
+  source?: string | null
+  /** Needs HR attention, e.g. probation policy not in whole months. */
+  warning?: string | null
+  override_reason?: string | null
+  /** true once sent: the value is frozen. */
+  frozen?: boolean
+}
 export const getContractFields = (token: string, id: number) => adminRequest<ContractField[]>(`${BASE}/${id}/fields`, { token })
 
 /** Plain-language names for template fields. */
@@ -418,4 +431,6 @@ export const CONTRACT_FIELD_LABELS: Record<string, string> = {
   signatory_name: "Company signatory name",
   signatory_title: "Company signatory title",
   issue_date: "Issue date",
+  grade: "Grade",
+  employment_basis: "Employment basis (full-time / part-time)",
 }

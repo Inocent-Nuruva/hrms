@@ -3,8 +3,10 @@
 import * as React from "react"
 
 import { ContractsList } from "@/components/dashboard/contracts/contracts-list"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import type { AdminRecord } from "@/lib/admin-api"
 import { readAccessToken } from "@/lib/contracts-api"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 
 function employeeName(employee: AdminRecord) {
   const full = typeof employee.full_name === "string" ? employee.full_name : ""
@@ -15,8 +17,13 @@ function employeeName(employee: AdminRecord) {
 /**
  * Contract list embedded in onboarding, recruitment and the employee
  * profile. With `employee` it shows that employee's contracts only.
+ * Editing actions show only for users who can manage contracts; read-only
+ * users see the list without "New contract" or edit actions.
  */
-export function EmploymentContractsView({ employee, canManage = true }: { employee?: AdminRecord; canManage?: boolean } = {}) {
+export function EmploymentContractsView({ employee, canManage }: { employee?: AdminRecord; canManage?: boolean } = {}) {
+  const actor = useDashboardActor()
+  const allowedToManage =
+    canPerformPermission(actor.permissionLabels, "employment_contracts:manage") && canManage !== false
   const [token, setToken] = React.useState("")
   React.useEffect(() => setToken(readAccessToken()), [])
   if (!token) return null
@@ -24,7 +31,7 @@ export function EmploymentContractsView({ employee, canManage = true }: { employ
   return (
     <ContractsList
       token={token}
-      canManage={canManage}
+      canManage={allowedToManage}
       employeeId={employeeId}
       employeeName={employee ? employeeName(employee) : undefined}
       compact={Boolean(employeeId)}
