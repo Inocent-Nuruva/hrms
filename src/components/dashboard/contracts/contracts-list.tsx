@@ -3,18 +3,10 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Dialog as FluentDialog, DialogSurface, DialogTitle } from "@fluentui/react-components"
-import { Loader2, Plus, RefreshCw, Search, X } from "lucide-react"
+import { Plus, RefreshCw, Search } from "lucide-react"
 
 import { FluentSelect } from "@/components/ui/fluent-select"
-import { listEmployees, type AdminRecord } from "@/lib/admin-api"
-import {
-  createContractDraft,
-  errorMessage,
-  listContracts,
-  type ContractRow,
-  type ContractType,
-} from "@/lib/contracts-api"
+import { errorMessage, listContracts, type ContractRow } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
 
 import { CONTRACT_TYPE_LABELS, ContractStatusBadge, ContractValidityText, formatDate } from "./contract-ui"
@@ -42,175 +34,6 @@ const VALIDITY_FILTERS = [
 
 const PAGE_SIZE = 25
 
-function NewContractDialog({
-  open,
-  onOpenChange,
-  token,
-  presetEmployee,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  token: string
-  presetEmployee?: { id: number; name: string } | null
-}) {
-  const router = useRouter()
-  const [search, setSearch] = React.useState("")
-  const [options, setOptions] = React.useState<AdminRecord[]>([])
-  const [employee, setEmployee] = React.useState<{ id: number; name: string } | null>(presetEmployee ?? null)
-  const [contractType, setContractType] = React.useState<ContractType>("UNSPECIFIED")
-  const [startDate, setStartDate] = React.useState("")
-  const [endDate, setEndDate] = React.useState("")
-  const [busy, setBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (!open) return
-    setEmployee(presetEmployee ?? null)
-    setSearch("")
-    setContractType("UNSPECIFIED")
-    setStartDate("")
-    setEndDate("")
-    setError(null)
-  }, [open, presetEmployee])
-
-  React.useEffect(() => {
-    if (!open || employee || search.trim().length < 2) {
-      setOptions([])
-      return
-    }
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      listEmployees(token, { search: search.trim(), limit: 10 } as never, { signal: controller.signal })
-        .then((result) => setOptions(result.rows))
-        .catch(() => undefined)
-    }, 250)
-    return () => {
-      controller.abort()
-      window.clearTimeout(timer)
-    }
-  }, [open, employee, search, token])
-
-  const needsEnd = contractType !== "UNSPECIFIED"
-  const valid = employee && startDate && (!needsEnd || (endDate && endDate >= startDate))
-
-  const create = async () => {
-    if (!employee) return
-    setBusy(true)
-    setError(null)
-    try {
-      const draft = await createContractDraft(token, {
-        employee_id: employee.id,
-        contract_type: contractType,
-        start_date: startDate,
-        ...(needsEnd && endDate ? { end_date: endDate } : {}),
-      })
-      onOpenChange(false)
-      router.push(`/dashboard/employees/contracts/${draft.id}`)
-    } catch (cause) {
-      setError(errorMessage(cause, "The draft could not be created"))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <FluentDialog open={open} onOpenChange={(_event, data) => !busy && onOpenChange(data.open)}>
-      <DialogSurface className="!w-[min(520px,calc(100vw-2rem))] !max-w-[520px] !p-0">
-        <div className="flex items-start justify-between border-b border-border px-5 py-4">
-          <div>
-            <DialogTitle as="h2" className="!text-lg !font-semibold">
-              New contract
-            </DialogTitle>
-            <p className="text-sm text-muted-foreground">Details fill in from the employee record; you can edit them next.</p>
-          </div>
-          <button type="button" aria-label="Close" className="rounded-md p-1 hover:bg-slate-100" onClick={() => onOpenChange(false)}>
-            <X className="size-5" />
-          </button>
-        </div>
-        <div className="grid gap-3 px-5 py-4">
-          <div className="grid gap-1">
-            <span className="text-sm font-medium">Employee</span>
-            {employee ? (
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                <span>{employee.name}</span>
-                {!presetEmployee ? (
-                  <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setEmployee(null)}>
-                    Change
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
-                <input
-                  className="h-9 w-full rounded-md border border-border pl-8 pr-3 text-sm"
-                  placeholder="Search name or employee number"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  aria-label="Search employees"
-                />
-                {options.length ? (
-                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-white shadow-md">
-                    {options.map((row) => {
-                      const name = `${String(row.first_name ?? "")} ${String(row.last_name ?? "")}`.trim()
-                      return (
-                        <li key={String(row.id)}>
-                          <button
-                            type="button"
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onClick={() => setEmployee({ id: Number(row.id), name: `${name} (${String(row.employee_no ?? row.id)})` })}
-                          >
-                            {name} <span className="text-xs text-muted-foreground">{String(row.employee_no ?? "")}</span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : null}
-              </div>
-            )}
-          </div>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Contract type</span>
-            <FluentSelect
-              ariaLabel="Contract type"
-              value={contractType}
-              onChange={(value) => setContractType(value as ContractType)}
-              options={(Object.keys(CONTRACT_TYPE_LABELS) as ContractType[]).map((value) => ({ value, label: CONTRACT_TYPE_LABELS[value] }))}
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-sm">
-              <span className="font-medium">Start date</span>
-              <input type="date" className="h-9 rounded-md border border-border px-2" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-            </label>
-            {needsEnd ? (
-              <label className="grid gap-1 text-sm">
-                <span className="font-medium">{contractType === "SPECIFIC_TASK" ? "Expected end date" : "End date"}</span>
-                <input type="date" className="h-9 rounded-md border border-border px-2" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} />
-              </label>
-            ) : null}
-          </div>
-          {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <button type="button" className="rounded-md border border-border px-3 py-2 text-sm" onClick={() => onOpenChange(false)}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            disabled={!valid || busy}
-            onClick={() => void create()}
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" /> : null} Create draft
-          </button>
-        </div>
-      </DialogSurface>
-    </FluentDialog>
-  )
-}
-
 /** HR contract list. With `employeeId` it is scoped to one employee (profile tab, onboarding). */
 export function ContractsList({
   token,
@@ -233,7 +56,7 @@ export function ContractsList({
   const [validity, setValidity] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [creating, setCreating] = React.useState(false)
+  const router = useRouter()
 
   const load = React.useCallback(async () => {
     if (!token) return
@@ -298,7 +121,7 @@ export function ContractsList({
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-              onClick={() => setCreating(true)}
+              onClick={() => router.push(`/dashboard/employees/contracts/new${employeeId ? `?employee_id=${employeeId}` : ""}`)}
             >
               <Plus className="size-4" /> New contract
             </button>
@@ -384,12 +207,6 @@ export function ContractsList({
         </div>
       ) : null}
 
-      <NewContractDialog
-        open={creating}
-        onOpenChange={setCreating}
-        token={token}
-        presetEmployee={employeeId ? { id: employeeId, name: employeeName ?? `Employee #${employeeId}` } : null}
-      />
     </section>
   )
 }

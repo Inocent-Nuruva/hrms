@@ -23,7 +23,17 @@ export type ContractValidity =
 
 export type ContractType = "UNSPECIFIED" | "FIXED_TERM" | "SPECIFIC_TASK"
 
-export type ContractSection = { id: string; heading: string; body: string }
+export type ContractSection = {
+  id: string
+  heading: string
+  body: string
+  /** Template rule: true = may be left out of a contract; false = required. */
+  optional?: boolean
+  /** false = left out of this contract (or off by default in a template). */
+  enabled?: boolean
+  /** false = wording fixed by the template. */
+  editable?: boolean
+}
 
 export type ContractRow = {
   id: number
@@ -68,6 +78,9 @@ export type ContractRow = {
   endReason: string | null
   amendmentReason: string | null
   sourceMovementId: number | null
+  templateId?: number | null
+  /** D4: salary masked for this user. */
+  salaryHidden?: boolean
   updatedAt: string
   createdAt: string
 }
@@ -390,6 +403,10 @@ export type ContractField = {
   override_reason?: string | null
   /** true once sent: the value is frozen. */
   frozen?: boolean
+  /** D4: salary hidden from this user (no payroll permission). */
+  hidden?: boolean
+  /** With `hidden`: whether a value exists behind the mask. */
+  has_value?: boolean
 }
 export const getContractFields = (token: string, id: number) => adminRequest<ContractField[]>(`${BASE}/${id}/fields`, { token })
 
@@ -433,4 +450,52 @@ export const CONTRACT_FIELD_LABELS: Record<string, string> = {
   issue_date: "Issue date",
   grade: "Grade",
   employment_basis: "Employment basis (full-time / part-time)",
+}
+
+export type ContractActivityItem = {
+  id: string
+  kind: "history" | "security"
+  at: string
+  action: string
+  title: string | null
+  detail: string | null
+  actor_name: string | null
+  outcome: string
+  changed_fields: string[]
+  old_values: Record<string, unknown> | null
+  new_values: Record<string, unknown> | null
+}
+export const getContractActivity = (token: string, id: number) =>
+  adminRequest<{ contract_id: number; items: ContractActivityItem[]; truncated?: boolean }>(`${BASE}/${id}/activity`, { token })
+
+/** New draft copied from an existing contract (same employee). */
+export const duplicateContract = (
+  token: string,
+  source: { id: number; employeeId: number; contractType: ContractType; startDate: string; endDate: string | null },
+) =>
+  createContractDraft(token, {
+    employee_id: source.employeeId,
+    contract_type: source.contractType,
+    start_date: source.startDate,
+    ...(source.endDate ? { end_date: source.endDate } : {}),
+    from_contract_id: source.id,
+  })
+
+/** Live preview of unsaved editor state (not stored, not audited). */
+export const previewContractDraft = (token: string, id: number, body: Record<string, unknown>) =>
+  post<{ content_base64: string; file_name: string; missing_fields: string[]; warnings?: Record<string, string> }>(
+    token,
+    `${BASE}/${id}/preview`,
+    body,
+  )
+
+export const CONTRACT_REF_KEYS = ["department_id", "position_id", "grade_id", "branch_id", "reports_to_id"] as const
+export type ContractRefKey = (typeof CONTRACT_REF_KEYS)[number]
+/** Template field each reference fills (override reasons use this key). */
+export const CONTRACT_REF_TOKEN: Record<ContractRefKey, string> = {
+  department_id: "department",
+  position_id: "job_title",
+  grade_id: "grade",
+  branch_id: "work_location",
+  reports_to_id: "reporting_manager",
 }

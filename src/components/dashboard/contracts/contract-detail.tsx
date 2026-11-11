@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
-import { ArrowLeft, Download, Eye, FileUp, Loader2, Send } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { ArrowLeft, Copy, Download, Eye, FileUp, Loader2, Send, Printer, XCircle } from "lucide-react"
 
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { toast } from "@/components/ui/fluent-toast-store"
@@ -15,8 +15,11 @@ import {
   errorMessage,
   fetchContractFile,
   fileToBase64,
+  duplicateContract,
   getContract,
   getContractFields,
+  listContractTemplates,
+  type ContractSection,
   type ContractField,
   listSignatories,
   previewContract,
@@ -34,12 +37,12 @@ import { cn } from "@/lib/utils"
 
 import { ClausesEditor } from "./contract-settings"
 import { ContractFieldsPanel } from "./contract-fields-panel"
+import { useContractDialogs } from "./contract-dialogs"
+import { ActivityPanel, PanelSection, SignatoriesPanel, SummaryPanel, VersionsPanel } from "./contract-page-panels"
 import { ContractSigningPanel } from "./contract-signing-panel"
 import {
   CONTRACT_TYPE_LABELS,
   ContractPdfViewer,
-  ContractStatusBadge,
-  ContractValidityText,
   formatDate,
   formatDateTime,
 } from "./contract-ui"
@@ -120,7 +123,17 @@ function DraftEditor({
   const [dirty, setDirty] = React.useState(false)
   const [fields, setFields] = React.useState<ContractField[]>([])
   const [fieldEdits, setFieldEdits] = React.useState<Record<string, string>>({})
+  const [templateSections, setTemplateSections] = React.useState<ContractSection[] | undefined>(undefined)
+
+  // The template this draft came from, for "Changed from template" / "Reset".
+  React.useEffect(() => {
+    if (!contract.templateId) return
+    listContractTemplates(token)
+      .then((rows) => setTemplateSections(rows.find((row) => row.id === contract.templateId)?.sections))
+      .catch(() => undefined)
+  }, [token, contract.templateId])
   const attachInput = React.useRef<HTMLInputElement | null>(null)
+  const { confirm, dialog } = useContractDialogs()
 
   // Reload field values whenever the saved draft changes.
   React.useEffect(() => {
@@ -158,7 +171,7 @@ function DraftEditor({
         job_description: form.job_description,
         hours_of_work: form.hours_of_work,
         probation_months: form.probation_months === "" ? null : Number(form.probation_months),
-        salary_amount: form.salary_amount || null,
+        ...(contract.salaryHidden ? {} : { salary_amount: form.salary_amount || null }),
         salary_currency: form.salary_currency || null,
         pay_frequency: form.pay_frequency || null,
         remuneration_method: form.remuneration_method,
@@ -172,8 +185,13 @@ function DraftEditor({
       onSaved()
       return true
     } catch (cause) {
-      setFieldErrors(readStatusFieldErrors(cause))
-      toast.error(errorMessage(cause, "Could not save the draft"))
+      const errors = readStatusFieldErrors(cause)
+      setFieldErrors(errors)
+      // Clause rules come back per clause; show their exact wording.
+      const clauseMessages = Object.entries(errors)
+        .filter(([key]) => key.startsWith("sections."))
+        .map(([, message]) => message)
+      toast.error(clauseMessages.length ? clauseMessages.join(" ") : errorMessage(cause, "Could not save the draft"))
       return false
     } finally {
       setBusy(null)
@@ -198,7 +216,12 @@ function DraftEditor({
 
   const send = async () => {
     if (dirty && !(await save())) return
-    if (!window.confirm("Send for signature? The content will be locked and the company signatory asked to sign first.")) return
+    const ok = await confirm({
+      title: "Send for signature?",
+      message: "The content is locked and the company signatory is asked to sign first. After that the employee signs.",
+      confirmLabel: "Send for signature",
+    })
+    if (!ok) return
     setBusy("send")
     setFieldErrors({})
     try {
@@ -222,7 +245,13 @@ function DraftEditor({
       toast.error("Select a PDF")
       return
     }
-    if (!window.confirm("Use this PDF instead of the generated contract? It is sent for signature as-is (company signs first).")) return
+    if (attachInput.current) attachInput.current.value = ""
+    const ok = await confirm({
+      title: "Use your own PDF?",
+      message: "This PDF replaces the generated contract and is sent for signature as-is. The company signs first.",
+      confirmLabel: "Use this PDF and send",
+    })
+    if (!ok) return
     setBusy("attach")
     try {
       await attachContractPdf(token, contract.id, await fileToBase64(file))
@@ -240,6 +269,7 @@ function DraftEditor({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      {dialog}
       <div className="grid content-start gap-4">
         <section className="grid gap-3 rounded-lg border border-border p-4">
           <h3 className="text-base font-semibold">Contract details</h3>
@@ -274,10 +304,16 @@ function DraftEditor({
               <input className={input} placeholder="e.g. 08:00–17:00, Monday to Friday" value={form.hours_of_work} onChange={text("hours_of_work")} />
             </Field>
             <Field label="Basic salary">
+              {contract.salaryHidden ? (
+                <p className="rounded-md border border-border bg-slate-50 px-2.5 py-1.5 text-sm text-muted-foreground">
+                  Hidden — set by a user with payroll access. Your changes keep it as it is.
+                </p>
+              ) : (
               <div className="flex gap-2">
                 <input className={cn(input, "w-20")} placeholder="TZS" value={form.salary_currency} onChange={text("salary_currency")} aria-label="Currency" />
                 <input className={input} inputMode="decimal" value={form.salary_amount} onChange={text("salary_amount")} aria-label="Amount" />
               </div>
+              )}
             </Field>
             <Field label="Pay frequency">
               <FluentSelect ariaLabel="Pay frequency" value={form.pay_frequency} onChange={set("pay_frequency")} options={[{ value: "", label: "Not set" }, { value: "MONTHLY", label: "Monthly" }, { value: "BIWEEKLY", label: "Every two weeks" }, { value: "WEEKLY", label: "Weekly" }, { value: "DAILY", label: "Daily" }]} />
@@ -310,6 +346,7 @@ function DraftEditor({
           <h3 className="text-base font-semibold">Clauses</h3>
           <ClausesEditor
             sections={sections}
+            templateSections={templateSections}
             onChange={(next) => {
               setSections(next)
               setDirty(true)
@@ -449,14 +486,42 @@ function RenewPanel({ token, contract, movementId }: { token: string; contract: 
   )
 }
 
+/** Opens the PDF in a hidden frame and starts the browser's print dialog. */
+async function printContract(token: string, contractId: number) {
+  const file = await fetchContractFile(token, contractId)
+  const url = URL.createObjectURL(file.blob)
+  const frame = document.createElement("iframe")
+  frame.style.position = "fixed"
+  frame.style.width = "0"
+  frame.style.height = "0"
+  frame.style.border = "0"
+  frame.src = url
+  frame.onload = () => {
+    try {
+      frame.contentWindow?.focus()
+      frame.contentWindow?.print()
+    } catch {
+      window.open(url, "_blank", "noopener")
+    }
+    window.setTimeout(() => {
+      frame.remove()
+      URL.revokeObjectURL(url)
+    }, 60_000)
+  }
+  document.body.appendChild(frame)
+}
+
 export function ContractDetailView({ contractId, token }: { contractId: number; token: string }) {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const amendMovement = Number(searchParams?.get("amend_movement")) || null
   const [contract, setContract] = React.useState<ContractDetail | null>(null)
   const [signatories, setSignatories] = React.useState<Signatory[]>([])
   const [error, setError] = React.useState<string | null>(null)
   const [opened, setOpened] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
   const replaceInput = React.useRef<HTMLInputElement | null>(null)
+  const { confirm, askReason, dialog } = useContractDialogs()
 
   const load = React.useCallback(async () => {
     if (!token) return
@@ -482,14 +547,23 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
     )
 
   const isDraft = contract.status === "DRAFT"
+  // Redesigned drafts are edited in the step-by-step editor.
+  const liveDraft = isDraft && contract.canManage && contract.particulars?.mode === "live"
   const canManage = contract.canManage
   const awaitingCompany = contract.status === "PENDING_HR_SIGNATURE"
+  const canReplace = ["PENDING_HR_SIGNATURE", "PENDING_EMPLOYEE_SIGNATURE", "ISSUED"].includes(contract.status)
 
   const doCancel = async () => {
-    const reason = window.prompt("Why is this contract being cancelled?")
-    if (!reason?.trim()) return
+    const reason = await askReason({
+      title: "Cancel this contract?",
+      message: "The contract can no longer be signed. This is recorded in the audit trail.",
+      confirmLabel: "Cancel contract",
+      tone: "danger",
+      placeholder: "Why is this contract being cancelled?",
+    })
+    if (!reason) return
     try {
-      await cancelContract(token, contract.id, reason.trim())
+      await cancelContract(token, contract.id, reason)
       toast.success("Contract cancelled")
       await load()
     } catch (cause) {
@@ -498,47 +572,63 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
   }
 
   const replace = async (file?: File) => {
+    if (replaceInput.current) replaceInput.current.value = ""
     if (!file) return
-    if (!window.confirm("The sent PDF is locked. Replacing it cancels this version and issues a new version that must be signed again. Continue?")) return
+    const ok = await confirm({
+      title: "Replace the sent PDF?",
+      message:
+        "The sent PDF is locked. Replacing it cancels this version and issues a new version that the company and the employee must sign again.",
+      confirmLabel: "Replace and issue new version",
+    })
+    if (!ok) return
     try {
       const result = await attachContractPdf(token, contract.id, await fileToBase64(file))
       toast.success("New version issued")
-      window.location.assign(`/dashboard/employees/contracts/${String(result.contract_id ?? contract.id)}`)
+      router.push(`/dashboard/employees/contracts/${String(result.contract_id ?? contract.id)}`)
     } catch (cause) {
       toast.error(errorMessage(cause, "Upload failed"))
     }
   }
 
+  const duplicate = async () => {
+    const ok = await confirm({
+      title: "Duplicate as a new draft?",
+      message: "A new draft is created for the same employee with these terms and clauses. This contract is not changed.",
+      confirmLabel: "Create draft",
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      const draft = await duplicateContract(token, contract)
+      toast.success("Draft created")
+      router.push(`/dashboard/employees/contracts/${draft.id}`)
+    } catch (cause) {
+      toast.error(errorMessage(cause, "Could not duplicate"))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const download = () =>
+    void fetchContractFile(token, contract.id)
+      .then((file) => saveBlob(file.blob, file.fileName))
+      .catch((cause: unknown) => toast.error(errorMessage(cause, "Download failed")))
+
+  const actionButton = "w-full justify-start border border-border bg-white"
+
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
+      {dialog}
       <Link href="/dashboard/employees/contracts" className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline">
         <ArrowLeft className="size-4" /> Contracts
       </Link>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">{contract.title}</h2>
-          <p className="text-sm text-muted-foreground">
-            {contract.referenceNo} · v{contract.version} · {contract.employeeName} ({contract.employeeNo}) · {CONTRACT_TYPE_LABELS[contract.contractType]}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <ContractStatusBadge status={contract.status} />
-            <ContractValidityText validity={contract.validity} />
-            {contract.amendmentReason ? <span className="text-xs text-slate-600">{contract.amendmentReason}</span> : null}
-          </div>
-        </div>
-        {!isDraft && contract.documentId ? (
-          <button
-            type="button"
-            className={cn(btn, "border border-border")}
-            onClick={() =>
-              void fetchContractFile(token, contract.id)
-                .then((file) => saveBlob(file.blob, file.fileName))
-                .catch((cause: unknown) => toast.error(errorMessage(cause, "Download failed")))
-            }
-          >
-            <Download className="size-4" /> Download PDF
-          </button>
-        ) : null}
+      <header className="min-w-0">
+        <h2 className="break-words text-xl font-semibold">
+          {contract.referenceNo} · v{contract.version} · {contract.title}
+        </h2>
+        <p className="break-words text-sm text-muted-foreground">
+          {contract.employeeName} ({contract.employeeNo}) · {CONTRACT_TYPE_LABELS[contract.contractType]}
+        </p>
       </header>
 
       {contract.status === "TERMINATED" || contract.endedAt ? (
@@ -551,15 +641,115 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
         <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Cancelled: {contract.cancelReason}</p>
       ) : null}
 
-      {isDraft && canManage ? (
-        <DraftEditor token={token} contract={contract} signatories={signatories} onSaved={() => void load()} />
+      {liveDraft ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
+          <p className="text-sm">This draft is edited step by step, with a live preview.</p>
+          <Link href={`/dashboard/employees/contracts/${contract.id}/edit`} className={cn(btn, "bg-primary text-primary-foreground")}>
+            Continue editing
+          </Link>
+        </div>
+      ) : null}
+      {isDraft && canManage && !liveDraft ? (
+        <>
+          <DraftEditor token={token} contract={contract} signatories={signatories} onSaved={() => void load()} />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <VersionsPanel token={token} contract={contract} />
+            <ActivityPanel token={token} contract={contract} />
+          </div>
+        </>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid content-start gap-4">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+          {/* Side panel: first on phones, right-hand column on large screens. */}
+          <aside className="grid min-w-0 content-start gap-3 lg:order-2">
+            <SummaryPanel contract={contract} />
+            <SignatoriesPanel contract={contract} />
+
+            <PanelSection title="Actions">
+              <div className="grid gap-2">
+                {contract.documentId ? (
+                  <>
+                    <button type="button" className={cn(btn, actionButton)} onClick={download}>
+                      <Download className="size-4" /> Download PDF
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(btn, actionButton)}
+                      onClick={() => void printContract(token, contract.id).catch((cause: unknown) => toast.error(errorMessage(cause, "Could not print")))}
+                    >
+                      <Printer className="size-4" /> Print
+                    </button>
+                  </>
+                ) : null}
+                {canManage ? (
+                  <button type="button" className={cn(btn, actionButton)} disabled={busy} onClick={() => void duplicate()}>
+                    <Copy className="size-4" /> Duplicate as new draft
+                  </button>
+                ) : null}
+                {canManage && canReplace ? (
+                  <>
+                    <button type="button" className={cn(btn, actionButton)} onClick={() => replaceInput.current?.click()}>
+                      <FileUp className="size-4" /> Replace PDF (new version)
+                    </button>
+                    <input ref={replaceInput} type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => void replace(event.target.files?.[0])} />
+                  </>
+                ) : null}
+                {canManage && awaitingCompany ? (
+                  <label className="grid gap-1 text-xs">
+                    <span className="text-muted-foreground">Company signatory</span>
+                    <FluentSelect
+                      ariaLabel="Reassign signatory"
+                      value={contract.assignedSignatoryId ? String(contract.assignedSignatoryId) : ""}
+                      onChange={(value) =>
+                        void reassignContractSignatory(token, contract.id, Number(value))
+                          .then(() => load())
+                          .catch((cause: unknown) => toast.error(errorMessage(cause, "Could not reassign")))
+                      }
+                      options={signatories
+                        .filter((row) => row.isActive && row.employeeId !== contract.employeeId)
+                        .map((row) => ({ value: String(row.id), label: `${row.displayName} — ${row.jobTitle}` }))}
+                    />
+                  </label>
+                ) : null}
+                {canManage && !TERMINAL.includes(contract.status) ? (
+                  <button type="button" className={cn(btn, actionButton, "text-rose-700")} onClick={() => void doCancel()}>
+                    <XCircle className="size-4" /> Cancel contract
+                  </button>
+                ) : null}
+              </div>
+            </PanelSection>
+
+            <VersionsPanel token={token} contract={contract} />
+            {contract.files.length ? (
+              <PanelSection title="Files" count={contract.files.length} defaultOpen={false}>
+                <ul className="grid gap-1">
+                  {contract.files.map((file) => (
+                    <li key={file.id}>
+                      <button
+                        type="button"
+                        className="text-left text-primary hover:underline"
+                        onClick={() =>
+                          void fetchContractFile(token, contract.id, file.id)
+                            .then((result) => saveBlob(result.blob, result.fileName))
+                            .catch((cause: unknown) => toast.error(errorMessage(cause, "Download failed")))
+                        }
+                      >
+                        {(file.document_type ?? "file").replace(/^CONTRACT_/, "").replace(/_/g, " ").toLowerCase()}
+                      </button>
+                      {file.current ? <span className="ml-1 text-xs text-emerald-700">current</span> : null}
+                      <span className="block text-xs text-muted-foreground">{formatDateTime(file.created_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </PanelSection>
+            ) : null}
+            <ActivityPanel token={token} contract={contract} />
+          </aside>
+
+          <div className="grid min-w-0 content-start gap-4 lg:order-1">
             {contract.status === "PENDING_VERIFICATION" && canManage ? (
               <VerifyUpload token={token} contract={contract} onDone={() => void load()} />
             ) : null}
-            {(contract.signing.my_party || (awaitingCompany && canManage)) ? (
+            {contract.signing.my_party || (awaitingCompany && canManage) ? (
               <ContractSigningPanel
                 token={token}
                 contract={contract}
@@ -570,110 +760,10 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
               />
             ) : null}
             {!isDraft ? (
-              <ContractPdfViewer
-                token={token}
-                contractId={contract.id}
-                documentId={contract.signing.current_document_id}
-                onLoaded={() => setOpened(true)}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">This draft is only visible to HR.</p>
-            )}
+              <ContractPdfViewer token={token} contractId={contract.id} documentId={contract.signing.current_document_id} onLoaded={() => setOpened(true)} />
+            ) : null}
             {contract.status === "SIGNED" && canManage ? <RenewPanel token={token} contract={contract} movementId={amendMovement} /> : null}
           </div>
-
-          <aside className="grid content-start gap-4">
-            <section className="grid gap-2 rounded-lg border border-border p-4 text-sm">
-              <h3 className="font-semibold">Details</h3>
-              <p>
-                <span className="text-muted-foreground">Period:</span> {formatDate(contract.startDate)} – {contract.endDate ? formatDate(contract.endDate) : "open"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Company signatory:</span> {contract.signatory ? `${contract.signatory.displayName}, ${contract.signatory.jobTitle}` : "—"}
-              </p>
-              {awaitingCompany && canManage ? (
-                <FluentSelect
-                  ariaLabel="Reassign signatory"
-                  value={contract.assignedSignatoryId ? String(contract.assignedSignatoryId) : ""}
-                  onChange={(value) =>
-                    void reassignContractSignatory(token, contract.id, Number(value))
-                      .then(() => load())
-                      .catch((cause: unknown) => toast.error(errorMessage(cause, "Could not reassign")))
-                  }
-                  options={signatories.filter((row) => row.isActive && row.employeeId !== contract.employeeId).map((row) => ({ value: String(row.id), label: `Reassign: ${row.displayName}` }))}
-                />
-              ) : null}
-            </section>
-
-            <section className="grid gap-2 rounded-lg border border-border p-4 text-sm">
-              <h3 className="font-semibold">Timeline</h3>
-              <ol className="grid gap-2 border-l border-border pl-3">
-                <li>
-                  Created <span className="block text-xs text-muted-foreground">{formatDateTime(contract.createdAt)}</span>
-                </li>
-                {contract.sentAt ? (
-                  <li>
-                    Sent for signature <span className="block text-xs text-muted-foreground">{formatDateTime(contract.sentAt)}</span>
-                  </li>
-                ) : null}
-                {contract.signatures.map((row) => (
-                  <li key={row.id}>
-                    {row.party === "COMPANY" ? "Company" : "Employee"} — {row.signerName}
-                    <span className="block text-xs text-muted-foreground">
-                      {row.method.replace(/_/g, " ").toLowerCase()} · {row.verificationMethod.replace(/_/g, " ").toLowerCase()} · {formatDateTime(row.signedAt)}
-                      {row.verificationOutcome ? ` · ${row.verificationOutcome.toLowerCase()}` : ""}
-                      {row.rejectionReason ? ` (${row.rejectionReason})` : ""}
-                    </span>
-                  </li>
-                ))}
-                {contract.completedAt ? (
-                  <li>
-                    Completed <span className="block text-xs text-muted-foreground">{formatDateTime(contract.completedAt)}</span>
-                  </li>
-                ) : null}
-              </ol>
-            </section>
-
-            <section className="grid gap-2 rounded-lg border border-border p-4 text-sm">
-              <h3 className="font-semibold">Files</h3>
-              <ul className="grid gap-1">
-                {contract.files.map((file) => (
-                  <li key={file.id}>
-                    <button
-                      type="button"
-                      className="text-left text-primary hover:underline"
-                      onClick={() =>
-                        void fetchContractFile(token, contract.id, file.id)
-                          .then((result) => saveBlob(result.blob, result.fileName))
-                          .catch((cause: unknown) => toast.error(errorMessage(cause, "Download failed")))
-                      }
-                    >
-                      {(file.document_type ?? "file").replace(/^CONTRACT_/, "").replace(/_/g, " ").toLowerCase()}
-                    </button>
-                    {file.current ? <span className="ml-1 text-xs text-emerald-700">current</span> : null}
-                    <span className="block text-xs text-muted-foreground">{formatDateTime(file.created_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {canManage && !TERMINAL.includes(contract.status) ? (
-              <section className="grid gap-2 rounded-lg border border-border p-4 text-sm">
-                <h3 className="font-semibold">Actions</h3>
-                {["PENDING_HR_SIGNATURE", "PENDING_EMPLOYEE_SIGNATURE", "ISSUED"].includes(contract.status) ? (
-                  <>
-                    <button type="button" className="w-fit text-primary hover:underline" onClick={() => replaceInput.current?.click()}>
-                      Replace PDF (new version)
-                    </button>
-                    <input ref={replaceInput} type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(event) => void replace(event.target.files?.[0])} />
-                  </>
-                ) : null}
-                <button type="button" className="w-fit text-rose-700 hover:underline" onClick={() => void doCancel()}>
-                  Cancel contract
-                </button>
-              </section>
-            ) : null}
-          </aside>
         </div>
       )}
     </div>

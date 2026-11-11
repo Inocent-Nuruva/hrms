@@ -96,7 +96,7 @@ export function ContractFieldsPanel({
       {GROUPS.map((group) => {
         const rows = group.keys
           .map((key) => byKey.get(key))
-          .filter((field): field is ContractField => Boolean(field) && (showAll || Boolean(field?.used)))
+          .filter((field): field is ContractField => Boolean(field) && !field?.hidden && (showAll || Boolean(field?.used)))
         if (!rows.length) return null
         return (
           <fieldset key={group.title} className="grid gap-2">

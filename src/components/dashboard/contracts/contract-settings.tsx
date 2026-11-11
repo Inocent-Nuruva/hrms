@@ -8,6 +8,7 @@ import { FluentSelect } from "@/components/ui/fluent-select"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { listEmployeeGrades, listEmployees, listPositions, type AdminRecord } from "@/lib/admin-api"
 import {
+  CONTRACT_FIELD_LABELS,
   CONTRACT_TOKENS,
   createSignatory,
   errorMessage,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
 
+import { useContractDialogs } from "./contract-dialogs"
 import { CONTRACT_TYPE_LABELS, formatDate } from "./contract-ui"
 
 const input = "h-9 w-full rounded-md border border-border px-2.5 text-sm"
@@ -167,6 +169,7 @@ function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminR
 }
 
 export function SigningSettingsForm({ token, canEdit }: { token: string; canEdit: boolean }) {
+  const { askReason, dialog } = useContractDialogs()
   const [settings, setSettings] = React.useState<ContractSettings | null>(null)
   const [signatories, setSignatories] = React.useState<Signatory[]>([])
   const [grades, setGrades] = React.useState<AdminRecord[]>([])
@@ -227,9 +230,15 @@ export function SigningSettingsForm({ token, canEdit }: { token: string; canEdit
   const toggle = async (row: Signatory) => {
     try {
       if (row.isActive) {
-        const reason = window.prompt(`Why is ${row.displayName} no longer a signatory?`)
-        if (!reason?.trim()) return
-        await revokeSignatory(token, row.id, reason.trim())
+        const reason = await askReason({
+          title: `Revoke ${row.displayName}?`,
+          message: "They can no longer sign contracts for the company. Contracts already assigned to them must be reassigned.",
+          confirmLabel: "Revoke",
+          tone: "danger",
+          placeholder: "Why is this person no longer a signatory?",
+        })
+        if (!reason) return
+        await revokeSignatory(token, row.id, reason)
       } else await reactivateSignatory(token, row.id)
       await load()
     } catch (cause) {
@@ -262,6 +271,7 @@ export function SigningSettingsForm({ token, canEdit }: { token: string; canEdit
 
   return (
     <div className="grid gap-4">
+      {dialog}
       <Section
         title="Authorized company signatories"
         description="Only people on this list can sign contracts for the company. The company always signs first."
@@ -359,17 +369,39 @@ export function SigningSettingsForm({ token, canEdit }: { token: string; canEdit
 
 // ─────────────────────────── clauses editor (templates and drafts) ───────────────────────────
 
+type ClauseRule = "required" | "optional_on" | "optional_off"
+
+function ruleOf(section: ContractSection): ClauseRule {
+  if (section.optional !== true) return "required"
+  return section.enabled === false ? "optional_off" : "optional_on"
+}
+
+/**
+ * Clause list.
+ * - `mode="template"`: HR sets each clause's rule (required / optional on or
+ *   off by default) and whether its wording may change per contract.
+ * - `mode="contract"`: the template's rules apply. Optional clauses have a
+ *   switch, locked clauses are read-only, required ones cannot be removed,
+ *   and changed wording shows a badge with "Reset to template".
+ * Clauses without any rule (older contracts) stay fully editable.
+ */
 export function ClausesEditor({
   sections,
   onChange,
   disabled,
+  mode = "contract",
+  templateSections,
 }: {
   sections: ContractSection[]
   onChange: (sections: ContractSection[]) => void
   disabled?: boolean
+  mode?: "template" | "contract"
+  templateSections?: ContractSection[]
 }) {
   const [focused, setFocused] = React.useState<number | null>(null)
   const refs = React.useRef<Array<HTMLTextAreaElement | null>>([])
+  const isTemplate = mode === "template"
+  const original = new Map((templateSections ?? []).map((section) => [section.id, section]))
   const update = (index: number, patch: Partial<ContractSection>) =>
     onChange(sections.map((row, i) => (i === index ? { ...row, ...patch } : row)))
   const move = (index: number, delta: number) => {
@@ -385,6 +417,9 @@ export function ClausesEditor({
     const at = area?.selectionStart ?? value.length
     update(focused, { body: `${value.slice(0, at)}{{${token}}}${value.slice(at)}` })
   }
+  const setRule = (index: number, rule: ClauseRule) =>
+    update(index, rule === "required" ? { optional: false, enabled: undefined } : { optional: true, enabled: rule === "optional_on" ? undefined : false })
+
   return (
     <div className="grid gap-3">
       {!disabled ? (
@@ -392,52 +427,139 @@ export function ClausesEditor({
           <summary className="cursor-pointer font-medium">Insert a field into the selected clause</summary>
           <div className="mt-2 flex flex-wrap gap-1">
             {CONTRACT_TOKENS.map((token) => (
-              <button key={token} type="button" className="rounded border border-border px-1.5 py-0.5 font-mono hover:bg-slate-50" disabled={focused === null} onClick={() => insertToken(token)}>
-                {token}
+              <button
+                key={token}
+                type="button"
+                title={`{{${token}}}`}
+                className="rounded border border-border px-1.5 py-0.5 hover:bg-slate-50"
+                disabled={focused === null}
+                onClick={() => insertToken(token)}
+              >
+                {CONTRACT_FIELD_LABELS[token] ?? token}
               </button>
             ))}
           </div>
         </details>
       ) : null}
       <ol className="grid gap-3">
-        {sections.map((section, index) => (
-          <li key={section.id} className="grid gap-1 rounded-md border border-border p-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-500">{index + 1}.</span>
-              <input className={input} aria-label={`Clause ${index + 1} heading`} value={section.heading} disabled={disabled} onChange={(event) => update(index, { heading: event.target.value })} />
-              {!disabled ? (
-                <span className="flex shrink-0">
-                  <button type="button" aria-label="Move up" className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-30" disabled={index === 0} onClick={() => move(index, -1)}>
-                    <ArrowUp className="size-4" />
-                  </button>
-                  <button type="button" aria-label="Move down" className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-30" disabled={index === sections.length - 1} onClick={() => move(index, 1)}>
-                    <ArrowDown className="size-4" />
-                  </button>
-                  <button type="button" aria-label="Remove clause" className="rounded p-1.5 hover:bg-slate-100" onClick={() => onChange(sections.filter((_, i) => i !== index))}>
-                    <Trash2 className="size-4" />
-                  </button>
-                </span>
+        {sections.map((section, index) => {
+          const flagged = section.optional !== undefined || section.editable !== undefined
+          const locked = !isTemplate && section.editable === false
+          const switchedOff = !isTemplate && section.optional === true && section.enabled === false
+          const removable = isTemplate || !flagged
+          const source = original.get(section.id)
+          const changed = !isTemplate && source && (source.heading !== section.heading || source.body !== section.body)
+          const textDisabled = disabled || locked || switchedOff
+          return (
+            <li key={section.id} className={cn("grid gap-2 rounded-md border border-border p-3", switchedOff && "bg-slate-50 opacity-70")}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-500">{index + 1}.</span>
+                <input
+                  className={input}
+                  aria-label={`Clause ${index + 1} heading`}
+                  value={section.heading}
+                  disabled={textDisabled}
+                  onChange={(event) => update(index, { heading: event.target.value })}
+                />
+                {!disabled ? (
+                  <span className="flex shrink-0">
+                    <button type="button" aria-label="Move up" className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-30" disabled={index === 0} onClick={() => move(index, -1)}>
+                      <ArrowUp className="size-4" />
+                    </button>
+                    <button type="button" aria-label="Move down" className="rounded p-1.5 hover:bg-slate-100 disabled:opacity-30" disabled={index === sections.length - 1} onClick={() => move(index, 1)}>
+                      <ArrowDown className="size-4" />
+                    </button>
+                    {removable ? (
+                      <button type="button" aria-label="Remove clause" className="rounded p-1.5 hover:bg-slate-100" onClick={() => onChange(sections.filter((_, i) => i !== index))}>
+                        <Trash2 className="size-4" />
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+
+              {isTemplate ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                  <FluentSelect
+                    ariaLabel={`Clause ${index + 1} rule`}
+                    className="w-full sm:w-64"
+                    value={ruleOf(section)}
+                    disabled={disabled}
+                    onChange={(value) => setRule(index, value as ClauseRule)}
+                    options={[
+                      { value: "required", label: "Required in every contract" },
+                      { value: "optional_on", label: "Optional — included by default" },
+                      { value: "optional_off", label: "Optional — left out by default" },
+                    ]}
+                  />
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={section.editable !== false}
+                      disabled={disabled}
+                      onCheckedChange={(value) => update(index, { editable: value ? undefined : false })}
+                    />
+                    Wording can be changed on each contract
+                  </label>
+                </div>
+              ) : flagged || changed ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {section.optional === true ? (
+                    <label className="flex items-center gap-2 font-medium">
+                      <Checkbox
+                        checked={section.enabled !== false}
+                        disabled={disabled}
+                        onCheckedChange={(value) => update(index, { enabled: value ? undefined : false })}
+                      />
+                      Include this optional clause
+                    </label>
+                  ) : flagged ? (
+                    <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-slate-600">Required</span>
+                  ) : null}
+                  {locked ? (
+                    <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-slate-600">Wording fixed by the template</span>
+                  ) : null}
+                  {changed ? (
+                    <>
+                      <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800">Changed from template</span>
+                      {!disabled ? (
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          onClick={() => update(index, { heading: source.heading, body: source.body })}
+                        >
+                          Reset to template
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
-            <textarea
-              ref={(element) => {
-                refs.current[index] = element
-              }}
-              aria-label={`Clause ${index + 1} text`}
-              className="min-h-24 rounded-md border border-border px-2.5 py-1.5 text-sm"
-              value={section.body}
-              disabled={disabled}
-              onFocus={() => setFocused(index)}
-              onChange={(event) => update(index, { body: event.target.value })}
-            />
-          </li>
-        ))}
+
+              <textarea
+                ref={(element) => {
+                  refs.current[index] = element
+                }}
+                aria-label={`Clause ${index + 1} text`}
+                className="min-h-24 rounded-md border border-border px-2.5 py-1.5 text-sm"
+                value={section.body}
+                disabled={textDisabled}
+                onFocus={() => setFocused(index)}
+                onChange={(event) => update(index, { body: event.target.value })}
+              />
+            </li>
+          )
+        })}
       </ol>
       {!disabled ? (
         <button
           type="button"
           className="inline-flex w-fit items-center gap-1 text-sm font-medium text-primary"
-          onClick={() => onChange([...sections, { id: `c${Date.now().toString(36)}`, heading: "New clause", body: "" }])}
+          onClick={() =>
+            onChange([
+              ...sections,
+              { id: `c${Date.now().toString(36)}`, heading: "New clause", body: "", ...(isTemplate ? { optional: false } : {}) },
+            ])
+          }
         >
           <Plus className="size-4" /> Add clause
         </button>
@@ -495,7 +617,7 @@ export function ContractTemplatesEditor({ token, canEdit }: { token: string; can
           <Field label="Title">
             <input className={input} value={draft.title} disabled={!canEdit} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
           </Field>
-          <ClausesEditor sections={draft.sections} disabled={!canEdit} onChange={(sections) => setDraft({ ...draft, sections })} />
+          <ClausesEditor mode="template" sections={draft.sections} disabled={!canEdit} onChange={(sections) => setDraft({ ...draft, sections })} />
           {canEdit ? (
             <div>
               <button type="button" className={primary} disabled={busy} onClick={() => void save()}>
