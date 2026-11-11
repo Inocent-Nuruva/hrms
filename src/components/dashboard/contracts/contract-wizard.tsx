@@ -539,9 +539,25 @@ function EditWizard({ token, contractId, initialStep }: { token: string; contrac
   // Job titles follow the chosen department.
   React.useEffect(() => {
     if (!token) return
-    listPositions(token, { limit: 200, ...(departmentId ? { department_id: departmentId } : {}) } as never)
-      .then((result) => setPositions(result.rows))
-      .catch(() => setPositions([]))
+    let cancelled = false
+    // Load every page so no job title is silently missing from the list.
+    void (async () => {
+      const all: AdminRecord[] = []
+      const pageSize = 100
+      try {
+        for (let page = 1; page <= 50; page++) {
+          const result = await listPositions(token, { page, limit: pageSize, ...(departmentId ? { department_id: departmentId } : {}) } as never)
+          all.push(...result.rows)
+          if (result.rows.length < pageSize) break
+        }
+        if (!cancelled) setPositions(all)
+      } catch {
+        if (!cancelled) setPositions(all)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [token, departmentId])
 
   const body = React.useCallback((): Record<string, unknown> | null => {
