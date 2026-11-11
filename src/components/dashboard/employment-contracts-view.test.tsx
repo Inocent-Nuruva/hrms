@@ -23,12 +23,15 @@ vi.mock("@/lib/contracts-api", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   ...contracts,
 }))
+const actor = vi.hoisted(() => ({ permissionLabels: ["employment_contracts:manage"] as string[] }))
+vi.mock("@/hooks/use-dashboard-actor", () => ({ useDashboardActor: () => ({ ready: true, ...actor }) }))
 vi.mock("@/lib/admin-api", () => ({ listEmployees: vi.fn().mockResolvedValue({ rows: [] }) }))
 
 let root: Root
 let container: HTMLDivElement
 beforeEach(() => {
   vi.clearAllMocks()
+  actor.permissionLabels = ["employment_contracts:manage"]
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   localStorage.setItem("hrms.admin.accessToken", "token")
   contracts.listContracts.mockResolvedValue({
@@ -68,6 +71,13 @@ describe("employee-scoped contracts", () => {
     expect(contracts.listContracts).toHaveBeenCalledWith("token", expect.objectContaining({ employee_id: 12 }))
     expect(container.textContent).toContain("EC-2026-00007")
     expect(container.textContent).toContain("Awaiting employee signature")
+    expect(container.textContent).not.toContain("New contract")
+  })
+
+  it("hides creation from users without the manage permission, even when the embed allows it", async () => {
+    actor.permissionLabels = ["employment_contracts:read"]
+    await act(async () => root.render(<EmploymentContractsView canManage />))
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
     expect(container.textContent).not.toContain("New contract")
   })
 
