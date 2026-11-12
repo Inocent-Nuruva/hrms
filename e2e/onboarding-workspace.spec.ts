@@ -122,7 +122,8 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       expect(Math.round(bounds?.width ?? Infinity)).toBeLessThanOrEqual(viewport.width)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       if (viewport.width < 640) {
-        const label = dialog.locator("p").filter({ hasText: /^Signed contract covering the start date$/ })
+        const label = dialog.getByText("Signed contract covering the start date", { exact: true })
+        await expect(label).toBeVisible()
         expect((await label.boundingBox())?.width).toBeGreaterThan(150)
       }
       await page.screenshot({ path: test.info().outputPath("readiness-dialog.png"), fullPage: true })
