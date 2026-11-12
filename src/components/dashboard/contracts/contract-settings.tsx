@@ -126,7 +126,7 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
 
 // ─────────────────────────── signatories & signing ───────────────────────────
 
-function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminRecord) => void }) {
+export function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminRecord) => void }) {
   const [search, setSearch] = React.useState("")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   React.useEffect(() => {
@@ -146,19 +146,19 @@ function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminR
       <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
       <input className={cn(input, "pl-8")} placeholder="Add signatory: search an active employee" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search employees" />
       {rows.length ? (
-        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-white shadow-md">
+        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md">
           {rows.map((row) => (
             <li key={String(row.id)}>
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                className="w-full px-3 py-2 text-left text-sm text-popover-foreground hover:bg-accent"
                 onClick={() => {
                   onPick(row)
                   setSearch("")
                 }}
               >
-                {String(row.first_name ?? "")} {String(row.last_name ?? "")}{" "}
-                <span className="text-xs text-muted-foreground">{String(row.employee_no ?? "")}</span>
+                {String(row.first_name ?? row.firstName ?? "")} {String(row.last_name ?? row.lastName ?? "")}{" "}
+                <span className="text-xs text-muted-foreground">{String(row.employee_no ?? row.employeeNo ?? "")}</span>
               </button>
             </li>
           ))}
