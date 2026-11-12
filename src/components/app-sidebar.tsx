@@ -25,8 +25,6 @@ import {
   BuildingMultiple24Color,
   CalendarClock24Regular,
   CalendarClock24Color,
-  ChartMultiple24Regular,
-  ChartMultiple24Color,
   Clock24Regular,
   Clock24Color,
   CoinMultiple24Regular,
@@ -53,6 +51,7 @@ import {
   normalizePermissionLabels,
 } from "@/lib/dashboard-permissions"
 import {
+  canShowKpiNavigationRoute,
   isSelfServiceDashboardRoute,
   mergeUniqueNavItems,
 } from "@/lib/dashboard-nav"
@@ -68,7 +67,6 @@ import {
   movementSectionTabGroups,
   notificationSectionTabGroups,
   operationsReportSectionTabGroups,
-  performanceActivitySectionTabGroups,
   probationSectionTabGroups,
   structureSectionTabGroups,
   type DashboardSectionTabGroup,
@@ -141,8 +139,6 @@ const PromotionIcon = ArrowTrendingLines24Regular
 const ActivePromotionIcon = ArrowTrendingLines24Color
 const LeaveIcon = CalendarClock24Regular
 const ActiveLeaveIcon = CalendarClock24Color
-const PerformanceIcon = ChartMultiple24Regular
-const ActivePerformanceIcon = ChartMultiple24Color
 const ProbationIcon = Trophy24Regular
 const ActiveProbationIcon = Trophy24Color
 const FieldIcon = LocationRipple24Regular
@@ -162,6 +158,31 @@ const ActiveInsightsIcon = DataBarVerticalAscending24Color
 
 const adminData: SidebarData = {
   navMain: [
+    {
+      title: "KPI & Performance",
+      url: "/dashboard/me/kpi/overview",
+      matchUrls: [
+        "/dashboard/me/kpi/overview",
+        "/dashboard/me/kpi",
+        "/dashboard/me/scorecards",
+        "/dashboard/me/evaluations",
+        "/dashboard/kpi",
+      ],
+      icon: ReportsIcon,
+      activeIcon: ActiveReportsIcon,
+      items: [
+        {
+          title: "My KPI & Performance",
+          url: "/dashboard/me/kpi/overview",
+          matchUrls: [
+            "/dashboard/me/kpi",
+            "/dashboard/me/scorecards",
+            "/dashboard/me/evaluations",
+          ],
+        },
+        { title: "KPI Management", url: "/dashboard/kpi" },
+      ],
+    },
     { title: "Forms & Feedback", url: "/dashboard/forms-feedback", icon: ReportsIcon, activeIcon: ActiveReportsIcon },
     {
       title: "To do",
@@ -259,6 +280,7 @@ const adminData: SidebarData = {
         "/dashboard/me/requests/resignation",
         "/dashboard/me/onboarding",
         "/dashboard/me/offboarding",
+        "/dashboard/me/contracts",
         "/dashboard/me/team",
         "/dashboard/me/team/overview",
         "/dashboard/me/team/members",
@@ -300,21 +322,6 @@ const adminData: SidebarData = {
       icon: LeaveIcon,
       activeIcon: ActiveLeaveIcon,
       items: sidebarWorkspacesFromSections(leaveManagementSectionTabGroups),
-    },
-    {
-      title: "Performance & Activities",
-      url: "/dashboard/performance",
-      matchUrls: [
-        "/dashboard/performance",
-        "/dashboard/me/performance",
-        "/dashboard/me/performance/assign-tasks",
-        "/dashboard/activities",
-        "/dashboard/me/activities",
-        ...performanceActivitySectionTabGroups.flatMap((group) => group.items.map((item) => item.url)),
-      ],
-      icon: PerformanceIcon,
-      activeIcon: ActivePerformanceIcon,
-      items: sidebarWorkspacesFromSections(performanceActivitySectionTabGroups),
     },
     {
       title: "Probation",
@@ -579,13 +586,6 @@ const adminSearchIndex = [
   { title: "Leave Management / Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar"] },
   { title: "Leave Management / Policies", url: "/dashboard/leave-management/policies", section: "Leave", keywords: ["leave", "policy", "quota"] },
   { title: "Leave Management / Workflows", url: "/dashboard/leave-management/workflows", section: "Leave", keywords: ["leave", "workflow", "approval"] },
-  { title: "Performance / Overview", url: "/dashboard/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score"] },
-  { title: "Performance / Setup", url: "/dashboard/performance/setup", section: "Performance", keywords: ["performance", "kpi", "year", "period", "template"] },
-  { title: "Performance / Plans", url: "/dashboard/performance/plans", section: "Performance", keywords: ["performance", "plan", "kpi"] },
-  { title: "Performance / Reviews", url: "/dashboard/performance/reviews", section: "Performance", keywords: ["performance", "review", "appeal", "moderation"] },
-  { title: "Performance / Improvement", url: "/dashboard/performance/improvement", section: "Performance", keywords: ["performance", "pip", "improvement"] },
-  { title: "Performance / Development", url: "/dashboard/performance/development", section: "Performance", keywords: ["performance", "development plan", "idp", "training"] },
-  { title: "Performance / Calibration", url: "/dashboard/performance/calibration", section: "Performance", keywords: ["performance", "calibration", "compare", "department"] },
   { title: "Employees / Recruitment", url: "/dashboard/operations/recruitment", section: "Employees", keywords: ["recruitment", "pipeline", "candidate", "hire", "letters"] },
   { title: "Probation / Overview", url: "/dashboard/probation/overview", section: "Probation", keywords: ["probation", "confirmation"] },
   { title: "Probation / Policies", url: "/dashboard/probation/policies", section: "Probation", keywords: ["probation", "policy"] },
@@ -602,10 +602,6 @@ const adminSearchIndex = [
   { title: "Payroll / Payroll deductions", url: "/dashboard/finance/payroll", section: "Finance", keywords: ["loan", "payroll", "deduction", "shortfall"] },
   { title: "Finance / Bank, ERP & migration", url: "/dashboard/finance/integrations", section: "Finance", keywords: ["bank", "erp", "journal", "payment file", "statement", "migration"] },
   { title: "Finance / Settings", url: "/dashboard/finance/settings", section: "Finance", keywords: ["sanction letter", "template", "delegation"] },
-  { title: "Activities / Overview", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "daily", "report"] },
-  { title: "Activities / Reports", url: "/dashboard/activities/reports", section: "Activities", keywords: ["activity", "report"] },
-  { title: "Activities / Reviews", url: "/dashboard/activities/reviews", section: "Activities", keywords: ["activity", "review", "approve"] },
-  { title: "Activities / Exceptions", url: "/dashboard/activities/exceptions", section: "Activities", keywords: ["activity", "exception"] },
   { title: "Movements / Overview", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer", "promotion"] },
   { title: "Movements / Cases", url: "/dashboard/movements/cases", section: "Movements", keywords: ["movement", "approve", "apply"] },
   { title: "Movements / Operations", url: "/dashboard/movements/operations", section: "Movements", keywords: ["movement", "retry", "operation"] },
@@ -654,13 +650,9 @@ const employeeSearchIndex = [
   { title: "My Leave / Holidays", url: "/dashboard/me/leave/holidays", section: "Leave", keywords: ["leave", "holiday"] },
   { title: "My Leave / Policies", url: "/dashboard/me/leave/policies", section: "Leave", keywords: ["leave", "policy"] },
   { title: "My Payroll", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["payroll", "payslips", "salary", "earnings", "deductions"] },
-  { title: "My Performance", url: "/dashboard/me/performance/overview", section: "Performance", keywords: ["performance", "kpi", "review", "score", "self review"] },
-  { title: "My Performance / KPIs", url: "/dashboard/me/performance/kpis", section: "Performance", keywords: ["performance", "kpi", "target", "progress", "score"] },
-  { title: "My Performance / Team", url: "/dashboard/me/performance/team", section: "Performance", keywords: ["performance", "team", "manager", "review"] },
   { title: "My Probation", url: "/dashboard/me/probation", section: "Probation", keywords: ["probation", "confirmation", "self assessment"] },
   { title: "My Field", url: "/dashboard/me/field/visits", section: "Field", keywords: ["field", "visit", "check in", "plan"] },
   { title: "My Finance", url: "/dashboard/me/finance/payroll", section: "Finance", keywords: ["loan", "advance", "application", "finance", "payroll"] },
-  { title: "My Activities", url: "/dashboard/me/activities/today", section: "Activities", keywords: ["activity", "daily", "report"] },
   { title: "My Movements", url: "/dashboard/me/movements", section: "Movements", keywords: ["movement", "transfer", "acknowledge"] },
   { title: "My Team", url: "/dashboard/me/team/overview", section: "Team", keywords: ["team", "manager", "direct reports", "action items"] },
   { title: "My Team / Movements", url: "/dashboard/team/movements", section: "Team", keywords: ["team", "movement", "transfer", "promotion", "manager"] },
@@ -672,11 +664,10 @@ const employeeSearchIndex = [
   { title: "SMS", url: "/dashboard/sms/overview", section: "SMS", keywords: ["sms", "text"] },
   { title: "Field", url: "/dashboard/field/overview", section: "Field", keywords: ["field", "visit"] },
   { title: "Finance", url: "/dashboard/finance/overview", section: "Finance", keywords: ["finance", "loan", "advance"] },
-  { title: "Activities", url: "/dashboard/activities/overview", section: "Activities", keywords: ["activity", "report"] },
-  { title: "Team Activities", url: "/dashboard/activities/team", section: "Activities", keywords: ["activity", "assign", "tasks", "manager"] },
   { title: "Movements", url: "/dashboard/movements/overview", section: "Movements", keywords: ["movement", "transfer"] },
   { title: "Onboarding", url: "/dashboard/me/onboarding", section: "Employees", keywords: ["employee", "onboarding", "acknowledge"] },
   { title: "Offboarding", url: "/dashboard/me/offboarding", section: "Employees", keywords: ["employee", "exit"] },
+  { title: "My contracts", url: "/dashboard/me/contracts", section: "Employees", keywords: ["contract", "sign", "employment"] },
   { title: "Settings", url: "/dashboard/settings", section: "General", keywords: ["preferences", "account"] },
   { title: "Help", url: "/dashboard/help", section: "General", keywords: ["help", "support", "shortcuts", "sso"] },
 ]
@@ -684,6 +675,7 @@ const employeeSearchIndex = [
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   accessMode?: AppSidebarAccessMode
   scope?: AuthScope | null
+  roleNames?: string[]
   homeDashboardKind?: HomeDashboardKind
   permissionLabels?: string[]
   /** False until the dashboard shell has read the signed-in identity. */
@@ -697,6 +689,8 @@ function firstAccessibleNavUrl(
   matchUrls: string[] | undefined,
   normalizedPermissions: string[],
   accessMode: AppSidebarAccessMode,
+  roleNames: string[],
+  scope: AuthScope | null,
   homeDashboardKind?: HomeDashboardKind,
 ) {
   const candidates = [
@@ -710,7 +704,8 @@ function firstAccessibleNavUrl(
       ]
     : candidates
   return orderedCandidates.find((candidate) =>
-    canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind }),
+    canShowKpiNavigationRoute(candidate, roleNames, scope, normalizedPermissions) &&
+    canSeeDashboardPage(candidate, normalizedPermissions, accessMode, { homeDashboardKind, roleNames, scope }),
   )
 }
 
@@ -718,13 +713,12 @@ function filterNavByPermissions(
   navMain: SidebarNavItem[],
   normalizedPermissions: string[],
   accessMode: AppSidebarAccessMode,
+  roleNames: string[],
+  scope: AuthScope | null,
   homeDashboardKind?: HomeDashboardKind,
 ): SidebarNavItem[] {
   return navMain
     .map((item) => {
-      if (accessMode === "employee" && item.title === "Performance management") {
-        return null
-      }
       const roleAwareTitle =
         accessMode === "employee" && item.title === "Attendance"
           ? "My attendance"
@@ -737,6 +731,8 @@ function filterNavByPermissions(
         item.matchUrls,
         normalizedPermissions,
         accessMode,
+        roleNames,
+        scope,
         homeDashboardKind,
       )
 
@@ -753,6 +749,8 @@ function filterNavByPermissions(
         item.items ?? [],
         normalizedPermissions,
         accessMode,
+        roleNames,
+        scope,
         homeDashboardKind,
       )
       // Never show a section with zero visible children (no empty menus).
@@ -811,6 +809,7 @@ export function resolveDashboardSearchItems({
 export function AppSidebar({
   accessMode = "admin",
   scope = null,
+  roleNames = [],
   homeDashboardKind,
   permissionLabels = [],
   identityReady = false,
@@ -881,6 +880,8 @@ export function AppSidebar({
           platformData.navMain,
           normalizedPermissions,
           resolvedAccessMode,
+          roleNames,
+          scope,
           homeDashboardKind,
         ),
       }
@@ -889,6 +890,8 @@ export function AppSidebar({
       adminData.navMain,
       normalizedPermissions,
       resolvedAccessMode,
+      roleNames,
+      scope,
       homeDashboardKind,
     )
     return {
@@ -900,6 +903,7 @@ export function AppSidebar({
     normalizedPermissions,
     permissionsResolved,
     resolvedAccessMode,
+    roleNames,
     scope,
   ])
 

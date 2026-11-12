@@ -5,7 +5,6 @@ export type NotificationDestinationPath =
   | '/(tabs)/home'
   | '/(tabs)/leave'
   | '/(tabs)/profile'
-  | '/(tabs)/performance'
   | '/activities'
   | '/documents'
   | '/field'
@@ -243,9 +242,6 @@ function resolveFromActionUrl(
     return buildDestination('/payroll');
   }
   if (parsedAction.normalizedPath.includes('/finance')) return buildDestination('/finance');
-  if (parsedAction.normalizedPath.includes('/performance') || parsedAction.normalizedPath.includes('/probation')) {
-    return buildDestination('/(tabs)/performance');
-  }
   if (parsedAction.normalizedPath.includes('/field') || parsedAction.normalizedPath.includes('/visit')) {
     return buildDestination('/field');
   }
@@ -282,7 +278,6 @@ export function resolveNotificationDestination(row: MobileRecord): NotificationD
 
   if (hintValues.some((value) => /payroll|payslip|salary/.test(value))) return buildDestination('/payroll');
   if (hintValues.some((value) => /finance|loan|advance/.test(value))) return buildDestination('/finance');
-  if (hintValues.some((value) => /performance|kpi|probation/.test(value))) return buildDestination('/(tabs)/performance');
   if (hintValues.some((value) => /field visit|field activity/.test(value))) return buildDestination('/field');
   if (hintValues.some((value) => /document|letter/.test(value))) return buildDestination('/documents');
   if (hintValues.some((value) => /movement|promotion|transfer/.test(value))) return buildDestination('/promotions');
@@ -388,7 +383,6 @@ export function parseNotificationDestinationPayload(payload: unknown): Notificat
     '/(tabs)/home',
     '/(tabs)/leave',
     '/(tabs)/profile',
-    '/(tabs)/performance',
     '/my-attendance',
     '/documents',
     '/field',

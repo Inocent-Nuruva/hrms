@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { OnboardingOverviewRow } from "./admin-api"
-import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview } from "./onboarding-overview"
+import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview, sortOnboardingOverview } from "./onboarding-overview"
 
 const rows = [
   { id: 1, employee_name: "Amina Ali", employee_no: "EMP-1", onboarding_no: "ONB-1", stage: "Checklist & documents", department: "Finance", overdue: true, owners: ["IT", "Payroll"], blockers: [{ label: "Laptop", group: "Checklist & documents" }, { label: "TIN", group: "Employment & payroll" }] },
@@ -29,5 +29,10 @@ describe("onboarding overview filters", () => {
   })
   it("puts activation-ready employees first without losing blocked employees", () => {
     expect(groupOnboardingOverview(rows).map(([stage]) => stage)).toEqual(["Ready for activation", "Checklist & documents"])
+  })
+  it("orders matching requests by request creation sequence across stages", () => {
+    const mixedStages = [rows[0], { ...rows[1], id: 3 }, { ...rows[0], id: 2, department: "Sales" }]
+    expect(sortOnboardingOverview(mixedStages, "newest").map((row) => row.id)).toEqual([3, 2, 1])
+    expect(sortOnboardingOverview(filterOnboardingOverview(mixedStages, { ...emptyOnboardingOverviewFilters, department: "Sales" }), "oldest").map((row) => row.id)).toEqual([2, 3])
   })
 })

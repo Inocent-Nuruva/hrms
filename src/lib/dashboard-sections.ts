@@ -65,6 +65,7 @@ export const employeeSelfSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Resignation", url: "/dashboard/me/requests/resignation" },
       { title: "Onboarding", url: "/dashboard/me/onboarding" },
       { title: "Offboarding", url: "/dashboard/me/offboarding" },
+      { title: "My contracts", url: "/dashboard/me/contracts" },
       { title: "Team overview", url: "/dashboard/me/team/overview" },
       { title: "Team members", url: "/dashboard/me/team/members" },
       { title: "Team attendance", url: "/dashboard/me/team/attendance" },
@@ -257,52 +258,44 @@ export const selfLeaveSectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ];
 
+export const personalKpiSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    title: "My KPI & Performance",
+    items: [
+      { title: "My Performance", url: "/dashboard/me/kpi/overview" },
+      { title: "My KPIs", url: "/dashboard/me/kpi" },
+      { title: "My Scorecards", url: "/dashboard/me/scorecards" },
+      { title: "My Evaluations", url: "/dashboard/me/evaluations" },
+      { title: "My KPI Report", url: "/dashboard/me/kpi/reports" },
+    ],
+  },
+];
+
+export const managementKpiSectionTabGroups: DashboardSectionTabGroup[] = [
+  {
+    title: "KPI Management",
+    items: [
+      { title: "Reporting Periods", url: "/dashboard/kpi/periods" },
+      { title: "KPI Library", url: "/dashboard/kpi" },
+      { title: "Templates", url: "/dashboard/kpi/templates" },
+      { title: "Assignments", url: "/dashboard/kpi/assignments" },
+      { title: "Target Revisions", url: "/dashboard/kpi/targets" },
+      { title: "Scorecards", url: "/dashboard/kpi/scorecards" },
+      { title: "Scoring Policies", url: "/dashboard/kpi/scoring-policies" },
+      { title: "Achievement Reviews", url: "/dashboard/kpi/reviews" },
+      { title: "Performance Evaluations", url: "/dashboard/kpi/evaluations" },
+      { title: "Analytics", url: "/dashboard/kpi/analytics" },
+      { title: "Reports", url: "/dashboard/kpi/reports" },
+    ],
+  },
+];
+
 export const positionsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
     items: [{ title: "Positions", url: "/dashboard/positions" }],
   },
 ];
 
-const performanceOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
-  {
-    title: "Performance management",
-    items: [
-      { title: "Overview", url: "/dashboard/performance/overview" },
-      { title: "Setup", url: "/dashboard/performance/setup" },
-      { title: "Plans", url: "/dashboard/performance/plans" },
-      { title: "Development", url: "/dashboard/performance/development" },
-      { title: "Reviews", url: "/dashboard/performance/reviews" },
-      { title: "Calibration", url: "/dashboard/performance/calibration" },
-      { title: "Improvement", url: "/dashboard/performance/improvement" },
-    ],
-  },
-];
-
-export const selfPerformanceSectionTabGroups: DashboardSectionTabGroup[] = [
-  {
-    title: "My performance",
-    items: [
-      { title: "Overview", url: "/dashboard/me/performance/overview" },
-      { title: "My KPIs", url: "/dashboard/me/performance/kpis" },
-      { title: "Review cycle", url: "/dashboard/me/performance/assignments" },
-      { title: "Reviews", url: "/dashboard/me/performance/reviews" },
-      { title: "Feedback", url: "/dashboard/me/performance/feedback" },
-      { title: "Achievements", url: "/dashboard/me/performance/achievements" },
-      { title: "Development", url: "/dashboard/me/performance/development" },
-      {
-        title: "Improvement plans",
-        url: "/dashboard/me/performance/improvement",
-      },
-      { title: "Team performance", url: "/dashboard/me/performance/team" },
-      { title: "KPI approvals", url: "/dashboard/me/performance/manager-kpis" },
-    ],
-  },
-];
-
-export const performanceSectionTabGroups: DashboardSectionTabGroup[] = [
-  ...selfPerformanceSectionTabGroups,
-  ...performanceOperationsSectionTabGroups,
-];
 
 const probationOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -436,67 +429,6 @@ export const activitySectionTabGroups: DashboardSectionTabGroup[] = [
   },
 ];
 
-export const performanceActivitySectionTabGroups: DashboardSectionTabGroup[] = [
-  {
-    title: "My goals and work",
-    items: [
-      { title: "Overview", url: "/dashboard/me/performance/overview" },
-      { title: "My KPIs", url: "/dashboard/me/performance/kpis" },
-      { title: "My activities", url: "/dashboard/me/activities/today" },
-      { title: "Review cycle", url: "/dashboard/me/performance/assignments" },
-      { title: "My reviews", url: "/dashboard/me/performance/reviews" },
-      { title: "Feedback", url: "/dashboard/me/performance/feedback" },
-      { title: "Achievements", url: "/dashboard/me/performance/achievements" },
-      { title: "Development", url: "/dashboard/me/performance/development" },
-      {
-        title: "Improvement plans",
-        url: "/dashboard/me/performance/improvement",
-      },
-    ],
-  },
-  {
-    title: "Team",
-    items: [
-      { title: "KPI approvals", url: "/dashboard/me/performance/manager-kpis" },
-      { title: "Team activities", url: "/dashboard/activities/team" },
-      { title: "Team performance", url: "/dashboard/me/performance/team" },
-    ],
-  },
-  {
-    title: "Performance management",
-    items: [
-      { title: "Overview", url: "/dashboard/performance/overview" },
-      { title: "Setup", url: "/dashboard/performance/setup" },
-      { title: "Plans", url: "/dashboard/performance/plans" },
-      { title: "Development", url: "/dashboard/performance/development" },
-      { title: "Reviews", url: "/dashboard/performance/reviews" },
-      { title: "Calibration", url: "/dashboard/performance/calibration" },
-      { title: "Improvement", url: "/dashboard/performance/improvement" },
-      { title: "Reports", url: "/dashboard/performance/reports" },
-    ],
-  },
-  {
-    title: "Activity management",
-    items: [
-      { title: "Overview", url: "/dashboard/activities/overview" },
-      { title: "Reports", url: "/dashboard/activities/reports" },
-      { title: "Reviews", url: "/dashboard/activities/reviews" },
-      { title: "Exceptions", url: "/dashboard/activities/exceptions" },
-      { title: "Setup", url: "/dashboard/activities/setup" },
-    ],
-  },
-];
-
-export const myGoalsAndWorkTabGroups = [performanceActivitySectionTabGroups[0]];
-export const teamGoalsAndWorkTabGroups = [
-  performanceActivitySectionTabGroups[1],
-];
-export const performanceManagementTabGroups = [
-  performanceActivitySectionTabGroups[2],
-];
-export const activityManagementTabGroups = [
-  performanceActivitySectionTabGroups[3],
-];
 
 const movementOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
   {
@@ -668,8 +600,6 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     selfRequestSectionTabGroups,
     selfLeaveSectionTabGroups,
     positionsSectionTabGroups,
-    performanceSectionTabGroups,
-    selfPerformanceSectionTabGroups,
     probationSectionTabGroups,
     fieldSectionTabGroups,
     selfFieldSectionTabGroups,
@@ -677,7 +607,6 @@ export function allDashboardSectionTabGroups(): DashboardSectionTabGroup[] {
     selfFinanceSectionTabGroups,
     activitySectionTabGroups,
     selfActivitySectionTabGroups,
-    performanceActivitySectionTabGroups,
     movementSectionTabGroups,
     smsSectionTabGroups,
     operationsReportSectionTabGroups,

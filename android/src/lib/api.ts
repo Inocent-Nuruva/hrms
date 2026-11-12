@@ -317,19 +317,6 @@ async function request<T>(path: string, options: {
 }
 
 export const api = {
-  /** Generic typed transport for the documented performance module endpoints. Paths are relative to /api/performance. */
-  async performanceRequest<T = unknown>(path: string, options: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-    body?: unknown;
-    params?: Record<string, unknown>;
-  } = {}) {
-    const normalizedPath = path.replace(/^\/+/, '');
-    const query = options.params ? buildQuery(options.params) : '';
-    return request<T>(`/api/performance/${normalizedPath}${query}`, {
-      method: options.method,
-      body: options.body,
-    });
-  },
   // --- AUTH (user specific) ---
   async login(email: string, password: string) {
     // Exact match for the LoginDto in the OpenAPI spec
@@ -837,83 +824,9 @@ export const api = {
       filename: filenameMatch?.[1] ?? `payslip-${id}.pdf`,
     };
   },
-  async listMyPerformanceAssignments() {
-    const payload = await request<unknown>('/api/performance/me/assignments');
-    return normalizeList(payload);
-  },
 
-  async listPerformancePeriods(params: Record<string, unknown> = {}) {
-    const q = buildQuery({ page: 1, limit: 100, ...params });
-    return normalizeList(await request<unknown>(`/api/performance/periods${q}`));
-  },
 
-  async listMyPerformanceKpis(params: Record<string, unknown> = {}) {
-    const q = buildQuery({ page: 1, limit: 100, ...params });
-    return normalizeList(await request<unknown>(`/api/performance/me/kpis${q}`));
-  },
 
-  async getMyPerformanceSummary() {
-    return request<Record<string, unknown>>('/api/performance/me/summary');
-  },
-  async listMyPerformanceAggregates() {
-    return normalizeList(
-      await request<unknown>('/api/performance/me/aggregates'),
-    );
-  },
-  async createMyPerformanceKpi(data: Record<string, unknown>) {
-    return request<Record<string, unknown>>('/api/performance/me/kpis', { method: 'POST', body: data });
-  },
-  async getMyPerformanceKpi(id: number | string) {
-    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}`);
-  },
-  async updateMyPerformanceKpi(id: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}`, { method: 'PATCH', body: data });
-  },
-  async deleteMyPerformanceKpi(id: number | string) {
-    return request<unknown>(`/api/performance/me/kpis/${id}`, { method: 'DELETE' });
-  },
-  async updateMyPerformanceKpiActual(id: number | string, actualValue: number) {
-    return request<Record<string, unknown>>(`/api/performance/me/kpis/${id}/actual`, { method: 'PATCH', body: { actual_value: actualValue } });
-  },
-  async submitMyPerformanceKpis(periodId: number | string) {
-    return request<unknown>(`/api/performance/me/kpis/periods/${periodId}/submit`, { method: 'POST' });
-  },
-  async listMyPerformanceAchievements() {
-    return normalizeList(await request<unknown>('/api/performance/me/achievements'));
-  },
-  async updateMyPerformanceAchievement(id: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/achievements/${id}`, { method: 'PATCH', body: data });
-  },
-  async listMyPerformanceReviews() {
-    return normalizeList(await request<unknown>('/api/performance/me/reviews'));
-  },
-  async submitMyPerformanceSelfReview(assignmentId: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/reviews/${assignmentId}/self-review`, { method: 'POST', body: data });
-  },
-  async submitMyPerformanceAppeal(reviewId: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/reviews/${reviewId}/appeal`, { method: 'POST', body: data });
-  },
-  async listMyPerformanceFeedback360() {
-    return normalizeList(await request<unknown>('/api/performance/me/feedback-360'));
-  },
-  async submitMyPerformanceFeedback360(id: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/feedback-360/${id}/submit`, { method: 'POST', body: data });
-  },
-  async declineMyPerformanceFeedback360(id: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/feedback-360/${id}/decline`, { method: 'POST', body: data });
-  },
-  async listMyPerformanceImprovementPlans() {
-    return normalizeList(await request<unknown>('/api/performance/me/improvement-plans'));
-  },
-  async acknowledgeMyPerformanceImprovementPlan(id: number | string) {
-    return request<Record<string, unknown>>(`/api/performance/me/improvement-plans/${id}/acknowledge`, { method: 'POST' });
-  },
-  async listMyPerformanceDevelopmentPlans() {
-    return normalizeList(await request<unknown>('/api/performance/me/development-plans'));
-  },
-  async updateMyPerformanceDevelopmentGoal(id: number | string, data: Record<string, unknown>) {
-    return request<Record<string, unknown>>(`/api/performance/me/development-goals/${id}`, { method: 'PATCH', body: data });
-  },
 
   async listMyDocuments() {
     return normalizeList(await request<unknown>('/api/me/documents'));

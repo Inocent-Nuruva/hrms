@@ -18,7 +18,7 @@ import type {
   AuthTokens,
 } from "@/types";
 import { extractBackupCodes } from "@/lib/backup-codes";
-import { readPermissionLabelsFromUnknown } from "@/lib/dashboard-permissions";
+import { readPermissionLabelsFromUnknown, readRoleNamesFromUnknown } from "@/lib/dashboard-permissions";
 import { apiRequest, ApiError } from "@/services/api";
 import { decodeJwtPayload, isLikelyRefreshToken } from "@/utils/token-utils";
 
@@ -434,6 +434,7 @@ function normalizeUser(payload: unknown): AuthUser | undefined {
         fullName,
         email,
         role: readRole(candidate),
+        roles: readRoleNamesFromUnknown(candidate, root, rootData, rootResult),
         scope: readAuthScope(payload),
         dashboardType: readDashboardType(payload),
         employeeId,

@@ -42,7 +42,6 @@ export function describeApiPath(path: string): string {
   if (normalized.includes("/attendance")) return "attendance"
   if (normalized.includes("/employee")) return "employee records"
   if (normalized.includes("/payroll")) return "payroll"
-  if (normalized.includes("/performance")) return "performance"
   if (normalized.includes("/probation")) return "probation"
   if (normalized.includes("/sms")) return "SMS"
   if (normalized.includes("/access-control")) return "door access"

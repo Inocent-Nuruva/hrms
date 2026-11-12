@@ -121,7 +121,6 @@ export function MobileTopBar({
     { label: 'Field work', route: '/field', icon: 'field' },
     { label: 'My location', route: '/my-location', icon: 'field' },
     { label: 'Finance', route: '/finance', icon: 'finance' },
-    { label: 'Performance', route: '/performance', icon: 'performance' },
     { label: 'Activities', route: '/activities', icon: 'work' },
     { label: 'Documents', route: '/documents', icon: 'documents' },
   ];

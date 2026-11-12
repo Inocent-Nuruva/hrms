@@ -52,6 +52,19 @@ function HeaderPageControls({
   onRefresh,
   loading,
 }: Pick<SiteHeaderProps, "onRefresh" | "loading">) {
+  const [refreshing, setRefreshing] = React.useState(false)
+
+  const refreshPageData = async () => {
+    if (refreshing || loading) return
+    setRefreshing(true)
+    try {
+      await onRefresh()
+      window.dispatchEvent(new Event("hrms:refresh-page-data"))
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <>
       <ThemeTogglerButton
@@ -65,13 +78,13 @@ function HeaderPageControls({
       <Button
         variant="ghost"
         size="icon-sm"
-        onClick={() => void Promise.resolve(onRefresh())}
-        disabled={loading}
+        onClick={() => void refreshPageData()}
+        disabled={loading || refreshing}
         aria-label="Refresh page data"
         title="Refresh page data"
         className={cn(headerActionButtonClass, "hidden sm:inline-flex")}
       >
-        <ArrowSync16Regular className={cn("size-4 text-blue-600 dark:text-blue-400", loading && "animate-spin")} />
+        <ArrowSync16Regular className={cn("size-4 text-blue-600 dark:text-blue-400", (loading || refreshing) && "animate-spin")} />
       </Button>
       <Link
         href="/dashboard/settings"

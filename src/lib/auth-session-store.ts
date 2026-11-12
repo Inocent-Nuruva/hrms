@@ -20,6 +20,7 @@ export const AuthUserSchema = z
     fullName: z.string(),
     email: z.string(),
     role: z.string().optional(),
+    roles: z.array(z.string()).optional(),
     scope: z.enum(["platform", "company"]).optional(),
     dashboardType: z.enum(["admin", "employee"]).optional(),
     companyId: z.number().int().positive().optional(),

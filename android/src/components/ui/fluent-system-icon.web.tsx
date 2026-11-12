@@ -14,7 +14,7 @@ import { AlertColor } from '../../../node_modules/@fluentui/react-icons/lib/icon
 import { BriefcaseColor, BriefcaseRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-7';
 import { BuildingGovernmentColor, BuildingGovernmentRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-26';
 import { CalendarClockColor, CalendarClockRegular, CalendarColor, CalendarRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-0';
-import { ChartMultipleColor, ChartMultipleRegular, ChevronLeftRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-24';
+import { ChevronLeftRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-24';
 import { ClockColor, ClockRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-18';
 import { DocumentColor, DocumentRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-3';
 import { HomeColor, HomeRegular } from '../../../node_modules/@fluentui/react-icons/lib/icons/chunk-25';
@@ -50,7 +50,6 @@ const ICONS = {
   payroll: VaultColor,
   field: LocationRippleColor,
   finance: BuildingGovernmentColor,
-  performance: ChartMultipleColor,
   documents: DocumentColor,
   work: BriefcaseColor,
   people: PeopleColor,
@@ -74,7 +73,6 @@ const NAV_REGULAR_ICONS = {
   payroll: VaultRegular,
   field: LocationRippleRegular,
   finance: BuildingGovernmentRegular,
-  performance: ChartMultipleRegular,
   documents: DocumentRegular,
   work: BriefcaseRegular,
   people: PeopleRegular,
@@ -83,7 +81,7 @@ const NAV_REGULAR_ICONS = {
 
 const MULTICOLOR_ICONS = new Set<IconName>([
   'sun', 'mail', 'shield-check', 'home', 'attendance', 'leave', 'profile', 'history',
-  'promotion', 'shift', 'payroll', 'field', 'finance', 'performance', 'documents',
+  'promotion', 'shift', 'payroll', 'field', 'finance', 'documents',
   'work', 'people', 'menu', 'notifications', 'settings', 'checked-in',
 ]);
 

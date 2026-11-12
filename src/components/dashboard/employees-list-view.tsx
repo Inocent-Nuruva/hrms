@@ -1454,7 +1454,7 @@ export function EmployeesListView({
             <AlertDialogTitle>Permanently delete employee?</AlertDialogTitle>
             <AlertDialogDescription>
               {permanentDeleteTarget?.name} and all employee-owned records—including
-              onboarding, employment, attendance, payroll and performance data,
+              onboarding, employment, attendance, and payroll data,
               documents, and uploaded files—will be removed. Their company access
               will be removed, and their login will also be deleted unless another
               company uses it. This cannot be undone.

@@ -105,13 +105,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="performance"
-        options={{
-          title: 'KPIs',
-          tabBarIcon: ({ color, focused }) => <FluentSystemIcon name="performance" active={focused} size={21} color={String(color)} />,
-        }}
-      />
       <Tabs.Screen name="location" options={{ href: null }} />
       <Tabs.Screen name="meetings" options={{ href: null }} />
       <Tabs.Screen

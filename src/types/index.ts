@@ -8,6 +8,7 @@ export interface AuthUser {
   fullName: string;
   email: string;
   role?: UserRole | string;
+  roles?: string[];
   scope?: AuthScope;
   dashboardType?: DashboardType;
   companyId?: number;

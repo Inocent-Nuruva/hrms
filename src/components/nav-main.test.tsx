@@ -6,9 +6,9 @@ import { renderToString } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NavMain } from "./nav-main"
 
-const navigation = vi.hoisted(() => ({ push: vi.fn(), setOpenMobile: vi.fn() }))
+const navigation = vi.hoisted(() => ({ path: "/dashboard/employees/onboarding", push: vi.fn(), setOpenMobile: vi.fn() }))
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard/employees/onboarding",
+  usePathname: () => navigation.path,
   useRouter: () => ({ push: navigation.push }),
 }))
 vi.mock("@/components/ui/sidebar", () => ({
@@ -25,6 +25,7 @@ let root: Root | undefined
 
 beforeEach(() => {
   vi.clearAllMocks()
+  navigation.path = "/dashboard/employees/onboarding"
   localStorage.clear()
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
@@ -48,6 +49,38 @@ function pinControl(label: string) {
 }
 
 describe("sidebar navigation pin controls", () => {
+  it("shows KPI & Performance as a direct link when only the personal destination is available", async () => {
+    navigation.path = "/dashboard/me/kpi/overview"
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<NavMain items={[{
+        title: "KPI & Performance",
+        url: "/dashboard/me/kpi/overview",
+        items: [{ title: "My KPI & Performance", url: "/dashboard/me/kpi/overview" }],
+      }]} />)
+    })
+    expect(container.querySelector('[data-active-category="true"]')).toBeNull()
+    expect(container.textContent).toContain("KPI & Performance")
+    expect(container.querySelector('button[value="/dashboard/me/kpi/overview"]')).not.toBeNull()
+  })
+  it("keeps a KPI detail route inside the active existing sidebar group", async () => {
+    navigation.path = "/dashboard/kpi/scorecards/42"
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<NavMain items={[{
+        title: "KPI Management",
+        url: "/dashboard/kpi",
+        items: [
+          { title: "KPI Library", url: "/dashboard/kpi" },
+          { title: "Scorecards", url: "/dashboard/kpi/scorecards" },
+          { title: "Analytics", url: "/dashboard/kpi/analytics" },
+        ],
+      }]} />)
+    })
+    expect(container.querySelector('[data-active-category="true"]')?.textContent).toContain("KPI Management")
+    expect(container.querySelector('button[value="/dashboard/kpi/scorecards"]')).not.toBeNull()
+    expect(localStorage.getItem("hrms.sidebar.fluent-open-groups.v1")).toContain("KPI Management")
+  })
   it("keeps pin controls separate from navigation for top-level, nested and favourite items", async () => {
     await act(async () => {
       root = createRoot(container)

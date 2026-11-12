@@ -97,48 +97,21 @@ describe("forbidden route memory", () => {
     ).toBe("/dashboard/structure/cost-centers")
   })
 
-  it("does not bounce HR performance setup after a catalogue 403", () => {
-    stubSession()
-    rememberForbiddenRoute("/dashboard/performance/setup")
-    expect(isRememberedForbiddenRoute("/dashboard/performance/setup")).toBe(false)
-    expect(
-      canSeeDashboardPage(
-        "/dashboard/performance/setup",
-        ["performance_periods:read"],
-        "admin",
-      ),
-    ).toBe(true)
-    expect(
-      canSeeDashboardPage(
-        "/dashboard/performance/setup",
-        ["performance_periods:read"],
-        "employee",
-      ),
-    ).toBe(false)
-  })
-
   it("does not hide My pages after an API permission error", () => {
     stubSession()
-    rememberForbiddenRoute("/dashboard/me/performance")
-    rememberForbiddenRoute("/dashboard/me/performance/overview")
     rememberForbiddenRoute("/dashboard/me/probation")
     rememberForbiddenRoute("/dashboard/me/leave/requests")
     rememberForbiddenRoute("/dashboard/attendance/today")
-    expect(isRememberedForbiddenRoute("/dashboard/me/performance/overview")).toBe(false)
     expect(isRememberedForbiddenRoute("/dashboard/me/probation")).toBe(false)
     expect(isRememberedForbiddenRoute("/dashboard/me/leave/requests")).toBe(false)
     expect(isRememberedForbiddenRoute("/dashboard/attendance/today")).toBe(false)
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "employee")).toBe(true)
     expect(firstVisibleSiblingOrHome("/dashboard/probation/overview", [], "employee")).toBe(
       "/dashboard/me/probation",
     )
   })
 
   it("shows self-service in company admin navigation but not platform navigation", () => {
-    expect(canAccessDashboardRoute("/dashboard/me/performance/overview", [], "admin")).toBe(true)
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin", { scope: "company" })).toBe(true)
     expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin", { scope: "company" })).toBe(true)
-    expect(canSeeDashboardPage("/dashboard/me/performance/overview", [], "admin", { scope: "platform" })).toBe(false)
     expect(canSeeDashboardPage("/dashboard/attendance/today", [], "admin", { scope: "platform" })).toBe(false)
   })
 
@@ -166,15 +139,7 @@ describe("forbidden route memory", () => {
     ).toBe(true)
   })
 
-  it("keeps employee-mode performance and probation redirects inside the My shell", () => {
-    expect(canAccessDashboardRoute("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
-    expect(canSeeDashboardPage("/dashboard/performance/overview", ["performance:read"], "employee")).toBe(false)
-    expect(
-      firstVisibleSiblingOrHome("/dashboard/performance/overview", ["performance:read"], "employee"),
-    ).toBe("/dashboard/me/performance/overview")
-    expect(
-      firstVisibleSiblingOrHome("/dashboard/performance/setup", ["performance:read"], "employee"),
-    ).toBe("/dashboard/me/performance/overview")
+  it("keeps employee-mode probation redirects inside the My shell", () => {
     expect(canAccessDashboardRoute("/dashboard/probation/cases", ["probation:read"], "employee")).toBe(false)
     expect(
       firstVisibleSiblingOrHome("/dashboard/probation/cases", ["probation:read"], "employee"),
@@ -200,9 +165,6 @@ describe("forbidden route memory", () => {
   it("redirects restricted self-service manager routes to a safe fallback", () => {
     expect(firstVisibleSiblingOrHome("/dashboard/me/team/overview", [], "employee")).toBe(
       "/dashboard/me/profile",
-    )
-    expect(firstVisibleSiblingOrHome("/dashboard/me/performance/team", [], "employee")).toBe(
-      "/dashboard/me/performance/overview",
     )
   })
 

@@ -358,7 +358,6 @@ export function ProfileScreen({ auth }: Props) {
               {([
                 { href: '/field', label: 'Field visits' },
                 { href: '/finance', label: 'Finance applications' },
-                { href: '/performance', label: 'Performance' },
                 { href: '/activities', label: 'Daily activities' },
                 { href: '/documents', label: 'Documents' },
               ] as const).map((item) => (

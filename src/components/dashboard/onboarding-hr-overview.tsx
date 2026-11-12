@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FluentSelect } from "@/components/ui/fluent-select"
 import { Input } from "@/components/ui/input"
 import { completeOnboardingRequest, extractProfilePhotoUrl, getEmployeeById, getOnboardingOverview, type OnboardingOverviewRow } from "@/lib/admin-api"
-import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview, type OnboardingOverviewFilters } from "@/lib/onboarding-overview"
+import { emptyOnboardingOverviewFilters, filterOnboardingOverview, groupOnboardingOverview, sortOnboardingOverview, type OnboardingOverviewFilters } from "@/lib/onboarding-overview"
 
 export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   token: string
@@ -18,6 +18,7 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   const [rows, setRows] = React.useState<OnboardingOverviewRow[]>([])
   const [employeePhotos, setEmployeePhotos] = React.useState<Record<number, string>>({})
   const [filters, setFilters] = React.useState(emptyOnboardingOverviewFilters)
+  const [order, setOrder] = React.useState<"newest" | "oldest">("newest")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
   const [revision, setRevision] = React.useState(0)
@@ -81,13 +82,14 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
     return () => { cancelled = true }
   }, [token, detailsOpen, revision])
 
-  const visible = filterOnboardingOverview(rows, filters)
-  const filterKey = JSON.stringify(filters)
+  const visible = sortOnboardingOverview(filterOnboardingOverview(rows, filters), order)
+  const filterKey = JSON.stringify([filters, order])
   const pageSize = 25
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
   const page = Math.min(pagination.filterKey === filterKey ? pagination.page : 1, pageCount)
   const groups = groupOnboardingOverview(visible)
   const pageRows = groups.flatMap(([, requests]) => requests).slice((page - 1) * pageSize, page * pageSize)
+
   const choices = (values: string[], label: string) => [
     { value: "", label },
     ...[...new Set(values)].sort().map((value) => ({ value, label: value })),
@@ -199,7 +201,7 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle>Onboarding readiness</CardTitle>
-          <Tooltip relationship="description" content="Open requests are grouped by their first mandatory blocker. Invitations and registration have separate tabs; completed requests remain in All requests.">
+          <Tooltip relationship="description" content="The stage shows each request’s first mandatory blocker. Invitations and registration have separate tabs; completed requests remain in All requests.">
             <FluentButton appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About onboarding readiness" />
           </Tooltip>
         </div>
@@ -212,6 +214,11 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
             Filters {activeFilters.length ? <CounterBadge size="small" aria-label={`${activeFilters.length} active filters`}>{activeFilters.length}</CounterBadge> : null}
           </FluentButton>
           <Tooltip relationship="label" content="Refresh overview"><FluentButton icon={<ArrowClockwise20Regular />} aria-label="Refresh overview" disabled={loading} onClick={() => setRevision((value) => value + 1)} /></Tooltip>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3" aria-label="Quick filters and order">
+          <FluentSelect label="Stage" size="small" value={filters.stage} options={filterFields[0].options} onChange={(stage) => setFilters((current) => ({ ...current, stage }))} />
+          <FluentSelect label="Department" size="small" value={filters.department} options={filterFields[1].options} onChange={(department) => setFilters((current) => ({ ...current, department }))} />
+          <FluentSelect label="Order" size="small" value={order} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]} onChange={(value) => setOrder(value === "oldest" ? "oldest" : "newest")} />
         </div>
         {hasFilters ? <div className="flex flex-wrap items-center gap-2" aria-label="Active onboarding filters">
           {activeFilters.map((field) => {
@@ -244,6 +251,7 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
                   <tr>
                     <th scope="col" className="sticky left-0 z-10 min-w-52 bg-muted px-4 py-3 font-semibold">Employee</th>
                     <th scope="col" className="min-w-36 px-3 py-3 font-semibold">Stage</th>
+
                     <th scope="col" className="min-w-32 px-3 py-3 font-semibold">Readiness</th>
                     <th scope="col" className="min-w-48 px-3 py-3 font-semibold">Next required action</th>
                     <th scope="col" className="min-w-28 px-3 py-3 font-semibold">Responsible</th>
@@ -267,11 +275,13 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
                         </div>
                       </th>
                       <td className="px-3 py-3"><FluentBadge appearance="outline">{row.stage}</FluentBadge></td>
+
                       <td className="px-3 py-3"><div className="space-y-1.5"><span className="tabular-nums text-muted-foreground">{row.readiness.completed_required}/{row.readiness.total_required}</span><ProgressBar value={row.readiness.total_required ? row.readiness.completed_required / row.readiness.total_required : 0} thickness="medium" /></div></td>
                       <td className="px-3 py-3 font-medium" title={nextAction?.label ?? "Ready for authorized HR to review and activate"}>{nextAction?.label ?? "Ready for HR activation"}</td>
                       <td className="px-3 py-3 text-muted-foreground">{nextAction?.owner ?? "HR"}</td>
                       <td className="px-3 py-3"><div className="flex flex-col items-start gap-1">{row.overdue ? <FluentBadge appearance="tint" color="warning">Overdue</FluentBadge> : null}{row.attention_reasons?.length ? <Tooltip relationship="description" content={row.attention_reasons.join(" · ")}><FluentBadge appearance="outline" color="warning" tabIndex={0}>Needs attention</FluentBadge></Tooltip> : null}{!row.overdue && !row.attention_reasons?.length ? <span className="text-muted-foreground">—</span> : null}</div></td>
                       <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton><FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton></div></td>
+
                     </tr>
                   })}
                 </tbody>

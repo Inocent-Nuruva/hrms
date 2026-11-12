@@ -104,6 +104,7 @@ import {
   fileToBase64UploadDto,
   getOnboardingAuditLogs,
   getOnboardingProgress,
+  getOnboardingReadiness,
   getEmployeePayrollSalary,
   getEmployeeById,
   extractProfilePhotoUrl,
@@ -145,9 +146,12 @@ import {
   type AdminRecord,
   type EmployeeInvitationHistoryStatus,
   type OnboardingProvisioning,
+  type OnboardingReadiness,
+  type OnboardingReadinessRequirement,
 } from "@/lib/admin-api";
 import { PayrollEmployeeSalaryDialog } from "@/components/dashboard/payroll-employee-salary-dialog";
-import { OnboardingReadinessOverview } from "@/components/dashboard/onboarding-readiness-overview";
+import { OnboardingReadinessOverview, requirementActionLabel } from "@/components/dashboard/onboarding-readiness-overview";
+import { OnboardingWorkflowMap } from "@/components/dashboard/onboarding-workflow-map";
 import { OnboardingHrOverview } from "@/components/dashboard/onboarding-hr-overview";
 import { EmploymentContractsView } from "@/components/dashboard/employment-contracts-view";
 import {
@@ -1891,6 +1895,7 @@ export function OnboardingView() {
   const [selectedRequestTasks, setSelectedRequestTasks] = React.useState<
     AdminRecord[]
   >([]);
+  const [selectedRequestReadiness, setSelectedRequestReadiness] = React.useState<OnboardingReadiness | null>(null);
   const [selectedWorkflowSteps, setSelectedWorkflowSteps] = React.useState<
     AdminRecord[]
   >([]);
@@ -2300,6 +2305,7 @@ export function OnboardingView() {
                   return {
                     ...flattened,
                     department_ids: Array.from(departmentIds),
+                    profile_photo_url: extractProfilePhotoUrl(flattened) ?? (linkedEmployees.length === 1 ? extractProfilePhotoUrl(linkedEmployees[0]) : null),
                   };
                 },
               );
@@ -4436,12 +4442,22 @@ export function OnboardingView() {
         detailRecord.tasks ??
         detailRecord.activities,
     );
+    const readinessSteps: AdminRecord[] = selectedRequestReadiness?.requirements
+      .filter((requirement) => requirement.action === "tasks" || requirement.action === "approvals")
+      .map((requirement) => ({ id: requirement.id, title: requirement.label, status: requirement.status, owner: requirement.owner, is_required: requirement.required })) ?? [];
 
-    const seed = workflowSteps.length
-      ? workflowSteps
-      : progressSteps.length
-        ? progressSteps
-        : requestSteps;
+    const useReadinessSteps = readinessSteps.length > workflowSteps.length;
+    const seed = useReadinessSteps
+      ? readinessSteps
+      : workflowSteps.length
+        ? workflowSteps
+        : readinessSteps.length
+        ? readinessSteps
+        : selectedRequestTasks.length
+          ? selectedRequestTasks
+          : requestSteps.length
+            ? requestSteps
+            : progressSteps;
     const progressByKey = new Map<string, AdminRecord>();
     const addProgressEntry = (entry: AdminRecord) => {
       const keys = [
@@ -4456,6 +4472,7 @@ export function OnboardingView() {
     };
     progressSteps.forEach(addProgressEntry);
     requestSteps.forEach(addProgressEntry);
+    selectedRequestTasks.forEach(addProgressEntry);
 
     const nodes = seed.map((step, index) => {
       const stepIdKey = readString(step, [
@@ -4470,7 +4487,7 @@ export function OnboardingView() {
         "title",
         "task_title",
       ]).toLowerCase();
-      const matchedProgress = workflowSteps.length
+      const matchedProgress = workflowSteps.length && !useReadinessSteps
         ? onboardingStepProgress(
             step,
             selectedRequestTasks.length
@@ -4491,8 +4508,10 @@ export function OnboardingView() {
       )
         .trim()
         .toLowerCase();
-      const owner =
-        resolveResponsibleParty(source) !== "-"
+      const labelledOwner = readString(step, ["owner"]);
+      const owner = labelledOwner !== "-"
+        ? labelledOwner
+        : resolveResponsibleParty(source) !== "-"
           ? resolveResponsibleParty(source)
           : resolveResponsibleParty(step);
       const actionLabel = readString({ ...step, ...source }, [
@@ -4521,42 +4540,13 @@ export function OnboardingView() {
       };
     });
 
-    if (nodes.length === 0) {
-      const fallbackStatus = String(
-        readString(selectedRequestRow, [
-          "status",
-          "request_status",
-          "onboarding_status",
-          "workflow_status",
-        ]),
-      )
-        .trim()
-        .toLowerCase();
-      return [
-        {
-          key: "fallback-step",
-          index: 1,
-          actionLabel: "Request Created",
-          status: fallbackStatus || "pending",
-          owner: readString(selectedRequestRow, [
-            "employee_name",
-            "full_name",
-            "name",
-          ]),
-          completedAt: toTimestamp(
-            readString(selectedRequestRow, ["updated_at", "created_at"]),
-          ),
-          required: true,
-        },
-      ];
-    }
-
     return nodes;
   }, [
     resolveResponsibleParty,
     selectedRequestDetails,
     selectedRequestProgress,
     selectedRequestTasks,
+    selectedRequestReadiness,
     selectedRequestRow,
     selectedWorkflowSteps,
   ]);
@@ -4956,6 +4946,34 @@ export function OnboardingView() {
     } finally {
       setBankVerificationLoading(false);
     }
+  }
+
+  function openWorkspaceRequirement(action: OnboardingReadinessRequirement["action"], requirementId: string) {
+    if (requirementId === "employee-profile") {
+      const employeeNo = readString(toRecord(selectedRequestDetails?.employee) ?? {}, ["employee_no"], "");
+      if (employeeNo) window.location.assign(`/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`);
+      else setWorkspaceTab("details");
+      return;
+    }
+    if (requirementId === "independently approved starting salary") {
+      if (canApproveJoiningSalary) window.location.assign("/dashboard/employees/salary-approvals");
+      else showErrorAlert("Salary approval access is required. Ask the assigned payroll approver to complete this requirement.");
+      return;
+    }
+    setWorkspaceTab(action === "contracts" ? "contracts" : action === "payroll" ? "payroll" : action === "approvals" ? "tasks" : action);
+    if (requirementId === "bank account") {
+      void openBankVerification();
+      return;
+    }
+    if (action === "payroll" && canReadJoiningSalary) {
+      setPayrollDrawerOpen(true);
+      return;
+    }
+    window.setTimeout(() => {
+      const target = document.getElementById(`onboarding-workspace-${action}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    }, 0);
   }
 
   async function verifyBankAccount(account: AdminRecord) {
@@ -5665,6 +5683,7 @@ export function OnboardingView() {
       if (switchingRequest) {
         setWorkspaceTab(
           normalizeOnboardingWorkspaceTab(url.searchParams.get("workspace_tab")),
+
         );
         dirtyReviewKeys.current.clear();
         reviewDraftVersions.current = {};
@@ -5682,6 +5701,7 @@ export function OnboardingView() {
         setSelectedRequestAuditLogs([]);
         setSelectedRequestDocuments([]);
         setSelectedRequestTasks([]);
+        setSelectedRequestReadiness(null);
         setSelectedWorkflowSteps([]);
         setEmployeeReviewStep(0);
         setEmployeeReviewComments({});
@@ -5700,7 +5720,7 @@ export function OnboardingView() {
           lookupKeys.length > 0
             ? loadLookups(token, lookupKeys)
             : Promise.resolve();
-        const [detail, progress, auditLogs, documents, tasks] =
+        const [detail, progress, auditLogs, documents, tasks, readiness] =
           await Promise.all([
             getOnboardingRequest(token, requestId),
             getOnboardingProgress(token, requestId),
@@ -5711,6 +5731,7 @@ export function OnboardingView() {
             canReadOnboardingTasks
               ? listOnboardingTasks(token, requestId)
               : Promise.resolve([]),
+            getOnboardingReadiness(token, requestId).catch(() => null),
           ]);
         await lookupsPromise;
         if (loadSequence !== workspaceLoadSequence.current) return;
@@ -5719,6 +5740,7 @@ export function OnboardingView() {
         setSelectedRequestAuditLogs(auditLogs);
         setSelectedRequestDocuments(documents);
         setSelectedRequestTasks(tasks);
+        setSelectedRequestReadiness(readiness);
         const detailReview = toRecord(detail?.employee_details_review);
         const detailSections = toRecordList(detailReview?.sections);
         setEmployeeReviewComments((current) => ({
@@ -5753,12 +5775,11 @@ export function OnboardingView() {
         if (workflowId !== null && canViewOnboardingWorkflows) {
           const workflow = await getOnboardingWorkflow(token, workflowId);
           if (workflow && loadSequence === workspaceLoadSequence.current) {
-            const workflowSteps = toRecordList(
-              workflow.steps ??
-                workflow.workflow_steps ??
-                workflow.tasks ??
-                workflow.activities,
-            );
+            const embeddedSteps = extractWorkflowSteps(workflow);
+            const workflowSteps = embeddedSteps.length
+              ? embeddedSteps
+              : await listOnboardingWorkflowSteps(token, workflowId).catch(() => [] as AdminRecord[]);
+            if (loadSequence !== workspaceLoadSequence.current) return;
             setSelectedWorkflowSteps(workflowSteps);
           }
         }
@@ -5799,10 +5820,11 @@ export function OnboardingView() {
     const refresh = async () => {
       if (refreshing || document.visibilityState === "hidden") return;
       refreshing = true;
-      const [detail, tasks, activity] = await Promise.allSettled([
+      const [detail, tasks, activity, readiness] = await Promise.allSettled([
         getOnboardingRequest(access, liveRequestId),
         listOnboardingTasks(access, liveRequestId),
         getOnboardingAuditLogs(access, liveRequestId),
+        getOnboardingReadiness(access, liveRequestId),
       ]);
       if (!cancelled) {
         if (detail.status === "fulfilled" && detail.value)
@@ -5810,6 +5832,7 @@ export function OnboardingView() {
         if (tasks.status === "fulfilled") setSelectedRequestTasks(tasks.value);
         if (activity.status === "fulfilled")
           setSelectedRequestAuditLogs(activity.value);
+        if (readiness.status === "fulfilled") setSelectedRequestReadiness(readiness.value);
       }
       refreshing = false;
     };
@@ -8086,7 +8109,7 @@ export function OnboardingView() {
             </DrawerHeaderTitle>
             <section
               aria-label="Employee onboarding workspace"
-              className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-4"
+              className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 bg-background p-3 sm:p-5"
             >
               <FluentButton
                 appearance="subtle"
@@ -8095,7 +8118,7 @@ export function OnboardingView() {
               >
                 ← Back to onboarding
               </FluentButton>
-              <header className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+              <header className="relative flex shrink-0 flex-wrap items-center justify-between gap-4 rounded-xl border border-border/70 bg-muted/15 p-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3">
                     <FluentAvatar
@@ -8112,12 +8135,12 @@ export function OnboardingView() {
                         {selectedRequestSummary.employee}
                       </h1>
                       <p className="text-sm text-muted-foreground">
-                        Employee onboarding workspace
+                        {readString(selectedRequestDetails ?? selectedRequestRow ?? {}, ["onboarding_no", "request_no", "request_code"], "Onboarding request")}
                       </p>
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-start gap-2">
+                <div className="flex flex-col items-start gap-1">
                   <FluentBadge
                     appearance="tint"
                     color={
@@ -8134,23 +8157,21 @@ export function OnboardingView() {
                       ),
                     )}
                   </FluentBadge>
-                  <p className="text-xs text-muted-foreground">
-                    Request {toTitleCaseWords(selectedRequestSummary.status)} ·
-                    Updated {selectedRequestSummary.updated}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Updated {selectedRequestSummary.updated}</p>
                 </div>
                 <div
                   id="onboarding-activation-summary"
                   className="min-w-[16rem] flex-1 sm:max-w-sm"
                 />
               </header>
-              <div className="min-w-0 shrink-0 overflow-x-auto">
+              <div className="min-w-0 shrink-0 overflow-x-auto border-b border-border/70">
                 <FluentTabList
                   aria-label="Employee workspace sections"
                   selectedValue={workspaceTab}
                   onTabSelect={(_, data) => setWorkspaceTab(String(data.value))}
                 >
                   <FluentTab value="overview">Overview</FluentTab>
+                  <FluentTab value="workflow">Workflow</FluentTab>
                   <FluentTab value="details">Employee details</FluentTab>
                   {canReadPayrollProfile ? (
                     <FluentTab value="payroll">Payroll</FluentTab>
@@ -8189,11 +8210,13 @@ export function OnboardingView() {
                           refreshKey={`${selectedRequestDetails?.version ?? selectedRequestDetails?.updated_at ?? ""}:${workspaceTab}`}
                         />
                       </div>
+
                       <OnboardingReadinessOverview
                         key={readCurrentRequestId()}
                         token={readStoredToken() ?? ""}
                         requestId={readCurrentRequestId()!}
                         employeeName={selectedRequestSummary.employee}
+                        ownerDirectory={users}
                         canActivate={canCompleteOnboardingRequests}
                         canViewPayroll={canReadPayrollProfile}
                         canViewContracts={canReadEmploymentContracts}
@@ -8209,65 +8232,41 @@ export function OnboardingView() {
                             "complete",
                           )
                         }
-                        onNavigate={(action, requirementId) => {
-                          if (requirementId === "employee-profile") {
-                            const employeeNo = readString(
-                              toRecord(selectedRequestDetails?.employee) ?? {},
-                              ["employee_no"],
-                              "",
-                            );
-                            if (employeeNo)
-                              window.location.assign(
-                                `/dashboard/employees/profile/${encodeURIComponent(employeeNo)}`,
-                              );
-                            else setWorkspaceTab("details");
-                            return;
-                          }
-                          setWorkspaceTab(
-                            action === "contracts"
-                              ? "contracts"
-                              : action === "payroll"
-                                ? "payroll"
-                                : action === "approvals"
-                                  ? "tasks"
-                                  : action,
-                          );
-                          if (
-                            requirementId ===
-                            "independently approved starting salary"
-                          ) {
-                            if (canApproveJoiningSalary)
-                              window.location.assign(
-                                "/dashboard/employees/salary-approvals",
-                              );
-                            else
-                              showErrorAlert(
-                                "Salary approval access is required. Ask the assigned payroll approver to complete this requirement.",
-                              );
-                            return;
-                          }
-                          if (requirementId === "bank account") {
-                            void openBankVerification();
-                            return;
-                          }
-                          if (action === "payroll" && canReadJoiningSalary) {
-                            setPayrollDrawerOpen(true);
-                            return;
-                          }
-                          window.setTimeout(() => {
-                            const target = document.getElementById(
-                              `onboarding-workspace-${action}`,
-                            );
-                            target?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "start",
-                            });
-                            target?.focus({ preventScroll: true });
-                          }, 0);
-                        }}
+                        onNavigate={openWorkspaceRequirement}
                       />
+                      <div className="mt-4">
+                        <OnboardingWorkspaceUpdates
+                          key={readCurrentRequestId()}
+                          token={readStoredToken() ?? ""}
+                          requestId={readCurrentRequestId()!}
+                          activity={selectedRequestAuditLogs}
+                          onActivity={() => setWorkspaceTab("activity")}
+                        />
+                      </div>
                     </div>
                   ) : null}
+                  {workspaceTab === "workflow" ? (() => {
+                    const workflowId = readNumber(selectedRequestDetails ?? selectedRequestRow ?? {}, ["workflow_id", "onboarding_workflow_id"]);
+                    const pendingRequirements = selectedRequestReadiness?.requirements.filter((item) =>
+                      item.required && item.status !== "complete" && item.status !== "skipped" &&
+                      (item.action !== "payroll" || canReadPayrollProfile) &&
+                      (item.action !== "contracts" || canReadEmploymentContracts)
+                    ) ?? [];
+                    const completedWorkflowSteps = requestTimelineNodes.filter((node) => /complete|approved|done|verified/.test(node.status)).length;
+                    return <section aria-label="Onboarding workflow and pending steps" className="space-y-4 p-3 sm:p-4">
+                      <div className="rounded-xl border border-border/80 bg-background p-4">
+                        <h2 className="text-lg font-semibold">Onboarding workflow</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{resolveWorkflowLabel(workflowId)}</p>
+                        <p className="mt-3 text-sm font-medium">{completedWorkflowSteps} of {requestTimelineNodes.length} assigned workflow steps complete</p>
+                        <p className="mt-1 text-xs text-muted-foreground">These are the tasks assigned by this workflow. Activation checks below must also be completed before the employee can become active.</p>
+                        <div className="mt-3"><OnboardingWorkflowMap nodes={requestTimelineNodes} pendingApprovers={approvalSummary.pendingLabels} /></div>
+                      </div>
+                      <div className="rounded-xl border border-border/80 bg-background">
+                        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-4 py-3"><div><h3 className="text-sm font-semibold">Activation checks still needed</h3><p className="text-xs text-muted-foreground">Open the relevant workspace for each check. The assigned owner completes it there.</p></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-amber-800">{pendingRequirements.length} remaining</span></header>
+                        {!selectedRequestReadiness ? <p className="px-4 py-3 text-sm text-muted-foreground">Readiness information is unavailable. Refresh the workspace to try again.</p> : pendingRequirements.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-left text-sm"><caption className="sr-only">Pending activation checks and actions</caption><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th scope="col" className="px-4 py-2 font-semibold">Requirement</th><th scope="col" className="px-3 py-2 font-semibold">Responsible</th><th scope="col" className="px-3 py-2 font-semibold">Status</th><th scope="col" className="px-4 py-2 text-right font-semibold">Action</th></tr></thead><tbody className="divide-y divide-border/70">{pendingRequirements.map((item) => <tr key={item.id} className="hover:bg-muted/20"><th scope="row" className="px-4 py-2 text-left font-medium">{item.label}{item.waiting_reason ? <span className="block text-xs font-normal text-muted-foreground">Waiting on: {item.waiting_reason}</span> : null}</th><td className="px-3 py-2 text-muted-foreground">{item.owner}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "blocked" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>{item.status === "blocked" ? "Needs attention" : "Awaiting"}</span></td><td className="px-4 py-2 text-right"><FluentButton appearance="primary" size="small" onClick={() => openWorkspaceRequirement(item.action, item.id)} aria-label={`${requirementActionLabel(item)} for ${item.label}`}>{requirementActionLabel(item)}</FluentButton></td></tr>)}</tbody></table></div> : <p className="px-4 py-3 text-sm text-emerald-700">All visible activation requirements are complete.</p>}
+                      </div>
+                    </section>;
+                  })() : null}
 
                   <section
                     hidden={workspaceTab !== "details"}
@@ -9036,115 +9035,30 @@ export function OnboardingView() {
                   ) : null}
 
                   <div className="grid items-start gap-px border-b border-border bg-border xl:grid-cols-2 [&>div]:bg-background [&>section]:bg-background">
-                    <details
-                      hidden={workspaceTab !== "overview"}
-                      className="bg-background p-3"
-                    >
-                      <summary className="cursor-pointer text-sm font-semibold">
-                        Request details
-                      </summary>
-                      <div className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Request Code
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {readString(
-                              selectedRequestDetails ??
-                                selectedRequestRow ??
-                                {},
-                              [
-                                "request_no",
-                                "request_code",
-                                "onboarding_no",
-                                "onboarding_code",
-                                "reference_no",
-                              ],
-                            )}
-                          </p>
+                    {(() => {
+                      const request = selectedRequestDetails ?? selectedRequestRow ?? {};
+                      const requestCode = readString(request, ["request_no", "request_code", "onboarding_no", "onboarding_code", "reference_no"]);
+                      const workflowName = resolveWorkflowLabel(readNumber(request, ["workflow_id", "onboarding_workflow_id"]));
+                      const requestTitle = readString(request, ["title", "name"]);
+                      const description = readString(request, ["description", "notes"]);
+                      const plannedStart = toTimestamp(selectedRequestDetails?.planned_start_date ?? selectedRequestRow?.planned_start_date);
+                      const plannedCompletion = toTimestamp(selectedRequestDetails?.planned_completion_date ?? selectedRequestRow?.planned_completion_date);
+                      const workflowStage = isOnboardingDraftStatus(readString(request, ["status", "request_status"])) ? "Waiting for HR to start" : "Workflow started";
+                      return <section hidden={workspaceTab !== "overview"} aria-label="Request details and workflow" className="bg-background p-3 xl:col-span-2">
+                        <div className="overflow-hidden rounded-xl border border-border/80 bg-background">
+                          <header className="border-b border-border/70 bg-muted/25 px-4 py-3"><h2 className="text-sm font-semibold">Request details</h2></header>
+                          <dl className="grid gap-x-8 gap-y-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <div><dt className="text-xs font-medium text-muted-foreground">Request code</dt><dd className="mt-1 text-sm font-semibold">{requestCode}</dd></div>
+                            <div><dt className="text-xs font-medium text-muted-foreground">Title</dt><dd className="mt-1 text-sm font-medium">{requestTitle}</dd></div>
+                            <div><dt className="text-xs font-medium text-muted-foreground">Workflow</dt><dd className="mt-1 text-sm font-medium">{workflowName}</dd></div>
+                            <div><dt className="text-xs font-medium text-muted-foreground">Workflow stage</dt><dd className="mt-1 text-sm font-medium">{workflowStage}</dd></div>
+                            <div><dt className="text-xs font-medium text-muted-foreground">Planned start</dt><dd className="mt-1 text-sm">{plannedStart === "-" ? "Not set" : plannedStart}</dd></div>
+                            <div><dt className="text-xs font-medium text-muted-foreground">Planned completion</dt><dd className="mt-1 text-sm">{plannedCompletion === "-" ? "Not set" : plannedCompletion}</dd></div>
+                            {description !== "-" ? <div className="sm:col-span-2 lg:col-span-3"><dt className="text-xs font-medium text-muted-foreground">Description</dt><dd className="mt-1 text-sm">{description}</dd></div> : null}
+                          </dl>
                         </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Workflow
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {resolveWorkflowLabel(
-                              readNumber(
-                                selectedRequestDetails ??
-                                  selectedRequestRow ??
-                                  {},
-                                ["workflow_id", "onboarding_workflow_id"],
-                              ),
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Workflow stage
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {isOnboardingDraftStatus(
-                              readString(
-                                selectedRequestDetails ??
-                                  selectedRequestRow ??
-                                  {},
-                                ["status", "request_status"],
-                              ),
-                            )
-                              ? "Waiting for HR to start"
-                              : "Workflow started"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Title
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {readString(
-                              selectedRequestDetails ??
-                                selectedRequestRow ??
-                                {},
-                              ["title", "name"],
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Planned Start
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {toTimestamp(
-                              selectedRequestDetails?.planned_start_date ??
-                                selectedRequestRow?.planned_start_date,
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Planned Completion
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {toTimestamp(
-                              selectedRequestDetails?.planned_completion_date ??
-                                selectedRequestRow?.planned_completion_date,
-                            )}
-                          </p>
-                        </div>
-                        <div className="md:col-span-2 xl:col-span-3">
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Description
-                          </p>
-                          <p className="text-sm text-slate-900">
-                            {readString(
-                              selectedRequestDetails ??
-                                selectedRequestRow ??
-                                {},
-                              ["description", "notes"],
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </details>
+                      </section>;
+                    })()}
 
                     {workspaceTab === "tasks" &&
                     isOnboardingActableStatus(
@@ -10436,91 +10350,7 @@ export function OnboardingView() {
                           ? "Hide workflow map"
                           : "Show workflow map"}
                       </FluentButton>
-                      <div
-                        hidden={!workflowMapVisible}
-                        className="divide-y divide-border overflow-hidden border border-border"
-                      >
-                        {requestTimelineNodes.map((node, idx) => {
-                          const isDone =
-                            node.status.includes("complete") ||
-                            node.status.includes("approved") ||
-                            node.status.includes("done") ||
-                            node.status.includes("verified");
-                          const isPending =
-                            node.status.includes("pending") ||
-                            node.status.includes("review") ||
-                            node.status.includes("in_progress") ||
-                            node.status.includes("active");
-                          const badgeClass = isDone
-                            ? "bg-emerald-100 text-emerald-700"
-                            : isPending
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-700";
-                          return (
-                            <div
-                              key={node.key}
-                              className="relative bg-background py-2 pl-10 pr-3"
-                            >
-                              {idx < requestTimelineNodes.length - 1 ? (
-                                <span className="absolute left-[19px] top-8 h-[calc(100%-1rem)] w-px bg-slate-200" />
-                              ) : null}
-                              <span
-                                className={`absolute left-2 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                                  isDone
-                                    ? "bg-emerald-500 text-white"
-                                    : isPending
-                                      ? "bg-amber-500 text-white"
-                                      : "bg-slate-300 text-slate-700"
-                                }`}
-                              >
-                                {node.index}
-                              </span>
-                              <div>
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {toTitleCaseWords(String(node.actionLabel))}
-                                  </p>
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
-                                  >
-                                    {toTitleCaseWords(String(node.status))}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-600">
-                                  {isPending &&
-                                  approvalSummary.pendingLabels.length > 0
-                                    ? "Pending approver"
-                                    : "Owner"}
-                                  :{" "}
-                                  <span className="font-medium text-slate-800">
-                                    {isPending &&
-                                    approvalSummary.pendingLabels.length > 0
-                                      ? approvalSummary.pendingLabels.join(", ")
-                                      : node.owner && node.owner !== "-"
-                                        ? node.owner
-                                        : "Unassigned"}
-                                  </span>
-                                </p>
-                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                                  <span>
-                                    {isPending
-                                      ? "Waiting to be completed"
-                                      : isDone
-                                        ? "Completed"
-                                        : "Not started"}
-                                  </span>
-                                  {node.required ? (
-                                    <span>Required step</span>
-                                  ) : null}
-                                  {node.completedAt !== "-" ? (
-                                    <span>Completed {node.completedAt}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {workflowMapVisible ? <OnboardingWorkflowMap nodes={requestTimelineNodes} pendingApprovers={approvalSummary.pendingLabels} /> : null}
                     </section>
 
                     <section

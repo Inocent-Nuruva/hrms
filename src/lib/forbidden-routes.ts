@@ -35,13 +35,6 @@ const DO_NOT_REMEMBER = new Set([
   "/dashboard/sms/overview",
   "/dashboard/sms/registry",
   "/dashboard/sms/logs",
-  "/dashboard/performance",
-  "/dashboard/performance/overview",
-  "/dashboard/performance/setup",
-  "/dashboard/performance/categories",
-  "/dashboard/performance/plans",
-  "/dashboard/performance/reviews",
-  "/dashboard/performance/improvement",
 ])
 
 function shouldRememberForbiddenRoute(url: string) {

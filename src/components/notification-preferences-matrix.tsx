@@ -18,6 +18,7 @@ import { readStoredSessionTokens } from "@/lib/session-client";
 
 const CHANNELS: NotificationChannel[] = ["IN_APP", "EMAIL", "SMS", "PUSH"];
 const GROUPS: Array<{ title: string; types: NotificationPreferenceType[] }> = [
+  { title: "KPI & Performance", types: ["KPI_PERIOD_CREATED"] },
   {
     title: "General",
     types: ["GENERAL", "AUTH_SECURITY", "ACCESS_CHANGE", "SYSTEM_ALERT"],
@@ -256,7 +257,7 @@ export function NotificationPreferencesMatrix() {
                           <td key={channel} className="px-3 py-3">
                             <div className="flex justify-center">
                               <Switch
-                                checked={enabled(preference)}
+                                checked={preference ? enabled(preference) : type !== "KPI_PERIOD_CREATED" || (channel === "IN_APP" && !CHANNELS.some((candidate) => enabled(byKey.get(key(type, candidate))) && byKey.has(key(type, candidate))))}
                                 disabled={busy}
                                 aria-label={`${label(type)} ${label(channel)}`}
                                 onChange={(_event, data) =>

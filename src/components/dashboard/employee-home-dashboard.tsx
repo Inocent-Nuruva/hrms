@@ -5,7 +5,7 @@ import { useAccountAppearance } from "@/hooks/use-account-appearance"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { Button as FluentButton, Badge as FluentBadge, PresenceBadge, Dropdown as FluentDropdown, Option as FluentOption, Switch as FluentSwitch } from "@fluentui/react-components"
-import { PaintBrush20Regular, Clock20Regular, CalendarClock20Regular, Wallet20Regular, Target20Regular, PersonInfo20Regular, Dismiss16Regular, CalendarAdd20Regular, AppsList20Regular, ChevronRight16Regular, Receipt32Regular, Mail20Regular, Call20Regular, Briefcase20Regular, CalendarCheckmark20Regular, PersonAvailable20Regular, PersonProhibited20Regular } from "@fluentui/react-icons"
+import { PaintBrush20Regular, Clock20Regular, CalendarClock20Regular, Wallet20Regular, PersonInfo20Regular, Dismiss16Regular, CalendarAdd20Regular, AppsList20Regular, ChevronRight16Regular, Receipt32Regular, Mail20Regular, Call20Regular, Briefcase20Regular, CalendarCheckmark20Regular, PersonAvailable20Regular, PersonProhibited20Regular } from "@fluentui/react-icons"
 import { WelcomeCardBackground, type WelcomeBackground } from "./welcome-card-background"
 import { DateInput } from "@/components/ui/date-input"
 import Link from "next/link"
@@ -2685,7 +2685,6 @@ export function EmployeeDashboardView({
               { href: attendanceHref, title: "My attendance", icon: <Clock20Regular /> },
               { href: leaveRequestHref, title: "Request leave", icon: <CalendarClock20Regular /> },
               { href: payrollHref, title: "My payroll", icon: <Wallet20Regular /> },
-              { href: "/dashboard/me/performance/overview", title: "My performance", icon: <Target20Regular /> },
             ].filter((action) =>
               actor.ready &&
               canSeeDashboardPage(action.href, actor.permissionLabels, actor.accessMode)

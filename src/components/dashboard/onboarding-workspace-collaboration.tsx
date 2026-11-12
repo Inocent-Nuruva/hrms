@@ -89,42 +89,16 @@ export function OnboardingWorkspaceUpdates({
     );
   if (previous === undefined) return null;
   return (
-    <Card>
-      <CardHeader
-        header={
-          <Text weight="semibold">
-            {previous
-              ? "Since your last review"
-              : "Your first recorded workspace review"}
-          </Text>
-        }
-        description={
-          previous
-            ? new Date(previous).toLocaleString()
-            : "Future visits will highlight new activity."
-        }
-      />
-      {previous ? (
-        changes.length ? (
-          <ul className="flex flex-col gap-2">
-            {changes.slice(0, 4).map((entry, index) => (
-              <li key={String(entry.id ?? index)}>
-                {onboardingActivityLabel(
-                  String(entry.action ?? entry.event ?? "Updated"),
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm">
-            No newer entries in the loaded activity record.
-          </p>
-        )
-      ) : null}
-      <Button appearance="subtle" onClick={onActivity}>
-        View activity
-      </Button>
-    </Card>
+    <section aria-label="Recent onboarding activity" className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{changes.length ? `${changes.length} update${changes.length === 1 ? "" : "s"} since your last visit` : "You're up to date"}</p>
+          <p className="text-xs text-muted-foreground">{previous ? `Last viewed ${new Date(previous).toLocaleString()}` : "New activity will appear here after your next visit."}</p>
+        </div>
+        <Button appearance="subtle" size="small" onClick={onActivity}>View activity</Button>
+      </div>
+      {changes.length ? <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">{changes.slice(0, 4).map((entry, index) => <li key={String(entry.id ?? index)}>• {onboardingActivityLabel(String(entry.action ?? entry.event ?? "Updated"))}</li>)}</ul> : null}
+    </section>
   );
 }
 
