@@ -7,6 +7,7 @@ import {
   employeeAttendanceSectionTabGroups,
   findFirstAccessibleSectionUrl,
   notificationSectionTabGroups,
+  managementKpiSectionTabGroups,
   operationsReportSectionTabGroups,
   resolveAttendanceSectionTabGroups,
 } from "@/lib/dashboard-sections"
@@ -131,5 +132,17 @@ describe("employee section navigation", () => {
       group.items.map((item) => item.url),
     )
     expect(urls).not.toContain("/dashboard/me/promotion")
+  })
+})
+
+
+describe("KPI management navigation", () => {
+  it("starts with reporting periods and preserves the KPI Library route", () => {
+    expect(managementKpiSectionTabGroups[0]?.items[0]).toEqual({
+      title: "Reporting Periods", url: "/dashboard/kpi/periods",
+    })
+    expect(managementKpiSectionTabGroups[0]?.items[1]).toEqual({
+      title: "KPI Library", url: "/dashboard/kpi",
+    })
   })
 })

@@ -73,7 +73,6 @@ import {
   updatePayrollPeriodDates,
   updatePayrollSecurityPolicy,
   createPayrollSource,
-  generatePayrollSources,
   createPayrollStatutoryRule,
   createPayrollStatutoryScheme,
   downloadPayrollBankingBatch,
@@ -198,7 +197,6 @@ type CreateDialogMode =
   | "leaveRule"
   | "source"
   | "sourceImport"
-  | "sourceGenerate"
   | "adjustment";
 
 const TABS: Array<{ id: PayrollTab; label: string }> = [
@@ -953,14 +951,7 @@ function emptyAdvancedPayrollForm() {
     reason: "",
     adjustmentType: "ADJUSTMENT",
     effectivePeriodCode: "",
-    performancePeriodId: "",
-    financialYearId: "",
-    periodType: "",
-    sequenceNumber: "",
-    amountPerScorePoint: "",
-    minimumScore: "",
     autoApprove: "true",
-    replaceExisting: "false",
     reportCode: "",
     reportRunId: "",
     reportYear: String(new Date().getFullYear()),
@@ -2466,7 +2457,6 @@ export function PayrollOperationsView() {
         "leaveRule",
         "source",
         "sourceImport",
-        "sourceGenerate",
         "adjustment",
       ].includes(mode)
     ) {
@@ -2771,8 +2761,6 @@ export function PayrollOperationsView() {
                                   ? "New source"
                                   : createMode === "sourceImport"
                                     ? "Import sources"
-                                    : createMode === "sourceGenerate"
-                                      ? "Generate sources"
                                       : "New adjustment";
 
   const columns: Column<AdminRecord>[] = (() => {
@@ -5240,32 +5228,6 @@ export function PayrollOperationsView() {
           auto_approve: advancedForm.autoApprove === "true",
           auto_post: advancedForm.autoPost === "true",
         });
-      } else if (createMode === "sourceGenerate") {
-        if (!advancedForm.payrollPeriodId) {
-          throw new Error("Payroll period is required.");
-        }
-        await generatePayrollSources(token, {
-          payroll_period_id: Number(advancedForm.payrollPeriodId),
-          source_type:
-            advancedForm.sourceType === "PERFORMANCE" ? "PERFORMANCE" : "KPI",
-          performance_period_id: advancedForm.performancePeriodId
-            ? Number(advancedForm.performancePeriodId)
-            : undefined,
-          financial_year_id: advancedForm.financialYearId
-            ? Number(advancedForm.financialYearId)
-            : undefined,
-          period_type: advancedForm.periodType.trim() || undefined,
-          sequence_number: advancedForm.sequenceNumber
-            ? Number(advancedForm.sequenceNumber)
-            : undefined,
-          scheme_code: advancedForm.schemeCode.trim() || undefined,
-          component_code: advancedForm.componentCode.trim() || undefined,
-          amount_per_score_point:
-            advancedForm.amountPerScorePoint.trim() || undefined,
-          minimum_score: advancedForm.minimumScore.trim() || undefined,
-          auto_approve: advancedForm.autoApprove === "true",
-          replace_existing: advancedForm.replaceExisting === "true",
-        });
       } else if (createMode === "profile") {
         if (
           !profileForm.employeeId ||
@@ -6151,7 +6113,7 @@ export function PayrollOperationsView() {
                   sourceType: value,
                 }))
               }
-              options={["SALES", "KPI", "PERFORMANCE", "COMMISSION"].map(
+              options={["SALES", "COMMISSION"].map(
                 (value) => ({
                   value,
                   label: prettify(value),
@@ -6195,7 +6157,7 @@ export function PayrollOperationsView() {
                   sourceReference: event.target.value,
                 }))
               }
-              placeholder="Invoice, KPI batch, deal ID"
+              placeholder="Invoice or deal ID"
             />
           </Field>
           <Field label="Scheme code">
@@ -6328,7 +6290,7 @@ export function PayrollOperationsView() {
                   sourceType: value,
                 }))
               }
-              options={["SALES", "COMMISSION", "KPI", "PERFORMANCE"].map(
+              options={["SALES", "COMMISSION"].map(
                 (value) => ({
                   value,
                   label: prettify(value),
@@ -6413,191 +6375,6 @@ export function PayrollOperationsView() {
               />
             </Field>
           </div>
-        </div>
-      );
-    }
-
-    if (createMode === "sourceGenerate") {
-      return (
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Payroll period">
-            <FluentSelect
-              ariaLabel="Payroll period"
-              className="w-full"
-              value={advancedForm.payrollPeriodId}
-              placeholder="Select a payroll period"
-              onChange={(value) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  payrollPeriodId: value,
-                }))
-              }
-              options={[
-                { value: "", label: "Select a payroll period" },
-                ...periods.flatMap((row) => {
-                  const id = readNumber(row, ["id"]);
-                  if (id === null) return [];
-                  return [{ value: String(id), label: readPeriodLabel(row) }];
-                }),
-              ]}
-            />
-          </Field>
-          <Field label="Source type">
-            <FluentSelect
-              ariaLabel="Source type"
-              className="w-full"
-              value={advancedForm.sourceType}
-              onChange={(value) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  sourceType: value,
-                }))
-              }
-              options={[
-                { value: "KPI", label: "KPI" },
-                { value: "PERFORMANCE", label: "Performance" },
-              ]}
-            />
-          </Field>
-          <Field label="Performance period ID">
-            <input
-              className={inputClass}
-              value={advancedForm.performancePeriodId}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  performancePeriodId: event.target.value,
-                }))
-              }
-              placeholder="Optional KPI period"
-            />
-          </Field>
-          <Field label="Financial year ID">
-            <input
-              className={inputClass}
-              value={advancedForm.financialYearId}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  financialYearId: event.target.value,
-                }))
-              }
-              placeholder="Performance aggregates"
-            />
-          </Field>
-          <Field label="Period type">
-            <input
-              className={inputClass}
-              value={advancedForm.periodType}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  periodType: event.target.value,
-                }))
-              }
-              placeholder="MONTHLY, QUARTERLY, ANNUAL"
-            />
-          </Field>
-          <Field label="Sequence number">
-            <input
-              className={inputClass}
-              value={advancedForm.sequenceNumber}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  sequenceNumber: event.target.value,
-                }))
-              }
-              placeholder="Optional"
-            />
-          </Field>
-          <Field label="Scheme code">
-            <input
-              className={inputClass}
-              value={advancedForm.schemeCode}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  schemeCode: event.target.value,
-                }))
-              }
-              placeholder="Optional bonus scheme"
-            />
-          </Field>
-          <Field label="Component code">
-            <input
-              className={inputClass}
-              value={advancedForm.componentCode}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  componentCode: event.target.value,
-                }))
-              }
-              list="payroll-component-codes"
-              placeholder="Optional override"
-            />
-          </Field>
-          <Field label="Amount per score point">
-            <input
-              className={inputClass}
-              value={advancedForm.amountPerScorePoint}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  amountPerScorePoint: event.target.value,
-                }))
-              }
-              placeholder="Uses scheme rate if empty"
-            />
-          </Field>
-          <Field label="Minimum score">
-            <input
-              className={inputClass}
-              value={advancedForm.minimumScore}
-              onChange={(event) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  minimumScore: event.target.value,
-                }))
-              }
-              placeholder="Optional threshold"
-            />
-          </Field>
-          <Field label="Auto approve">
-            <FluentSelect
-              ariaLabel="Auto approve"
-              className="w-full"
-              value={advancedForm.autoApprove}
-              onChange={(value) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  autoApprove: value,
-                }))
-              }
-              options={[
-                { value: "true", label: "Yes" },
-                { value: "false", label: "No" },
-              ]}
-            />
-          </Field>
-          <Field label="Replace draft/rejected">
-            <FluentSelect
-              ariaLabel="Replace draft/rejected"
-              className="w-full"
-              value={advancedForm.replaceExisting}
-              onChange={(value) =>
-                setAdvancedForm((current) => ({
-                  ...current,
-                  replaceExisting: value,
-                }))
-              }
-              options={[
-                { value: "false", label: "No" },
-                { value: "true", label: "Yes" },
-              ]}
-            />
-          </Field>
         </div>
       );
     }
@@ -8334,7 +8111,7 @@ export function PayrollOperationsView() {
                   schemeType: value,
                 }))
               }
-              options={["BONUS", "COMMISSION", "KPI", "PERFORMANCE"].map(
+              options={["BONUS", "COMMISSION"].map(
                 (value) => ({
                   value,
                   label: prettify(value),
@@ -11165,14 +10942,6 @@ export function PayrollOperationsView() {
                     >
                       <Add20Regular className="h-3.5 w-3.5" />
                       Import
-                    </button>
-                    <button
-                      type="button"
-                      className={secondaryButtonClass}
-                      onClick={() => openCreate("sourceGenerate")}
-                    >
-                      <Add20Regular className="h-3.5 w-3.5" />
-                      Generate
                     </button>
                   </>
                 ) : null}

@@ -27,6 +27,10 @@ export function filterOnboardingOverview(rows: OnboardingOverviewRow[], filters:
   )
 }
 
+export function sortOnboardingOverview(rows: OnboardingOverviewRow[], order: "newest" | "oldest") {
+  return [...rows].sort((first, second) => order === "newest" ? second.id - first.id : first.id - second.id)
+}
+
 export function groupOnboardingOverview(rows: OnboardingOverviewRow[]) {
   const groups = new Map<string, OnboardingOverviewRow[]>()
   for (const row of rows) {

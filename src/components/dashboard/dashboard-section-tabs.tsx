@@ -7,6 +7,7 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 import { Tabs2 } from "@/components/ui/tabs-2"
 import { canSeeDashboardPage } from "@/lib/forbidden-routes"
+import { canShowKpiNavigationRoute } from "@/lib/dashboard-nav"
 import { cn } from "@/lib/utils"
 import type { DashboardSectionTabGroup } from "@/lib/dashboard-sections"
 
@@ -49,6 +50,7 @@ export function DashboardSectionTabs({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
+          canShowKpiNavigationRoute(item.url, actor.roleNames, actor.scope) &&
           canSeeDashboardPage(item.url, actor.permissionLabels, actor.accessMode, {
             roleNames: actor.roleNames,
             scope: actor.scope,

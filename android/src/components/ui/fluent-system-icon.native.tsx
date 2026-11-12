@@ -8,7 +8,7 @@ import { SettingsColor, SettingsRegular, ShieldCheckmarkColor } from '../../../n
 import { WeatherMoonRegular, WeatherSunnyLowColor } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-11';
 import { ArrowEnterRegular, ArrowExitRegular, AlertColor } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-0';
 import { BriefcaseColor, BriefcaseRegular, BuildingGovernmentColor, BuildingGovernmentRegular, CalendarClockColor, CalendarClockRegular, CalendarColor, CalendarRegular } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-1';
-import { ChartMultipleColor, ChartMultipleRegular, ChevronLeftRegular, ClockColor, ClockRegular } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-2';
+import { ChevronLeftRegular, ClockColor, ClockRegular } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-2';
 import { TextBulletListSquareColor } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-10';
 import { HomeColor, HomeRegular } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-5';
 import { LocationRippleColor, LocationRippleRegular } from '../../../node_modules/@fluentui/react-native-icons/lib/icons/chunk-6';
@@ -40,7 +40,6 @@ const ICONS = {
   payroll: VaultColor,
   field: LocationRippleColor,
   finance: BuildingGovernmentColor,
-  performance: ChartMultipleColor,
   documents: DocumentColor,
   work: BriefcaseColor,
   people: PeopleColor,
@@ -64,7 +63,6 @@ const NAV_REGULAR_ICONS = {
   payroll: VaultRegular,
   field: LocationRippleRegular,
   finance: BuildingGovernmentRegular,
-  performance: ChartMultipleRegular,
   documents: DocumentRegular,
   work: BriefcaseRegular,
   people: PeopleRegular,
@@ -73,7 +71,7 @@ const NAV_REGULAR_ICONS = {
 
 const MULTICOLOR_ICONS = new Set<IconName>([
   'sun', 'mail', 'shield-check', 'home', 'attendance', 'leave', 'profile', 'history',
-  'promotion', 'shift', 'payroll', 'field', 'finance', 'performance', 'documents',
+  'promotion', 'shift', 'payroll', 'field', 'finance', 'documents',
   'work', 'people', 'menu', 'notifications', 'settings', 'checked-in',
 ]);
 

@@ -116,7 +116,7 @@ export function ResetPasswordForm({
         </Link>
         <Link
           href={ROUTES.login}
-          className="inline-flex h-9 w-full items-center justify-center text-[12px] font-medium text-muted-foreground transition hover:text-foreground"
+          className="inline-flex h-9 w-full items-center justify-center rounded-md bg-transparent text-[12px] font-medium text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
         >
           Back to sign in
         </Link>

@@ -1,7 +1,9 @@
 export const ONBOARDING_WORKSPACE_TABS = [
   "overview",
+  "workflow",
   "details",
   "payroll",
+  "contracts",
   "tasks",
   "activity",
 ] as const

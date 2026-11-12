@@ -6,7 +6,7 @@ export function WelcomeCardBackground({ background }: { background: WelcomeBackg
   return (
     background === "aurora" ? <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0 isolate overflow-hidden rounded-none dark:opacity-50"
+            className="pointer-events-none absolute inset-0 z-0 isolate overflow-hidden rounded-none dark:opacity-100"
             style={{ backgroundColor: "var(--primary)" }}
           >
             <div
@@ -21,6 +21,7 @@ export function WelcomeCardBackground({ background }: { background: WelcomeBackg
                 mixBlendMode: "luminosity",
               }}
             />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/25 via-background/10 to-background/30 dark:from-background/90 dark:via-background/75 dark:to-background/85" />
           </div> : background === "glow" ? (
             <div
               aria-hidden="true"

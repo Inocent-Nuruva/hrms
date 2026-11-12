@@ -57,7 +57,7 @@ const useStyles = makeStyles({
     fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
   },
   iconBadge: {
-    color: "var(--primary)",
+    color: "var(--sidebar-icon-color, var(--primary))",
     display: "inline-flex",
     width: "24px",
     height: "24px",
@@ -95,7 +95,7 @@ const useStyles = makeStyles({
       fontSize: "16px",
     },
     '&[data-active-category="true"] .fui-NavCategoryItem__icon': {
-      color: tokens.colorCompoundBrandForeground1,
+      color: "var(--sidebar-active-link-color, var(--primary))",
     },
     "::after": {
       width: "3px",
@@ -678,7 +678,7 @@ export function NavMain({
         if (group.items?.length && visibleDestinations.length === 0) return null
         // Skip redundant category navigation when only one destination remains.
         const item: NavMainItem = visibleDestinations.length === 1
-          ? { ...group, ...visibleDestinations[0], items: undefined }
+          ? { ...group, ...visibleDestinations[0], title: group.title === "KPI & Performance" ? group.title : visibleDestinations[0].title, items: undefined }
           : group
         const isActive = nodeContainsCurrentPath(item, currentPath)
         const Icon = item.icon ?? item.activeIcon

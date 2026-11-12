@@ -307,6 +307,7 @@ export type NotificationPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type NotificationChannel = "IN_APP" | "EMAIL" | "SMS" | "PUSH";
 export type NotificationPreferenceType =
   | "GENERAL"
+  | "KPI_PERIOD_CREATED"
   | "AUTH_SECURITY"
   | "ACCESS_CHANGE"
   | "LEAVE_SUBMITTED"
@@ -344,11 +345,6 @@ export type NotificationPreferenceType =
   | "FIELD_VISIT_REPORT_PENDING"
   | "PROBATION_CONFIRMATION_DUE"
   | "PROBATION_CONFIRMATION_OVERDUE"
-  | "KPI_UPDATE_PENDING"
-  | "KPI_SCORE_PUBLISHED"
-  | "PERFORMANCE_DEADLINE_REMINDER"
-  | "PERFORMANCE_PIP_REMINDER"
-  | "PERFORMANCE_DEVELOPMENT_REMINDER"
   | "PAYROLL_PROCESSED"
   | "PAYSLIP_AVAILABLE"
   | "STAFF_LOAN_INSTALLMENT_DEDUCTED"
@@ -3237,71 +3233,11 @@ function parseAdminContract<S extends z.ZodType>(
   return result.data;
 }
 
-export type PerformanceKpiCategory = {
-  id: number;
-  name: string;
-  description?: string | null;
-};
 
-function unwrapPerformanceKpiCategory(value: unknown): PerformanceKpiCategory {
-  const record =
-    value && typeof value === "object" ? (value as AdminRecord) : {};
-  const item = record.data ?? record.result ?? record.item ?? record;
-  return item as PerformanceKpiCategory;
-}
 
-export async function listPerformanceKpiCategories(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/kpi-categories",
-    { token },
-  );
-  const record =
-    payload && typeof payload === "object" ? (payload as AdminRecord) : {};
-  const items = Array.isArray(payload)
-    ? payload
-    : Array.isArray(record.data)
-      ? record.data
-      : Array.isArray(record.result)
-        ? record.result
-        : Array.isArray(record.items)
-          ? record.items
-          : [];
-  return items.map(unwrapPerformanceKpiCategory);
-}
 
-export async function createPerformanceKpiCategory(
-  token: string,
-  data: Pick<PerformanceKpiCategory, "name" | "description">,
-) {
-  return unwrapPerformanceKpiCategory(
-    await adminRequest<unknown>("/api/performance/kpi-categories", {
-      method: "POST",
-      token,
-      body: data,
-    }),
-  );
-}
 
-export async function updatePerformanceKpiCategory(
-  token: string,
-  id: number,
-  data: Pick<PerformanceKpiCategory, "name" | "description">,
-) {
-  return unwrapPerformanceKpiCategory(
-    await adminRequest<unknown>(`/api/performance/kpi-categories/${id}`, {
-      method: "PATCH",
-      token,
-      body: data,
-    }),
-  );
-}
 
-export async function deletePerformanceKpiCategory(token: string, id: number) {
-  return adminRequest<unknown>(`/api/performance/kpi-categories/${id}`, {
-    method: "DELETE",
-    token,
-  });
-}
 
 export interface ListRequestOptions {
   signal?: AbortSignal;
@@ -17700,14 +17636,6 @@ export async function createPayrollSourcesBatch(
   });
 }
 
-export async function generatePayrollSources(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/payroll/sources/generate", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
-
 export async function importPayrollSources(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/payroll/sources/import", {
     method: "POST",
@@ -18588,422 +18516,45 @@ function buildStatusQuery(status?: string) {
   return value ? `?status=${encodeURIComponent(value)}` : "";
 }
 
-export async function getPerformanceDashboard(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/dashboard/summary",
-    {
-      token,
-    },
-  );
-  return normalizeSingle(payload) ?? asRecord(payload);
-}
 
-export async function listPerformanceFinancialYears(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/financial-years",
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceFinancialYear(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/financial-years", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function generatePerformancePeriods(
-  token: string,
-  yearId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/financial-years/${yearId}/generate-periods`,
-    { method: "POST", token },
-  );
-}
 
-export async function calculatePerformanceAggregates(
-  token: string,
-  yearId: string | number,
-  periodType: "QUARTERLY" | "ANNUAL",
-) {
-  return adminRequest<unknown>(
-    `/api/performance/financial-years/${yearId}/aggregates`,
-    {
-      method: "POST",
-      token,
-      body: { period_type: periodType },
-    },
-  );
-}
 
-export async function publishPerformanceAggregates(
-  token: string,
-  yearId: string | number,
-  periodType: "QUARTERLY" | "ANNUAL",
-) {
-  return adminRequest<unknown>(
-    `/api/performance/financial-years/${yearId}/aggregates/publish`,
-    { method: "POST", token, body: { period_type: periodType } },
-  );
-}
 
-export async function previewKpiImport(token: string, file: File) {
-  const body = new FormData();
-  body.append("file", file);
-  return adminRequest<unknown>("/api/performance/kpi-imports/preview", {
-    method: "POST",
-    token,
-    body,
-  });
-}
 
-export async function listKpiImports(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpi-imports", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function getKpiImport(token: string, batchId: string | number) {
-  return adminRequest<unknown>(`/api/performance/kpi-imports/${batchId}`, {
-    token,
-  });
-}
 
-export async function approveKpiImport(
-  token: string,
-  batchId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/kpi-imports/${batchId}/approve`,
-    { method: "POST", token },
-  );
-}
 
-export async function applyKpiImport(token: string, batchId: string | number) {
-  return adminRequest<unknown>(
-    `/api/performance/kpi-imports/${batchId}/apply`,
-    {
-      method: "POST",
-      token,
-    },
-  );
-}
 
-/**
- * HR catalogue: GET /api/performance/periods (Performance_listPeriods).
- * There is no GET /api/performance/me/periods. Employee pages must use
- * GET /api/performance/me/assignments and GET /api/performance/me/kpis.
- */
-export async function listPerformancePeriods(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/periods", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformancePeriod(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/periods", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function updatePerformancePeriod(
-  token: string,
-  periodId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
-}
 
-export async function activatePerformancePeriod(
-  token: string,
-  periodId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/periods/${periodId}/activate`,
-    {
-      method: "POST",
-      token,
-    },
-  );
-}
 
-export async function closePerformancePeriod(
-  token: string,
-  periodId: string | number,
-) {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}/close`, {
-    method: "POST",
-    token,
-  });
-}
 
-export async function reopenPerformancePeriod(
-  token: string,
-  periodId: string | number,
-  reason: string,
-) {
-  return adminRequest<unknown>(`/api/performance/periods/${periodId}/reopen`, {
-    method: "POST",
-    token,
-    body: { reason },
-  });
-}
 
-export async function createPerformancePeriodAssignments(
-  token: string,
-  periodId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/periods/${periodId}/assignments`,
-    {
-      method: "POST",
-      token,
-    },
-  );
-}
 
-export async function syncPerformanceSystemKpis(
-  token: string,
-  periodId: string | number,
-  providerKey?: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/periods/${periodId}/sync-system-kpis`,
-    {
-      method: "POST",
-      token,
-      body: providerKey ? { provider_key: providerKey } : {},
-    },
-  );
-}
 
-export async function listPerformanceKpis(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpis", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformanceKpi(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/performance/kpis", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function updatePerformanceKpi(
-  token: string,
-  kpiId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
-}
 
-export async function deletePerformanceKpi(
-  token: string,
-  kpiId: string | number,
-) {
-  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}`, {
-    method: "DELETE",
-    token,
-  });
-}
 
-export async function createPerformanceKpiVersion(
-  token: string,
-  kpiId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/kpis/${kpiId}/versions`, {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceKpiTemplates(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/kpi-templates",
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceKpiTemplate(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/kpi-templates", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function applyPerformanceKpiTemplate(
-  token: string,
-  periodId: string,
-  templateId: string,
-  conflictPolicy: "MERGE" | "SKIP" | "REPLACE",
-) {
-  return adminRequest<unknown>(
-    `/api/performance/periods/${periodId}/apply-kpi-template`,
-    {
-      method: "POST",
-      token,
-      body: {
-        template_id: Number(templateId),
-        conflict_policy: conflictPolicy,
-      },
-    },
-  );
-}
 
-export async function listPerformanceKpiRules(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/kpi-rules", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformanceKpiRule(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/kpi-rules", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceCompetencyTemplates(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/competency-templates",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceCompetencyTemplate(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/competency-templates", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceRatingScales(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/rating-scales",
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceRatingScale(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/rating-scales", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceScorecards(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/scorecards", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformanceScorecard(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/scorecards", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceWorkflows(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/workflows", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformanceWorkflow(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/workflows", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function getPerformanceReviewWorkflow(
-  token: string,
-  reviewId: string | number,
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/workflow`,
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function actionPerformanceReviewWorkflow(
-  token: string,
-  reviewId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/workflow/action`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
+
 
 export async function listPayrollGroups(token: string) {
   const payload = await adminRequest<unknown>(
@@ -19065,620 +18616,61 @@ export async function createPayrollBonusScheme(
   });
 }
 
-export async function listPerformancePlans(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/plans", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function createPerformancePlan(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/performance/plans", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function generatePerformancePlanFromRules(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/plans/generate-from-rules", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listPerformanceImprovementPlans(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/improvement-plans",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function listPerformanceDevelopmentPlans(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/development-plans",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceDevelopmentPlan(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/development-plans", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function updatePerformanceDevelopmentGoal(
-  token: string,
-  goalId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/development-goals/${goalId}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
-}
 
-export async function carryForwardPerformanceDevelopmentGoals(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    "/api/performance/development-plans/carry-forward",
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function listPerformanceReportCatalog(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/reports/catalog",
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function downloadPerformanceReport(
-  token: string,
-  reportCode: string,
-  format: "csv" | "xlsx" | "pdf" | "json",
-) {
-  const response = await fetch(
-    buildUrl(`/api/performance/reports/${reportCode}/export?format=${format}`),
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    },
-  );
-  if (!response.ok) {
-    throw new Error(await response.text().catch(() => "Report export failed."));
-  }
-  return response.blob();
-}
 
-export async function getPerformanceCalibrationDepartments(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/calibration/departments",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function getPerformanceCalibrationComparison(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/calibration/comparison",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function createPerformanceImprovementPlan(
-  token: string,
-  reviewId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/improvement-plan`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function closePerformanceImprovementPlan(
-  token: string,
-  planId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/improvement-plans/${planId}/close`,
-    { method: "POST", token },
-  );
-}
 
-export async function reviewPerformanceImprovementMilestone(
-  token: string,
-  milestoneId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/improvement-milestones/${milestoneId}/review`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function moderatePerformanceReview(
-  token: string,
-  reviewId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/moderate`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function reopenPerformanceReview(
-  token: string,
-  reviewId: string | number,
-  reason: string,
-) {
-  return adminRequest<unknown>(`/api/performance/reviews/${reviewId}/reopen`, {
-    method: "POST",
-    token,
-    body: { reason },
-  });
-}
 
-export async function approvePerformanceReview(
-  token: string,
-  periodAssignmentId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/reviews/${periodAssignmentId}/approve`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function invitePerformanceFeedback360(
-  token: string,
-  reviewId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/feedback-360/invitations`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function listPerformanceFeedback360(
-  token: string,
-  reviewId: string | number,
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/feedback-360`,
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function getPerformanceFeedback360Summary(
-  token: string,
-  reviewId: string | number,
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/reviews/${reviewId}/feedback-360/summary`,
-    { token },
-  );
-  return normalizeSingle(payload) ?? asRecord(payload);
-}
 
-export async function listPerformanceAppeals(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/appeals", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function getMyPerformanceSummary(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/me/summary", {
-    token,
-  });
-  return normalizeSingle(payload) ?? asRecord(payload);
-}
 
-function buildEmployeeKpiQuery(params: AdminRecord = {}) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      query.set(key, String(value));
-    }
-  });
-  const value = query.toString();
-  return value ? `?${value}` : "";
-}
 
-export async function listMyEmployeeKpis(
-  token: string,
-  params: AdminRecord = {},
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/me/kpis${buildEmployeeKpiQuery(params)}`,
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function listKpiCycleReviews(
-  token: string,
-  mode: "self" | "manager",
-  periodId?: string,
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/${mode === "self" ? "me" : "manager"}/kpi-reviews${periodId ? `?period_id=${encodeURIComponent(periodId)}` : ""}`,
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function listMyKpiCycleScores(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/kpi-scores",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function listMyPerformanceAggregates(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/aggregates",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function submitKpiCycleRating(
-  token: string,
-  mode: "self" | "manager",
-  kpiId: string,
-  kind: "MID" | "FINAL",
-  rating: number,
-  comment: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/${mode === "self" ? "me" : "manager"}/kpis/${kpiId}/reviews/${kind}/${mode === "self" ? "self" : "manager"}`,
-    { method: "POST", token, body: { rating, comment } },
-  );
-}
 
-export async function respondToKpiMidReview(
-  token: string,
-  kpiId: string,
-  decision: "ACKNOWLEDGE" | "DISPUTE",
-  comment: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/kpis/${kpiId}/reviews/mid/respond`,
-    { method: "POST", token, body: { decision, comment } },
-  );
-}
 
-export async function finalizeKpiCycleReview(
-  token: string,
-  kpiId: string,
-  comment: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/manager/kpis/${kpiId}/reviews/final/finalize`,
-    { method: "POST", token, body: { comment } },
-  );
-}
 
-export async function createMyEmployeeKpi(token: string, data: AdminRecord) {
-  return adminRequest<unknown>("/api/performance/me/kpis", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function updateMyEmployeeKpi(
-  token: string,
-  kpiId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
-}
 
-export async function deleteMyEmployeeKpi(
-  token: string,
-  kpiId: string | number,
-) {
-  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}`, {
-    method: "DELETE",
-    token,
-  });
-}
 
-export async function submitMyEmployeeKpis(
-  token: string,
-  periodId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/kpis/periods/${periodId}/submit`,
-    { method: "POST", token },
-  );
-}
 
-export async function updateMyEmployeeKpiActual(
-  token: string,
-  kpiId: string | number,
-  actualValue: number,
-) {
-  return adminRequest<unknown>(`/api/performance/me/kpis/${kpiId}/actual`, {
-    method: "PATCH",
-    token,
-    body: { actual_value: actualValue },
-  });
-}
 
-export async function listManagerEmployeeKpis(
-  token: string,
-  params: AdminRecord = {},
-) {
-  const payload = await adminRequest<unknown>(
-    `/api/performance/manager/kpis${buildEmployeeKpiQuery(params)}`,
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function createManagerEmployeeKpi(
-  token: string,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>("/api/performance/manager/kpis", {
-    method: "POST",
-    token,
-    body: data,
-  });
-}
 
-export async function listManagerKpiAssignees(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/manager/kpi-assignees",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function beginManagerEmployeeKpiReview(
-  token: string,
-  kpiId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/manager/kpis/${kpiId}/begin-review`,
-    { method: "POST", token },
-  );
-}
 
-export async function reviewManagerEmployeeKpi(
-  token: string,
-  kpiId: string | number,
-  decision: "APPROVE" | "RETURN" | "REJECT",
-  comment?: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/manager/kpis/${kpiId}/review`,
-    {
-      method: "POST",
-      token,
-      body: { decision, comment },
-    },
-  );
-}
 
-export async function listMyPerformanceAssignments(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/assignments",
-    {
-      token,
-    },
-  );
-  return normalizeList(payload);
-}
 
-export async function listMyPerformanceAchievements(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/achievements",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function updateMyPerformanceAchievement(
-  token: string,
-  id: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(`/api/performance/me/achievements/${id}`, {
-    method: "PATCH",
-    token,
-    body: data,
-  });
-}
 
-export async function listMyPerformanceReviews(token: string) {
-  const payload = await adminRequest<unknown>("/api/performance/me/reviews", {
-    token,
-  });
-  return normalizeList(payload);
-}
 
-export async function listMyPerformanceFeedback360(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/feedback-360",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function submitMyPerformanceSelfReview(
-  token: string,
-  periodAssignmentId: string | number,
-  review: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/reviews/${periodAssignmentId}/self-review`,
-    {
-      method: "POST",
-      token,
-      body: { review },
-    },
-  );
-}
 
-export async function submitMyPerformanceFeedback360(
-  token: string,
-  requestId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/feedback-360/${requestId}/submit`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function declineMyPerformanceFeedback360(
-  token: string,
-  requestId: string | number,
-  reason?: string,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/feedback-360/${requestId}/decline`,
-    {
-      method: "POST",
-      token,
-      body: { reason },
-    },
-  );
-}
 
-export async function submitMyPerformanceAppeal(
-  token: string,
-  reviewId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/reviews/${reviewId}/appeal`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function listMyPerformanceImprovementPlans(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/improvement-plans",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function listMyPerformanceDevelopmentPlans(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/me/development-plans",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
-export async function updateMyPerformanceDevelopmentGoal(
-  token: string,
-  goalId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/development-goals/${goalId}`,
-    {
-      method: "PATCH",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function acknowledgeMyPerformanceImprovementPlan(
-  token: string,
-  planId: string | number,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/me/improvement-plans/${planId}/acknowledge`,
-    { method: "POST", token },
-  );
-}
 
-export async function getManagerPerformanceSummary(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/manager/summary",
-    { token },
-  );
-  return normalizeSingle(payload) ?? asRecord(payload);
-}
 
-export async function listManagerTeamAchievements(token: string) {
-  const payload = await adminRequest<unknown>(
-    "/api/performance/manager/team-achievements",
-    { token },
-  );
-  return normalizeList(payload);
-}
 
 export async function createManagerActivityTask(
   token: string,
@@ -19706,35 +18698,7 @@ export async function listMyActivityCategories(token: string) {
   return normalizeList(payload);
 }
 
-export async function validateManagerAchievement(
-  token: string,
-  achievementId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/manager/achievements/${achievementId}/validate`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
-export async function submitManagerPerformanceReview(
-  token: string,
-  periodAssignmentId: string | number,
-  data: AdminRecord,
-) {
-  return adminRequest<unknown>(
-    `/api/performance/manager/reviews/${periodAssignmentId}/submit`,
-    {
-      method: "POST",
-      token,
-      body: data,
-    },
-  );
-}
 
 export async function getProbationDashboard(token: string) {
   const payload = await adminRequest<unknown>(
@@ -22274,7 +21238,6 @@ function looksLikeRoleDashboardRecord(record: AdminRecord) {
     "team",
     "attendance",
     "approvals",
-    "performance",
     "work_activities",
     "workActivities",
     "capabilities",
@@ -22353,16 +21316,6 @@ export async function getHrDocumentComplianceDetails(
 ) {
   return adminRequest<AdminRecord>(
     `/api/dashboards/hr/document-requirements/${requirementId}/details${buildRecordQuery(params)}`,
-    { token },
-  );
-}
-
-export async function getManagementPublishedScoreDetails(
-  token: string,
-  params: Record<string, string | number | undefined>,
-) {
-  return adminRequest<AdminRecord>(
-    `/api/dashboards/management/performance-details${buildRecordQuery(params)}`,
     { token },
   );
 }

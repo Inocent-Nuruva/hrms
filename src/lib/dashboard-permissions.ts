@@ -130,61 +130,6 @@ export const EMPLOYMENT_CONTRACT_READ_PERMISSION: PermissionRequirement = {
 export const EMPLOYMENT_CONTRACT_MANAGE_PERMISSION = "employment_contracts:manage"
 
 /**
- * HR Performance (`/dashboard/performance/*`).
- * Company dashboard actors can see the HR performance overview/setup shell; deeper
- * workflows still use their feature-specific grants.
- */
-const PERFORMANCE_MODULE_WIDE = [
-  "performance:read",
-  "performance:create",
-  "performance:update",
-  "manage_performance",
-  "view_performance",
-]
-
-export const PERFORMANCE_ROUTE_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...PERFORMANCE_MODULE_WIDE,
-    "performance_years:read",
-    "performance_periods:read",
-    "performance_kpis:read",
-    "performance_plans:read",
-    "performance_reviews:read",
-    "performance_improvement_plans:read",
-  ],
-  mode: "any",
-}
-
-export const PERFORMANCE_SETUP_PERMISSION: PermissionRequirement = {
-  permissions: [
-    ...PERFORMANCE_MODULE_WIDE,
-    "performance_years:read",
-    "performance_periods:read",
-    "performance_kpis:read",
-    "performance_templates:read",
-    "kpi_templates:read",
-    "performance_rating_scales:read",
-    "kpi_rules:read",
-  ],
-  mode: "any",
-}
-
-export const PERFORMANCE_PLANS_PERMISSION: PermissionRequirement = {
-  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_plans:read"],
-  mode: "any",
-}
-
-export const PERFORMANCE_REVIEWS_PERMISSION: PermissionRequirement = {
-  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_reviews:read", "performance_appeals:read"],
-  mode: "any",
-}
-
-export const PERFORMANCE_IMPROVEMENT_PERMISSION: PermissionRequirement = {
-  permissions: [...PERFORMANCE_MODULE_WIDE, "performance_improvement_plans:read"],
-  mode: "any",
-}
-
-/**
  * HR Probation (`/dashboard/probation/*`).
  * Company dashboard access is not enough — /api/probation/* is its own grant.
  */
@@ -770,7 +715,6 @@ export const ATTENDANCE_REPORTS_ROUTE_PERMISSION: PermissionRequirement = {
     "leave_reports.view",
     "field_reports.view",
     "activity_reports.view",
-    "performance_reports.view",
     "payroll_reports.view",
     "loan_reports.view",
     "analytics:reports",
@@ -842,8 +786,6 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
   "/dashboard/leave-management/types",
   "/dashboard/leave-management/policies",
   "/dashboard/leave-management/workflows",
-  // Do not use /dashboard/performance/overview here. Employees may have
-  // performance:read for self-service and must keep the My * shell.
   "/dashboard/probation/overview",
   "/dashboard/field/overview",
   "/dashboard/finance/overview",
@@ -865,7 +807,6 @@ const ADMIN_DASHBOARD_LANDING_ROUTES = [
 const DASHBOARD_ROUTE_SHELLS: Record<string, DashboardAccessMode> = {
   // This is the admin-shell overview surface, not a generic feature route.
   "/dashboard/company-overview": "admin",
-  "/dashboard/performance": "admin",
   "/dashboard/probation": "admin",
 }
 
@@ -988,24 +929,15 @@ const ATTENDANCE_ROUTE_PERMISSIONS: PermissionRequirement = {
 }
 
 export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement | null> = {
+  "/dashboard/me/kpi": null,
+  "/dashboard/me/scorecards": null,
+  "/dashboard/me/evaluations": null,
+  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read"], mode: "any" },
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
   "/dashboard/me/payroll": null,
   "/dashboard/me/finance/payroll": null,
-  "/dashboard/me/performance": null,
-  "/dashboard/me/performance/overview": null,
-  "/dashboard/me/performance/kpis": null,
-  "/dashboard/me/performance/assignments": null,
-  "/dashboard/me/performance/assign-tasks": {
-    permissions: ["work_activities:manager:review"],
-    mode: "any",
-  },
-  "/dashboard/me/performance/reviews": null,
-  "/dashboard/me/performance/achievements": null,
-  "/dashboard/me/performance/improvement": null,
-  "/dashboard/me/performance/team": MANAGER_ROUTE_PERMISSION,
-  "/dashboard/me/performance/manager-kpis": MANAGER_ROUTE_PERMISSION,
   "/dashboard/me/probation": null,
   "/dashboard/me/field": null,
   "/dashboard/me/field/visits": null,
@@ -1210,22 +1142,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/operations/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
   "/dashboard/operations/scheduled-reporting": SCHEDULED_REPORTING_ROUTE_PERMISSION,
   "/dashboard/operations/notifications": NOTIFICATIONS_ADMIN_ROUTE_PERMISSION,
-  "/dashboard/performance": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/overview": PERFORMANCE_ROUTE_PERMISSION,
-  "/dashboard/performance/setup": PERFORMANCE_SETUP_PERMISSION,
-  "/dashboard/performance/plans": PERFORMANCE_PLANS_PERMISSION,
-  "/dashboard/performance/reviews": PERFORMANCE_REVIEWS_PERMISSION,
-  "/dashboard/performance/improvement": PERFORMANCE_IMPROVEMENT_PERMISSION,
-  // HR-only: managers also hold performance_development_plans:read for their
-  // team view, so require HR plan access too.
-  "/dashboard/performance/development": {
-    permissions: ["performance_plans:read", "performance_development_plans:read"],
-    mode: "all",
-  },
-  "/dashboard/performance/calibration": {
-    permissions: [...PERFORMANCE_MODULE_WIDE, "performance_calibration:read"],
-    mode: "any",
-  },
+
   "/dashboard/probation": PROBATION_SECTION_PERMISSION,
   "/dashboard/probation/overview": PROBATION_ROUTE_PERMISSION,
   "/dashboard/probation/policies": PROBATION_POLICIES_PERMISSION,
@@ -1842,36 +1759,6 @@ function hasPrefixedAccess(
   })
 }
 
-export function hasPerformanceAccess(permissionLabels: string[]) {
-  return hasPrefixedAccess(permissionLabels, PERFORMANCE_ROUTE_PERMISSION, [
-    "performance",
-    "view_performance",
-    "manage_performance",
-  ])
-}
-
-/** HR performance admin grants — not the generic performance:read employees may hold. */
-const PERFORMANCE_ADMIN_SHELL_PERMISSION: PermissionRequirement = {
-  permissions: [
-    "performance:create",
-    "performance:update",
-    "manage_performance",
-    "performance_years:read",
-    "performance_periods:read",
-    "performance_kpis:read",
-    "performance_templates:read",
-    "performance_plans:read",
-    "performance_reviews:read",
-    "performance_improvement_plans:read",
-    "performance_appeals:read",
-  ],
-  mode: "any",
-}
-
-function hasHrPerformanceAdminAccess(permissionLabels: string[]) {
-  return hasPermission(permissionLabels, PERFORMANCE_ADMIN_SHELL_PERMISSION)
-}
-
 export function hasProbationAccess(permissionLabels: string[]) {
   return hasPrefixedAccess(permissionLabels, PROBATION_ROUTE_PERMISSION, [
     "probation",
@@ -2022,13 +1909,7 @@ export function canAccessDashboardRoute(
 
   const requiredShell = resolveDashboardRouteShellRequirement(path)
   if (requiredShell && accessMode && accessMode !== requiredShell) {
-    const canRecoverStalePerformanceShell =
-      requiredShell === "admin" &&
-      path.startsWith("/dashboard/performance") &&
-      canViewCompanyDashboard(permissionLabels)
-    if (!canRecoverStalePerformanceShell) {
-      return false
-    }
+    return false
   }
 
   if (path === "/dashboard/sms/platform" || path.startsWith("/dashboard/sms/platform/")) {
@@ -2063,7 +1944,6 @@ export function hasAdminDashboardAccess(permissionLabels: string[]) {
   }
   if (
     hasPayrollAccess(permissionLabels) ||
-    hasHrPerformanceAdminAccess(permissionLabels) ||
     hasProbationAccess(permissionLabels) ||
     hasFieldAccess(permissionLabels) ||
     hasFinanceAccess(permissionLabels) ||

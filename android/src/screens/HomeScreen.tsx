@@ -210,7 +210,6 @@ export function HomeScreen({ auth, onTabChange }: Props) {
     { label: 'My attendance', short: 'Attendance', icon: 'attendance' as const, onPress: () => onTabChange?.('attendance') },
     { label: 'Request leave', short: 'Leave', icon: 'leave' as const, onPress: () => onTabChange?.('leave') },
     { label: 'My payroll', short: 'Payroll', icon: 'payroll' as const, onPress: () => router.push('/payroll') },
-    { label: 'My performance', short: 'Goals', icon: 'performance' as const, onPress: () => router.push('/performance') },
   ];
 
   return (

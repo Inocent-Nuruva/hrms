@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { Badge, Button, Card, CardHeader, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, MessageBar, MessageBarBody, ProgressBar, Spinner, Text, Tooltip } from "@fluentui/react-components"
+import { Avatar, Badge, Button, Card, CardHeader, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, MessageBar, MessageBarBody, ProgressBar, Spinner, Text, Tooltip } from "@fluentui/react-components"
 import { ArrowClockwise20Regular, CheckmarkCircle20Regular, Clock20Regular, ArrowRight20Regular, Info20Regular } from "@fluentui/react-icons"
-import { getOnboardingReadiness, type OnboardingReadiness, type OnboardingReadinessRequirement } from "@/lib/admin-api"
+import { extractProfilePhotoUrl, getOnboardingReadiness, type AdminRecord, type OnboardingReadiness, type OnboardingReadinessRequirement } from "@/lib/admin-api"
+import { personDisplayName } from "@/lib/onboarding-activity-labels"
 
 function requirementGuidance(requirement: OnboardingReadinessRequirement) {
   if (requirement.id === "bank account") return "Open payroll setup, review the employee bank details, select the verified account, and save the payroll profile."
@@ -13,17 +14,22 @@ function requirementGuidance(requirement: OnboardingReadinessRequirement) {
   return requirement.actionable ? "Ready for the assigned owner to act." : "Open the relevant workspace to complete this requirement."
 }
 
-function requirementActionLabel(requirement: OnboardingReadinessRequirement) {
+export function requirementActionLabel(requirement: OnboardingReadinessRequirement) {
   if (requirement.id === "bank account") return "Open payroll setup"
   if (requirement.id === "independently approved starting salary") return "Open salary approvals"
   if (requirement.id === "signed employment contract") return "Manage contract"
-  return "Open requirement"
+  if (requirement.action === "details") return "Open employee details"
+  if (requirement.action === "tasks") return "Open tasks"
+  if (requirement.action === "approvals") return "Open approvals"
+  if (requirement.action === "payroll") return "Open payroll"
+  return "Open contracts"
 }
 
-export function OnboardingReadinessOverview({ token, requestId, employeeName, canActivate, canViewPayroll = false, canViewContracts = false, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
+export function OnboardingReadinessOverview({ token, requestId, employeeName, ownerDirectory = [], canActivate, canViewPayroll = false, canViewContracts = false, saving, onActivate, onNavigate, refreshKey, onDiscuss, summaryTargetId }: {
   token: string
   requestId: number
   employeeName: string
+  ownerDirectory?: AdminRecord[]
   canActivate: boolean
   canViewPayroll?: boolean
   canViewContracts?: boolean
@@ -38,7 +44,6 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [revision, setRevision] = React.useState(0)
-  const [showCompleted, setShowCompleted] = React.useState(false)
   const [confirming, setConfirming] = React.useState(false)
   React.useEffect(() => {
     let cancelled = false
@@ -82,10 +87,11 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
   const completed = visibleRequirements.filter(complete)
   const visibleRequired = visibleRequirements.filter((item) => item.required)
   const visibleCompletedRequired = visibleRequired.filter(complete).length
-  const groups = new Map<string, OnboardingReadinessRequirement[]>()
-  for (const requirement of outstanding) {
-    const key = `${requirement.owner} · ${requirement.action === "payroll" ? "Payroll & salary" : requirement.group}`
-    groups.set(key, [...(groups.get(key) ?? []), requirement])
+  const ownerPhotos = new Map<string, string | null>()
+  for (const user of ownerDirectory) {
+    const name = personDisplayName(user).trim().toLocaleLowerCase()
+    if (!name) continue
+    ownerPhotos.set(name, ownerPhotos.has(name) ? null : extractProfilePhotoUrl(user))
   }
   const stages = [
     { label: "Registration & review", actions: ["details"] },
@@ -106,9 +112,9 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
   </div> : null
   const summaryTarget = summaryTargetId && typeof document !== "undefined" ? document.getElementById(summaryTargetId) : null
   return (
-    <section aria-label={`Activation overview · ${employeeName}`} className="flex min-w-0 flex-col gap-5">
+    <section aria-label={`Activation overview · ${employeeName}`} className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Activation overview · {employeeName}</h2>
+        <div><h2 className="text-lg font-semibold">Onboarding progress</h2><p className="text-sm text-muted-foreground">Review the remaining steps to activate this employee.</p></div>
         <Tooltip relationship="label" content="Refresh readiness">
           <Button
             appearance="subtle"
@@ -120,7 +126,8 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
         </Tooltip>
       </div>
       {error ? <MessageBar intent="error"><MessageBarBody><strong>Readiness unavailable</strong><p>{error} Activation is disabled until a fresh check succeeds.</p></MessageBarBody></MessageBar> : !readiness ? <Spinner label="Checking activation requirements…" /> : <>
-        <div className="grid overflow-hidden rounded-xl border border-border/80 bg-background shadow-sm sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-border/70" aria-label="Onboarding stages">
+        {summaryTarget ? createPortal(summary, summaryTarget) : summary}
+        <div className="grid overflow-hidden rounded-xl border border-border/80 bg-background sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-border/70" aria-label="Onboarding stages">
           {stages.map((stage) => {
             const items = visibleRequirements.filter((item) => item.required && stage.actions.includes(item.action))
             const remaining = items.filter((item) => !complete(item))
@@ -128,7 +135,7 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
             const stageStatus = !items.length ? "No checks" : stageComplete ? "Complete" : `${remaining.length} left`
             return <div
               key={stage.label}
-              className="group flex min-w-0 items-center gap-3 border-b border-border/70 px-3 py-2.5 transition-colors last:border-b-0 hover:bg-muted/30 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0"
+              className="flex min-w-0 items-center gap-2.5 border-b border-border/70 px-3 py-3 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 lg:border-b-0"
             >
               <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${stageComplete ? "bg-emerald-50 text-emerald-700" : remaining.length ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground"}`} aria-hidden="true">
                 {stageComplete ? <CheckmarkCircle20Regular /> : <Clock20Regular />}
@@ -140,32 +147,41 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ca
                   {items.length ? <span className="text-xs text-muted-foreground">{items.length - remaining.length}/{items.length}</span> : null}
                 </div>
               </div>
-              <span className={`size-1.5 shrink-0 rounded-full ${stageComplete ? "bg-emerald-500" : remaining.length ? "bg-amber-500" : "bg-muted-foreground/40"}`} aria-hidden="true" />
             </div>
           })}
         </div>
         {readiness.activation_failure && !readiness.closed ? <MessageBar intent="error"><MessageBarBody><strong>Activation failed</strong><p>The last activation attempt{readiness.activation_failure.failed_at ? ` on ${new Date(readiness.activation_failure.failed_at).toLocaleString()}` : ""} was rolled back: {readiness.activation_failure.message}</p><p>Nothing was applied. Fix the cause, then activate again.</p></MessageBarBody></MessageBar> : null}
         {summaryTarget ? createPortal(summary, summaryTarget) : summary}
+
         <div className="min-w-0">
           <div className="flex min-w-0 flex-col gap-4">
             {readiness.closed ? <MessageBar intent={readiness.request_status === "completed" ? "success" : "info"}><MessageBarBody><strong>{title}</strong><p>Employee status: {readiness.employee_status?.replaceAll("_", " ")}.</p><Button onClick={() => onNavigate("details", "employee-profile")}>Open employee profile</Button></MessageBarBody></MessageBar> : null}
-            {!readiness.closed ? <div className="grid items-start gap-3 2xl:grid-cols-2">{Array.from(groups, ([group, requirements]) => <section key={group} className="min-w-0 overflow-hidden rounded-lg border border-border/80 bg-background shadow-sm">
-              <header className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-3 py-2">
-                <h3 className="min-w-0 truncate text-sm font-semibold">{group}</h3>
-                <Badge appearance="tint" color="warning" size="small">{requirements.length} open</Badge>
+            {!readiness.closed ? <section className="min-w-0 rounded-xl border border-border/80 bg-background">
+              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-3 py-2">
+                <h3 className="text-sm font-semibold">Next steps</h3><p className="text-xs text-muted-foreground">{outstanding.length ? `${outstanding.length} required action${outstanding.length === 1 ? "" : "s"} remaining` : "All required actions complete"}</p>
               </header>
-              <ul className="divide-y divide-border/70">{requirements.map((requirement) => <li key={requirement.id} className="min-w-0 px-3 py-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-                  <div className="mr-auto min-w-40 flex-1"><p className="truncate text-sm font-semibold leading-5">{requirement.label}</p><span className="sr-only">Responsible: {requirement.owner}</span>{requirement.due_date ? <p className="text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</p> : null}</div>
-                  <Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge>
-                  <Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button>
-                  <Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`}>Details</Button></Tooltip>
-                  {onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}
-                </div>
-              </li>)}</ul>
-            </section>)}</div> : null}
-            <Button appearance="subtle" aria-expanded={showCompleted} onClick={() => setShowCompleted((value) => !value)}>{showCompleted ? "Hide completed requirements" : `Show completed requirements (${completed.length})`}</Button>
-            {showCompleted ? <Card><ul className="flex flex-col gap-3">{completed.map((item) => <li key={item.id}><Text weight="semibold">✓ {item.label}</Text><p className="text-sm text-muted-foreground">{item.owner} · {item.status === "skipped" ? "Not applicable" : "Complete"}</p></li>)}</ul></Card> : null}
+              <div className="max-w-full overflow-x-auto rounded-b-xl">
+                <table className="w-full min-w-[850px] border-collapse text-left text-sm">
+                  <caption className="sr-only">All required onboarding steps and their responsible owners</caption>
+                  <thead className="bg-muted/40 text-xs text-muted-foreground"><tr>
+                    <th scope="col" className="w-[37%] px-3 py-2 font-semibold">Requirement</th>
+                    <th scope="col" className="w-[21%] px-2 py-2 font-semibold">Responsible</th>
+                    <th scope="col" className="w-[12%] px-2 py-2 font-semibold">Status</th>
+                    <th scope="col" className="px-3 py-2 text-right font-semibold">Actions</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-border/70">{outstanding.map((requirement) => <tr key={requirement.id} className="hover:bg-muted/20">
+                    <th scope="row" className="px-3 py-1.5 text-left font-normal"><span className="font-medium">{requirement.label}</span>{requirement.due_date ? <span className="block text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</span> : null}</th>
+                    <td className="px-2 py-1.5"><div className="flex items-center gap-2"><Avatar size={24} name={requirement.owner} image={ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase()) ? { src: ownerPhotos.get(requirement.owner.trim().toLocaleLowerCase())! } : undefined} /><span className="min-w-0 truncate" title={requirement.owner}>{requirement.owner}</span></div></td>
+                    <td className="px-2 py-1.5"><Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge></td>
+                    <td className="px-3 py-1.5"><div className="flex items-center justify-end gap-0.5 whitespace-nowrap"><Button appearance="primary" size="small" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button><Tooltip relationship="description" content={requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label={`More information about ${requirement.label}`} /></Tooltip>{onDiscuss ? <Button appearance="subtle" size="small" onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}</div></td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            </section> : null}
+            {completed.length ? <section aria-label="Completed onboarding steps" className="rounded-xl border border-border/70 bg-muted/15 px-4 py-3">
+              <h3 className="text-sm font-semibold">Completed <span className="font-normal text-muted-foreground">({completed.length})</span></h3>
+              <ul className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">{completed.map((item) => <li key={item.id} className="flex min-w-0 items-start gap-2 text-sm"><CheckmarkCircle20Regular className="mt-0.5 shrink-0 text-emerald-600" aria-hidden="true" /><span className="min-w-0"><span className="block font-medium">{item.label}</span><span className="text-xs text-muted-foreground">{item.owner} · {item.status === "skipped" ? "Not applicable" : "Complete"}</span></span></li>)}</ul>
+            </section> : null}
             {optional.length ? <Card><CardHeader header={<Text weight="semibold">Optional work still open</Text>} description="These items do not block activation." />{optional.map((item) => <Button key={item.id} onClick={() => onNavigate(item.action, item.id)}>{item.label} · {item.owner}</Button>)}</Card> : null}
           </div>
         </div>

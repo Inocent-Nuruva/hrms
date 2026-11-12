@@ -43,7 +43,6 @@ import {
   getHrDocumentComplianceDetails,
   getHrDashboard,
   getManagerDashboard,
-  getManagementPublishedScoreDetails,
   getHrLaunchReadiness,
   getHrLaunchReadinessEmployees,
   getSystemHealth,
@@ -960,52 +959,6 @@ function DashboardMetricPanels({
   canManageDocumentRequirements: boolean;
   onRefreshDashboard: () => void;
 }) {
-  const [scoreDetails, setScoreDetails] = React.useState<AdminRecord | null>(
-    null,
-  );
-  const [scoreDetailsLoading, setScoreDetailsLoading] = React.useState(false);
-  const [scoreDetailsPage, setScoreDetailsPage] = React.useState(1);
-  const [scoreDetailsFilters, setScoreDetailsFilters] = React.useState<
-    Record<string, string | number>
-  >({});
-  const scoreDetailRecord = asRecord(scoreDetails);
-  const scoreDetailItems = asRecordArray(scoreDetailRecord?.items);
-  const scoreDetailPagination = asRecord(scoreDetailRecord?.pagination);
-  const loadScoreDetails = async (
-    page: number,
-    filters: Record<string, string | number> = scoreDetailsFilters,
-  ) => {
-    const token = readStoredToken();
-    if (!token || !dateFrom || !dateTo) return;
-    setScoreDetailsLoading(true);
-    try {
-      const result = await getManagementPublishedScoreDetails(token, {
-        date_from: dateFrom,
-        date_to: dateTo,
-        period_type: "MONTHLY",
-        page,
-        limit: 20,
-        ...filters,
-        ...(employeeIdFilter ? { employee_id: Number(employeeIdFilter) } : {}),
-      });
-      setScoreDetails(result);
-      setScoreDetailsPage(page);
-      setScoreDetailsFilters(filters);
-    } catch (detailsError) {
-      toast.error(
-        detailsError instanceof Error
-          ? detailsError.message
-          : "Could not load published score details.",
-      );
-    } finally {
-      setScoreDetailsLoading(false);
-    }
-  };
-  React.useEffect(() => {
-    setScoreDetails(null);
-    setScoreDetailsPage(1);
-    setScoreDetailsFilters({});
-  }, [dateFrom, dateTo, employeeIdFilter]);
   if (!dashboard) return null;
   const sections =
     activeTab === "hr"
@@ -1030,7 +983,6 @@ function DashboardMetricPanels({
             ["Leave", dashboard.leave],
             ["Workflow pipeline", dashboard.workflow_pipeline],
             ["Action inbox assigned to you", dashboard.action_inbox],
-            ["Performance summary", dashboard.performance],
             ["Field and work activity", dashboard.work_activities],
             ["Payroll", dashboard.payroll],
             ["Staff loans", dashboard.employee_finance],
@@ -1041,18 +993,11 @@ function DashboardMetricPanels({
               ["Attendance", dashboard.attendance],
               ["Leave", dashboard.leave],
               ["Activity and field productivity", dashboard.activities],
-              ["Performance and KPI", dashboard.performance],
               ["Actionable approvals", dashboard.approvals],
               ["Risk indicators", dashboard.risk_indicators],
             ] as Array<[string, unknown]>)
           : [];
   const unavailable = asRecordArray(dashboard.unavailable_widgets);
-  const topPerformers = asRecordArray(dashboard.top_performers);
-  const scoreDistribution = asRecord(dashboard.monthly_score_distribution);
-  const scorePeriods = asRecordArray(scoreDistribution?.periods);
-  const scoresUnavailable = unavailable.some(
-    (item) => readString(item, ["code"]) === "PERFORMANCE_SCORES",
-  );
   const fieldUnavailable = unavailable.filter(
     (item) => readBoolean(item, ["available"]) === false,
   );
@@ -1156,266 +1101,6 @@ function DashboardMetricPanels({
             valueKeys={["headcount"]}
           />
         </>
-      ) : null}
-      {topPerformers.length ? (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">
-            Published top performers
-          </h2>
-          <div className="mt-3 divide-y divide-border/60">
-            {topPerformers.map((row, index) => (
-              <div
-                key={`${readString(row, ["employee_id"], String(index))}-${index}`}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2 text-sm"
-              >
-                <span className="text-xs text-muted-foreground">
-                  #{readNumber(row, ["rank"]) ?? index + 1}
-                </span>
-                <span className="truncate text-foreground">
-                  {readString(row, ["full_name", "employee_name"], "Employee")}
-                </span>
-                <span className="tabular-nums font-semibold text-foreground">
-                  {readNumber(row, ["final_score", "score"]) ?? "—"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {activeTab === "management" ? (
-        <section
-          className="rounded-xl border border-border bg-card p-4"
-          aria-label="Published monthly score distribution"
-        >
-          <h2 className="text-sm font-semibold text-foreground">
-            Published monthly score distribution
-          </h2>
-          {scoresUnavailable ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              You do not have permission to view published performance scores.
-            </p>
-          ) : scorePeriods.length ? (
-            <div className="mt-3 space-y-4">
-              <button
-                className={`${secondaryButtonClass} text-xs`}
-                type="button"
-                disabled={scoreDetailsLoading}
-                onClick={() => void loadScoreDetails(1, {})}
-              >
-                {scoreDetailsLoading
-                  ? "Loading score details…"
-                  : "View published score records"}
-              </button>
-              <p className="text-xs text-muted-foreground">
-                {readNumber(scoreDistribution, [
-                  "low_performer_employee_count",
-                ]) ?? 0}{" "}
-                distinct employees fall in configured improvement-plan bands.
-              </p>
-              {scorePeriods.map((period, index) => {
-                const bands = asRecordArray(period.bands);
-                return (
-                  <div
-                    key={`${readString(period, ["period_id"], String(index))}`}
-                    className="rounded-lg border border-border/60 p-3"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="text-sm font-medium text-foreground">
-                        {readString(period, ["period_name"], "Monthly period")}
-                      </h3>
-                      <span className="text-xs text-muted-foreground">
-                        {readNumber(period, ["published_review_count"]) ?? 0}{" "}
-                        published ·{" "}
-                        {readNumber(period, ["scored_review_count"]) ?? 0}{" "}
-                        scored ·{" "}
-                        {readNumber(period, ["unscored_review_count"]) ?? 0}{" "}
-                        unscored
-                      </span>
-                    </div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {bands.map((band) => (
-                        <div
-                          key={`${readString(band, ["band_id"])}-${readString(period, ["period_id"])}`}
-                          className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-3 py-2 text-xs"
-                        >
-                          <span className="truncate text-foreground">
-                            {readString(
-                              band,
-                              ["label"],
-                              readString(band, ["code"], "Configured band"),
-                            )}
-                            {readBoolean(band, ["requires_improvement_plan"])
-                              ? " · improvement plan"
-                              : ""}
-                          </span>
-                          <span className="shrink-0 tabular-nums font-semibold text-foreground">
-                            {readNumber(band, ["scored_review_count"]) ?? 0}
-                          </span>
-                          <button
-                            className="underline underline-offset-2"
-                            type="button"
-                            disabled={scoreDetailsLoading}
-                            onClick={() =>
-                              void loadScoreDetails(1, {
-                                period_id:
-                                  readNumber(period, ["period_id"]) ?? 0,
-                                rating_band_id:
-                                  readNumber(band, ["band_id"]) ?? 0,
-                                score_state: "scored",
-                              })
-                            }
-                          >
-                            View
-                          </button>
-                        </div>
-                      ))}
-                      {(readNumber(period, ["unbanded_scored_review_count"]) ??
-                        0) > 0 ? (
-                        <div className="flex justify-between gap-3 rounded-md bg-amber-50/70 px-3 py-2 text-xs dark:bg-amber-950/20">
-                          <span className="text-foreground">
-                            Scored without a configured band
-                          </span>
-                          <span className="shrink-0 tabular-nums font-semibold text-foreground">
-                            {readNumber(period, [
-                              "unbanded_scored_review_count",
-                            ])}
-                          </span>
-                          <button
-                            className="underline underline-offset-2"
-                            type="button"
-                            disabled={scoreDetailsLoading}
-                            onClick={() =>
-                              void loadScoreDetails(1, {
-                                period_id:
-                                  readNumber(period, ["period_id"]) ?? 0,
-                                rating_band_id: 0,
-                                score_state: "scored",
-                              })
-                            }
-                          >
-                            View
-                          </button>
-                        </div>
-                      ) : null}
-                      {(readNumber(period, ["unscored_review_count"]) ?? 0) >
-                      0 ? (
-                        <div className="flex justify-between gap-3 rounded-md bg-muted/30 px-3 py-2 text-xs">
-                          <span>Unscored published reviews</span>
-                          <span className="tabular-nums font-semibold">
-                            {readNumber(period, ["unscored_review_count"])}
-                          </span>
-                          <button
-                            className="underline underline-offset-2"
-                            type="button"
-                            disabled={scoreDetailsLoading}
-                            onClick={() =>
-                              void loadScoreDetails(1, {
-                                period_id:
-                                  readNumber(period, ["period_id"]) ?? 0,
-                                score_state: "unscored",
-                              })
-                            }
-                          >
-                            View
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No published monthly scores are available for this period.
-            </p>
-          )}
-          {scoreDetails ? (
-            <div className="mt-4 border-t border-border/60 pt-3">
-              <p className="mb-2 text-xs text-muted-foreground">
-                Published monthly records for {dateFrom} to {dateTo}, using the
-                same company, employee, branch and department scope as the
-                summary.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-border/60 text-muted-foreground">
-                      <th className="px-2 py-2">Employee</th>
-                      <th className="px-2 py-2">Period</th>
-                      <th className="px-2 py-2">Score</th>
-                      <th className="px-2 py-2">Rating</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scoreDetailItems.map((row, index) => (
-                      <tr
-                        className="border-b border-border/40"
-                        key={readString(row, ["review_id"], String(index))}
-                      >
-                        <td className="px-2 py-2">
-                          {readString(row, ["employee_name"], "Employee")}
-                          <span className="ml-1 text-muted-foreground">
-                            {readString(row, ["employee_no"])}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2">
-                          {readString(row, ["period_name"])}
-                        </td>
-                        <td className="px-2 py-2 tabular-nums">
-                          {readNumber(row, ["final_score"]) ?? "—"}
-                        </td>
-                        <td className="px-2 py-2">
-                          {readString(row, ["rating_code"], "Unrated")}
-                        </td>
-                      </tr>
-                    ))}
-                    {scoreDetailItems.length === 0 ? (
-                      <tr>
-                        <td
-                          className="px-2 py-3 text-muted-foreground"
-                          colSpan={4}
-                        >
-                          No matching published score records.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <span className="text-xs text-muted-foreground">
-                  Page {scoreDetailsPage} of{" "}
-                  {readNumber(scoreDetailPagination, ["total_pages"]) ?? 0} ·{" "}
-                  {readNumber(scoreDetailPagination, ["total"]) ?? 0} records
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    className={secondaryButtonClass}
-                    type="button"
-                    disabled={scoreDetailsLoading || scoreDetailsPage <= 1}
-                    onClick={() => void loadScoreDetails(scoreDetailsPage - 1)}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    className={secondaryButtonClass}
-                    type="button"
-                    disabled={
-                      scoreDetailsLoading ||
-                      scoreDetailsPage >=
-                        (readNumber(scoreDetailPagination, ["total_pages"]) ??
-                          0)
-                    }
-                    onClick={() => void loadScoreDetails(scoreDetailsPage + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </section>
       ) : null}
       {activeTab === "sales-field" ? (
         <>
@@ -1857,275 +1542,16 @@ function ManagerStatList({
 
 function ScopedInsightPanels({ dashboard }: { dashboard: AdminRecord | null }) {
   const attendance = asRecord(dashboard?.attendance) ?? dashboard;
-  const performance = asRecord(dashboard?.performance) ?? dashboard;
-  const present =
-    readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0;
-  const late =
-    readNumber(attendance, ["late", "late_arrivals", "lateArrivals"]) ?? 0;
-  const absent =
-    readNumber(attendance, ["absent", "absent_today", "absentToday"]) ?? 0;
-  const attendanceTotal = Math.max(1, present + late + absent);
-  const attendanceRate =
-    Math.round(((present + late) / attendanceTotal) * 1000) / 10;
-  const published =
-    readNumber(performance, [
-      "published_team_reviews",
-      "publishedTeamReviews",
-      "published_reviews",
-    ]) ?? 0;
-  const pending =
-    readNumber(performance, [
-      "pending_team_validations",
-      "pendingTeamValidations",
-      "pending_validations",
-    ]) ?? 0;
-  const approved =
-    readNumber(performance, [
-      "approved_reports",
-      "approvedReports",
-      "approved_daily_reports",
-    ]) ?? 0;
-  const rawScore = readNumber(performance, [
-    "average_score",
-    "averageScore",
-    "performance_score",
-    "performanceScore",
-  ]);
-  const performanceScore =
-    rawScore !== null ? Math.round(rawScore * 10) / 10 : null;
-  const attendanceBars = [
-    { label: "On time", value: present, color: "bg-emerald-500" },
-    { label: "Late", value: late, color: "bg-amber-300" },
-    { label: "Absent", value: absent, color: "bg-rose-300" },
-  ];
-  const performanceBars = [
-    { label: "Reviews", value: published },
-    { label: "Pending", value: pending },
-    { label: "Approved", value: approved },
-  ];
-  const attendanceMax = Math.max(
-    1,
-    ...attendanceBars.map((item) => item.value),
-  );
-  const performanceMax = Math.max(
-    1,
-    ...performanceBars.map((item) => item.value),
-  );
-
+  const present = readNumber(attendance, ["present", "present_today", "presentToday"]) ?? 0;
+  const late = readNumber(attendance, ["late", "late_arrivals", "lateArrivals"]) ?? 0;
+  const absent = readNumber(attendance, ["absent", "absent_today", "absentToday"]) ?? 0;
+  const total = Math.max(1, present + late + absent);
+  const rate = Math.round(((present + late) / total) * 1000) / 10;
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Attendance report
-            </h2>
-            <div className="mt-3 flex items-end gap-2">
-              <span className="text-3xl font-semibold leading-none tabular-nums text-foreground">
-                {attendanceRate}%
-              </span>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-                Attendance rate
-              </span>
-            </div>
-          </div>
-          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">
-            Selected period
-          </span>
-        </div>
-        <div className="mt-6 flex h-40 items-end justify-around gap-6 border-b border-border/60 px-4 pb-2">
-          {attendanceBars.map((item) => (
-            <div
-              key={item.label}
-              className="flex h-full min-w-16 flex-1 flex-col items-center justify-end gap-2"
-            >
-              <span className="text-xs font-semibold tabular-nums text-foreground">
-                {item.value}
-              </span>
-              <span
-                className={cn("w-full max-w-16 rounded-t-md", item.color)}
-                style={{
-                  height: `${Math.max(8, (item.value / attendanceMax) * 75)}%`,
-                }}
-              />
-              <span className="text-[10px] text-muted-foreground">
-                {item.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Team performance
-            </h2>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              Reviews and approved work
-            </p>
-          </div>
-          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">
-            This period
-          </span>
-        </div>
-        <p className="mt-5 text-3xl font-semibold leading-none tabular-nums text-foreground">
-          {performanceScore === null ? "—" : performanceScore}
-        </p>
-        <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">
-          Published score average
-        </p>
-        <div className="mt-5 flex h-28 items-end justify-around gap-3 border-b border-border/60 pb-2">
-          {performanceBars.map((item) => (
-            <div
-              key={item.label}
-              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"
-            >
-              <div className="flex h-20 items-end gap-1">
-                <span
-                  className="w-3 rounded-t bg-emerald-500/20"
-                  style={{
-                    height: `${Math.max(10, (item.value / performanceMax) * 65)}%`,
-                  }}
-                />
-                <span
-                  className="w-3 rounded-t bg-emerald-500"
-                  style={{
-                    height: `${Math.max(14, (item.value / performanceMax) * 100)}%`,
-                  }}
-                />
-              </div>
-              <span className="truncate text-[9px] text-muted-foreground">
-                {item.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function PublishedPerformanceAggregatePanels({
-  dashboard,
-}: {
-  dashboard: AdminRecord | null;
-}) {
-  const aggregates = asRecord(dashboard?.published_performance_aggregates);
-  const quarterly = asRecordArray(aggregates?.quarterly_trend);
-  const annual = asRecordArray(aggregates?.annual_average_by_year);
-  const quarterlyPublishedAt = readString(aggregates, [
-    "quarterly_latest_published_at",
-  ]);
-  const annualPublishedAt = readString(aggregates, [
-    "annual_latest_published_at",
-  ]);
-  const unavailable = asRecordArray(dashboard?.unavailable_widgets).some(
-    (item) => readString(item, ["code"]) === "PERFORMANCE_TRENDS",
-  );
-
-  const renderRows = (rows: AdminRecord[]) => {
-    const maxScore = Math.max(
-      0,
-      ...rows.map((row) => readNumber(row, ["average_score"]) ?? 0),
-    );
-    return rows.map((row, index) => {
-      const score = readNumber(row, ["average_score"]);
-      const count = readNumber(row, ["published_employee_count"]);
-      const relativeWidth =
-        score !== null && maxScore > 0
-          ? Math.max(0, Math.min(100, (score / maxScore) * 100))
-          : 0;
-      return (
-        <div
-          key={`${readString(row, ["financial_year_id"])}-${readString(row, ["sequence_number"])}-${index}`}
-          className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-border/60 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_auto_auto]"
-        >
-          <span className="min-w-0 truncate text-foreground">
-            {readString(row, ["period_name"], "Published period")}
-          </span>
-          <span className="whitespace-nowrap tabular-nums font-semibold text-foreground">
-            {score === null ? "—" : score.toFixed(1)}
-          </span>
-          <span className="col-span-2 text-right text-xs text-muted-foreground sm:col-span-1">
-            {count ?? 0} scored
-          </span>
-          <div
-            className="col-span-2 h-1.5 overflow-hidden rounded-full bg-muted sm:col-span-3"
-            aria-hidden="true"
-          >
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none"
-              style={{ width: `${relativeWidth}%` }}
-            />
-          </div>
-        </div>
-      );
-    });
-  };
-
-  return (
-    <section
-      className="grid gap-3 lg:grid-cols-2"
-      aria-label="Published performance aggregates"
-    >
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">
-          Quarterly performance trend
-        </h2>
-        {unavailable ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            You do not have permission to view published performance aggregates.
-          </p>
-        ) : quarterly.length ? (
-          <>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Bars compare scores within this panel; values remain on the
-              configured score scale.
-            </p>
-            <div className="mt-3">{renderRows(quarterly)}</div>
-          </>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            No published quarterly aggregates are available.
-          </p>
-        )}
-        {quarterlyPublishedAt ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Latest publication (UTC):{" "}
-            <time dateTime={quarterlyPublishedAt}>{quarterlyPublishedAt}</time>
-          </p>
-        ) : null}
-      </div>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">
-          Annual average
-        </h2>
-        {unavailable ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            You do not have permission to view published performance aggregates.
-          </p>
-        ) : annual.length ? (
-          <>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Bars compare scores within this panel; values remain on the
-              configured score scale.
-            </p>
-            <div className="mt-3">{renderRows(annual)}</div>
-          </>
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            No published annual aggregates are available.
-          </p>
-        )}
-        {annualPublishedAt ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Latest publication (UTC):{" "}
-            <time dateTime={annualPublishedAt}>{annualPublishedAt}</time>
-          </p>
-        ) : null}
-      </div>
+    <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-foreground">Attendance report</h2>
+      <p className="mt-3 text-3xl font-semibold tabular-nums text-foreground">{rate}%</p>
+      <p className="mt-1 text-xs text-muted-foreground">Attendance rate for the selected period</p>
     </section>
   );
 }
@@ -2138,7 +1564,6 @@ function ManagerDashboardPanels({
   const team = asRecord(dashboard?.team);
   const attendance = asRecord(dashboard?.attendance);
   const approvals = asRecord(dashboard?.approvals);
-  const performance = asRecord(dashboard?.performance);
   const activities = asRecord(
     dashboard?.work_activities ?? dashboard?.workActivities,
   );
@@ -2155,22 +1580,6 @@ function ManagerDashboardPanels({
         {
           label: "Pending",
           keys: ["pending_activity_reviews", "pendingActivityReviews"],
-        },
-      ],
-    },
-    {
-      label: "KPI reviews",
-      record: asRecord(capabilities?.kpi_review ?? capabilities?.kpiReview),
-      href: "/dashboard/performance/reviews",
-      linkLabel: "Open performance reviews",
-      stats: [
-        {
-          label: "Pending validations",
-          keys: ["pending_team_validations", "pendingTeamValidations"],
-        },
-        {
-          label: "Published reviews",
-          keys: ["published_team_reviews", "publishedTeamReviews"],
         },
       ],
     },
@@ -2308,36 +1717,10 @@ function ManagerDashboardPanels({
           ]}
         />
         <ManagerStatList
-          title="Performance and approvals"
+          title="Approvals"
           items={[
-            {
-              label: "Team validations",
-              value: managerMetric(performance, [
-                "pending_team_validations",
-                "pendingTeamValidations",
-              ]),
-            },
-            {
-              label: "Published reviews",
-              value: managerMetric(performance, [
-                "published_team_reviews",
-                "publishedTeamReviews",
-              ]),
-            },
-            {
-              label: "Open action items",
-              value: managerMetric(approvals, [
-                "open_action_items",
-                "openActionItems",
-              ]),
-            },
-            {
-              label: "Attendance corrections",
-              value: managerMetric(approvals, [
-                "pending_attendance_corrections",
-                "pendingAttendanceCorrections",
-              ]),
-            },
+            { label: "Open action items", value: managerMetric(approvals, ["open_action_items", "openActionItems"]) },
+            { label: "Attendance corrections", value: managerMetric(approvals, ["pending_attendance_corrections", "pendingAttendanceCorrections"]) },
           ]}
         />
       </div>
@@ -2958,7 +2341,7 @@ export function InsightsOperationsView({
         }
         description={
           activeTab === "manager"
-            ? "Team attendance, approvals, performance, and work requiring your attention."
+            ? "Team attendance, approvals, and work requiring your attention."
             : undefined
         }
         actions={
@@ -3237,7 +2620,6 @@ export function InsightsOperationsView({
               {activeTab === "management" ? (
                 <>
                   <ScopedInsightPanels dashboard={dashboard} />
-                  <PublishedPerformanceAggregatePanels dashboard={dashboard} />
                 </>
               ) : null}
               <motion.div

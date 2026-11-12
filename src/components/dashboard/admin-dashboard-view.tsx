@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/animate-ui/components/base/dialog";
 import { DashboardSectionTabs } from "@/components/dashboard/dashboard-section-tabs";
+import { KpiHomeWidget } from "@/components/dashboard/kpi/kpi-home-widget";
 import { AccessSkeleton } from "@/components/ui/access-skeleton";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -794,18 +795,22 @@ export default function AdminDashboardView({
     await loadData(accessToken);
   };
 
-  const handleChangeMyPassword = React.useCallback(async (
-    oldPassword: string,
-    newPassword: string,
-  ) => {
-    const accessToken = resolveStoredTokens().accessToken;
-    if (!accessToken) {
-      throw new Error("Authentication required. Please log in again.");
-    }
+  const handleChangeMyPassword = React.useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      const accessToken = resolveStoredTokens().accessToken;
+      if (!accessToken) {
+        throw new Error("Authentication required. Please log in again.");
+      }
 
-    const api = await loadAdminApi();
-    await api.changeCurrentUserPassword(accessToken, oldPassword, newPassword);
-  }, [resolveStoredTokens]);
+      const api = await loadAdminApi();
+      await api.changeCurrentUserPassword(
+        accessToken,
+        oldPassword,
+        newPassword,
+      );
+    },
+    [resolveStoredTokens],
+  );
 
   const handleForcedPasswordReset = React.useCallback(
     async (payload: {
@@ -981,12 +986,12 @@ export default function AdminDashboardView({
     const syncFromStoredUser = () => {
       // Focus refreshes must not clear a requirement raised by the API guard.
       // Only a successful password change or signing out dismisses it.
-      setForcePasswordResetOpen((alreadyRequired) =>
-        Boolean(token) && (
-          alreadyRequired ||
-          authSession.user?.requiresPasswordChange === true ||
-          readStoredUserPasswordChangeRequirement()
-        ),
+      setForcePasswordResetOpen(
+        (alreadyRequired) =>
+          Boolean(token) &&
+          (alreadyRequired ||
+            authSession.user?.requiresPasswordChange === true ||
+            readStoredUserPasswordChangeRequirement()),
       );
     };
     const openFromApiGuard = () => {
@@ -1296,13 +1301,6 @@ export default function AdminDashboardView({
     }
 
     if (
-      currentPath === "/dashboard/performance" ||
-      currentPath.startsWith("/dashboard/performance/")
-    ) {
-      return;
-    }
-
-    if (
       !canAccessDashboardRoute(
         currentPath,
         effectivePermissionLabels,
@@ -1350,6 +1348,7 @@ export default function AdminDashboardView({
           homeDashboardKind={effectiveHomeDashboardKind}
           identityReady={navigationReady}
           permissionLabels={effectivePermissionLabels}
+          roleNames={actorSnapshot.roleNames}
           activeResource={resolvedActiveResource}
           onSelectResource={navigateToResource}
         />
@@ -1385,16 +1384,19 @@ export default function AdminDashboardView({
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
             <div className="@container/main flex min-w-0 max-w-full flex-col">
               {resolvedShowOverview && showWorkforceDashboard ? (
-                <HrAnalyticsDashboard
-                  refreshKey={overviewRefreshKey}
-                  companyName={companyName}
-                  adminRolesLabel={adminRolesLabel}
-                  assignedRoleNames={adminRoleNames}
-                  userName={adminName}
-                  profilePhotoUrl={adminAvatar}
-                  showLeaveRequests={effectiveHomeDashboardKind === "hr"}
-                  showHrAnalytics={effectiveHomeDashboardKind === "hr"}
-                />
+                <>
+                  <HrAnalyticsDashboard
+                    refreshKey={overviewRefreshKey}
+                    companyName={companyName}
+                    adminRolesLabel={adminRolesLabel}
+                    assignedRoleNames={adminRoleNames}
+                    userName={adminName}
+                    profilePhotoUrl={adminAvatar}
+                    showLeaveRequests={effectiveHomeDashboardKind === "hr"}
+                    showHrAnalytics={effectiveHomeDashboardKind === "hr"}
+                  />
+                  <KpiHomeWidget personal={false} />
+                </>
               ) : null}
               <div
                 className={`flex min-w-0 max-w-full flex-col pt-0 ${currentPath === "/dashboard/me/requests/actions" ? "px-0 pb-0" : `pb-3 md:pb-4 ${currentPath === "/dashboard/employees/onboarding" ? "px-1 sm:px-2" : "px-3 sm:px-4 md:px-4"}`} ${showAccessControlTabs ? "gap-2 md:gap-3" : "gap-3 md:gap-4"}`}
@@ -1495,7 +1497,9 @@ export default function AdminDashboardView({
                 <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xl">
                   <section className="flex min-w-0 items-center bg-card p-5 sm:p-6">
                     <div className="mx-auto w-full">
-                      <div className="mb-4 text-sm font-semibold text-primary">Alliance HRMS</div>
+                      <div className="mb-4 text-sm font-semibold text-primary">
+                        Alliance HRMS
+                      </div>
                       <DialogHeader className="mb-4">
                         <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
                           Change your temporary password

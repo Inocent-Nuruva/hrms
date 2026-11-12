@@ -759,15 +759,13 @@ function DashboardPriorityCard({ priority }: { priority: DashboardPriority }) {
       </UiCardContent>
       {priority.href ? (
         <UiCardFooter className="justify-end border-border/60 bg-muted/20 py-2.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            render={<Link href={priority.href} />}
-            className="gap-1.5"
+          <Link
+            href={priority.href}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             Review
             <ChevronRightIcon data-icon="inline-end" aria-hidden="true" />
-          </Button>
+          </Link>
         </UiCardFooter>
       ) : null}
     </UiCard>
@@ -1301,11 +1299,6 @@ type AttendanceChartDay = {
   absent: number;
 };
 
-type PerformanceStat = {
-  label: string;
-  value: number | null;
-};
-
 function WorkforceInsightPanels({
   rangeLabel,
   attendanceRate,
@@ -1314,8 +1307,6 @@ function WorkforceInsightPanels({
   absent,
   attendanceDays,
   attendanceUnavailable,
-  performanceScore,
-  performanceStats,
 }: {
   rangeLabel: string;
   attendanceRate: number | null;
@@ -1324,16 +1315,9 @@ function WorkforceInsightPanels({
   absent: number | null;
   attendanceDays: AttendanceChartDay[];
   attendanceUnavailable: boolean;
-  performanceScore: number | null;
-  performanceStats: PerformanceStat[];
 }) {
-  const maxPerformanceValue = Math.max(
-    1,
-    ...performanceStats.map((item) => item.value ?? 0),
-  );
-
   return (
-    <div className="mt-3 grid w-full gap-3 lg:grid-cols-2">
+    <div className="mt-3 w-full">
       <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-[0_16px_42px_-34px_rgb(15_23_42_/_0.45)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -1412,69 +1396,6 @@ function WorkforceInsightPanels({
         )}
       </section>
 
-      <section className="h-full min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-[0_16px_42px_-34px_rgb(15_23_42_/_0.45)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              Team performance
-            </h2>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              Published reviews and approved work
-            </p>
-          </div>
-          <span className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] font-medium text-foreground">
-            {rangeLabel}
-          </span>
-        </div>
-        <div className="mt-5">
-          <p className="text-3xl font-semibold leading-none tabular-nums text-foreground">
-            {performanceScore === null ? "—" : `${performanceScore}%`}
-          </p>
-          <p className="mt-1 text-[10px] text-emerald-700 dark:text-emerald-400">
-            {performanceScore !== null
-              ? "Average published review score"
-              : performanceStats[0]?.value === 0
-                ? "No published reviews in this period"
-                : "Performance score unavailable"}
-          </p>
-        </div>
-        <div className="mt-6 flex h-36 items-end justify-around gap-4 border-b border-border/60 pb-2">
-          {performanceStats.map((item) => (
-            <div
-              key={item.label}
-              className="flex min-w-0 flex-1 flex-col items-center gap-2"
-            >
-              <div className="flex h-24 w-full max-w-12 items-end justify-center gap-1">
-                <span
-                  className="w-2.5 rounded-t bg-emerald-500/20"
-                  style={{
-                    height: `${((item.value ?? 0) / maxPerformanceValue) * 70}%`,
-                  }}
-                />
-                <span
-                  className="w-2.5 rounded-t bg-emerald-500"
-                  style={{
-                    height: `${((item.value ?? 0) / maxPerformanceValue) * 100}%`,
-                  }}
-                />
-              </div>
-              <span className="truncate text-[9px] font-medium text-foreground">
-                {item.label}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-3 text-[9px] text-muted-foreground">
-          {performanceStats.map((item) => (
-            <span key={item.label}>
-              <span className="font-semibold text-foreground">
-                {item.value ?? "Unavailable"}
-              </span>{" "}
-              {item.label.toLowerCase()}
-            </span>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
@@ -2696,42 +2617,6 @@ export default function HrAnalyticsDashboard({
         })),
     };
   }, [attendanceSummaries]);
-  const rawPerformanceScore = readNumberDeep(analyticsSummary, [
-    "average_score",
-    "team_performance",
-    "performance_score",
-    "average_performance_score",
-  ]);
-  const publishedReviewCount = readNumberDeep(analyticsSummary, [
-    "published_reviews",
-    "published_team_reviews",
-  ]);
-  const performanceScore =
-    rawPerformanceScore === null ||
-    publishedReviewCount === null ||
-    publishedReviewCount === 0
-      ? null
-      : Math.min(100, Math.max(0, Math.round(rawPerformanceScore * 10) / 10));
-  const performanceStats: PerformanceStat[] = [
-    {
-      label: "Reviews",
-      value: publishedReviewCount,
-    },
-    {
-      label: "Reports",
-      value: readNumberDeep(analyticsSummary, [
-        "approved_daily_reports",
-        "approved_reports",
-      ]),
-    },
-    {
-      label: "Visits",
-      value: readNumberDeep(analyticsSummary, [
-        "reviewed_field_visits",
-        "reviewed_visits",
-      ]),
-    },
-  ];
   const satisfactionScore = surveySatisfaction?.score ?? null;
   const satisfactionCategories = Object.entries(
     surveySatisfaction?.categories ?? {},
@@ -3133,13 +3018,8 @@ export default function HrAnalyticsDashboard({
         ],
       },
       {
-        title: "Performance and operations",
+        title: "Operations",
         items: [
-          {
-            label: "Published reviews",
-            value: decimal(number(["published_reviews"])),
-          },
-          { label: "Average score", value: decimal(number(["average_score"])) },
           {
             label: "Approved daily reports",
             value: decimal(number(["approved_daily_reports"])),
@@ -3244,7 +3124,7 @@ export default function HrAnalyticsDashboard({
               <div className="min-w-0">
                 <FluentText
                   as="p"
-                  className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+                  className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-foreground/80"
                 >
                   Welcome back
                 </FluentText>
@@ -3268,7 +3148,7 @@ export default function HrAnalyticsDashboard({
                 </div>
                 <FluentText
                   as="p"
-                  className="mt-0.5 text-sm text-muted-foreground"
+                  className="mt-0.5 text-sm text-muted-foreground dark:text-foreground/75"
                 >
                   {priorities.length > 0
                     ? `${priorities.length} areas need attention.`
@@ -3327,17 +3207,17 @@ export default function HrAnalyticsDashboard({
               {upcomingHoliday && upcomingHolidayDate ? (
                 <FluentLink
                   href="/dashboard/attendance/holidays"
-                  className="!inline-flex max-w-full items-center gap-2"
+                  className="!inline-flex max-w-full items-center gap-2 !text-foreground dark:!text-slate-100 [&_svg]:!text-primary dark:[&_svg]:!text-violet-300"
                   aria-label={`Upcoming holiday ${upcomingHolidayName || "Holiday"} on ${formatDateShort(upcomingHolidayDate)}`}
                 >
                   <CalendarLtr20Regular
                     className="shrink-0"
                     aria-hidden="true"
                   />
-                  <Caption1 className="min-w-0">
+                  <Caption1 className="min-w-0 !text-current">
                     {upcomingHolidayName || "Holiday"}
                   </Caption1>
-                  <Caption1 className="shrink-0 whitespace-nowrap text-muted-foreground">
+                  <Caption1 className="shrink-0 whitespace-nowrap !text-current opacity-75">
                     {formatDateShort(upcomingHolidayDate)}
                   </Caption1>
                 </FluentLink>
@@ -3347,7 +3227,7 @@ export default function HrAnalyticsDashboard({
                   appearance="subtle"
                   size="small"
                   icon={
-                    <PaintBrush20Regular style={{ color: "var(--primary)" }} />
+                    <PaintBrush20Regular className="!text-primary dark:!text-violet-300" />
                   }
                   type="button"
                   aria-label={`Background: ${welcomeBackground}. Switch to ${nextWelcomeBackground}`}
@@ -3364,7 +3244,7 @@ export default function HrAnalyticsDashboard({
                       appearance="subtle"
                       size="small"
                       icon={
-                        <Filter20Regular style={{ color: "var(--primary)" }} />
+                        <Filter20Regular className="!text-primary dark:!text-violet-300" />
                       }
                       type="button"
                       aria-label="Filter dashboard date range"
@@ -3432,8 +3312,7 @@ export default function HrAnalyticsDashboard({
                   size="small"
                   icon={
                     <ArrowClockwise20Regular
-                      style={{ color: "var(--primary)" }}
-                      className={cn(loading && "animate-spin")}
+                      className={cn("!text-primary dark:!text-violet-300", loading && "animate-spin")}
                     />
                   }
                   onClick={() => void fetchAll()}
@@ -3513,6 +3392,7 @@ export default function HrAnalyticsDashboard({
                     <Link
                       key={priority.id}
                       href={priority.href}
+                      prefetch={false}
                       className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       {row}
@@ -3695,8 +3575,6 @@ export default function HrAnalyticsDashboard({
             attendanceUnavailable={partialSourceErrors.includes(
               "Attendance history",
             )}
-            performanceScore={performanceScore}
-            performanceStats={performanceStats}
           />
           <PeopleExperiencePanels
             satisfactionUnavailable={partialSourceErrors.includes(
@@ -3760,7 +3638,7 @@ export default function HrAnalyticsDashboard({
                 HR analytics
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Workforce, attendance, pay, and performance snapshot
+                Workforce, attendance, and pay snapshot
               </p>
             </div>
             <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">

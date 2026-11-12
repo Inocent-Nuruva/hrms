@@ -19,6 +19,51 @@ function normalizeDashboardPath(url: string) {
   return path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path
 }
 
+const KPI_READ_ROLES = new Set([
+  "COMPANY_ADMIN", "HR_MANAGER", "DEPARTMENT_MANAGER", "BRANCH_MANAGER", "MANAGEMENT",
+])
+const KPI_WRITE_ROLES = new Set([
+  "COMPANY_ADMIN", "HR_MANAGER", "DEPARTMENT_MANAGER", "BRANCH_MANAGER",
+])
+const KPI_ADMIN_ROLES = new Set(["COMPANY_ADMIN", "HR_MANAGER"])
+const KPI_PERSONAL_ROLES = new Set([
+  "EMPLOYEE", "COMPANY_ADMIN", "HR_MANAGER", "DEPARTMENT_MANAGER", "BRANCH_MANAGER",
+])
+
+/** Navigation only. KPI API guards and record scope remain authoritative. */
+export function canShowKpiNavigationRoute(
+  url: string,
+  roleNames: string[],
+  scope: "platform" | "company" | null | undefined,
+  permissionLabels: string[] = [],
+) {
+  const path = normalizeDashboardPath(url)
+  if (!path.startsWith("/dashboard/kpi") && !path.startsWith("/dashboard/me/kpi") &&
+      !path.startsWith("/dashboard/me/scorecards") && !path.startsWith("/dashboard/me/evaluations")) {
+    return true
+  }
+  if (scope !== "company") return false
+  const roles = new Set(roleNames.map((role) => role.trim().toUpperCase()))
+  const hasAny = (allowed: Set<string>) => [...roles].some((role) => allowed.has(role))
+  const canReadAssignments = permissionLabels.includes("kpi_assignments:read")
+  const canManageAssignments = permissionLabels.includes("kpi_assignments:create") || permissionLabels.includes("kpi_assignments:update") || permissionLabels.includes("kpi_targets:revise")
+  if (path === "/dashboard/me/kpi/reports") return roles.has("EMPLOYEE")
+  if (path.startsWith("/dashboard/me/")) return hasAny(KPI_PERSONAL_ROLES)
+  if (path === "/dashboard/kpi/create" ||
+      path === "/dashboard/kpi/periods" ||
+      path === "/dashboard/kpi/templates" ||
+      path.startsWith("/dashboard/kpi/evaluation-cycles") ||
+      path.startsWith("/dashboard/kpi/evaluation-templates") ||
+      path.startsWith("/dashboard/kpi/scoring-policies") ||
+      path.startsWith("/dashboard/kpi/scorecard-templates")) return hasAny(KPI_ADMIN_ROLES)
+  if (path.startsWith("/dashboard/kpi/assignments") || path.startsWith("/dashboard/kpi/targets")) return hasAny(KPI_WRITE_ROLES) || canReadAssignments || canManageAssignments
+  if (path.startsWith("/dashboard/kpi/reviews") ||
+      path.startsWith("/dashboard/kpi/evaluations") ||
+      path.startsWith("/dashboard/kpi/scorecards/new") ||
+      /\/dashboard\/kpi\/scorecards\/[^/]+\/edit(?:\/|$)/.test(path)) return hasAny(KPI_WRITE_ROLES)
+  return hasAny(KPI_READ_ROLES) || (path === "/dashboard/kpi" && canReadAssignments)
+}
+
 const PERSONAL_ATTENDANCE_ROUTES = new Set([
   "/dashboard/attendance/today",
   "/dashboard/attendance/punch-action",
@@ -47,9 +92,6 @@ export function canShowDashboardRouteInNavigation(
 
 export function selfServiceHomeFor(url: string): string | null {
   const path = normalizeDashboardPath(url)
-  if (path.startsWith("/dashboard/me/performance") || path.startsWith("/dashboard/performance")) {
-    return "/dashboard/me/performance/overview"
-  }
   if (path.startsWith("/dashboard/me/probation") || path.startsWith("/dashboard/probation")) {
     return "/dashboard/me/probation"
   }

@@ -131,7 +131,6 @@ describe("insights, readiness, and payroll report API helpers", () => {
       team: { total_members: 1, employees_on_leave: 0 },
       attendance: { total_records: 1, present: 1, absent: 0 },
       approvals: { open_action_items: 0, pending_attendance_corrections: 0 },
-      performance: { pending_team_validations: 0, published_team_reviews: 0 },
       work_activities: { pending_activity_reviews: 1, approved_reports: 0 },
       capabilities: { activity_review: { available: true } },
     }

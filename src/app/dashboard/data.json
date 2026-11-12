@@ -109,7 +109,7 @@
   },
   {
     "id": 13,
-    "header": "Past Performance",
+    "header": "Past Results",
     "type": "Narrative",
     "status": "Done",
     "target": "22",
@@ -307,7 +307,7 @@
   },
   {
     "id": 35,
-    "header": "Performance Metrics",
+    "header": "Operational Metrics",
     "type": "Technical content",
     "status": "In Process",
     "target": "23",

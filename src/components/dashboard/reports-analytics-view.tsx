@@ -83,30 +83,6 @@ const REPORT_UI: Record<string, ReportUiConfig> = {
     columns: ["activity_date", "employee_no", "employee_name", "department_name", "report_status", "is_workday", "is_holiday", "has_approved_leave", "assigned_task_count", "completed_task_count", "open_task_count"],
     cards: [{ label: "Pending employee-days", count: true }, { label: "Assigned tasks", field: "assigned_task_count" }, { label: "Open tasks", field: "open_task_count" }],
   },
-  KPI_ASSIGNMENTS: {
-    columns: ["employee_number", "employee_name", "kpi_code", "kpi_name", "target_value", "weight", "assignment_status", "effective_from"],
-    cards: [{ label: "Assignments", count: true }, { label: "Total weight", field: "weight" }],
-  },
-  KPI_TARGET_VS_ACHIEVEMENT: {
-    columns: ["employee_number", "employee_name", "period_name", "kpi_code", "target_value", "achievement_value", "raw_score", "weighted_score", "status"],
-    cards: [{ label: "Rows", count: true }, { label: "Achievement", field: "achievement_value" }, { label: "Weighted score", field: "weighted_score" }],
-  },
-  MONTHLY_KPI_SCORE: {
-    columns: ["employee_number", "employee_name", "period_name", "final_score", "rating_code", "status", "published_at", "locked_at"],
-    cards: [{ label: "Rows", count: true }, { label: "Published final score", field: "final_score" }],
-  },
-  QUARTERLY_KPI_AVERAGE: {
-    columns: ["employee_number", "employee_name", "period_name", "score", "rating_code", "published_at", "locked_at"],
-    cards: [{ label: "Rows", count: true }, { label: "Score", field: "score" }],
-  },
-  ANNUAL_KPI_AVERAGE: {
-    columns: ["employee_number", "employee_name", "period_name", "score", "rating_code", "published_at", "locked_at"],
-    cards: [{ label: "Rows", count: true }, { label: "Score", field: "score" }],
-  },
-  KPI_SCORE_HISTORY: {
-    columns: ["employee_number", "employee_name", "period_name", "kpi_score", "competency_score", "final_score", "rating_code", "status"],
-    cards: [{ label: "Rows", count: true }, { label: "Final score", field: "final_score" }],
-  },
   ATTENDANCE_EXCEPTIONS: {
     columns: ["attendance_date", "employee_number", "employee_name", "exception_type", "status", "message", "resolved_at"],
     cards: [{ label: "Exceptions", count: true }],

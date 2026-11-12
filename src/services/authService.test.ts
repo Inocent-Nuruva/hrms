@@ -51,6 +51,7 @@ describe("authService foundation helpers", () => {
     expect(result.scope).toBe("platform")
     expect(result.user?.dashboardType).toBe("admin")
     expect(result.user?.scope).toBe("platform")
+    expect(result.user?.roles).toContain("SUPER_ADMIN")
   })
 
   it("lists and normalizes active sessions", async () => {
@@ -308,7 +309,27 @@ describe("authService foundation helpers", () => {
     const user = await authService.getCurrentUser("access-token")
 
     expect(user.permissions).toEqual([])
+    expect(user.roles).toEqual([])
     expect(user.accessContextResolved).toBe(true)
+  })
+
+  it("preserves company role names from the live profile", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: 7,
+        first_name: "KPI",
+        last_name: "Administrator",
+        email: "kpi-admin@example.invalid",
+        user_type: "COMPANY_USER",
+        roles: [{ name: "COMPANY_ADMIN" }],
+        permissions: [{ name: "data_scope:company" }],
+      }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const user = await authService.getCurrentUser("access-token")
+
+    expect(user.roles).toContain("COMPANY_ADMIN")
   })
 
   it("marks profile-only current-user responses for token compatibility fallback", async () => {

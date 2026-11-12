@@ -139,6 +139,10 @@ const NOTIFICATION_PREFERENCE_GROUPS: Array<{
     title: "Attendance",
     types: ["ATTENDANCE_LATE", "ATTENDANCE_MISSING", "ATTENDANCE_CORRECTION"],
   },
+  {
+    title: "KPI & Performance",
+    types: ["KPI_PERIOD_CREATED"],
+  },
 ]
 
 function securityTabFromQuery(value: string | null): SecurityTab {
@@ -1752,23 +1756,31 @@ function AccountSettingsPanelContent({
                               const preference = notificationPreferencesByKey.get(key) ?? null
                               const busy = notificationPreferenceBusyKey === key
                               const hasExplicitPreference = Boolean(preference)
+                              const hasSelectedKpiChannel = NOTIFICATION_PREFERENCE_CHANNELS.some((candidate) => {
+                                const selected = notificationPreferencesByKey.get(buildNotificationPreferenceKey(notificationType, candidate))
+                                return selected && readNotificationPreferenceEnabled(selected)
+                              })
+                              const defaultEnabled = notificationType !== "KPI_PERIOD_CREATED" || (channel === "IN_APP" && !hasSelectedKpiChannel)
+                              const isEnabled = hasExplicitPreference
+                                ? readNotificationPreferenceEnabled(preference)
+                                : defaultEnabled
                               return (
                                 <td key={channel} className="px-3 py-3 text-center align-middle">
                                   <div className="flex justify-center">
                                     <Switch
                                       className="notification-preference-switch"
                                       size="medium"
-                                      checked={readNotificationPreferenceEnabled(preference)}
+                                      checked={isEnabled}
                                       disabled={busy || !token}
                                       aria-label={`${formatNotificationPreferenceLabel(notificationType)} ${formatNotificationPreferenceLabel(channel)}`}
                                       label={
                                         busy
                                           ? "Saving..."
                                           : hasExplicitPreference
-                                            ? readNotificationPreferenceEnabled(preference)
+                                            ? isEnabled
                                               ? "On"
                                               : "Off"
-                                            : "Default on"
+                                            : defaultEnabled ? "Default on" : "Default off"
                                       }
                                       labelPosition="after"
                                       onChange={(_event, data) =>

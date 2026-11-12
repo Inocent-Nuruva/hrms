@@ -6,7 +6,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { OnboardingReadinessOverview } from "./onboarding-readiness-overview"
 
 const getReadiness = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/admin-api", () => ({ getOnboardingReadiness: getReadiness }))
+vi.mock("@/lib/admin-api", () => ({ getOnboardingReadiness: getReadiness, extractProfilePhotoUrl: (record: { profile_photo_url?: string }) => record.profile_photo_url ?? null }))
 let root: Root
 let container: HTMLDivElement
 const activate = vi.fn()
@@ -36,8 +36,8 @@ afterEach(async () => {
   container.remove()
   vi.unstubAllGlobals()
 })
-async function render(canActivate = true, canViewPayroll = false, canViewContracts = true) {
-  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" canActivate={canActivate} canViewPayroll={canViewPayroll} canViewContracts={canViewContracts} saving={false} onActivate={activate} onNavigate={navigate} />))
+async function render(canActivate = true, canViewPayroll = false, canViewContracts = true, ownerDirectory: Record<string, unknown>[] = []) {
+  await act(async () => root.render(<OnboardingReadinessOverview token="token" requestId={1} employeeName="Amina" ownerDirectory={ownerDirectory} canActivate={canActivate} canViewPayroll={canViewPayroll} canViewContracts={canViewContracts} saving={false} onActivate={activate} onNavigate={navigate} />))
 }
 function button(label: string) {
   return [...document.querySelectorAll("button")].find((entry) => entry.textContent?.trim() === label)!
@@ -49,13 +49,13 @@ describe("onboarding activation overview", () => {
   it("shows blockers and prevents activation until ready", async () => {
     await render()
     expect(container.textContent).toContain("1 activation requirements outstanding")
-    expect(container.textContent).toContain("Responsible: HR / Employee")
+    expect(container.querySelector('table[aria-label]') ?? container.querySelector('table caption')?.textContent).toBeTruthy()
+    expect(container.querySelector('tbody tr')?.textContent).toContain("HR / Employee")
     expect(button("Activate employee")).toBeUndefined()
-    await act(async () => button("Open requirement").click())
+    await act(async () => button("Open contracts").click())
     expect(navigate).toHaveBeenCalledWith("contracts", "contract")
-    expect(container.textContent).not.toContain("Provide laptop")
-    await act(async () => button("Show completed requirements (1)").click())
     expect(container.textContent).toContain("Provide laptop")
+    expect(container.querySelector('[aria-label="Completed onboarding steps"]')).toBeTruthy()
   })
   it("enables activation only after a successful readiness response", async () => {
     getReadiness.mockResolvedValue({ ...data, ready_to_activate: true, blocker_count: 0, next_action: null })
@@ -100,5 +100,19 @@ describe("onboarding activation overview", () => {
     await act(async () => labelledButton("Refresh readiness").click())
     expect(getReadiness).toHaveBeenCalledTimes(2)
     expect(container.textContent).toContain("Signed contract")
+  })
+  it("shows every required action without an extra reveal click", async () => {
+    const extra = Array.from({ length: 4 }, (_, index) => ({ id: `step-${index}`, label: `Required step ${index + 1}`, group: "Checklist", owner: "IT", required: true, status: "pending", action: "tasks" }))
+    getReadiness.mockResolvedValue({ ...data, blocker_count: 5, requirements: [data.requirements[0], ...extra, data.requirements[1]] })
+    await render()
+    expect(container.textContent).toContain("Required step 4")
+    expect(button("Show all 5 steps")).toBeUndefined()
+    await act(async () => labelledButton("Open tasks for Required step 4").click())
+    expect(navigate).toHaveBeenCalledWith("tasks", "step-3")
+  })
+  it("shows a matching assignee photo in the responsible column", async () => {
+    getReadiness.mockResolvedValue({ ...data, requirements: [{ ...data.requirements[0], owner: "Neema David" }] })
+    await render(true, false, true, [{ first_name: "Neema", last_name: "David", profile_photo_url: "/photos/neema.jpg" }])
+    expect(container.querySelector('tbody img')?.getAttribute("src")).toBe("/photos/neema.jpg")
   })
 })

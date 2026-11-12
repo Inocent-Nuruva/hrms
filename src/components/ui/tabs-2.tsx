@@ -79,20 +79,6 @@ const ACCESS_CONTROL_TAB_ICONS = {
   "/dashboard/me/team/members": [PeopleTeam20Regular, ""],
   "/dashboard/me/team/attendance": [CalendarLtr20Regular, ""],
   "/dashboard/me/team/actions": [ClipboardTask20Regular, ""],
-  "/dashboard/me/performance/overview": [ChartMultiple20Regular, ""],
-  "/dashboard/me/performance/kpis": [Target20Regular, ""],
-  "/dashboard/me/performance/assignments": [ClipboardTask20Regular, ""],
-  "/dashboard/me/performance/reviews": [DocumentText20Regular, ""],
-  "/dashboard/me/performance/achievements": [Trophy20Regular, ""],
-  "/dashboard/me/performance/improvement": [ArrowTrendingLines20Regular, ""],
-  "/dashboard/me/performance/team": [PeopleTeam20Regular, ""],
-  "/dashboard/me/performance/manager-kpis": [Gauge20Regular, ""],
-  "/dashboard/performance/overview": [ChartMultiple20Regular, ""],
-  "/dashboard/performance/setup": [Gauge20Regular, ""],
-  "/dashboard/performance/plans": [Target20Regular, ""],
-  "/dashboard/performance/reviews": [DocumentText20Regular, ""],
-  "/dashboard/performance/improvement": [ArrowTrendingLines20Regular, ""],
-  "/dashboard/performance/reports": [ChartMultiple20Regular, ""],
   "/dashboard/me/activities/today": [ClipboardTask20Regular, ""],
   "/dashboard/activities/team": [PeopleTeam20Regular, ""],
   "/dashboard/activities/overview": [ChartMultiple20Regular, ""],
@@ -145,8 +131,9 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
     groups[0] ??
     null
   const tabs = activeGroup?.items ?? []
-  const selectedValue =
-    tabs.find((item) => isActivePath(currentPath, item.url))?.url ?? ""
+  const selectedValue = tabs
+    .filter((item) => isActivePath(currentPath, item.url))
+    .sort((left, right) => right.url.length - left.url.length)[0]?.url ?? ""
 
   const navigateToTab = (_event: unknown, data: SelectTabData) => {
     const url = String(data.value)
