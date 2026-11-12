@@ -116,6 +116,7 @@ export function MyContractViewer({ contractId }: { contractId: number }) {
       </p>
     )
 
+
   const party = contract.signing.my_party
   return (
     <div className="grid gap-4">
@@ -134,7 +135,7 @@ export function MyContractViewer({ contractId }: { contractId: number }) {
             <ContractValidityText validity={contract.validity} />
           </div>
         </div>
-        <button
+        {contract.can_view_document ? <button
           type="button"
           className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium"
           onClick={() =>
@@ -144,7 +145,7 @@ export function MyContractViewer({ contractId }: { contractId: number }) {
           }
         >
           <Download className="size-4" /> {contract.status === "SIGNED" ? "Download signed contract" : "Download PDF"}
-        </button>
+        </button> : null}
       </header>
 
       {contract.status === "PENDING_VERIFICATION" ? (
@@ -168,7 +169,7 @@ export function MyContractViewer({ contractId }: { contractId: number }) {
         />
       ) : null}
 
-      <ContractPdfViewer token={token} contractId={contract.id} documentId={contract.signing.current_document_id} onLoaded={() => setOpened(true)} />
+      {contract.can_view_document ? <ContractPdfViewer token={token} contractId={contract.id} documentId={contract.signing.current_document_id} onLoaded={() => setOpened(true)} /> : null}
     </div>
   )
 }

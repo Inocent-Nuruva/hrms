@@ -1,22 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 
-import { ContractWizard } from "@/components/dashboard/contracts/contract-wizard"
-import { readAccessToken } from "@/lib/contracts-api"
 
 function EditContract() {
   const params = useParams<{ id: string }>()
-  const searchParams = useSearchParams()
-  const [token, setToken] = React.useState("")
-  React.useEffect(() => setToken(readAccessToken()), [])
+  const router = useRouter()
   const id = Number(params?.id)
-  if (!token || !Number.isInteger(id)) return null
-  return <ContractWizard token={token} contractId={id} initialStep={searchParams?.get("step")} />
+  React.useEffect(() => { if (Number.isInteger(id) && id > 0) router.replace(`/dashboard/employees/contracts/${id}`) }, [id, router])
+  return null
 }
 
-/** Step-by-step editing of a draft contract with live preview. */
+/** Existing editor links open the unified contract detail page. */
 export default function EditContractPage() {
   return (
     <React.Suspense fallback={null}>

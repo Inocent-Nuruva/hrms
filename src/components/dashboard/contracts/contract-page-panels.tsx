@@ -15,6 +15,8 @@ import {
 import { cn } from "@/lib/utils"
 
 import { CONTRACT_TYPE_LABELS, ContractStatusBadge, ContractValidityText, formatDate, formatDateTime } from "./contract-ui"
+import { groupDraftActivity, summarizeDraftActivity } from "./contract-activity-groups"
+import { contractWorkspaceMessages } from "./contract-workspace-messages"
 
 /** Collapsible card; open by default on large screens only when `defaultOpen`. */
 export function PanelSection({
@@ -139,11 +141,11 @@ export function SignatoriesPanel({ contract }: { contract: ContractDetail }) {
         {rows.map((row) => (
           <li key={row.label} className="flex items-start gap-2">
             {row.signedAt ? (
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-label="Signed" />
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-label="Signed" />
             ) : row.pending ? (
-              <Clock className="mt-0.5 size-4 shrink-0 text-amber-600" aria-label="Pending" />
+              <Clock className="mt-0.5 size-4 shrink-0 text-foreground" aria-label="Pending" />
             ) : (
-              <Circle className="mt-0.5 size-4 shrink-0 text-slate-300" aria-label="Not yet" />
+              <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="Not yet" />
             )}
             <span>
               <span className="font-medium">{row.label}:</span> {row.name}
@@ -233,19 +235,48 @@ function show(value: unknown) {
   return typeof value === "object" ? JSON.stringify(value) : String(value)
 }
 
-export function ActivityPanel({ token, contract }: { token: string; contract: ContractDetail }) {
+export function ActivityPanel({ token, contract, onItems, refreshKey }: { token: string; contract: ContractDetail; onItems?: (items: ContractActivityItem[]) => void; refreshKey?: number }) {
   const [items, setItems] = React.useState<ContractActivityItem[] | null>(null)
   const [truncated, setTruncated] = React.useState(false)
+  const [groupMinutes, setGroupMinutes] = React.useState(10)
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null)
+  const [loadingAll, setLoadingAll] = React.useState(false)
+  const [loadAllError, setLoadAllError] = React.useState(false)
+  const mounted = React.useRef(true)
+  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const [error, setError] = React.useState(false)
   React.useEffect(() => {
     getContractActivity(token, contract.id)
       .then((result) => {
         setItems(result.items)
+        onItems?.(result.items)
         setTruncated(result.truncated === true)
+        setNextCursor(result.next_cursor ?? null)
+        setGroupMinutes(result.group_window_minutes ?? 10)
       })
       .catch(() => setError(true))
-  }, [token, contract.id, contract.updatedAt])
-  if (error) return null // readers without HR access do not see the audit trail
+  }, [token, contract.id, contract.updatedAt, onItems, refreshKey])
+  const viewAll = async () => {
+    let cursor = nextCursor
+    let collected = [...(items ?? [])]
+    setLoadingAll(true)
+    setLoadAllError(false)
+    try {
+      while (cursor && mounted.current) {
+        const page = await getContractActivity(token, contract.id, cursor)
+        if (!mounted.current) return
+        const seen = new Set(collected.map((item) => item.id))
+        collected = [...collected, ...page.items.filter((item) => !seen.has(item.id))].sort((a, b) => b.at.localeCompare(a.at))
+        if (page.next_cursor === cursor) throw new Error("Activity cursor did not advance")
+        cursor = page.next_cursor ?? null
+        setItems(collected)
+        onItems?.(collected)
+        setNextCursor(cursor)
+      }
+      setTruncated(false)
+    } catch { if (mounted.current) setLoadAllError(true) } finally { if (mounted.current) setLoadingAll(false) }
+  }
+  if (error) return <PanelSection title="Activity & audit"><p>{contractWorkspaceMessages.activityUnavailable}</p></PanelSection>
   return (
     <PanelSection title="Activity & audit" count={items?.length} defaultOpen={false}>
       {!items ? (
@@ -254,9 +285,9 @@ export function ActivityPanel({ token, contract }: { token: string; contract: Co
         <p className="text-muted-foreground">No activity yet.</p>
       ) : (
         <>
-        {truncated ? <p className="mb-2 text-xs text-muted-foreground">Showing the most recent activity; older entries are not listed.</p> : null}
+        {truncated ? <div className="mb-2 text-xs text-muted-foreground"><p>Showing the most recent activity; older entries are not listed.</p>{loadAllError ? <p role="alert">{contractWorkspaceMessages.activityLoadMoreError}</p> : null}{nextCursor ? <button type="button" disabled={loadingAll} onClick={() => void viewAll()} className="text-primary underline">{loadingAll ? contractWorkspaceMessages.loading : contractWorkspaceMessages.viewAllActivity}</button> : null}</div> : null}
         <ol className="grid gap-2 border-l border-border pl-3">
-          {items.map((item) => (
+          {groupDraftActivity(items, groupMinutes).map((group) => { const item = summarizeDraftActivity(group); return (
             <li key={item.id} className="grid gap-0.5">
               <span className={cn(item.outcome !== "SUCCESS" && "text-rose-700")}>
                 {describe(item)}
@@ -280,8 +311,9 @@ export function ActivityPanel({ token, contract }: { token: string; contract: Co
                   </ul>
                 </details>
               ) : null}
+              {group.length > 1 ? <details className="text-xs"><summary className="cursor-pointer text-primary">{group.length} individual saves</summary><ol>{group.map((event) => <li key={event.id}>{formatDateTime(event.at)}<ul>{event.changed_fields.map((field) => <li key={field}>{fieldLabel(field)}: {show(event.old_values?.[field])} → {show(event.new_values?.[field])}</li>)}</ul></li>)}</ol></details> : null}
             </li>
-          ))}
+          ) })}
         </ol>
         </>
       )}

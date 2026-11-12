@@ -10,6 +10,7 @@ import { errorMessage, listContracts, type ContractRow } from "@/lib/contracts-a
 import { cn } from "@/lib/utils"
 
 import { CONTRACT_TYPE_LABELS, ContractStatusBadge, ContractValidityText, formatDate } from "./contract-ui"
+import { contractWorkspaceMessages as m } from "./contract-workspace-messages"
 
 const STATUS_FILTERS = [
   { value: "", label: "All statuses" },
@@ -129,6 +130,7 @@ export function ContractsList({
         </div>
       </div>
 
+      {!compact ? <nav aria-label={m.quickFilters} className="flex flex-wrap gap-2">{STATUS_FILTERS.filter((item) => ["", "DRAFT", "PENDING_HR_SIGNATURE", "PENDING_EMPLOYEE_SIGNATURE", "SIGNED"].includes(item.value)).map((item) => <button key={item.value || "all"} type="button" aria-pressed={status === item.value && !validity} className="rounded-full border border-border px-3 py-1 text-sm aria-pressed:bg-primary aria-pressed:text-primary-foreground" onClick={() => { setStatus(item.value); setValidity(""); setPage(1) }}>{item.label}</button>)}<button type="button" aria-pressed={validity === "EXPIRING"} className="rounded-full border border-border px-3 py-1 text-sm aria-pressed:bg-primary aria-pressed:text-primary-foreground" onClick={() => { setStatus(""); setValidity("EXPIRING"); setPage(1) }}>{VALIDITY_FILTERS.find((item) => item.value === "EXPIRING")?.label}</button></nav> : null}
       {error ? <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
 
       <div className="overflow-hidden rounded-lg border border-border">
