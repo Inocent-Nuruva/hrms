@@ -151,7 +151,6 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ow
           })}
         </div>
         {readiness.activation_failure && !readiness.closed ? <MessageBar intent="error"><MessageBarBody><strong>Activation failed</strong><p>The last activation attempt{readiness.activation_failure.failed_at ? ` on ${new Date(readiness.activation_failure.failed_at).toLocaleString()}` : ""} was rolled back: {readiness.activation_failure.message}</p><p>Nothing was applied. Fix the cause, then activate again.</p></MessageBarBody></MessageBar> : null}
-        {summaryTarget ? createPortal(summary, summaryTarget) : summary}
 
         <div className="min-w-0">
           <div className="flex min-w-0 flex-col gap-4">
