@@ -53,10 +53,8 @@ describe("new contract", () => {
       rows: [
         {
           id: 8,
-          first_name: "Amina",
-          last_name: "Ali",
-          employee_no: "E8",
-          position_name: "Nurse",
+          fullName: "Amina Mary Ali",
+          employeeNo: "E8",
         },
       ],
     });
@@ -98,9 +96,16 @@ describe("new contract", () => {
       "token",
       expect.objectContaining({ search: "Ami" }),
     );
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "E8");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(mock.listEmployees).toHaveBeenCalledWith("token", expect.objectContaining({ search: "E8" }));
     const option = [...element.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Nurse"),
+      button.textContent?.includes("Amina Mary Ali") && button.textContent?.includes("E8"),
     )!;
+    expect(option).toBeTruthy();
     await act(async () => {
       option.click();
       await Promise.resolve();
@@ -144,6 +149,9 @@ describe("new contract", () => {
       element.querySelector('a[href="/dashboard/employees/contracts/3"]'),
     ).toBeTruthy();
     expect(element.textContent).toContain("Employment template");
+    const startInput = element.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(startInput.value).toBe("2026-01-01");
+    expect(startInput.readOnly).toBe(true);
     await act(async () => {
       element
         .querySelector("form")!
@@ -163,6 +171,24 @@ describe("new contract", () => {
     expect(mock.replace).toHaveBeenCalledWith(
       "/dashboard/employees/contracts/9",
     );
+    await act(async () => root.unmount());
+    element.remove();
+  });
+  it("asks HR to add a missing hire date before creating a contract", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    mock.getEmployeeById.mockResolvedValue({ id: 8, first_name: "Amina", last_name: "Ali", hire_date: null });
+    mock.listContracts.mockResolvedValue({ data: [] });
+    mock.listContractTemplateSummaries.mockResolvedValue([]);
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    await act(async () => {
+      root.render(<ContractCreate token="token" presetEmployeeId={8} fromContractId={null} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("The employee has no hire date");
+    expect(element.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
     await act(async () => root.unmount());
     element.remove();
   });

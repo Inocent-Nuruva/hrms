@@ -29,9 +29,14 @@ import {
 
 function employeeName(employee: AdminRecord) {
   return (
-    [employee.first_name, employee.last_name].filter(Boolean).join(" ") ||
+    String(employee.fullName ?? employee.full_name ?? "").trim() ||
+    [employee.first_name ?? employee.firstName, employee.middle_name ?? employee.middleName, employee.last_name ?? employee.lastName].filter(Boolean).join(" ") ||
     String(employee.name ?? employee.id)
   );
+}
+
+function employeeNumber(employee: AdminRecord) {
+  return String(employee.employee_no ?? employee.employeeNo ?? "");
 }
 
 export function ContractCreate({
@@ -81,19 +86,7 @@ export function ContractCreate({
             (item) => item.status === "DRAFT" || item.validity === "ACTIVE",
           ),
         );
-        const latestEnd = [...contracts.data]
-          .sort((a, b) => b.version - a.version)
-          .find(
-            (item) =>
-              item.endDate && ["SIGNED", "SUPERSEDED"].includes(item.status),
-          )?.endDate;
-        setStart(
-          latestEnd
-            ? new Date(Date.parse(`${latestEnd}T00:00:00Z`) + 86_400_000)
-                .toISOString()
-                .slice(0, 10)
-            : String(record.hire_date ?? "").slice(0, 10),
-        );
+        setStart(String(record.hire_date ?? record.hireDate ?? "").slice(0, 10));
         setResults([]);
         setSearch("");
       } catch {
@@ -172,7 +165,7 @@ export function ContractCreate({
       return;
     }
     if (!start) {
-      setError(m.chooseStart);
+      setError("The employee has no hire date. Add a hire date to their employee record before creating a contract.");
       return;
     }
     if (type === "FIXED_TERM" && !end) {
@@ -231,7 +224,7 @@ export function ContractCreate({
         {m.employee}
         {employee ? (
           <span>
-            {employeeName(employee)} · {String(employee.employee_no ?? "")}
+            {employeeName(employee)} · {employeeNumber(employee)}
             {!presetEmployeeId && !fromContractId && (
               <button
                 type="button"
@@ -263,8 +256,7 @@ export function ContractCreate({
                 className="w-full p-2 text-left hover:bg-muted"
                 onClick={() => void selectEmployee(Number(row.id))}
               >
-                {employeeName(row)} · {String(row.employee_no ?? "")} ·{" "}
-                {String(row.position_name ?? "")}
+                {employeeName(row)} · {employeeNumber(row)}
               </button>
             </li>
           ))}
@@ -329,8 +321,10 @@ export function ContractCreate({
           className="rounded border border-border bg-background p-2"
           type="date"
           value={start}
-          onChange={(event) => setStart(event.target.value)}
+          readOnly
         />
+        <span className="text-sm text-muted-foreground">Taken automatically from the employee’s hire date. Update the employee record to change it.</span>
+        {employee && !start ? <span role="alert" className="text-sm text-destructive">The employee has no hire date. Add one to their employee record before creating a contract.</span> : null}
       </label>
       {type === "FIXED_TERM" && (
         <label className="grid gap-1">
@@ -368,7 +362,7 @@ export function ContractCreate({
       <button
         className="w-fit rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
         disabled={
-          busy || (!!fromContractId && !sourceContract) || !canSupplyReasons
+          busy || !start || (!!fromContractId && !sourceContract) || !canSupplyReasons
         }
         type="submit"
       >

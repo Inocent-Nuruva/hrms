@@ -1497,6 +1497,7 @@ export function ContractWorkspaceShell({
                                 ) : (
                                   <input
                                     aria-label={m.label(item.key)}
+                                    readOnly={item.key === "start_date" && !contract.amendmentReason}
                                     aria-invalid={!!fieldError}
                                     aria-describedby={
                                       fieldError
@@ -1595,6 +1596,7 @@ export function ContractWorkspaceShell({
                                 ) : (
                                   <input
                                     aria-label={m.label(item.key)}
+                                    readOnly={item.key === "start_date" && !contract.amendmentReason}
                                     aria-invalid={!!fieldError}
                                     aria-describedby={
                                       fieldError

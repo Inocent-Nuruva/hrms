@@ -180,7 +180,7 @@ export function ContractsList({
                   <span className="font-medium">{row.referenceNo}</span>
                   <ContractStatusBadge status={row.status} />
                 </span>
-                {!employeeId ? <span className="text-sm">{row.employeeName}</span> : null}
+                {!employeeId ? <span className="text-sm">{row.employeeName}{row.employeeNo ? ` · ${row.employeeNo}` : ""}</span> : null}
                 <span className="text-xs text-muted-foreground">
                   {CONTRACT_TYPE_LABELS[row.contractType]} · {formatDate(row.startDate)} – {row.endDate ? formatDate(row.endDate) : "open"}
                 </span>
