@@ -6860,21 +6860,37 @@ export function OnboardingView() {
         <div className="space-y-2">
           <div hidden={requestDetailsOpen}>
             {!isEmployeeMode ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                <div className="w-56 max-w-full">
-                  <FluentSelect
-                    ariaLabel="Onboarding view"
-                    value={requestPresentation}
-                    onChange={setRequestPresentation}
-                    options={[
-                      { value: "overview", label: "HR readiness overview" },
-                      { value: "requests", label: "All requests" },
-                    ]}
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2">
+                <div
+                  role="radiogroup"
+                  aria-label="Onboarding view"
+                  className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+                >
+                  {[
+                    { value: "overview", label: "Readiness overview" },
+                    { value: "requests", label: "All requests" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={requestPresentation === option.value}
+                      onClick={() => setRequestPresentation(option.value)}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                        requestPresentation === option.value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
                 {requestPresentation === "overview" &&
                 canCreateOnboardingRequests ? (
                   <Button size="sm" onClick={() => void openRequestSheet()}>
+                    <Plus className="mr-1.5 h-4 w-4" />
                     Create Request
                   </Button>
                 ) : null}
