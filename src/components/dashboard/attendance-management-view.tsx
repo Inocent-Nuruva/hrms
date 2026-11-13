@@ -188,7 +188,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "late_after_minutes",
     label: "Mark Late After (Minutes)",
-    description: "Minutes after scheduled start before someone is considered late.",
+    description: "Minutes after scheduled start before someone is considered late. A shift that sets its own value overrides this.",
     type: "number",
     placeholder: "e.g 10",
     defaultValue: "10",
@@ -196,7 +196,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "half_day_after_minutes",
     label: "Mark Half Day After (Minutes)",
-    description: "Minutes late after which the day counts as half day.",
+    description: "Minutes late after which the day counts as half day. A shift that sets its own value overrides this.",
     type: "number",
     placeholder: "e.g 240",
     defaultValue: "240",
@@ -204,7 +204,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "absent_after_minutes",
     label: "Mark Absent After (Minutes)",
-    description: "Minutes late after which the day counts as absent.",
+    description: "Minutes late after which the day counts as absent. A shift that sets its own value overrides this.",
     type: "number",
     placeholder: "e.g 480",
     defaultValue: "480",
@@ -212,7 +212,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "grace_period_minutes",
     label: "Grace Period (Minutes)",
-    description: "Extra minutes allowed before late rules apply.",
+    description: "Extra minutes allowed before late rules apply. A shift that sets its own value overrides this.",
     type: "number",
     placeholder: "e.g 10",
     defaultValue: "10",
@@ -315,13 +315,6 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
     defaultValue: "true",
   },
   {
-    key: "treat_weekend_as_absent_if_scheduled",
-    label: "Treat Weekend As Absent If Scheduled",
-    description: "Mark an employee absent when they miss a shift that was explicitly scheduled on a weekend.",
-    type: "boolean",
-    defaultValue: "false",
-  },
-  {
     key: "holiday_policy_mode",
     label: "Holiday Policy Mode",
     description: "Choose how public holidays affect attendance and pay calculations.",
@@ -409,13 +402,6 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
     defaultValue: "23:59:00",
   },
   {
-    key: "consider_shift_roster",
-    label: "Use Shift Roster",
-    description: "Use assigned roster shifts as the schedule when calculating attendance.",
-    type: "boolean",
-    defaultValue: "true",
-  },
-  {
     key: "requires_manager_approval_for_overtime",
     label: "Require Manager Approval For Overtime",
     description: "Require a manager to approve overtime before it is finalized.",
@@ -447,7 +433,7 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "max_overtime_minutes_per_day",
     label: "Daily Overtime Limit (Minutes)",
-    description: "Maximum overtime minutes that can be counted for one employee in a day; use 0 for no limit.",
+    description: "Maximum overtime minutes that can be counted for one employee in a day; use 0 for no limit. Company-wide ceiling: a shift can only set a lower limit.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
@@ -455,34 +441,10 @@ const ATTENDANCE_POLICY_FIELDS: FieldConfig[] = [
   {
     key: "max_overtime_minutes_per_month",
     label: "Monthly Overtime Limit (Minutes)",
-    description: "Maximum overtime minutes that can be counted for one employee in a month; use 0 for no limit.",
+    description: "Maximum overtime minutes that can be counted for one employee in a month; use 0 for no limit. Overtime pay rates are set in Payroll → Overtime policies.",
     type: "number",
     placeholder: "e.g 0",
     defaultValue: "0",
-  },
-  {
-    key: "overtime_rate_multiplier",
-    label: "Normal Overtime Rate Multiplier",
-    description: "Pay multiplier applied to overtime worked on normal working days.",
-    type: "number",
-    placeholder: "e.g 1",
-    defaultValue: "1",
-  },
-  {
-    key: "holiday_overtime_multiplier",
-    label: "Holiday Overtime Rate Multiplier",
-    description: "Pay multiplier applied to overtime worked on configured holidays.",
-    type: "number",
-    placeholder: "e.g 1",
-    defaultValue: "1",
-  },
-  {
-    key: "weekend_overtime_multiplier",
-    label: "Weekend Overtime Rate Multiplier",
-    description: "Pay multiplier applied to overtime worked on configured weekend days.",
-    type: "number",
-    placeholder: "e.g 1",
-    defaultValue: "1",
   },
 ]
 

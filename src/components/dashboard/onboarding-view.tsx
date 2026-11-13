@@ -2422,7 +2422,6 @@ export function OnboardingView() {
                 result: await listAttendancePolicies(token, {
                   page: 1,
                   limit: 100,
-                  is_active: true,
                 }),
               };
             case "leavePolicies":
