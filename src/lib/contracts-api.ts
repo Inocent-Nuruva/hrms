@@ -280,6 +280,8 @@ export const getContractPrefill = (token: string, employeeId: number) =>
 export const createContractDraft = (token: string, body: Record<string, unknown>) => post<ContractRow>(token, BASE, body)
 export const updateContractDraft = (token: string, id: number, body: Record<string, unknown>) =>
   patch<ContractRow>(token, `${BASE}/${id}`, body)
+export const deleteContractDraft = (token: string, id: number) =>
+  adminRequest<{ deleted: boolean }>(`${BASE}/${id}`, { method: "DELETE", token, dedupe: false })
 export const previewContract = (token: string, id: number) =>
   post<{ content_base64: string; file_name: string; missing_fields: string[]; preview_hash: string; page_count: number }>(token, `${BASE}/${id}/preview`)
 export const sendContract = (token: string, id: number, assignedSignatoryId?: number | null) =>

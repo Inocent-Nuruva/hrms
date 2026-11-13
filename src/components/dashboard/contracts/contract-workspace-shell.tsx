@@ -2,6 +2,22 @@
 
 import * as React from "react";
 import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  CloudOff,
+  Download,
+  Eye,
+  FileText,
+  Loader2,
+  MoreHorizontal,
+  RotateCw,
+  Save,
+  Send,
+  UserRound,
+} from "lucide-react";
 import { ActivityPanel } from "./contract-page-panels";
 import { ContractWorkspaceVersions } from "./contract-workspace-versions";
 import { ContractStatusBadge, formatDateTime } from "./contract-ui";
@@ -54,6 +70,17 @@ const MemoContractField = React.memo(
 );
 const MemoContractClauses = React.memo(ContractWorkspaceClauses);
 MemoContractField.displayName = "MemoContractField";
+
+const headerBtn =
+  "inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted";
+
+function contractStep(status: string): number {
+  if (status === "DRAFT") return 0;
+  if (status === "PENDING_HR_SIGNATURE") return 1;
+  if (["PENDING_EMPLOYEE_SIGNATURE", "PENDING_VERIFICATION", "ISSUED"].includes(status)) return 2;
+  if (status === "SIGNED") return 4; // all steps complete
+  return -1;
+}
 
 function loadFailure(kind: "fields" | "readiness", cause: unknown): Error {
   const status = (cause as { status?: number } | null)?.status;
@@ -133,6 +160,23 @@ export function ContractWorkspaceShell({
   } | null>(null);
   const [conflictError, setConflictError] = React.useState(false);
   const [baselineFields, setBaselineFields] = React.useState<ContractField[]>([]);
+  const moreRef = React.useRef<HTMLDetailsElement | null>(null);
+  const currentStep = contractStep(contract.status);
+  React.useEffect(() => {
+    // Close the "More actions" menu on outside click or Escape.
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      const menu = moreRef.current;
+      if (!menu?.open) return;
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !menu.contains(event.target as Node))
+        menu.open = false;
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, []);
   const direct = useContractDirectFields(
     token,
     contract,
@@ -808,146 +852,272 @@ export function ContractWorkspaceShell({
           "body:has([data-contract-workspace]) [data-support-widget] { position: static !important; margin: 1rem; }"
         }
       </style>
-      <header className="sticky top-0 z-20 grid gap-2 border-b border-border bg-background py-3">
-        <Link href="/dashboard/employees/contracts" className="text-primary">
-          {m.contracts}
-        </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold">
-            {contract.referenceNo} · v{contract.version} ·{" "}
-            {draft
-              ? ((legacy
-                  ? direct.state?.legacyValues.title
-                  : direct.state?.values.title) ?? contract.title)
-              : contract.title}
-          </h1>
-          <ContractStatusBadge status={contract.status} />
-          {legacy ? (
-            <span className="rounded-full border border-border px-2 py-1 text-xs">
-              {m.legacyDraft}
-            </span>
+      <header className="sticky top-0 z-20 -mx-1 rounded-xl border border-border bg-background/95 shadow-sm backdrop-blur supports-backdrop-filter:bg-background/85">
+        {/* Row 1: breadcrumb + identity on the left, actions on the right */}
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3">
+          <div className="grid min-w-0 gap-1">
+            <Link
+              href="/dashboard/employees/contracts"
+              className="inline-flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary"
+            >
+              <ArrowLeft className="size-3.5" /> {m.contracts}
+            </Link>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <FileText className="size-5 shrink-0 text-primary" aria-hidden />
+              <h1 className="truncate text-lg font-semibold leading-tight">
+                {draft
+                  ? ((legacy
+                      ? direct.state?.legacyValues.title
+                      : direct.state?.values.title) ?? contract.title)
+                  : contract.title}
+              </h1>
+              <ContractStatusBadge status={contract.status} />
+              {legacy ? (
+                <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                  {m.legacyDraft}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+              <span className="font-mono text-xs">
+                {contract.referenceNo} · v{contract.version}
+              </span>
+              <span aria-hidden>•</span>
+              <Link
+                className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary hover:underline"
+                href={`/dashboard/employees/profile/${encodeURIComponent(contract.employeeNo ?? "")}`}
+              >
+                <UserRound className="size-3.5" aria-hidden />
+                {contract.employeeName}
+              </Link>
+              <span>({contract.employeeNo})</span>
+              <span aria-hidden>•</span>
+              <span>{contract.jobTitle || m.empty}</span>
+              <span aria-hidden>•</span>
+              <span>{contract.departmentName || m.empty}</span>
+            </div>
+          </div>
+
+          {draft ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                {direct.status === "saving" ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : direct.status === "error" || offline ? (
+                  <CloudOff className="size-3.5 text-destructive" aria-hidden />
+                ) : direct.status === "saved" ? (
+                  <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+                ) : (
+                  <Save className="size-3.5" aria-hidden />
+                )}
+                {offline && (pending || direct.status === "error") ? (
+                  <span role="status">{m.offline}</span>
+                ) : (
+                  <SaveStatus status={direct.status} savedAt={direct.savedAt} />
+                )}
+                {direct.status === "error" && direct.issue !== "conflict" ? (
+                  <button
+                    type="button"
+                    className="font-medium text-primary hover:underline"
+                    onClick={() => void direct.flush()}
+                  >
+                    {m.retry}
+                  </button>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                className={headerBtn}
+                title="Ctrl/⌘+S"
+                onClick={() => void direct.flush()}
+              >
+                <Save className="size-4" aria-hidden /> {m.saveDraft}
+              </button>
+              <button
+                type="button"
+                className={headerBtn}
+                onClick={preview}
+                title="Ctrl/⌘+Shift+P"
+              >
+                <Eye className="size-4" aria-hidden /> {m.preview}
+              </button>
+              <button
+                type="button"
+                disabled={
+                  sending ||
+                  !readiness?.ready ||
+                  !!direct.issue ||
+                  clauseErrors.length > 0
+                }
+                title={
+                  !readiness?.ready || clauseErrors.length
+                    ? m.itemsNeedAttention
+                    : undefined
+                }
+                onClick={() => void send()}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Send className="size-4" aria-hidden />
+                )}
+                {sending ? m.sending : m.send}
+              </button>
+              <details ref={moreRef} className="relative">
+                <summary
+                  className={`${headerBtn} list-none [&::-webkit-details-marker]:hidden`}
+                  aria-label={m.moreActions}
+                  title={m.moreActions}
+                >
+                  <MoreHorizontal className="size-4" aria-hidden />
+                  <span className="hidden sm:inline">{m.moreActions}</span>
+                </summary>
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-30 mt-1 grid w-64 gap-0.5 rounded-lg border border-border bg-background p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => {
+                      if (moreRef.current) moreRef.current.open = false;
+                      void downloadDraft();
+                    }}
+                  >
+                    <Download className="size-4" aria-hidden /> {m.downloadDraft}
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                  <ContractWorkspaceFileAction
+                    token={token}
+                    contract={contract}
+                    beforeAction={direct.flush}
+                    variant="menu"
+                  />
+                </div>
+              </details>
+            </div>
           ) : null}
         </div>
-        <Link
-          className="text-primary underline"
-          href={`/dashboard/employees/profile/${encodeURIComponent(contract.employeeNo ?? "")}`}
-        >
-          {contract.employeeName} · {contract.employeeNo} ·{" "}
-          {contract.jobTitle || m.empty} · {contract.departmentName || m.empty}
-        </Link>
-        <ol className="flex flex-wrap gap-3 text-sm" aria-label={m.progress}>
-          {m.steps.map((label, i) => (
-            <li
-              key={label}
-              aria-current={
-                i ===
-                (contract.status === "DRAFT"
-                  ? 0
-                  : contract.status === "PENDING_HR_SIGNATURE"
-                    ? 1
-                    : [
-                          "PENDING_EMPLOYEE_SIGNATURE",
-                          "PENDING_VERIFICATION",
-                          "ISSUED",
-                        ].includes(contract.status)
-                      ? 2
-                      : contract.status === "SIGNED"
-                        ? 3
-                        : -1)
-                  ? "step"
-                  : undefined
-              }
+
+        {/* Row 2: progress stepper + readiness */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <ol
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-y-2 text-xs sm:text-sm"
+            aria-label={m.progress}
+          >
+            {m.steps.map((label, i) => {
+              const done = currentStep > i;
+              const current = currentStep === i;
+              return (
+                <li
+                  key={label}
+                  aria-current={current ? "step" : undefined}
+                  className="flex items-center"
+                >
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                      current
+                        ? "bg-primary/10 font-semibold text-primary"
+                        : done
+                          ? "text-emerald-700"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold ${
+                        current
+                          ? "bg-primary text-primary-foreground"
+                          : done
+                            ? "bg-emerald-600 text-white"
+                            : "border border-border"
+                      }`}
+                    >
+                      {done ? <Check className="size-3" aria-hidden /> : i + 1}
+                    </span>
+                    {label}
+                  </span>
+                  {i < m.steps.length - 1 ? (
+                    <span
+                      aria-hidden
+                      className={`mx-1 h-px w-4 sm:w-8 ${done ? "bg-emerald-600" : "bg-border"}`}
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+          {draft && readiness ? (
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+                readiness.ready && !clauseErrors.length
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-amber-300 bg-amber-50 text-amber-900"
+              }`}
+              onClick={() => {
+                if (window.matchMedia("(max-width: 1023px)").matches)
+                  setMobileOpen(true);
+                else
+                  document
+                    .getElementById("contract-readiness")
+                    ?.scrollIntoView({ block: "center" });
+              }}
             >
-              {i + 1}. {label}
-            </li>
-          ))}
-        </ol>
-        {draft && readiness ? (
-          <button
-            type="button"
-            className="w-fit text-primary underline"
-            onClick={() => {
-              if (window.matchMedia("(max-width: 1023px)").matches)
-                setMobileOpen(true);
-              else
-                document
-                  .getElementById("contract-readiness")
-                  ?.scrollIntoView({ block: "center" });
-            }}
+              {readiness.ready && !clauseErrors.length ? (
+                <CheckCircle2 className="size-3.5" aria-hidden />
+              ) : (
+                <AlertTriangle className="size-3.5" aria-hidden />
+              )}
+              {readiness.ready && !clauseErrors.length
+                ? m.ready
+                : `${problems.length + readiness.missing_fields.length + clauseErrors.length} ${m.itemsNeedAttention}`}
+            </button>
+          ) : null}
+        </div>
+
+        {/* Row 3: section tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2">
+          <nav
+            aria-label={m.navigation}
+            className="-mb-px flex min-w-0 gap-1 overflow-x-auto"
           >
-            {readiness.ready && !clauseErrors.length
-              ? m.ready
-              : `${problems.length + readiness.missing_fields.length + clauseErrors.length} ${m.itemsNeedAttention}`}
-          </button>
-        ) : null}
-        {contract.status === "DRAFT" ? (
-          <button
-            type="button"
-            className="w-fit rounded border border-border px-3 py-1"
-            onClick={preview}
-            title="Ctrl/⌘+Shift+P"
-          >
-            {m.preview}
-          </button>
-        ) : null}
-        {draft ? (
-          <button
-            type="button"
-            className="w-fit rounded border border-border px-3 py-1"
-            title="Ctrl/⌘+S"
-            onClick={() => void direct.flush()}
-          >
-            {m.saveDraft}
-          </button>
-        ) : null}
-        {draft ? (
-          offline && (pending || direct.status === "error") ? (
-            <span role="status">{m.offline}</span>
-          ) : (
-            <SaveStatus status={direct.status} savedAt={direct.savedAt} />
-          )
-        ) : null}
-        {draft && direct.status === "error" && direct.issue !== "conflict" ? (
-          <button
-            type="button"
-            className="w-fit text-primary underline"
-            onClick={() => void direct.flush()}
-          >
-            {m.retry}
-          </button>
-        ) : null}
-        {draft ? (
-          <button
-            type="button"
-            disabled={
-              sending ||
-              !readiness?.ready ||
-              !!direct.issue ||
-              clauseErrors.length > 0
-            }
-            onClick={() => void send()}
-            className="w-fit rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
-          >
-            {sending ? m.sending : m.send}
-          </button>
-        ) : null}
-        {draft ? (
-          <details>
-            <summary className="w-fit cursor-pointer rounded border border-border px-3 py-1">
-              {m.moreActions}
-            </summary>
-            <div className="grid w-fit gap-2 rounded border border-border bg-background p-2">
-              <button type="button" onClick={() => void downloadDraft()}>
-                {m.downloadDraft}
-              </button>
-              <ContractWorkspaceFileAction
-                token={token}
-                contract={contract}
-                beforeAction={direct.flush}
-              />
-            </div>
-          </details>
-        ) : null}
+            {m.sections.map((group) => (
+              <a
+                className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors ${
+                  activeSection === group
+                    ? "border-primary font-semibold text-primary"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+                }`}
+                aria-current={activeSection === group ? "location" : undefined}
+                key={group}
+                href={`#section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`}
+              >
+                {group}
+              </a>
+            ))}
+          </nav>
+          <div className="flex items-center gap-3 px-2 py-1.5">
+            {draft ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={showUnused}
+                  onChange={(event) => setShowUnused(event.target.checked)}
+                />
+                {m.showUnusedFields}
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-md border border-border px-2.5 py-1 text-xs lg:hidden"
+              onClick={() => setMobileOpen(true)}
+            >
+              {m.mobilePanel}
+            </button>
+          </div>
+        </div>
       </header>
       {direct.issue ? (
         <p role="alert">
@@ -1004,54 +1174,26 @@ export function ContractWorkspaceShell({
         <p>{m.snapshotUnavailable}</p>
       ) : null}
       {error ? (
-        <div role="alert" className="text-destructive">
-          <p>{error}</p>
+        <div
+          role="alert"
+          className="flex flex-wrap items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p className="min-w-0 flex-1">{error}</p>
           {error === m.loadError || error.startsWith("Could not load contract fields") || error.startsWith("Could not load contract readiness") ? (
             <button
               type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-white px-3 py-1 text-xs font-medium hover:bg-rose-100"
               onClick={() => {
                 setError(null);
                 setLoadAttempt((value) => value + 1);
               }}
             >
-              {m.retry}
+              <RotateCw className="size-3.5" aria-hidden /> {m.retry}
             </button>
           ) : null}
         </div>
       ) : null}
-      <nav aria-label={m.navigation} className="flex flex-wrap gap-3">
-        {m.sections.map((group) => (
-          <a
-            className={
-              activeSection === group
-                ? "font-semibold text-primary underline"
-                : "text-primary underline"
-            }
-            aria-current={activeSection === group ? "location" : undefined}
-            key={group}
-            href={`#section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`}
-          >
-            {group}
-          </a>
-        ))}
-      </nav>
-      {draft ? (
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={showUnused}
-            onChange={(event) => setShowUnused(event.target.checked)}
-          />
-          {m.showUnusedFields}
-        </label>
-      ) : null}
-      <button
-        type="button"
-        className="rounded border border-border p-3 lg:hidden"
-        onClick={() => setMobileOpen(true)}
-      >
-        {m.mobilePanel}
-      </button>
       <Dialog
         open={mobileOpen}
         onOpenChange={(_event, data) => setMobileOpen(data.open)}
@@ -1078,7 +1220,7 @@ export function ContractWorkspaceShell({
             <section
               key={group}
               id={`section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`}
-              className="scroll-mt-40 rounded-lg border border-border p-4"
+              className="scroll-mt-56 rounded-lg border border-border p-4"
             >
               <h2 className="mb-3 text-lg font-semibold">{group}</h2>
               {group === "Parties" && draft && direct.state ? (
@@ -1925,7 +2067,7 @@ export function ContractWorkspaceShell({
             </section>
           ))}
         </main>
-        <aside className="hidden self-start lg:sticky lg:top-40 lg:block">
+        <aside className="hidden self-start lg:sticky lg:top-56 lg:block">
           {panel}
         </aside>
       </div>

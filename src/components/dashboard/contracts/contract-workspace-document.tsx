@@ -8,6 +8,7 @@ import { readStatusFieldErrors } from "@/lib/admin-api";
 import {
   attachContractPdf,
   cancelContract,
+  deleteContractDraft,
   fetchContractFile,
   fileToBase64,
   getContract,
@@ -34,14 +35,21 @@ export function ContractWorkspaceFileAction({
   token,
   contract,
   beforeAction,
+  variant = "buttons",
 }: {
   token: string;
   contract: ContractDetail;
   beforeAction?: () => Promise<boolean>;
+  variant?: "buttons" | "menu";
 }) {
+  const menu = variant === "menu";
+  const itemClass = menu
+    ? "flex w-full items-center rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+    : "rounded border border-border px-3 py-2";
   const input = React.useRef<HTMLInputElement | null>(null);
   const { confirm, askReason, dialog } = useContractDialogs();
   const [error, setError] = React.useState<string | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
   const canReplace = [
     "PENDING_HR_SIGNATURE",
     "PENDING_EMPLOYEE_SIGNATURE",
@@ -86,15 +94,28 @@ export function ContractWorkspaceFileAction({
       setError(m.cancelFailed);
     }
   };
+  const deleteDraft = async () => {
+    if (!(await confirm({ title: "Delete draft contract?", message: "This permanently deletes this draft and its associated files and history. This cannot be undone.", confirmLabel: "Delete draft", tone: "danger" }))) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteContractDraft(token, contract.id);
+      window.location.assign("/dashboard/employees/contracts");
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not delete the draft. Please try again."));
+      setDeleting(false);
+    }
+  };
   if (!contract.canManage) return null;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={menu ? "grid gap-0.5" : "flex flex-wrap gap-2"}>
       {dialog}
       {contract.status === "DRAFT" || canReplace ? (
         <>
           <button
             type="button"
-            className="rounded border border-border px-3 py-2"
+            role={menu ? "menuitem" : undefined}
+            className={itemClass}
             onClick={() => input.current?.click()}
           >
             {contract.status === "DRAFT" ? m.useExternal : m.replacePdf}
@@ -121,13 +142,23 @@ export function ContractWorkspaceFileAction({
       ].includes(contract.status) ? (
         <button
           type="button"
-          className="rounded border border-border px-3 py-2"
+          role={menu ? "menuitem" : undefined}
+          className={menu ? `${itemClass} text-destructive` : itemClass}
           onClick={() => void cancel()}
         >
           {m.cancelContract}
         </button>
       ) : null}
-      {error ? <span role="alert">{error}</span> : null}
+      {contract.status === "DRAFT" ? (
+        <button type="button" role={menu ? "menuitem" : undefined} className={menu ? `${itemClass} text-destructive` : `${itemClass} text-destructive`} disabled={deleting} onClick={() => void deleteDraft()}>
+          {deleting ? "Deleting…" : "Delete draft"}
+        </button>
+      ) : null}
+      {error ? (
+        <span role="alert" className={menu ? "px-3 py-1 text-xs text-destructive" : undefined}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }

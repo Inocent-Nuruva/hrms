@@ -3,7 +3,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ContractWorkspaceDocument } from "./contract-workspace-document";
+import { ContractWorkspaceDocument, ContractWorkspaceFileAction } from "./contract-workspace-document";
 
 const mock = vi.hoisted(() => ({
   getContract: vi.fn(),
@@ -27,6 +27,20 @@ afterEach(() => {
 });
 
 describe("version comparison", () => {
+  it("offers permanent deletion only for manageable drafts", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    await act(async () => root.render(<ContractWorkspaceFileAction token="x" contract={{ id: 1, status: "DRAFT", canManage: true } as never} />));
+    expect(element.textContent).toContain("Delete draft");
+    await act(async () => root.render(<ContractWorkspaceFileAction token="x" contract={{ id: 1, status: "SIGNED", canManage: true } as never} />));
+    expect(element.textContent).not.toContain("Delete draft");
+    await act(async () => root.render(<ContractWorkspaceFileAction token="x" contract={{ id: 1, status: "DRAFT", canManage: false } as never} />));
+    expect(element.textContent).not.toContain("Delete draft");
+    await act(async () => root.unmount());
+    element.remove();
+  });
   it("hides file and verification actions from an unauthorized reviewer", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     mock.loadContractVersions.mockResolvedValue([]);
