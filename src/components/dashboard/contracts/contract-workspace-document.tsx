@@ -147,6 +147,7 @@ export function ContractWorkspaceDocument({
   );
   const [renewReason, setRenewReason] = React.useState("");
   const [renewEnd, setRenewEnd] = React.useState("");
+  const [renewStart, setRenewStart] = React.useState("");
   const [inheritedReasons, setInheritedReasons] = React.useState<
     Record<string, string>
   >({});
@@ -214,9 +215,11 @@ export function ContractWorkspaceDocument({
     if (id) {
       setMovementId(id);
       setRenewKind("AMENDMENT");
+      setRenewStart(contract.startDate ?? "");
+      setRenewEnd(contract.endDate ?? "");
       setRenewReason(m.movementApplied);
     }
-  }, []);
+  }, [contract.startDate, contract.endDate]);
   const renew = async () => {
     setRenewBusy(true);
     setFieldErrors({});
@@ -224,7 +227,8 @@ export function ContractWorkspaceDocument({
       const next = await renewContract(token, contract.id, {
         kind: renewKind,
         reason: renewReason.trim(),
-        ...(renewEnd ? { end_date: renewEnd } : {}),
+        ...(renewStart ? { start_date: renewStart } : {}),
+        ...(renewEnd ? { end_date: renewEnd } : renewKind === "AMENDMENT" ? { end_date: null } : {}),
         ...(movementId ? { source_movement_id: movementId } : {}),
         ...(missingReasons.length
           ? {
@@ -440,17 +444,27 @@ export function ContractWorkspaceDocument({
       {contract.status === "SIGNED" && contract.canManage ? (
         <section className="grid gap-2 rounded border border-border p-3">
           <h3>{m.renewOrAmend}</h3>
+          <p className="text-sm text-muted-foreground">Create a new draft to change contract terms. The current signed contract remains in place until the new version is signed by both parties.</p>
+          {versions.some((row) => row.status === "DRAFT" && row.id !== contract.id) ? (
+            <p className="text-sm">An existing draft is available. {versions.filter((row) => row.status === "DRAFT" && row.id !== contract.id).map((row) => <a key={row.id} className="text-primary underline" href={`/dashboard/employees/contracts/${row.id}`}>Open draft v{row.version} </a>)}</p>
+          ) : null}
+          <label className="grid gap-1 text-sm">What would you like to do?
           <select
             aria-label={m.renewOrAmend}
             className="rounded border border-border bg-background p-2"
             value={renewKind}
-            onChange={(event) =>
-              setRenewKind(event.target.value as "RENEWAL" | "AMENDMENT")
-            }
+            onChange={(event) => {
+              const kind = event.target.value as "RENEWAL" | "AMENDMENT";
+              setRenewKind(kind);
+              setRenewStart(kind === "AMENDMENT" ? contract.startDate ?? "" : "");
+              setRenewEnd(kind === "AMENDMENT" ? contract.endDate ?? "" : "");
+            }}
           >
             <option value="RENEWAL">{m.renewal}</option>
             <option value="AMENDMENT">{m.amendment}</option>
           </select>
+          </label>
+          <label className="grid gap-1 text-sm">Reason for the change
           <input
             aria-label={m.renewalReason}
             placeholder={m.renewalReason}
@@ -458,6 +472,11 @@ export function ContractWorkspaceDocument({
             value={renewReason}
             onChange={(event) => setRenewReason(event.target.value)}
           />
+          </label>
+          <label className="grid gap-1 text-sm">{renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"}
+          <input aria-label={renewKind === "AMENDMENT" ? "Corrected start date" : "New start date (optional)"} className="rounded border border-border bg-background p-2" type="date" value={renewStart} onChange={(event) => setRenewStart(event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm">{m.newEndDate}
           <input
             aria-label={m.newEndDate}
             className="rounded border border-border bg-background p-2"
@@ -465,12 +484,16 @@ export function ContractWorkspaceDocument({
             value={renewEnd}
             onChange={(event) => setRenewEnd(event.target.value)}
           />
+          </label>
+          {renewStart && renewEnd && renewEnd < renewStart ? <p role="alert" className="text-sm text-destructive">The end date must be on or after the start date.</p> : null}
           <button
             type="button"
             className="w-fit rounded bg-primary px-3 py-2 text-primary-foreground disabled:opacity-50"
             disabled={
               renewBusy ||
               renewReason.trim().length < 3 ||
+              (renewKind === "AMENDMENT" && !renewStart) ||
+              (!!renewStart && !!renewEnd && renewEnd < renewStart) ||
               !canSupplyReasons ||
               (contract.contractType === "FIXED_TERM" && !renewEnd)
             }

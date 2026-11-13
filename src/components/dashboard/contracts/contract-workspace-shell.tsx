@@ -55,6 +55,14 @@ const MemoContractField = React.memo(
 const MemoContractClauses = React.memo(ContractWorkspaceClauses);
 MemoContractField.displayName = "MemoContractField";
 
+function loadFailure(kind: "fields" | "readiness", cause: unknown): Error {
+  const status = (cause as { status?: number } | null)?.status;
+  const description = kind === "fields" ? "contract fields" : "contract readiness";
+  const advice = status === 401 ? "Your session may have expired. Sign in again." : status === 403 ? "You do not have permission to view this information." : "Try again. If the problem continues, contact support.";
+  const detail = status && status >= 400 && status < 500 && status !== 401 && status !== 403 && cause instanceof Error ? ` ${cause.message}` : "";
+  return new Error(`Could not load ${description}${status ? ` (HTTP ${status})` : ""}.${detail} ${advice}`);
+}
+
 function SaveStatus({
   status,
   savedAt,
@@ -310,8 +318,8 @@ export function ContractWorkspaceShell({
     const loading: Promise<[ContractField[], ContractReadiness | null]> =
       contract.status === "DRAFT"
         ? Promise.all([
-            getContractFields(token, contract.id),
-            getContractReadiness(token, contract.id, {}),
+            getContractFields(token, contract.id).catch((cause: unknown) => { throw loadFailure("fields", cause); }),
+            getContractReadiness(token, contract.id, {}).catch((cause: unknown) => { throw loadFailure("readiness", cause); }),
           ])
         : Promise.resolve([frozen, null]);
     loading
@@ -321,8 +329,8 @@ export function ContractWorkspaceShell({
           setReadiness(nextReadiness);
         }
       })
-      .catch(() => {
-        if (!cancelled) setError(m.loadError);
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : m.loadError);
       });
     return () => {
       cancelled = true;
@@ -998,7 +1006,7 @@ export function ContractWorkspaceShell({
       {error ? (
         <div role="alert" className="text-destructive">
           <p>{error}</p>
-          {error === m.loadError ? (
+          {error === m.loadError || error.startsWith("Could not load contract fields") || error.startsWith("Could not load contract readiness") ? (
             <button
               type="button"
               onClick={() => {

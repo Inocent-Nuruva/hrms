@@ -289,7 +289,7 @@ export const cancelContract = (token: string, id: number, reason: string) =>
 export const renewContract = (
   token: string,
   id: number,
-  body: { kind: "RENEWAL" | "AMENDMENT"; reason: string; start_date?: string; end_date?: string; contract_type?: ContractType; source_movement_id?: number; override_reasons?: Record<string, string> },
+  body: { kind: "RENEWAL" | "AMENDMENT"; reason: string; start_date?: string; end_date?: string | null; contract_type?: ContractType; source_movement_id?: number; override_reasons?: Record<string, string> },
 ) => post<ContractRow>(token, `${BASE}/${id}/renew`, body)
 export const reassignContractSignatory = (token: string, id: number, signatoryId: number) =>
   patch<ContractRow>(token, `${BASE}/${id}/signatory`, { signatory_id: signatoryId })
