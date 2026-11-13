@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useForbiddenRouteGuard, useLeaveIfForbidden } from "@/hooks/use-forbidden-route-guard"
 import { readStoredSessionTokens } from "@/lib/session-client"
+import { PageHeader } from "@/components/ui/page-header"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 
 function readStoredToken() {
@@ -639,15 +640,11 @@ export function HrProfileChangeRequestsView() {
         "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-            Profile changes
-          </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Review employee change requests and return incomplete submissions
-          </p>
-        </div>
+      <PageHeader
+        className="border-b border-border px-3 py-3"
+        title="Profile changes"
+        description="Review employee change requests and return incomplete submissions"
+        actions={
         <button
           type="button"
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-primary transition-colors hover:bg-muted disabled:opacity-60"
@@ -658,7 +655,8 @@ export function HrProfileChangeRequestsView() {
         >
           <RefreshCwIcon className={cn("size-3.5", loading && "animate-spin")} />
         </button>
-      </div>
+        }
+      />
       <div className="border-b border-border bg-muted/[0.12]">
         <div className="grid grid-cols-4">
           {([

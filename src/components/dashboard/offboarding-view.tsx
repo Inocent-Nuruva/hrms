@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
+import { PageHeader } from "@/components/ui/page-header";
 import { ResizableTable } from "@/components/ui/resizable-table";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, RefreshCw } from "lucide-react";
@@ -2380,21 +2381,16 @@ export function OffboardingView() {
         "flex min-w-0 flex-col overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-            {isEmployeeMode ? "My Offboarding" : "Offboarding"}
-          </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {canManage
-              ? "Review exit requests, approvals, tasks, and manage workflows."
-              : "Submit and track your exit request, plus any tasks or clearances assigned to you."}
-          </p>
-        </div>
-        <span className="text-[10px] font-medium text-muted-foreground">
-          {requests.length} {requests.length === 1 ? "request" : "requests"}
-        </span>
-      </div>
+      <PageHeader
+        className="border-b border-border px-3 py-3"
+        title={isEmployeeMode ? "My Offboarding" : "Offboarding"}
+        description={
+          canManage
+            ? "Review exit requests, approvals, tasks, and manage workflows."
+            : "Submit and track your exit request, plus any tasks or clearances assigned to you."
+        }
+        stats={[{ label: requests.length === 1 ? "Request" : "Requests", value: requests.length }]}
+      />
 
       <div className="inline-flex w-full flex-wrap items-center gap-1 border-b border-border bg-muted/[0.12] px-3">
         <button

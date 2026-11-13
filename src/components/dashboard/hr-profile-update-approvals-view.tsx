@@ -22,6 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
+import { PageHeader } from "@/components/ui/page-header"
 import { ResizableTable, type Column } from "@/components/ui/resizable-table"
 import {
   Select,
@@ -1052,16 +1053,11 @@ export function HrProfileUpdateApprovalsView() {
         "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-            Profile updates
-          </h1>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
-            Review employee updates before they are applied to official records
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+      <PageHeader
+        className="border-b border-border px-3 py-3"
+        title="Profile updates"
+        description="Review employee updates before they are applied to official records"
+        actions={
           <button
             type="button"
             className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-primary transition-colors hover:bg-muted disabled:opacity-60"
@@ -1072,8 +1068,8 @@ export function HrProfileUpdateApprovalsView() {
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading ? "animate-spin" : "")} />
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {error ? (
         <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">

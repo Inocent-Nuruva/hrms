@@ -1,5 +1,6 @@
 "use client"
 
+import { PageHeader } from "@/components/ui/page-header"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { DateInput } from "@/components/ui/date-input"
 import { Textarea } from "@/components/ui/textarea"
@@ -199,13 +200,16 @@ export function RecruitmentPipelineView() {
   }
 
   return <div className="space-y-5">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-lg font-semibold">Recruitment pipeline</h2>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => void refresh(token, requestId)} disabled={loading} title="Refresh"><RefreshCw className="size-4" /></Button>
+    <PageHeader
+      as="h2"
+      title="Recruitment pipeline"
+      description="Track hiring requests, candidates and their progress."
+      stats={[{ label: "Requests", value: requests.length }]}
+      actions={<>
+        <Button variant="outline" size="sm" onClick={() => void refresh(token, requestId)} disabled={loading} title="Refresh" aria-label="Refresh"><RefreshCw className="size-4" /></Button>
         <Button size="sm" onClick={() => open("request")}><Plus className="size-4" /> Request</Button>
-      </div>
-    </div>
+      </>}
+    />
 
     <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(250px,0.9fr)_minmax(0,1.7fr)]">
       <section className="min-w-0 border-t" aria-label="Recruitment requests">
