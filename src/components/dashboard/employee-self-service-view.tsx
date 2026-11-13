@@ -7607,8 +7607,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               </FluentDropdown>
             </FluentField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { end_date: value }) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
-              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
+              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(value && (prev.duration_type !== "FULL_DAY" || !prev.end_date || prev.end_date < value) ? { end_date: value } : {}) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
+              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} min={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
             </div>
             {requestForm.duration_type === "HALF_DAY" ? (
               <FluentField label="Half-day session" hint="Half-day leave uses the same start and end date.">

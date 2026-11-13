@@ -6452,6 +6452,9 @@ export function LeaveManagementView({
                           setRequestForm((prev) => ({
                             ...prev,
                             start_date: value,
+                            ...(value && (!prev.end_date || prev.end_date < value)
+                              ? { end_date: value }
+                              : {}),
                           }))
                         }
                         placeholder="Start date"
@@ -6465,6 +6468,7 @@ export function LeaveManagementView({
                     <div className="mt-1">
                       <DatePickerPresets
                         value={requestForm.end_date}
+                        min={requestForm.start_date}
                         onChange={(value) =>
                           setRequestForm((prev) => ({
                             ...prev,
