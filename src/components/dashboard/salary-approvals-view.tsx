@@ -1,5 +1,6 @@
 "use client"
 
+import { PageHeader } from "@/components/ui/page-header"
 import * as React from "react"
 import {
   Avatar,
@@ -19,12 +20,6 @@ import {
   TagPickerInput,
   TagPickerList,
   TagPickerOption,
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableHeaderCell,
-  TableRow,
 } from "@fluentui/react-components"
 import {
   ArrowClockwise20Regular,
@@ -227,40 +222,30 @@ export function SalaryApprovalsView() {
 
   return (
     <section className="w-full min-w-0">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <MoneyHand20Regular />
-            <h1 className="text-base font-semibold">Salary approvals</h1>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Review starting salaries, assigned approvers, and completed decisions.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {canAssignApprovers ? <Button appearance="primary" icon={<PersonAdd20Regular />} onClick={() => setAssignmentOpen(true)}>Assign approvers</Button> : null}
-          <Badge appearance="tint" color={pendingCount ? "warning" : "success"}>{pendingCount} pending</Badge>
-          <Button appearance="subtle" icon={<ArrowClockwise20Regular />} aria-label="Refresh salary approvals" onClick={() => void refresh()} />
-        </div>
+      <header className="border-b px-4 py-4">
+        <PageHeader
+          title={<span className="inline-flex items-center gap-2"><MoneyHand20Regular />Salary approvals</span>}
+          description="Review starting salaries, assigned approvers, and completed decisions."
+          stats={[
+            { label: "Pending", value: pendingCount, tone: pendingCount ? "warning" : "success" },
+            { label: "Approved", value: rows.length - pendingCount, tone: "success" },
+          ]}
+          actions={<>
+            {canAssignApprovers ? <Button appearance="primary" icon={<PersonAdd20Regular />} onClick={() => setAssignmentOpen(true)}>Assign approvers</Button> : null}
+            <Button icon={<ArrowClockwise20Regular />} aria-label="Refresh salary approvals" onClick={() => void refresh()} />
+          </>}
+        />
       </header>
 
       {loading ? (
         <div className="flex min-h-56 items-center justify-center"><FluentLoadingIndicator /></div>
       ) : rows.length ? (
-        <div className="w-full overflow-x-auto">
-          <Table aria-label="Salary approvals" className="w-full min-w-[980px]">
-            <TableHeader>
-              <TableRow>
-                <TableHeaderCell>Employee</TableHeaderCell>
-                <TableHeaderCell>Salary</TableHeaderCell>
-                <TableHeaderCell>Structure</TableHeaderCell>
-                <TableHeaderCell>Submitted by</TableHeaderCell>
-                <TableHeaderCell>Approver</TableHeaderCell>
-                <TableHeaderCell>Status</TableHeaderCell>
-                <TableHeaderCell>Actions</TableHeaderCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div className="p-3 sm:p-4">
+          <div className="overflow-hidden rounded-xl border border-border bg-background">
+            <div aria-hidden="true" className="hidden grid-cols-[minmax(200px,1.4fr)_minmax(120px,1fr)_minmax(180px,1.4fr)_minmax(130px,0.8fr)_auto] gap-4 border-b border-border bg-muted/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:grid">
+              <span>Employee</span><span>Salary</span><span>Submitted / approver</span><span>Status</span><span className="w-[200px] text-right">Actions</span>
+            </div>
+            <ul aria-label="Salary approvals" className="divide-y divide-border">
               {rows.map((row) => {
                 const employee = record(row.employee)
                 const approval = record(row.approval)
@@ -269,24 +254,29 @@ export function SalaryApprovalsView() {
                 const approvedBy = record(approval.approved_by)
                 const pending = text(row, "status") === "PENDING_APPROVAL"
                 return (
-                  <TableRow key={text(row, "id")}>
-                    <TableCell><div className="font-medium">{text(employee, "name")}</div><div className="text-xs text-muted-foreground">{text(employee, "employee_no")}</div></TableCell>
-                    <TableCell>{money(row)}</TableCell>
-                    <TableCell>{text(row, "salaryStructureCode") || "—"}</TableCell>
-                    <TableCell>{text(submittedBy, "name") || "Not recorded"}</TableCell>
-                    <TableCell>{text(approvedBy, "name") || text(assignedTo, "name") || "Any eligible approver"}</TableCell>
-                    <TableCell><Badge appearance="tint" color={pending ? "warning" : "success"}>{pending ? "Pending approval" : "Approved"}</Badge></TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button appearance="subtle" icon={<Eye20Regular />} onClick={() => setSelected(row)}>Review</Button>
-                        {pending && canApprove ? <Button appearance="primary" icon={<CheckmarkCircle20Regular />} disabled={busyId === text(row, "id")} onClick={() => void approve(row)}>Approve</Button> : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <li key={text(row, "id")} className="grid gap-3 px-4 py-4 hover:bg-muted/30 sm:grid-cols-2 lg:grid-cols-[minmax(200px,1.4fr)_minmax(120px,1fr)_minmax(180px,1.4fr)_minmax(130px,0.8fr)_auto] lg:items-center lg:gap-4 lg:py-3">
+                    <div className="min-w-0 sm:col-span-2 lg:col-span-1">
+                      <div className="truncate font-semibold">{text(employee, "name")}</div>
+                      <div className="text-xs text-muted-foreground">{text(employee, "employee_no")}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-medium tabular-nums">{money(row)}</div>
+                      <div className="text-xs text-muted-foreground">Structure: {text(row, "salaryStructureCode") || "—"}</div>
+                    </div>
+                    <div className="min-w-0 text-sm">
+                      <div className="truncate"><span className="text-xs text-muted-foreground">Submitted by </span>{text(submittedBy, "name") || "Not recorded"}</div>
+                      <div className="truncate"><span className="text-xs text-muted-foreground">Approver </span>{text(approvedBy, "name") || text(assignedTo, "name") || "Any eligible approver"}</div>
+                    </div>
+                    <div><Badge appearance="tint" color={pending ? "warning" : "success"}>{pending ? "Pending approval" : "Approved"}</Badge></div>
+                    <div className="flex items-center gap-2 sm:justify-end lg:w-[200px]">
+                      <Button className="flex-1 sm:flex-none" icon={<Eye20Regular />} onClick={() => setSelected(row)}>Review</Button>
+                      {pending && canApprove ? <Button className="flex-1 sm:flex-none" appearance="primary" icon={<CheckmarkCircle20Regular />} disabled={busyId === text(row, "id")} onClick={() => void approve(row)}>Approve</Button> : null}
+                    </div>
+                  </li>
                 )
               })}
-            </TableBody>
-          </Table>
+            </ul>
+          </div>
         </div>
       ) : (
         <div className="flex min-h-64 flex-col items-center justify-center gap-2 text-center">

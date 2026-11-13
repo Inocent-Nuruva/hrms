@@ -551,6 +551,21 @@ function mergePersistedColumnWidths(
   }
 }
 
+const MOBILE_QUERY = "(max-width: 767px)";
+/** True on phone-sized screens; false during SSR and where matchMedia is missing (tests). */
+function useIsMobileTable() {
+  return React.useSyncExternalStore(
+    (notify) => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+      const media = window.matchMedia(MOBILE_QUERY);
+      media.addEventListener?.("change", notify);
+      return () => media.removeEventListener?.("change", notify);
+    },
+    () => typeof window !== "undefined" && typeof window.matchMedia === "function" && Boolean(window.matchMedia(MOBILE_QUERY)?.matches),
+    () => false,
+  );
+}
+
 export function ResizableTable<T = Record<string, unknown>>({
   title = "Item",
   data,
@@ -593,6 +608,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const selectedIds = controlledSelectedRowIds ?? internalSelectedIds;
   const [mounted, setMounted] = useState(false);
+  const isMobileTable = useIsMobileTable();
   const [currentPage, setCurrentPage] = useState(1);
   const isServerPagination = typeof onPageChange === "function";
   const [sortField, setSortField] = useState<string | null>(null);
@@ -1587,10 +1603,72 @@ export function ResizableTable<T = Record<string, unknown>>({
         </div>
       ) : null}
 
+      {isMobileTable ? (
+        <ul aria-label={`${title} list`} className="flex flex-col gap-2">
+          {paginatedData.map((item, index) => {
+            const rowId = getRowIdentifier(item, index);
+            const isSelected = selectedIds.includes(rowId);
+            const actionCols = visibleTableColumns.filter((col) => col.key === "actions" || col.key === "act");
+            const dataCols = visibleTableColumns.filter((col) => col.key !== "actions" && col.key !== "act");
+            const [primary, ...rest] = dataCols;
+            return (
+              <li
+                key={rowId}
+                className={cn(
+                  "cursor-pointer rounded-xl border border-border bg-background p-3 shadow-sm transition-colors active:bg-muted/40",
+                  isSelected && "border-primary/50 bg-primary/5",
+                )}
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("a,button,input,[role='menuitem'],[data-slot='popover-trigger'],[data-slot='dropdown-menu-trigger']")) return;
+                  handleRowSelect(rowId, item);
+                }}
+              >
+                <div className="flex items-start gap-2">
+                  {showCheckboxes ? (
+                    <input
+                      type="checkbox"
+                      aria-label={`${isSelected ? "Deselect" : "Select"} ${title.toLowerCase()} row ${index + 1}`}
+                      className="mt-1 size-4 shrink-0 cursor-pointer"
+                      checked={isSelected}
+                      onChange={() => handleSelectionToggle(rowId)}
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+                    {primary ? renderCell(primary, item) : null}
+                  </div>
+                </div>
+                {rest.length ? (
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    {rest.map((col) => (
+                      <div key={col.key} className="min-w-0">
+                        <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{col.label}</dt>
+                        <dd className="mt-0.5 min-w-0 break-words text-foreground">{renderCell(col, item)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+                {actionCols.length ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-2">
+                    {actionCols.map((col) => <React.Fragment key={col.key}>{renderCell(col, item)}</React.Fragment>)}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+          {loading && paginatedData.length === 0 ? (
+            <li className="rounded-xl border border-border p-4 text-center text-sm text-muted-foreground">Loading…</li>
+          ) : null}
+          {!loading && paginatedData.length === 0 ? (
+            <li className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No {title.toLowerCase()} records found.</li>
+          ) : null}
+        </ul>
+      ) : null}
+
       <div
         className={cn(
           "relative max-w-full overflow-hidden border border-border bg-background shadow-sm",
           frameClassName,
+          isMobileTable && "hidden",
         )}
       >
         {fluent ? (

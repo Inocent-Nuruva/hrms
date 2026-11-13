@@ -15,6 +15,7 @@ import {
   canPerformPermission,
   EMPLOYMENT_CONTRACT_MANAGE_PERMISSION,
 } from "@/lib/dashboard-permissions"
+import { PageHeader } from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 
 const TABS = [
@@ -41,13 +42,8 @@ function ContractsWorkspace() {
 
   return (
     <div className="grid gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Employment contracts</h2>
-        <p className="text-sm text-muted-foreground">
-          Prepare contracts from templates, collect company and employee signatures, and track renewals and expiry.
-        </p>
-      </div>
-      <div role="tablist" aria-label="Contracts sections" className="flex flex-wrap gap-1 border-b border-border">
+      <PageHeader as="h2" title="Employment contracts" description="Prepare contracts from templates, collect company and employee signatures, and track renewals and expiry." />
+      <div role="tablist" aria-label="Contracts sections" className="inline-flex max-w-full flex-wrap gap-0.5 self-start rounded-lg border border-border bg-muted/40 p-0.5">
         {TABS.map((item) => (
           <button
             key={item.value}
@@ -55,8 +51,8 @@ function ContractsWorkspace() {
             role="tab"
             aria-selected={tab === item.value}
             className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm",
-              tab === item.value ? "border-primary font-medium text-primary" : "border-transparent text-slate-600 hover:text-slate-900",
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === item.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => router.replace(`${pathname}?tab=${item.value}`)}
           >
