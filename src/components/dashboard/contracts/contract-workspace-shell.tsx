@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
   CloudOff,
   Download,
   Eye,
@@ -156,6 +157,7 @@ export function ContractWorkspaceShell({
   >({});
   const [sending, setSending] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [issuesOpen, setIssuesOpen] = React.useState(false);
   const [showUnused, setShowUnused] = React.useState(false);
   const [offline, setOffline] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState<(typeof m.sections)[number]>(m.sections[0]);
@@ -592,15 +594,24 @@ export function ContractWorkspaceShell({
     }
   };
   const problems = Object.entries(readiness?.field_errors ?? {});
+  const sectionId = (group: string) =>
+    `section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`;
   const focusField = (key: string) => {
     setMobileOpen(false);
+    setIssuesOpen(false);
     setShowUnused(true);
     requestAnimationFrame(() => {
-      const target = document.getElementById(
-        key === "sections" || key.startsWith("sections.")
-          ? "section-clauses"
-          : `field-${key}`,
-      );
+      const group = metadata.find((item) => item.key === key)?.group;
+      const target =
+        document.getElementById(
+          key === "sections" || key.startsWith("sections.")
+            ? "section-clauses"
+            : `field-${key}`,
+        ) ??
+        // Field not rendered (e.g. only shown for another contract type):
+        // fall back to its section, then to the top of the form.
+        (group ? document.getElementById(sectionId(group)) : null) ??
+        document.getElementById(sectionId(m.sections[0]));
       const focusable =
         target?.querySelector<HTMLElement>("input,select,textarea,button") ??
         target;
@@ -648,6 +659,59 @@ export function ContractWorkspaceShell({
       (!pendingClear && (local || field.override))
     );
   });
+  // One list of everything blocking "Send for signature".
+  const issues: Array<{ id: string; key: string; message: string; tone: "error" | "warning" }> = readiness
+    ? [
+        ...problems.map(([key, message]) => ({ id: `p-${key}`, key, message, tone: "error" as const })),
+        ...readiness.missing_fields.map((key) => ({
+          id: `m-${key}`,
+          key,
+          message: `${m.missing}: ${m.label(key)}`,
+          tone: "error" as const,
+        })),
+        ...(clauseErrors.length
+          ? [{ id: "clauses", key: "sections", message: `${m.invalidTokens} ${clauseErrors.join(", ")}`, tone: "error" as const }]
+          : []),
+        ...Object.entries(readiness.warnings).map(([key, message]) => ({
+          id: `w-${key}`,
+          key,
+          message,
+          tone: "warning" as const,
+        })),
+      ]
+    : [];
+  const blockingCount = issues.filter((issue) => issue.tone === "error").length;
+  const issueList = (
+    <ul className="grid gap-1.5">
+      {issues.map((issue) => (
+        <li key={issue.id}>
+          <button
+            type="button"
+            className={`flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm hover:shadow-sm ${
+              issue.tone === "error"
+                ? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                : "border-border bg-muted/40 text-foreground hover:bg-muted"
+            }`}
+            onClick={() => focusField(issue.key)}
+          >
+            <AlertTriangle
+              className={`mt-0.5 size-4 shrink-0 ${issue.tone === "error" ? "text-amber-600" : "text-muted-foreground"}`}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1">
+              {issue.message}
+              {issue.key !== "sections" && metadata.some((item) => item.key === issue.key) ? (
+                <span className="block text-xs text-muted-foreground">
+                  {m.label(issue.key)} · {metadata.find((item) => item.key === issue.key)?.group}
+                </span>
+              ) : null}
+            </span>
+            <span className="shrink-0 text-xs font-medium text-primary">Go to field →</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
   const panel = (
     <div className="grid gap-3">
       {contract.status === "DRAFT" ? (
@@ -658,66 +722,16 @@ export function ContractWorkspaceShell({
           <h2 className="mb-2 text-sm font-semibold">{m.readiness}</h2>
           {!readiness ? (
             <p>{m.loading}</p>
-          ) : readiness.ready && !clauseErrors.length ? (
-            <p>{m.ready}</p>
+          ) : issues.length ? (
+            <>
+              {readiness.ready && !clauseErrors.length ? (
+                <p className="mb-2 text-sm text-emerald-700">{m.ready}</p>
+              ) : null}
+              {issueList}
+            </>
           ) : (
-            <ul>
-              {problems.map(([key, message]) => (
-                <li key={key}>
-                  <a
-                    className="text-primary underline"
-                    href={
-                      key === "sections" ? "#section-clauses" : `#field-${key}`
-                    }
-                    onClick={(event) => {
-                      event.preventDefault();
-                      focusField(key);
-                    }}
-                  >
-                    {message}
-                  </a>
-                </li>
-              ))}
-              {readiness.missing_fields.map((key) => (
-                <li key={`missing-${key}`}>
-                  <a
-                    className="text-primary underline"
-                    href={`#field-${key}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      focusField(key);
-                    }}
-                  >
-                    {m.missing}: {m.label(key)}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <p className="text-sm text-emerald-700">{m.ready}</p>
           )}
-          {clauseErrors.length ? (
-            <button
-              type="button"
-              className="text-primary underline"
-              onClick={() => focusField("sections")}
-            >
-              {m.invalidTokens} {clauseErrors.join(", ")}
-            </button>
-          ) : null}
-          {readiness &&
-            Object.entries(readiness.warnings).map(([key, message]) => (
-              <p key={key}>
-                <a
-                  href={`#field-${key}`}
-                  className="text-primary underline"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    focusField(key);
-                  }}
-                >
-                  {message}
-                </a>
-              </p>
-            ))}
         </section>
       ) : null}
       <section className="rounded-xl border border-border bg-background p-4 shadow-xs">
@@ -1090,14 +1104,10 @@ export function ContractWorkspaceShell({
                   ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                   : "border-amber-300 bg-amber-50 text-amber-900"
               }`}
-              onClick={() => {
-                if (window.matchMedia("(max-width: 1023px)").matches)
-                  setMobileOpen(true);
-                else
-                  document
-                    .getElementById("contract-readiness")
-                    ?.scrollIntoView({ block: "center" });
-              }}
+              aria-expanded={issuesOpen}
+              aria-controls="contract-issues"
+              disabled={!issues.length}
+              onClick={() => setIssuesOpen((open) => !open)}
             >
               {readiness.ready && !clauseErrors.length ? (
                 <CheckCircle2 className="size-3.5" aria-hidden />
@@ -1106,10 +1116,36 @@ export function ContractWorkspaceShell({
               )}
               {readiness.ready && !clauseErrors.length
                 ? m.ready
-                : `${problems.length + readiness.missing_fields.length + clauseErrors.length} ${m.itemsNeedAttention}`}
+                : `${blockingCount} ${m.itemsNeedAttention}`}
+              {issues.length ? (
+                <ChevronDown
+                  className={`size-3.5 transition-transform ${issuesOpen ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+              ) : null}
             </button>
           ) : null}
         </div>
+        {draft && issuesOpen && issues.length ? (
+          <div
+            id="contract-issues"
+            className="mx-4 mb-3 rounded-lg border border-amber-200 bg-background p-3"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold">
+                Fix these before sending for signature
+              </p>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setIssuesOpen(false)}
+              >
+                {m.close}
+              </button>
+            </div>
+            {issueList}
+          </div>
+        ) : null}
 
         {/* Row 3: section tabs */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2">
@@ -1482,15 +1518,6 @@ export function ContractWorkspaceShell({
                       const overrideActive =
                         activeOverrides[item.key] ??
                         !!direct.state?.overrides[item.key];
-                      const sourceHref = legacyEditable
-                        ? null
-                        : item.owner === "company"
-                          ? "/dashboard/employees/contracts?tab=company"
-                          : item.owner === "position"
-                            ? "/dashboard/positions"
-                            : item.owner === "employee"
-                              ? `/dashboard/employees/profile/${encodeURIComponent(contract.employeeNo ?? "")}`
-                              : null;
                       const signature = JSON.stringify([
                         item,
                         field,
@@ -2075,22 +2102,6 @@ export function ContractWorkspaceShell({
                               >
                                 {m.reset}
                               </button>
-                            ) : null}
-                            {sourceHref ? (
-                              <p>
-                                <Link
-                                  className="text-sm text-primary underline"
-                                  href={sourceHref}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  {item.owner === "company"
-                                    ? m.fixCompany
-                                    : item.owner === "employee"
-                                      ? m.fixEmployee
-                                      : m.sourceRecord}
-                                </Link>
-                              </p>
                             ) : null}
                           </div>
                         </MemoContractField>
