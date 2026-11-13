@@ -120,7 +120,7 @@ import {
   PLATFORM_COMPANY_MODULES,
   publishCompanyModules,
   readPublishedCompanyModules,
-  resolveCompanyDashboardModules,
+  parseCompanyModulesFromCompany,
 } from "@/lib/company-modules";
 import {
   canAccessDashboardRoute,
@@ -1104,11 +1104,7 @@ export default function AdminDashboardView({
         const company = await api.getMyCompany(token);
         if (!active) return;
         setMyCompany(company);
-        const modules = await resolveCompanyDashboardModules({
-          company,
-          extraIdSources: [clientIdentity.rawUser, clientIdentity.tokenPayload],
-          loadModules: (id) => api.getCompanyModules(token, id),
-        });
+        const modules = parseCompanyModulesFromCompany(company);
         if (!active) return;
         publishCompanyModules(modules);
       })

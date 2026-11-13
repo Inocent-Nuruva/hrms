@@ -33,7 +33,7 @@ vi.mock("@/lib/contracts-api", async (original) => ({
 describe("read-only contract shell", () => {
   it("shows an owner's salary without granting salary editing", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    api.getContractFields.mockResolvedValue([
+    api.getContractFields.mockRejectedValueOnce(new DOMException("Invalidated", "AbortError")).mockResolvedValue([
       {
         key: "salary",
         value: "1500.00",
@@ -90,6 +90,7 @@ describe("read-only contract shell", () => {
       await Promise.resolve();
     });
     const salary = element.querySelector("#field-salary")!;
+    expect(api.getContractFields).toHaveBeenCalledTimes(2);
     expect(salary.textContent).toContain("1500.00");
     expect(salary.textContent).toContain(
       "A salary-authorized user must change this value",

@@ -384,8 +384,20 @@ export function ContractWorkspaceShell({
     }
     // Load fields and readiness independently: a readiness failure (it
     // renders the whole PDF server-side) must not block editing the fields.
+    const loadFields = async () => {
+      try {
+        return await getContractFields(token, contract.id);
+      } catch (error) {
+        // A concurrent write can invalidate an in-flight GET. Fetch the
+        // current fields once more instead of presenting it as a load failure.
+        if (!cancelled && typeof error === "object" && error !== null && "name" in error && error.name === "AbortError") {
+          return getContractFields(token, contract.id);
+        }
+        throw error;
+      }
+    };
     void Promise.allSettled([
-      getContractFields(token, contract.id),
+      loadFields(),
       getContractReadiness(token, contract.id, {}),
     ]).then(([nextFields, nextReadiness]) => {
       if (cancelled) return;
