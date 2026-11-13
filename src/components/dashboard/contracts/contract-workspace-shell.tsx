@@ -72,6 +72,17 @@ const MemoContractField = React.memo(
 const MemoContractClauses = React.memo(ContractWorkspaceClauses);
 MemoContractField.displayName = "MemoContractField";
 
+/** Display order inside a section; fields not listed keep their place after these. */
+const FIELD_ORDER = [
+  "work_location",
+  "department",
+  "job_title",
+  "grade",
+  "reporting_manager",
+  "place_of_recruitment",
+  "job_description",
+];
+
 const headerBtn =
   "inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted";
 
@@ -681,6 +692,12 @@ export function ContractWorkspaceShell({
       ]
     : [];
   const blockingCount = issues.filter((issue) => issue.tone === "error").length;
+  // Job titles are listed for the chosen department (override, else automatic).
+  const selectedDepartmentId =
+    (direct.state?.refs.department_id ??
+      fields?.find((field) => field.key === "department")
+        ?.automatic_reference_id) ??
+    null;
   const issueList = (
     <ul className="grid gap-1.5">
       {issues.map((issue) => (
@@ -1363,7 +1380,12 @@ export function ContractWorkspaceShell({
                 <div className="grid gap-3">
                   <h3 className="font-medium">{m.reviewValues}</h3>
                   <dl>
-                    {(fields ?? []).map((field) => (
+                    {(fields ?? [])
+                      .filter(
+                        (field) =>
+                          field.key !== "reporting_manager" || field.used,
+                      )
+                      .map((field) => (
                       <div key={field.key}>
                         <dt className="inline font-medium">
                           {m.label(field.key)}:{" "}
@@ -1476,7 +1498,16 @@ export function ContractWorkspaceShell({
                           (legacy
                             ? direct.state?.legacyValues.contract_type
                             : direct.state?.values.contract_type) ===
-                            "SPECIFIC_TASK"),
+                            "SPECIFIC_TASK") &&
+                        // Reports to is not part of the contract unless a clause uses it.
+                        (item.key !== "reporting_manager" ||
+                          fields?.find((field) => field.key === item.key)
+                            ?.used === true),
+                    )
+                    .sort(
+                      (a, b) =>
+                        (FIELD_ORDER.indexOf(a.key) + 1 || 99) -
+                        (FIELD_ORDER.indexOf(b.key) + 1 || 99),
                     )
                     .map((item) => {
                       const field = fields?.find(
@@ -1532,6 +1563,7 @@ export function ContractWorkspaceShell({
                         direct.state?.overrides[item.key],
                         direct.state?.reasons[item.key],
                         reference ? direct.state?.refs[reference] : null,
+                        reference === "position_id" ? selectedDepartmentId : null,
                         overrideActive,
                         item.key === "probation_months"
                           ? [
@@ -1850,6 +1882,11 @@ export function ContractWorkspaceShell({
                                 <ContractReferencePicker
                                   token={token}
                                   referenceKey={reference}
+                                  departmentId={
+                                    reference === "position_id"
+                                      ? selectedDepartmentId
+                                      : null
+                                  }
                                   disabled={!!direct.state.overrides[item.key]}
                                   label={m.label(item.key)}
                                   value={direct.state.refs[reference] ?? null}

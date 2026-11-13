@@ -10,6 +10,9 @@ import {
 } from "@/lib/admin-api";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
 
+/** References chosen from a plain dropdown, without a search box. */
+const DROPDOWN_ONLY = new Set(["branch_id", "department_id", "position_id", "grade_id"]);
+
 export function ContractReferencePicker({
   token,
   referenceKey,
@@ -21,6 +24,7 @@ export function ContractReferencePicker({
   onChange,
   onReason,
   disabled = false,
+  departmentId = null,
 }: {
   token: string;
   referenceKey: string;
@@ -32,6 +36,8 @@ export function ContractReferencePicker({
   onChange: (id: number | null) => void;
   onReason: (reason: string) => void;
   disabled?: boolean;
+  /** For job titles: only list positions of this department. */
+  departmentId?: number | null;
 }) {
   const reasonErrorId = React.useId();
   const [query, setQuery] = React.useState("");
@@ -40,7 +46,14 @@ export function ContractReferencePicker({
   React.useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      const params = { search: query, limit: 100 } as never;
+      const params = (DROPDOWN_ONLY.has(referenceKey)
+        ? {
+            limit: 500,
+            ...(referenceKey === "position_id" && departmentId
+              ? { department_id: departmentId }
+              : {}),
+          }
+        : { search: query, limit: 100 }) as never;
       const request =
         referenceKey === "department_id"
           ? listDepartments(token, params).then((r) => r.rows)
@@ -66,7 +79,7 @@ export function ContractReferencePicker({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, referenceKey, token]);
+  }, [query, referenceKey, token, departmentId]);
   const name = (row: AdminRecord) =>
     String(
       row.name ||
@@ -74,19 +87,31 @@ export function ContractReferencePicker({
         row.id,
     );
   const selected = rows.find((row) => Number(row.id) === value);
+  // Branch, department, position and grade are picked straight from the
+  // dropdown; employee lists keep a search box to narrow them down.
+  const searchable = !DROPDOWN_ONLY.has(referenceKey);
   return (
     <div className="grid gap-2">
       {disabled ? <span>{m.resetLegacyFirst}</span> : null}
-      <label className="grid gap-1">
-        {m.search} {label}
-        <input
-          disabled={disabled}
-          className="rounded border border-border bg-background p-2"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
+      {searchable ? (
+        <label className="grid gap-1">
+          {m.search} {label}
+          <input
+            disabled={disabled}
+            className="rounded border border-border bg-background p-2"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+      ) : null}
       {error ? <span role="alert">{m.referenceLoadError}</span> : null}
+      {referenceKey === "position_id" && departmentId ? (
+        <span className="text-xs text-muted-foreground">
+          {rows.length
+            ? "Showing job titles in the selected department."
+            : "No job titles are set up for the selected department."}
+        </span>
+      ) : null}
       <select
         disabled={disabled}
         aria-label={label}
@@ -96,7 +121,10 @@ export function ContractReferencePicker({
           onChange(event.target.value ? Number(event.target.value) : null)
         }
       >
-        <option value="">{m.useAutomatic}</option>
+        <option value="">
+          {m.useAutomatic}
+          {automaticLabel ? ` (${automaticLabel})` : ""}
+        </option>
         {value !== null && !selected ? (
           <option value={value}>
             {m.selectedReference} #{value}
