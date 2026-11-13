@@ -49,7 +49,7 @@ describe("HR onboarding overview", () => {
     expect(getOverview).toHaveBeenNthCalledWith(2, "token", 1)
     expect(completeOnboarding).toHaveBeenCalledWith("token", 2)
     expect(container.textContent).toContain("1 of 1 open requests · 0 ready for activation · 1 overdue")
-    expect(container.querySelectorAll("tbody tr")).toHaveLength(1)
+    expect(container.querySelectorAll('ul[aria-label^="Open onboarding requests"] > li')).toHaveLength(1)
     expect(container.querySelector("th[scope='row']")?.textContent).toContain("Amina Ali")
     expect(container.querySelector("tbody")?.textContent).toContain("Signed contract")
     expect(container.querySelector("tbody")?.textContent).toContain("HR / Employee")
