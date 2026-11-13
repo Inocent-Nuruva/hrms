@@ -1,5 +1,6 @@
 ﻿"use client";
 import * as React from "react";
+import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import { ContractPdfViewer, formatDate } from "./contract-ui";
 import { ContractSigningPanel } from "./contract-signing-panel";
 import { SignatoriesPanel } from "./contract-page-panels";
@@ -586,20 +587,27 @@ export function ContractWorkspaceDocument({
       )}
       {contract.status === "PENDING_VERIFICATION" && contract.canManage ? (
         contract.can_view_document ? (
-          <section className="grid gap-2 rounded border border-border p-3">
-            <h3>{m.verifyUpload}</h3>
-            <p>{m.compareScans}</p>
-            <div className="grid gap-2 lg:grid-cols-2">
+          <section className="grid gap-4 rounded-xl border border-sky-200 bg-sky-50/40 p-4 shadow-xs">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                <ShieldCheck className="size-5" aria-hidden />
+              </span>
               <div>
-                <p>{m.employeeUpload}</p>
+                <h3 className="text-base font-semibold">{m.verifyUpload}</h3>
+                <p className="text-sm text-muted-foreground">{m.compareScans}</p>
+              </div>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid gap-1.5">
+                <p className="text-sm font-medium">{m.employeeUpload}</p>
                 <ContractPdfViewer
                   token={token}
                   contractId={contract.id}
                   documentId={contract.pendingUploadDocumentId}
                 />
               </div>
-              <div>
-                <p>{m.companySigned}</p>
+              <div className="grid gap-1.5">
+                <p className="text-sm font-medium">{m.companySigned}</p>
                 <ContractPdfViewer
                   token={token}
                   contractId={contract.id}
@@ -607,22 +615,43 @@ export function ContractWorkspaceDocument({
                 />
               </div>
             </div>
-            <textarea
-              aria-label={m.rejectReason}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => void decide("ACCEPT")}>
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">
+                Reason for rejection{" "}
+                <span className="font-normal text-muted-foreground">(only needed to reject)</span>
+              </span>
+              <textarea
+                aria-label={m.rejectReason}
+                placeholder="e.g. Page 3 is not signed, or the scan is unreadable"
+                className="min-h-20 rounded-md border border-border bg-background p-2.5 text-sm focus:border-primary focus:outline-none"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-3 border-t border-sky-200 pt-3">
+              <button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                onClick={() => void decide("ACCEPT")}
+              >
+                <CheckCircle2 className="size-4" aria-hidden />
                 {m.accept}
               </button>
               <button
                 type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-rose-300 bg-white px-5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={reason.trim().length < 3}
+                title={reason.trim().length < 3 ? "Enter a reason to reject" : undefined}
                 onClick={() => void decide("REJECT")}
               >
+                <XCircle className="size-4" aria-hidden />
                 {m.reject}
               </button>
+              {reason.trim().length < 3 ? (
+                <span className="text-xs text-muted-foreground">
+                  Enter a reason above to enable Reject.
+                </span>
+              ) : null}
             </div>
           </section>
         ) : (
