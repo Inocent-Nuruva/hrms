@@ -17,7 +17,7 @@ describe("company signatory employee picker", () => {
   it("shows and selects employees returned with API field names", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.useFakeTimers()
-    const employee = { id: 7, firstName: "Filbert", lastName: "Msaki", employeeNo: "E007" }
+    const employee = { id: 7, fullName: "Filbert Msaki", employeeNo: "E007" }
     mock.listEmployees.mockResolvedValue({ rows: [employee] })
     const select = vi.fn()
     const element = document.createElement("div")

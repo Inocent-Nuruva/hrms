@@ -157,7 +157,7 @@ export function EmployeePicker({ token, onPick }: { token: string; onPick: (row:
                   setSearch("")
                 }}
               >
-                {String(row.first_name ?? row.firstName ?? "")} {String(row.last_name ?? row.lastName ?? "")}{" "}
+                {String(row.fullName ?? row.full_name ?? [row.first_name ?? row.firstName, row.middle_name ?? row.middleName, row.last_name ?? row.lastName].filter(Boolean).join(" "))}{" "}
                 <span className="text-xs text-muted-foreground">{String(row.employee_no ?? row.employeeNo ?? "")}</span>
               </button>
             </li>
