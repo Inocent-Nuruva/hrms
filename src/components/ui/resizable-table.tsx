@@ -505,6 +505,8 @@ interface ResizableTableProps<T = Record<string, unknown>> {
   storageKey?: string;
   /** Render the data surface with Fluent UI table primitives. */
   fluent?: boolean;
+  /** Roomier rows, muted uppercase header and rounded frame (employees section look). */
+  modern?: boolean;
   /** Use a borderless Fluent icon button for the standalone Sort action. */
   sortIconOnly?: boolean;
   /** Optional destination for the standalone Sort control. */
@@ -602,6 +604,7 @@ export function ResizableTable<T = Record<string, unknown>>({
   hiddenColumnKeys = [],
   storageKey,
   fluent = true,
+  modern = false,
   sortIconOnly = false,
   sortContainer,
 }: ResizableTableProps<T> = {}) {
@@ -1667,6 +1670,7 @@ export function ResizableTable<T = Record<string, unknown>>({
       <div
         className={cn(
           "relative max-w-full overflow-hidden border border-border bg-background shadow-sm",
+          modern && "rounded-xl",
           frameClassName,
           isMobileTable && "hidden",
         )}
@@ -1692,6 +1696,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                       className={cn(
                         compact &&
                           "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                          modern && "!h-10 !bg-muted/50 !px-3",
                       )}
                       style={{ width: getColumnWidth("checkbox") || 36 }}
                     >
@@ -1720,6 +1725,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                           isActions && "text-right",
                           compact &&
                             "!h-8 !px-2 !py-1 !text-[10px] !font-semibold uppercase tracking-[0.08em]",
+                          modern && "!h-10 !bg-muted/50 !px-3 !text-[11px] !text-muted-foreground",
                         )}
                         style={{ width: getColumnWidth(col) }}
                         sortDirection={
@@ -1750,6 +1756,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                       className={cn(
                         "cursor-pointer",
                         compact && "!h-9",
+                        modern && "!h-12",
                         isSelected && "bg-muted/30",
                       )}
                       onClick={() => handleRowSelect(rowId, item)}
@@ -1759,6 +1766,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                           className={cn(
                             compact &&
                               "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
+                              modern && "!h-12 !px-3 !text-[13px] !leading-5",
                           )}
                           style={{ width: getColumnWidth("checkbox") || 36 }}
                         >
@@ -1783,6 +1791,7 @@ export function ResizableTable<T = Record<string, unknown>>({
                               "min-w-0",
                               compact &&
                                 "!h-9 !px-2 !py-1 !text-[11px] !leading-4",
+                              modern && "!h-12 !px-3 !text-[13px] !leading-5",
                               isActions && "overflow-visible text-right",
                             )}
                             style={{ width: getColumnWidth(col) }}

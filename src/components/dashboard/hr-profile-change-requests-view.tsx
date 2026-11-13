@@ -739,6 +739,7 @@ export function HrProfileChangeRequestsView() {
           showExport={false}
           storageKey="hr-profile-change-requests"
           compact
+          modern
           toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
           frameClassName="rounded-none border-0 shadow-none"
           onRowSelect={(_, row) => {

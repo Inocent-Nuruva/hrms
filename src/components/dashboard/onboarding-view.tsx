@@ -6583,6 +6583,7 @@ export function OnboardingView() {
             storageKey="employee-invitations"
             enableAnimations
             compact
+            modern
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
             frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}
@@ -6925,6 +6926,7 @@ export function OnboardingView() {
                 storageKey="onboarding-requests"
                 enableAnimations
                 compact
+                modern
                 toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
                 frameClassName="rounded-none border-0 shadow-none"
                 itemsPerPage={15}
@@ -10776,6 +10778,7 @@ export function OnboardingView() {
             columns={onboardingWorkflowColumns}
             loading={loading}
             storageKey="onboarding-workflows-v2"
+            modern
             enableAnimations
             compact
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"

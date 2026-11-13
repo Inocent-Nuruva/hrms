@@ -2523,6 +2523,7 @@ export function OffboardingView() {
                 showExport={false}
                 storageKey="offboarding-requests-v2"
                 compact
+                modern
                 frameClassName="rounded-none border border-border shadow-none"
                 onRowSelect={(_, row) => {
                   if (row) void openRequestDetails(row);
@@ -2944,6 +2945,7 @@ export function OffboardingView() {
                 showExport={false}
                 storageKey="offboarding-my-approvals-v1"
                 compact
+                modern
                 frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {
@@ -3063,6 +3065,7 @@ export function OffboardingView() {
                 showExport={false}
                 storageKey="offboarding-my-tasks-v1"
                 compact
+                modern
                 frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {
@@ -3155,6 +3158,7 @@ export function OffboardingView() {
                 showExport={false}
                 storageKey="offboarding-my-clearances-v1"
                 compact
+                modern
                 frameClassName="rounded-none border border-border shadow-none"
                 columns={[
                   {

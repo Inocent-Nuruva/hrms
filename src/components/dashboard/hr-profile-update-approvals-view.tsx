@@ -1197,6 +1197,7 @@ export function HrProfileUpdateApprovalsView() {
             storageKey="hr-profile-update-approval-requests"
             showToolbar={false}
             compact
+            modern
             frameClassName="rounded-none border border-border shadow-none"
             getRowId={(row) => getRequestId(row) || String(row.id ?? "")}
             onRowSelect={(id) => {

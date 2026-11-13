@@ -1265,6 +1265,7 @@ export function EmployeesListView({
         enableAnimations
         enableColumnVisibility
         compact
+        modern
         itemsPerPage={query.limit}
         page={page}
         totalPages={totalPages}
