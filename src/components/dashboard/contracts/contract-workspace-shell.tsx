@@ -359,23 +359,34 @@ export function ContractWorkspaceShell({
       frozen: true,
       hidden: item.key === "salary" && !!contract.salaryHidden,
     }));
-    const loading: Promise<[ContractField[], ContractReadiness | null]> =
-      contract.status === "DRAFT"
-        ? Promise.all([
-            getContractFields(token, contract.id).catch((cause: unknown) => { throw loadFailure("fields", cause); }),
-            getContractReadiness(token, contract.id, {}).catch((cause: unknown) => { throw loadFailure("readiness", cause); }),
-          ])
-        : Promise.resolve([frozen, null]);
-    loading
-      .then(([nextFields, nextReadiness]) => {
-        if (!cancelled) {
-          setFields(nextFields);
-          setReadiness(nextReadiness);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : m.loadError);
-      });
+    if (contract.status !== "DRAFT") {
+      setFields(frozen);
+      setReadiness(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Load fields and readiness independently: a readiness failure (it
+    // renders the whole PDF server-side) must not block editing the fields.
+    void Promise.allSettled([
+      getContractFields(token, contract.id),
+      getContractReadiness(token, contract.id, {}),
+    ]).then(([nextFields, nextReadiness]) => {
+      if (cancelled) return;
+      if (nextFields.status === "fulfilled") setFields(nextFields.value);
+      if (nextReadiness.status === "fulfilled") setReadiness(nextReadiness.value);
+      const failure =
+        nextFields.status === "rejected"
+          ? loadFailure("fields", nextFields.reason)
+          : nextReadiness.status === "rejected"
+            ? loadFailure("readiness", nextReadiness.reason)
+            : null;
+      if (failure) {
+        console.error("[contract workspace]", failure.message,
+          nextFields.status === "rejected" ? nextFields.reason : (nextReadiness as PromiseRejectedResult).reason);
+        setError(failure.message);
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -428,7 +439,7 @@ export function ContractWorkspaceShell({
     const refresh = () => {
       void getContractFields(token, contract.id)
         .then(setFields)
-        .catch(() => setError(m.loadError));
+        .catch((cause: unknown) => setError(loadFailure("fields", cause).message));
     };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
@@ -614,9 +625,9 @@ export function ContractWorkspaceShell({
       {contract.status === "DRAFT" ? (
         <section
           id="contract-readiness"
-          className="rounded-lg border border-border p-4"
+          className="rounded-xl border border-border bg-background p-4 shadow-xs"
         >
-          <h2 className="font-semibold">{m.readiness}</h2>
+          <h2 className="mb-2 text-sm font-semibold">{m.readiness}</h2>
           {!readiness ? (
             <p>{m.loading}</p>
           ) : readiness.ready && !clauseErrors.length ? (
@@ -681,8 +692,8 @@ export function ContractWorkspaceShell({
             ))}
         </section>
       ) : null}
-      <section className="rounded-lg border border-border p-4">
-        <h2 className="font-semibold">
+      <section className="rounded-xl border border-border bg-background p-4 shadow-xs">
+        <h2 className="mb-2 text-sm font-semibold">
           {m.overrides} ({summaryOverrides.length})
         </h2>
         {summaryOverrides.length ? (
@@ -847,11 +858,6 @@ export function ContractWorkspaceShell({
         readiness={readiness}
         onFocusField={focusField}
       />
-      <style>
-        {
-          "body:has([data-contract-workspace]) [data-support-widget] { position: static !important; margin: 1rem; }"
-        }
-      </style>
       <header className="sticky top-0 z-20 -mx-1 rounded-xl border border-border bg-background/95 shadow-sm backdrop-blur supports-backdrop-filter:bg-background/85">
         {/* Row 1: breadcrumb + identity on the left, actions on the right */}
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3">
@@ -1165,7 +1171,7 @@ export function ContractWorkspaceShell({
         </p>
       ) : null}
       {contract.status === "DRAFT" && contract.particulars?.mode !== "live" ? (
-        <section className="rounded-lg border border-border p-4">
+        <section className="rounded-xl border border-border bg-background p-4 shadow-xs">
           <strong>{m.legacyDraft}</strong>
           <p>{m.legacyNotice}</p>
         </section>
@@ -1220,9 +1226,9 @@ export function ContractWorkspaceShell({
             <section
               key={group}
               id={`section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`}
-              className="scroll-mt-56 rounded-lg border border-border p-4"
+              className="scroll-mt-56 rounded-xl border border-border bg-background p-5 shadow-xs"
             >
-              <h2 className="mb-3 text-lg font-semibold">{group}</h2>
+              <h2 className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-base font-semibold"><span className="h-4 w-1 rounded-full bg-primary" aria-hidden />{group}</h2>
               {group === "Parties" && draft && direct.state ? (
                 <label
                   id="field-assigned_signatory_id"
@@ -1386,7 +1392,7 @@ export function ContractWorkspaceShell({
                     ))}
                 </ol>
               ) : (
-                <dl className="grid gap-3">
+                <dl className="grid gap-3 md:grid-cols-2">
                   {metadata
                     .filter(
                       (item) =>
@@ -1498,7 +1504,7 @@ export function ContractWorkspaceShell({
                             aria-describedby={
                               fieldError ? `error-${item.key}` : undefined
                             }
-                            className="scroll-mt-40 rounded border border-border p-3"
+                            className={`scroll-mt-56 grid content-start gap-1.5 rounded-lg border border-border p-3 ${item.inputKind === "longtext" ? "md:col-span-2" : ""}`}
                           >
                             <dt
                               id={`label-${item.key}`}

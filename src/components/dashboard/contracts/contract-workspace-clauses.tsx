@@ -7,6 +7,10 @@ import type {
 } from "@/lib/contracts-api";
 import { contractWorkspaceMessages as m } from "./contract-workspace-messages";
 import { toast } from "@/components/ui/fluent-toast-store";
+import { ArrowDown, ArrowUp, Lock, Plus, RotateCcw, Trash2 } from "lucide-react";
+
+const iconBtn =
+  "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30";
 
 /** Uses the same lowercase/underscore grammar as the server renderer. */
 export function clauseTokenErrors(
@@ -151,17 +155,49 @@ export function ContractWorkspaceClauses({
                 if (dragged !== null) move(dragged, index);
                 setDragged(null);
               }}
-              className="grid gap-2 rounded border border-border p-3"
+              className={`group grid gap-2 rounded-lg border bg-background p-3 shadow-xs transition-shadow hover:shadow-sm ${section.enabled === false ? "border-dashed border-border opacity-70" : "border-border"}`}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span>{currentNumber ?? m.optionalDisabled}</span>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span
+                  className={
+                    currentNumber
+                      ? "inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+                      : "rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  }
+                >
+                  {currentNumber ?? m.optionalDisabled}
+                </span>
                 {!editable ? (
-                  <span aria-label={m.locked}>🔒 {m.locked}</span>
+                  <span
+                    aria-label={m.locked}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    <Lock className="size-3" aria-hidden /> {m.locked}
+                  </span>
                 ) : null}
-                {modified ? <span>{m.modifiedTemplate}</span> : null}
+                {modified ? (
+                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+                    {m.modifiedTemplate}
+                  </span>
+                ) : null}
+                {section.optional === true ? (
+                  <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={section.enabled !== false}
+                      onChange={(event) =>
+                        update(index, { enabled: event.target.checked })
+                      }
+                    />
+                    {m.enabled}
+                  </label>
+                ) : null}
+                <span className="flex-1" />
                 {modified && editable && template ? (
                   <button
                     type="button"
+                    className={iconBtn}
+                    title={m.resetTemplate}
                     onClick={() =>
                       update(index, {
                         heading: template.heading,
@@ -169,26 +205,32 @@ export function ContractWorkspaceClauses({
                       })
                     }
                   >
-                    {m.resetTemplate}
+                    <RotateCcw className="size-4" aria-hidden /><span className="sr-only">{m.resetTemplate}</span>
                   </button>
                 ) : null}
                 <button
                   type="button"
+                  className={iconBtn}
+                  title={m.moveUp}
                   disabled={index === 0}
                   onClick={() => move(index, index - 1)}
                 >
-                  {m.moveUp}
+                  <ArrowUp className="size-4" aria-hidden /><span className="sr-only">{m.moveUp}</span>
                 </button>
                 <button
                   type="button"
+                  className={iconBtn}
+                  title={m.moveDown}
                   disabled={index === sections.length - 1}
                   onClick={() => move(index, index + 1)}
                 >
-                  {m.moveDown}
+                  <ArrowDown className="size-4" aria-hidden /><span className="sr-only">{m.moveDown}</span>
                 </button>
                 {removable ? (
                   <button
                     type="button"
+                    className={`${iconBtn} hover:bg-rose-50 hover:text-rose-700`}
+                    title={m.removeClause}
                     onClick={() => {
                       onChange(sections.filter((_, i) => i !== index));
                       toast.message(m.clauseRemoved, {
@@ -218,20 +260,8 @@ export function ContractWorkspaceClauses({
                       });
                     }}
                   >
-                    {m.removeClause}
+                    <Trash2 className="size-4" aria-hidden /><span className="sr-only">{m.removeClause}</span>
                   </button>
-                ) : null}
-                {section.optional === true ? (
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={section.enabled !== false}
-                      onChange={(event) =>
-                        update(index, { enabled: event.target.checked })
-                      }
-                    />{" "}
-                    {m.enabled}
-                  </label>
                 ) : null}
               </div>
               {!collapsed && (
@@ -239,13 +269,13 @@ export function ContractWorkspaceClauses({
                   <input
                     aria-label={m.clauseTitle}
                     readOnly={!editable}
-                    className="rounded border border-border bg-background p-2"
+                    className="rounded-md border border-transparent bg-transparent px-2 py-1.5 text-base font-semibold hover:border-border focus:border-primary focus:outline-none"
                     value={section.heading}
                     onChange={(event) =>
                       update(index, { heading: event.target.value })
                     }
                   />
-                  <div className="grid gap-1 rounded border border-border p-2">
+                  <div className="grid gap-1 rounded-md bg-muted/40 p-2">
                     {parts.map((part, partIndex) => {
                       const match = /^\{\{\s*([a-z_]+)\s*\}\}$/.exec(part);
                       const known =
@@ -288,7 +318,7 @@ export function ContractWorkspaceClauses({
                           aria-label={m.clauseBody}
                           aria-invalid={sectionErrors.length > 0}
                           readOnly={!editable}
-                          className={`min-h-12 w-full rounded border bg-background p-2 ${sectionErrors.length ? "border-destructive" : "border-border"} ${/^\{\{[^{}]*\}\}$/.test(part) ? "text-destructive underline decoration-destructive" : ""}`}
+                          className={`min-h-20 w-full rounded-md border bg-background p-2.5 text-sm leading-relaxed focus:border-primary focus:outline-none ${sectionErrors.length ? "border-destructive" : "border-border"} ${/^\{\{[^{}]*\}\}$/.test(part) ? "text-destructive underline decoration-destructive" : ""}`}
                           value={part}
                           onFocus={() =>
                             setFocused({ id: section.id, part: partIndex })
@@ -405,7 +435,7 @@ export function ContractWorkspaceClauses({
       </ol>
       <button
         type="button"
-        className="w-fit rounded border border-border p-2"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border p-3 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary"
         onClick={() =>
           onChange([
             ...sections,
@@ -417,7 +447,7 @@ export function ContractWorkspaceClauses({
           ])
         }
       >
-        {m.addClause}
+        <Plus className="size-4" aria-hidden />{m.addClause}
       </button>
     </div>
   );

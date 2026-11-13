@@ -92,7 +92,14 @@ export const contractWorkspaceMessages = {
   missing: "Missing",
   from: "From",
   saveSaved: "Saved",
-  savedSecondsAgo: (seconds: number) => `Saved ${seconds}s ago`,
+  savedSecondsAgo: (seconds: number) =>
+    seconds < 10
+      ? "Saved just now"
+      : seconds < 60
+        ? `Saved ${seconds}s ago`
+        : seconds < 3600
+          ? `Saved ${Math.floor(seconds / 60)} min ago`
+          : `Saved ${Math.floor(seconds / 3600)} h ago`,
   saveDirty: "Unsaved changes",
   saveSaving: "Saving…",
   saveError: "Could not save changes. Your edits are still here.",
