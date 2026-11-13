@@ -8269,7 +8269,7 @@ export function OnboardingView() {
                       </div>
                       <div className="rounded-xl border border-border/80 bg-background">
                         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-4 py-3"><div><h3 className="text-sm font-semibold">Activation checks still needed</h3><p className="text-xs text-muted-foreground">Open the relevant workspace for each check. The assigned owner completes it there.</p></div><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-amber-800">{pendingRequirements.length} remaining</span></header>
-                        {!selectedRequestReadiness ? <p className="px-4 py-3 text-sm text-muted-foreground">Readiness information is unavailable. Refresh the workspace to try again.</p> : pendingRequirements.length ? <div className="max-w-full overflow-x-auto"><table className="w-full min-w-[720px] border-collapse text-left text-sm"><caption className="sr-only">Pending activation checks and actions</caption><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th scope="col" className="px-4 py-2 font-semibold">Requirement</th><th scope="col" className="px-3 py-2 font-semibold">Responsible</th><th scope="col" className="px-3 py-2 font-semibold">Status</th><th scope="col" className="px-4 py-2 text-right font-semibold">Action</th></tr></thead><tbody className="divide-y divide-border/70">{pendingRequirements.map((item) => <tr key={item.id} className="hover:bg-muted/20"><th scope="row" className="px-4 py-2 text-left font-medium">{item.label}{item.waiting_reason ? <span className="block text-xs font-normal text-muted-foreground">Waiting on: {item.waiting_reason}</span> : null}</th><td className="px-3 py-2 text-muted-foreground">{item.owner}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "blocked" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>{item.status === "blocked" ? "Needs attention" : "Awaiting"}</span></td><td className="px-4 py-2 text-right"><FluentButton appearance="primary" size="small" onClick={() => openWorkspaceRequirement(item.action, item.id)} aria-label={`${requirementActionLabel(item)} for ${item.label}`}>{requirementActionLabel(item)}</FluentButton></td></tr>)}</tbody></table></div> : <p className="px-4 py-3 text-sm text-emerald-700">All visible activation requirements are complete.</p>}
+                        {!selectedRequestReadiness ? <p className="px-4 py-3 text-sm text-muted-foreground">Readiness information is unavailable. Refresh the workspace to try again.</p> : pendingRequirements.length ? <><div className="divide-y divide-border/70 md:hidden">{pendingRequirements.map((item) => <article key={item.id} className="space-y-2 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><h4 className="min-w-0 break-words text-sm font-semibold">{item.label}</h4><span className={item.status === "blocked" ? "text-sm font-medium text-rose-700" : "text-sm font-medium text-amber-800"}>{item.status === "blocked" ? "Needs attention" : "Awaiting"}</span></div><p className="text-sm text-muted-foreground">Responsible: {item.owner}</p>{item.waiting_reason ? <p className="text-sm text-muted-foreground">Waiting on: {item.waiting_reason}</p> : null}<FluentButton appearance="primary" onClick={() => openWorkspaceRequirement(item.action, item.id)} aria-label={`${requirementActionLabel(item)} for ${item.label}`}>{requirementActionLabel(item)}</FluentButton></article>)}</div><div className="hidden max-w-full overflow-x-auto md:block"><table className="w-full min-w-[720px] border-collapse text-left text-sm"><caption className="sr-only">Pending activation checks and actions</caption><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th scope="col" className="px-4 py-2 font-semibold">Requirement</th><th scope="col" className="px-3 py-2 font-semibold">Responsible</th><th scope="col" className="px-3 py-2 font-semibold">Status</th><th scope="col" className="px-4 py-2 text-right font-semibold">Action</th></tr></thead><tbody className="divide-y divide-border/70">{pendingRequirements.map((item) => <tr key={item.id} className="hover:bg-muted/20"><th scope="row" className="px-4 py-2 text-left font-medium">{item.label}{item.waiting_reason ? <span className="block text-xs font-normal text-muted-foreground">Waiting on: {item.waiting_reason}</span> : null}</th><td className="px-3 py-2 text-muted-foreground">{item.owner}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${item.status === "blocked" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>{item.status === "blocked" ? "Needs attention" : "Awaiting"}</span></td><td className="px-4 py-2 text-right"><FluentButton appearance="primary" size="small" onClick={() => openWorkspaceRequirement(item.action, item.id)} aria-label={`${requirementActionLabel(item)} for ${item.label}`}>{requirementActionLabel(item)}</FluentButton></td></tr>)}</tbody></table></div></> : <p className="px-4 py-3 text-sm text-emerald-700">All visible activation requirements are complete.</p>}
                       </div>
                     </section>;
                   })() : null}
@@ -8285,12 +8285,15 @@ export function OnboardingView() {
                         <p className="text-sm font-semibold text-foreground">
                           Employee details review
                         </p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        <p className="mt-1 text-sm text-muted-foreground">
                           Verify each section. Return only the sections that
                           need correction and include a reason.
                         </p>
+                        <p className="mt-2 text-sm font-medium">
+                          {employeeDetailsReviewCounts.approved + employeeDetailsReviewCounts.changesRequested} of {employeeDetailsReview.sections.length} sections reviewed
+                        </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
                         <span className="bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-700 dark:text-emerald-400">
                           {employeeDetailsReviewCounts.approved} approved
                         </span>
@@ -8352,16 +8355,6 @@ export function OnboardingView() {
                                   "pending",
                                 ).toLowerCase();
                                 const active = index === employeeReviewStep;
-                                const sectionFields = toRecordList(
-                                  section.fields,
-                                );
-                                const allFieldsPresent =
-                                  sectionFields.length > 0 &&
-                                  sectionFields.every((field) =>
-                                    hasEmployeeReviewValue(
-                                      readString(field, ["value"]),
-                                    ),
-                                  );
                                 return (
                                   <li
                                     key={readString(
@@ -8372,6 +8365,7 @@ export function OnboardingView() {
                                   >
                                     <button
                                       type="button"
+                                      aria-current={active ? "step" : undefined}
                                       onClick={() =>
                                         setEmployeeReviewStep(index)
                                       }
@@ -8379,7 +8373,7 @@ export function OnboardingView() {
                                         active ? "brand" : undefined
                                       }
                                       className={cn(
-                                        "flex min-h-11 w-full items-center gap-2 border border-transparent px-2 py-1.5 text-left text-[11px] transition",
+                                        "flex min-h-11 w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                                         active
                                           ? "bg-primary text-primary-foreground"
                                           : "text-foreground hover:bg-muted",
@@ -8390,9 +8384,7 @@ export function OnboardingView() {
                                           "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
                                           sectionStatus === "approved"
                                             ? "bg-emerald-500 text-white"
-                                            : allFieldsPresent
-                                              ? "bg-emerald-500 text-white ring-2 ring-emerald-200"
-                                              : active
+                                            : active
                                                 ? "bg-white/20 text-white"
                                                 : sectionStatus ===
                                                     "changes_requested"
@@ -8414,7 +8406,7 @@ export function OnboardingView() {
                                         </span>
                                         <span
                                           className={cn(
-                                            "mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-medium",
+                                          "mt-0.5 inline-flex rounded px-1.5 py-0.5 text-xs font-medium",
                                             sectionStatus === "approved"
                                               ? "bg-emerald-100 text-emerald-700"
                                               : sectionStatus ===
@@ -8428,7 +8420,7 @@ export function OnboardingView() {
                                                   : "bg-amber-100 text-amber-700",
                                           )}
                                         >
-                                          {toTitleCaseWords(sectionStatus)}
+                                          {sectionStatus === "pending" || sectionStatus === "submitted" || sectionStatus === "in_review" ? "Awaiting review" : toTitleCaseWords(sectionStatus)}
                                         </span>
                                       </span>
                                     </button>
@@ -8442,11 +8434,11 @@ export function OnboardingView() {
                         {currentEmployeeReviewSection ? (
                           <div className="space-y-3 p-3 sm:p-4">
                             <div className="flex flex-wrap items-baseline gap-2">
-                              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                 Step {employeeReviewStep + 1} of{" "}
                                 {employeeDetailsReview.sections.length}
                               </p>
-                              <h3 className="text-sm font-semibold text-foreground">
+                              <h3 className="text-base font-semibold text-foreground">
                                 {readString(
                                   currentEmployeeReviewSection,
                                   ["label"],
@@ -8491,7 +8483,7 @@ export function OnboardingView() {
                                         )}
                                         <p
                                           className={cn(
-                                            "text-[10px] font-medium uppercase tracking-wide",
+                                            "text-xs font-medium uppercase tracking-wide",
                                             isFilled
                                               ? "text-emerald-700"
                                               : "text-muted-foreground",
@@ -8506,13 +8498,13 @@ export function OnboardingView() {
                                       </div>
                                       <p
                                         className={cn(
-                                          "mt-0.5 whitespace-pre-wrap pl-5 text-xs",
+                                          "mt-1 break-words whitespace-pre-wrap pl-5 text-sm",
                                           isFilled
                                             ? "text-foreground"
                                             : "text-muted-foreground",
                                         )}
                                       >
-                                        {value}
+                                        {isFilled ? value : "Not provided"}
                                       </p>
                                       {previousValue !== null &&
                                       previousValue !== value ? (
@@ -8631,10 +8623,12 @@ export function OnboardingView() {
                             >
                               Reload latest review details
                             </FluentButton>
-                            <label className="grid gap-1.5 text-xs font-medium text-foreground">
+                            <label className="grid gap-1.5 text-sm font-medium text-foreground">
                               Review note
+                              <span className="font-normal text-muted-foreground">A reason is required to request changes. The employee will be notified of your decision.</span>
                               <Textarea
-                                className="min-h-16 border border-input bg-background px-3 py-2 text-xs font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                aria-label="Review note"
+                                className="min-h-20 border border-input bg-background px-3 py-2 text-sm font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 value={
                                   employeeReviewComments[
                                     readString(
@@ -8665,11 +8659,11 @@ export function OnboardingView() {
                             </label>
 
                             {canUpdateOnboardingRequests ? (
-                              <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-3">
+                              <div className="flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:justify-between">
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  size="sm"
+                                  className="min-h-11"
                                   disabled={
                                     saving ||
                                     !employeeReviewComments[
@@ -8690,7 +8684,7 @@ export function OnboardingView() {
                                 </Button>
                                 <Button
                                   type="button"
-                                  size="sm"
+                                  className="min-h-11"
                                   disabled={
                                     saving ||
                                     currentEmployeeReviewStatus === "approved"
@@ -8701,10 +8695,14 @@ export function OnboardingView() {
                                 >
                                   {currentEmployeeReviewStatus === "approved"
                                     ? "Approved"
-                                    : "Approve & notify employee"}
+                                    : "Approve section & notify employee"}
                                 </Button>
                               </div>
                             ) : null}
+                            <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                              <Button type="button" variant="outline" className="min-h-11" disabled={employeeReviewStep === 0} onClick={() => setEmployeeReviewStep(employeeReviewStep - 1)}>Previous section</Button>
+                              <Button type="button" variant="outline" className="min-h-11" disabled={employeeReviewStep >= employeeDetailsReview.sections.length - 1} onClick={() => setEmployeeReviewStep(employeeReviewStep + 1)}>Next section</Button>
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -10778,9 +10776,9 @@ export function OnboardingView() {
             columns={onboardingWorkflowColumns}
             loading={loading}
             storageKey="onboarding-workflows-v2"
-            modern
             enableAnimations
             compact
+            modern
             toolbarClassName="mb-0 border-b border-border bg-muted/[0.12] px-3 py-2"
             frameClassName="rounded-none border-0 shadow-none"
             itemsPerPage={15}

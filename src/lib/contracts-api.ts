@@ -166,7 +166,15 @@ export type ContractSettings = {
   governing_law: string
 }
 
-export type ContractSettingsResponse = { company_name: string; legal: CompanyLegal; contract_settings: ContractSettings }
+/** Logo (PNG/JPEG data URL, ≤ 300 KB) and tagline printed on contracts. */
+export type ContractBranding = { logo_data_url: string | null; tagline: string | null }
+
+export type ContractSettingsResponse = {
+  company_name: string
+  legal: CompanyLegal
+  contract_settings: ContractSettings
+  contract_branding?: ContractBranding
+}
 
 export type ContractTemplate = {
   contract_type: ContractType
@@ -328,6 +336,10 @@ export const uploadSignedContract = (
 export const getContractSettings = (token: string) => adminRequest<ContractSettingsResponse>(`${BASE}/settings`, { token })
 export const updateCompanyLegal = (token: string, body: Partial<CompanyLegal>) =>
   put<ContractSettingsResponse>(token, `${BASE}/settings/legal`, body)
+
+/** Omitted fields are kept; null or "" clears them. */
+export const updateContractBranding = (token: string, body: Partial<ContractBranding>) =>
+  put<ContractSettingsResponse>(token, `${BASE}/settings/branding`, body)
 export const updateContractSigningSettings = (token: string, body: Partial<ContractSettings>) =>
   put<ContractSettingsResponse>(token, `${BASE}/settings/signing`, body)
 export const listContractTemplates = (token: string) => adminRequest<ContractTemplate[]>(`${BASE}/templates`, { token })
