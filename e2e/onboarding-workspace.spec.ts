@@ -216,7 +216,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: approval, requirements: [approval] } }))
     await page.goto("/dashboard/employees/onboarding?request_id=55")
     await page.getByRole("button", { name: "More information about Starting salary review", exact: true }).hover()
-    await expect(page.getByText("Waiting on a prerequisite:", { exact: false })).toBeVisible()
+    await expect(page.getByRole("tooltip").getByText("Waiting on a prerequisite: Waiting for earlier required workflow steps to complete.")).toBeVisible()
     await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     await page.screenshot({ path: test.info().outputPath("waiting-on-approval.png"), fullPage: true })
   })
