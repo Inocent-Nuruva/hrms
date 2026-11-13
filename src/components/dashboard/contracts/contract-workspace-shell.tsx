@@ -84,10 +84,26 @@ function contractStep(status: string): number {
 
 function loadFailure(kind: "fields" | "readiness", cause: unknown): Error {
   const status = (cause as { status?: number } | null)?.status;
+  const name = (cause as { name?: string } | null)?.name;
   const description = kind === "fields" ? "contract fields" : "contract readiness";
-  const advice = status === 401 ? "Your session may have expired. Sign in again." : status === 403 ? "You do not have permission to view this information." : "Try again. If the problem continues, contact support.";
-  const detail = status && status >= 400 && status < 500 && status !== 401 && status !== 403 && cause instanceof Error ? ` ${cause.message}` : "";
-  return new Error(`Could not load ${description}${status ? ` (HTTP ${status})` : ""}.${detail} ${advice}`);
+  const advice =
+    status === 401
+      ? "Your session may have expired. Sign in again."
+      : status === 403
+        ? "You do not have permission to view this information."
+        : !status && name === "TypeError"
+          ? "The server could not be reached. Check your connection and try again."
+          : "Try again. If the problem continues, contact support.";
+  // Always show the underlying reason so the problem can be diagnosed.
+  const reason =
+    cause instanceof Error || cause instanceof DOMException
+      ? `${name && name !== "Error" ? `${name}: ` : ""}${cause.message}`
+      : typeof cause === "string"
+        ? cause
+        : "";
+  return new Error(
+    `Could not load ${description}${status ? ` (HTTP ${status})` : ""}.${reason ? ` Reason: ${reason}.` : ""} ${advice}`,
+  );
 }
 
 function SaveStatus({
@@ -858,7 +874,7 @@ export function ContractWorkspaceShell({
         readiness={readiness}
         onFocusField={focusField}
       />
-      <header className="sticky top-0 z-20 -mx-1 rounded-xl border border-border bg-background/95 shadow-sm backdrop-blur supports-backdrop-filter:bg-background/85">
+      <header className="rounded-xl border border-border bg-background shadow-sm">
         {/* Row 1: breadcrumb + identity on the left, actions on the right */}
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3">
           <div className="grid min-w-0 gap-1">
@@ -1226,7 +1242,7 @@ export function ContractWorkspaceShell({
             <section
               key={group}
               id={`section-${group.replace(/[^a-z]+/gi, "-").toLowerCase()}`}
-              className="scroll-mt-56 rounded-xl border border-border bg-background p-5 shadow-xs"
+              className="scroll-mt-4 rounded-xl border border-border bg-background p-5 shadow-xs"
             >
               <h2 className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-base font-semibold"><span className="h-4 w-1 rounded-full bg-primary" aria-hidden />{group}</h2>
               {group === "Parties" && draft && direct.state ? (
@@ -1504,7 +1520,7 @@ export function ContractWorkspaceShell({
                             aria-describedby={
                               fieldError ? `error-${item.key}` : undefined
                             }
-                            className={`scroll-mt-56 grid content-start gap-1.5 rounded-lg border border-border p-3 ${item.inputKind === "longtext" ? "md:col-span-2" : ""}`}
+                            className={`scroll-mt-4 grid content-start gap-1.5 rounded-lg border border-border p-3 ${item.inputKind === "longtext" ? "md:col-span-2" : ""}`}
                           >
                             <dt
                               id={`label-${item.key}`}
@@ -2073,7 +2089,7 @@ export function ContractWorkspaceShell({
             </section>
           ))}
         </main>
-        <aside className="hidden self-start lg:sticky lg:top-56 lg:block">
+        <aside className="hidden self-start lg:sticky lg:top-4 lg:block">
           {panel}
         </aside>
       </div>

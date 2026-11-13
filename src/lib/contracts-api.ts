@@ -253,6 +253,10 @@ const post = <T>(token: string, path: string, body: unknown = {}) =>
   adminRequest<T>(path, { method: "POST", token, body, dedupe: false })
 const patch = <T>(token: string, path: string, body: unknown) =>
   adminRequest<T>(path, { method: "PATCH", token, body, dedupe: false })
+/** POST that only reads (readiness, resolve, preview): must not invalidate the GET cache,
+ *  or GETs running at the same time (e.g. /fields) are aborted as stale. */
+const readPost = <T>(token: string, path: string, body: unknown = {}) =>
+  adminRequest<T>(path, { method: "POST", token, body, dedupe: false, invalidateCache: false })
 const put = <T>(token: string, path: string, body: unknown) =>
   adminRequest<T>(path, { method: "PUT", token, body, dedupe: false })
 
@@ -272,8 +276,8 @@ export const getContract = (token: string, id: number) => adminRequest<ContractD
 export type ContractFieldMetadata = { key: string; labelKey: string; group: string; inputKind: "text" | "longtext" | "date" | "money" | "number" | "enum" | "reference"; owner: string; overridePolicy: "none" | "with-reason" | "reference-only"; referenceKey?: string }
 export type ContractReadiness = { ready: boolean; field_errors: Record<string, string>; missing_fields: string[]; warnings: Record<string, string>; signatory_id: number | null }
 export const getContractFieldMetadata = (token: string) => adminRequest<{ fields: ContractFieldMetadata[] }>(`${BASE}/field-metadata`, { token })
-export const resolveContractDraftFields = (token: string, id: number, body: Record<string, unknown>) => post<ContractField[]>(token, `${BASE}/${id}/fields/resolve`, body)
-export const getContractReadiness = (token: string, id: number, body: Record<string, unknown>) => post<ContractReadiness>(token, `${BASE}/${id}/readiness`, body)
+export const resolveContractDraftFields = (token: string, id: number, body: Record<string, unknown>) => readPost<ContractField[]>(token, `${BASE}/${id}/fields/resolve`, body)
+export const getContractReadiness = (token: string, id: number, body: Record<string, unknown>) => readPost<ContractReadiness>(token, `${BASE}/${id}/readiness`, body)
 export const listMyContracts = (token: string) => adminRequest<ContractRow[]>(`${BASE}/me`, { token })
 export const getContractPrefill = (token: string, employeeId: number) =>
   adminRequest<Record<string, unknown>>(`${BASE}/prefill/${employeeId}`, { token })
@@ -506,7 +510,7 @@ export const duplicateContract = (
 
 /** Live preview of unsaved editor state (not stored, not audited). */
 export const previewContractDraft = (token: string, id: number, body: Record<string, unknown>) =>
-  post<{ content_base64: string; file_name: string; missing_fields: string[]; warnings?: Record<string, string>; preview_hash: string; page_count: number }>(
+  readPost<{ content_base64: string; file_name: string; missing_fields: string[]; warnings?: Record<string, string>; preview_hash: string; page_count: number }>(
     token,
     `${BASE}/${id}/preview`,
     body,
