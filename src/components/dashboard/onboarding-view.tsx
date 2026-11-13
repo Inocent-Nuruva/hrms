@@ -73,6 +73,7 @@ import {
 import { OnboardingPayrollDrawer } from "./onboarding-payroll-drawer";
 import { pageBleedClass } from "@/components/dashboard/talent-visuals";
 
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
@@ -6506,41 +6507,28 @@ export function OnboardingView() {
         "min-w-0 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div
-        hidden={requestDetailsOpen}
-        className="flex flex-col gap-1 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-            Onboarding
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          {canViewPendingInvitations ? (
-            <span className="inline-flex items-center gap-2">Invitations <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{invitations.length}</FluentBadge></span>
-          ) : null}
-          {canViewOnboardingRequests ? (
-            <span className="inline-flex items-center gap-2">Requests <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{filteredRequests.length}</FluentBadge></span>
-          ) : null}
-          {canViewOnboardingWorkflows ? (
-            <span className="inline-flex items-center gap-2">Workflows <FluentBadge appearance="tint" size="small" style={{ color: "var(--primary)", backgroundColor: "color-mix(in srgb, var(--primary) 8%, transparent)" }}>{filteredWorkflows.length}</FluentBadge></span>
-          ) : null}
-        </div>
+      <div hidden={requestDetailsOpen} className="border-b border-border px-3 py-3">
+        <PageHeader
+          title="Onboarding"
+          description="Invite new hires, track their onboarding requests and manage workflows."
+          stats={[
+            ...(canViewPendingInvitations ? [{ label: "Invitations", value: invitations.length, tone: "info" as const }] : []),
+            ...(canViewOnboardingRequests ? [{ label: "Requests", value: filteredRequests.length }] : []),
+            ...(canViewOnboardingWorkflows ? [{ label: "Workflows", value: filteredWorkflows.length }] : []),
+          ]}
+        />
       </div>
-      <div
-        hidden={requestDetailsOpen}
-        className="tab-rail-scroll bg-muted/[0.12] px-3"
-      >
-        <div className="inline-flex min-w-full items-center gap-1 border-b border-border/80">
+      <div hidden={requestDetailsOpen} className="px-3 pt-3">
+        <div role="tablist" aria-label="Onboarding sections" className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
           {canViewPendingInvitations ? (
             <button
               type="button"
               onClick={() => setActiveTab("invitations")}
               className={cn(
-                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                 activeTab === "invitations"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Invitations
@@ -6552,10 +6540,10 @@ export function OnboardingView() {
               type="button"
               onClick={() => setActiveTab("requests")}
               className={cn(
-                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                 activeTab === "requests"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Requests
@@ -6566,10 +6554,10 @@ export function OnboardingView() {
               type="button"
               onClick={() => setActiveTab("workflows")}
               className={cn(
-                "shrink-0 border-b-2 px-1.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
                 activeTab === "workflows"
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Workflows

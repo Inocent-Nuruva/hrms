@@ -1,5 +1,6 @@
 "use client"
 
+import { PageHeader } from "@/components/ui/page-header"
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
 import { InfoIcon, MailIcon, PhoneIcon, RotateCcwIcon, UserPlus2Icon } from "lucide-react";
@@ -1003,6 +1004,11 @@ export function EmployeeInviteView() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-8">
+      <PageHeader
+        className="border-b border-border pb-3"
+        title="Invite employee"
+        description="Send a new hire an invitation to complete their own registration details."
+      />
       {savedInviteDraft ? (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
