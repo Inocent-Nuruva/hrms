@@ -167,18 +167,38 @@ export function LeaveWorkflowStepDialog({
   const departmentLabel =
     departmentOptions.find((option) => option.value === value.assigned_department_id)?.label ?? "All departments"
   const levelNumber = Number(value.approval_level)
-  const hasValidLevel = Number.isFinite(levelNumber) && levelNumber >= 1
+  // Routing uses exactly two levels: 1 = department manager (resolved per
+  // employee), 2 = HR. A third approval comes from management approval rules.
+  const hasValidLevel = levelNumber === 1 || levelNumber === 2
+  const departmentManagerRole = roleOptions.find((option) =>
+    /department[ _]?manager/i.test(`${option.label} ${option.value}`),
+  )
   const hasApprover = Boolean(approverConfig.selectedValue)
   const isReady = hasValidLevel && hasApprover
   const missingHint = !hasValidLevel
-    ? "Set a level of 1 or higher."
+    ? "Use level 1 (department manager) or level 2 (HR)."
     : !hasApprover
       ? `Select a ${approverConfig.label.toLowerCase()}.`
       : "Ready to save."
 
+  const setLevel = (next: number) => {
+    const level = Math.min(2, Math.max(1, Number.isFinite(next) ? next : 1))
+    onValueChange(
+      level === 1
+        ? {
+            approval_level: "1",
+            approver_type: "role",
+            role_id: departmentManagerRole?.value ?? value.role_id,
+            position_id: "",
+            company_user_id: "",
+            assigned_branch_id: "",
+            assigned_department_id: "",
+          }
+        : { approval_level: String(level) },
+    )
+  }
   const bumpLevel = (delta: number) => {
-    const current = Number.isFinite(levelNumber) ? levelNumber : 1
-    onValueChange({ approval_level: String(Math.max(1, current + delta)) })
+    setLevel((Number.isFinite(levelNumber) ? levelNumber : 1) + delta)
   }
 
   const updateApproverType = (nextType: string) => {
@@ -240,9 +260,10 @@ export function LeaveWorkflowStepDialog({
                       id="workflow-step-level"
                       type="number"
                       min={1}
+                      max={2}
                       className="h-10 w-14 border-x border-slate-300 bg-transparent text-center text-sm font-semibold tabular-nums text-slate-900 outline-none dark:border-border dark:text-white"
                       value={value.approval_level}
-                      onChange={(event) => onValueChange({ approval_level: event.target.value })}
+                      onChange={(event) => setLevel(Number(event.target.value))}
                     />
                     <button
                       type="button"
@@ -254,6 +275,11 @@ export function LeaveWorkflowStepDialog({
                     </button>
                   </div>
                 </div>
+                <p className="pl-9 text-xs text-slate-500">
+                  {levelNumber === 1
+                    ? "Level 1 is the employee's department manager, found automatically from their department (or their reports-to manager). Keep the Department Manager role with no branch or department filter."
+                    : "Level 2 is the HR step. For a third approval, add a management approval rule instead of another level."}
+                </p>
               </section>
 
               <section className="space-y-4 px-5 py-5 sm:px-6">
