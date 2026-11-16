@@ -2669,31 +2669,63 @@ export function LeaveManagementView({
         render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
       },
       { key: "department", label: "Department", render: (group: LeaveBalanceEmployeeGroup) => readString(asRecord(asRecord(group.rows[0]?.employee)?.department) ?? {}, ["name"]) },
+      ...(["annual", "sick"] as const).map((kind) => {
+        // Matches the leave type by name, e.g. "Annual Leave" / "Sick Leave".
+        const findRow = (group: LeaveBalanceEmployeeGroup) =>
+          group.rows.find((row) =>
+            leaveTypeLabelFromRow(row).toLowerCase().includes(kind),
+          );
+        const available = (row: Record<string, unknown>) =>
+          readBalanceDays(row, ["available_days", "remaining_days"]);
+        return {
+          key: `${kind}_left`,
+          label: kind === "annual" ? "Annual left" : "Sick left",
+          defaultWidth: 110,
+          sortValue: (group: LeaveBalanceEmployeeGroup) => {
+            const row = findRow(group);
+            return row ? available(row) : -Infinity;
+          },
+          render: (group: LeaveBalanceEmployeeGroup) => {
+            const row = findRow(group);
+            if (!row) return "—";
+            const allocated = readBalanceDays(row, [
+              "allocated_days",
+              "allocated",
+              "allocatedDays",
+            ]);
+            const left = available(row);
+            return (
+              <span
+                className={cn(
+                  "tabular-nums",
+                  left < 0 && "font-semibold text-destructive",
+                )}
+              >
+                {formatBalanceDays(left)}
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {formatBalanceDays(allocated)}
+                </span>
+              </span>
+            );
+          },
+        };
+      }),
       {
-        key: "types",
-        label: "Leave Types",
-        defaultWidth: 85,
+        key: "other_types",
+        label: "Other types",
+        defaultWidth: 100,
         sortValue: (group: LeaveBalanceEmployeeGroup) => group.typeCount,
-        render: (group: LeaveBalanceEmployeeGroup) => String(group.typeCount),
-      },
-      {
-        key: "fiscal_year",
-        label: "FY",
-        defaultWidth: 70,
-        sortValue: (group: LeaveBalanceEmployeeGroup) =>
-          group.fiscalYears.join(", "),
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          group.fiscalYears.join(", ") || "-",
-      },
-      {
-        key: "balances",
-        label: "Available by leave type",
-        defaultWidth: 300,
-        ...(balanceType === "all" ? {} : { sortValue: (group: LeaveBalanceEmployeeGroup) => readBalanceDays(group.rows[0] ?? {}, ["available_days", "remaining_days"]) }),
-        render: (group: LeaveBalanceEmployeeGroup) => group.rows.map((row) =>           `${leaveTypeLabelFromRow(row)}: ${formatBalanceDays(readBalanceDays(row, ["available_days", "remaining_days"]))}`).join(" | "),
+        render: (group: LeaveBalanceEmployeeGroup) => {
+          const others = group.rows.filter((row) => {
+            const label = leaveTypeLabelFromRow(row).toLowerCase();
+            return !label.includes("annual") && !label.includes("sick");
+          }).length;
+          return others > 0 ? `${others} more` : "—";
+        },
       },
     ],
-    [leaveTypeLabelFromRow, balanceType],
+    [leaveTypeLabelFromRow],
   );
 
   React.useEffect(() => {
