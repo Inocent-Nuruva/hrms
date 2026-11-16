@@ -233,7 +233,16 @@ export default function LeaveVerificationPage() {
   }
 
   const data = result.data;
-  const view = STATUS_VIEW[data.verification_status] ?? STATUS_VIEW.pending;
+  const baseView = STATUS_VIEW[data.verification_status] ?? STATUS_VIEW.pending;
+  const view: StatusView = data.code_revoked_at
+    ? {
+        ...baseView,
+        title: "Verification code revoked",
+        detail: `HR withdrew this document's verification code on ${formatDate(
+          data.code_revoked_at,
+        )}. This copy is no longer valid; ask the employee or HR for a current one.`,
+      }
+    : baseView;
   const StatusIcon = view.icon;
 
   return (

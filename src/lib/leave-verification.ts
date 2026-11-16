@@ -22,6 +22,8 @@ export type PublicLeaveVerification = {
   total_days: string;
   approval_status: string;
   approved_at: string | null;
+  /** Set when HR withdrew this specific QR code. */
+  code_revoked_at?: string | null;
   checked_at: string;
 };
 

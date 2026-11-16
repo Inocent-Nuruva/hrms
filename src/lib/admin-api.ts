@@ -10320,6 +10320,18 @@ export async function bulkLeaveApprovalAction(token: string, data: AdminRecord) 
   );
 }
 
+/** Withdraws the QR verification code on a leave request's PDFs (HR only). */
+export async function revokeLeaveVerificationCode(
+  token: string,
+  id: string | number,
+  reason: string,
+) {
+  return adminRequest<unknown>(
+    `/api/leave/requests/${id}/verification/revoke`,
+    { method: "POST", token, body: { reason } },
+  );
+}
+
 export async function leaveRequestApprovalAction(
   token: string,
   id: string | number,
