@@ -7685,6 +7685,7 @@ export function LeaveManagementView({
         <DialogPopup
           from="bottom"
           className="flex max-h-[min(92dvh,40rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:max-w-xl sm:p-4"
+          bodyClassName="!max-h-[min(92dvh,40rem)] overscroll-contain"
         >
           <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
             <DialogTitle className="text-base leading-snug sm:text-lg">
@@ -7702,7 +7703,7 @@ export function LeaveManagementView({
           </DialogHeader>
 
           {selectedBalanceGroup ? (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
+            <div className="shrink-0 space-y-3 py-2">
               <TalentDoodleSprites />
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -7835,7 +7836,7 @@ export function LeaveManagementView({
           {selectedBalanceGroup && employeeBalanceDetailsOpen ? (
             <section className="shrink-0 border-t border-border pt-2 text-xs">
               <div className="flex items-center justify-between"><h3 className="font-semibold">Transaction history - FY {balanceYear}</h3><div className="flex gap-2"><button type="button" disabled={balanceHistoryPage === 1 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page - 1)}>Previous</button><span>Page {balanceHistoryPage}</span><button type="button" disabled={balanceHistory.length < 20 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page + 1)}>Next</button></div></div>
-              <div className="mt-2 max-h-36 overflow-auto rounded-md border border-slate-200">
+              <div className="mt-2 overflow-x-auto rounded-md border border-slate-200">
                 {balanceHistoryLoading ? (
                   <p className="p-2">Loading history...</p>
                 ) : balanceHistoryError ? (
@@ -7844,7 +7845,7 @@ export function LeaveManagementView({
                   <p className="p-2">No transactions found.</p>
                 ) : (
                   <table className="w-full text-left text-[11px]">
-                    <thead className="sticky top-0 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                       <tr>
                         <th className="px-2 py-1">Date</th>
                         <th className="px-2 py-1">Type</th>
