@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AttendanceBusinessTripsView } from "@/components/dashboard/attendance-business-trips-view";
 import { LeaveBalanceImportView } from "@/components/dashboard/leave-balance-import-view";
 import { LeaveManagementView } from "@/components/dashboard/leave-management-view";
-import { MainlandLeaveView } from "@/components/dashboard/mainland-leave-view";
 
 const ALLOWED_VIEWS = new Set([
   "types",
@@ -17,7 +16,6 @@ const ALLOWED_VIEWS = new Set([
   "holidays",
   "policies",
   "workflows",
-  "mainland",
 ]);
 
 type LeaveView =
@@ -49,10 +47,6 @@ export default async function LeaveManagementViewPage({
 
   if (normalized === "business-trips") {
     return <AttendanceBusinessTripsView />;
-  }
-
-  if (normalized === "mainland") {
-    return <MainlandLeaveView />;
   }
 
   if (normalized === "balance-import") {

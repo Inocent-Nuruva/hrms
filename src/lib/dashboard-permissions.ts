@@ -1118,10 +1118,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: ["leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
-  "/dashboard/leave-management/mainland": {
-    permissions: ["leave-balances.view", "leave_policies:read"],
-    mode: "any",
-  },
   "/dashboard/leave-management/balance-import": {
     permissions: [
       "leave-balances.export",

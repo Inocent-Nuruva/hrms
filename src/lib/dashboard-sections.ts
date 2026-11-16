@@ -539,10 +539,6 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
         url: "/dashboard/leave-management/balance-import",
       },
       {
-        title: "Mainland Tanzania",
-        url: "/dashboard/leave-management/mainland",
-      },
-      {
         title: "Balance Transactions",
         url: "/dashboard/leave-management/transactions",
       },
