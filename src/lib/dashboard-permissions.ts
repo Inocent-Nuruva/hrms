@@ -1931,6 +1931,16 @@ export function canAccessDashboardRoute(
     return true
   }
 
+  // Broad legacy read permissions also support personal screens. They must not
+  // expose operational workspaces to users whose data scope is self only.
+  const normalizedLabels = normalizePermissionLabels(permissionLabels)
+  const selfOnly = normalizedLabels.includes("data_scope:self") &&
+    !["data_scope:company", "data_scope:branch", "data_scope:department", "data_scope:team"].some((scope) => normalizedLabels.includes(scope))
+  const personalAttendance = ["today", "punch-action", "attendance-history", "schedule-preview", "corrections", "work-from-home-requests"]
+  if (selfOnly && (path === "/dashboard/employees" || path.startsWith("/dashboard/employees/") || path === "/dashboard/leave-management" || path.startsWith("/dashboard/leave-management/") || path === "/dashboard/operations" || path.startsWith("/dashboard/operations/") || (path.startsWith("/dashboard/attendance/") && !personalAttendance.some((part) => path === `/dashboard/attendance/${part}` || path.startsWith(`/dashboard/attendance/${part}/`))))) {
+    return false
+  }
+
   const requiredShell = resolveDashboardRouteShellRequirement(path)
   if (requiredShell && accessMode && accessMode !== requiredShell) {
     return false

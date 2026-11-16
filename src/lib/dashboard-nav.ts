@@ -70,6 +70,7 @@ const PERSONAL_ATTENDANCE_ROUTES = new Set([
   "/dashboard/attendance/attendance-history",
   "/dashboard/attendance/schedule-preview",
   "/dashboard/attendance/corrections",
+  "/dashboard/attendance/work-from-home-requests",
 ])
 
 export function isSelfServiceDashboardRoute(url: string) {

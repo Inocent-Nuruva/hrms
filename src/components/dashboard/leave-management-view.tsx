@@ -2668,7 +2668,7 @@ export function LeaveManagementView({
         render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
       },
       { key: "department", label: "Department", render: (group: LeaveBalanceEmployeeGroup) => readString(asRecord(asRecord(group.rows[0]?.employee)?.department) ?? {}, ["name"]) },
-      ...(["annual"] as const).map((kind) => {
+      ...(["annual", "sick"] as const).map((kind) => {
         // Matches the leave type by name, e.g. "Annual Leave" / "Sick Leave".
         const findRow = (group: LeaveBalanceEmployeeGroup) =>
           group.rows.find((row) =>
@@ -2678,7 +2678,7 @@ export function LeaveManagementView({
           readBalanceDays(row, ["available_days", "remaining_days"]);
         return {
           key: `${kind}_left`,
-          label: "Annual leave left",
+          label: kind === "annual" ? "Annual leave left" : "Sick leave left",
           defaultWidth: 110,
           sortValue: (group: LeaveBalanceEmployeeGroup) => {
             const row = findRow(group);

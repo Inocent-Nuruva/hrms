@@ -1292,7 +1292,7 @@ export default function AdminDashboardView({
       return;
     }
 
-    if (isSelfServiceDashboardRoute(currentPath)) {
+    if (isSelfServiceDashboardRoute(currentPath) && !currentPath.startsWith("/dashboard/me/team")) {
       return;
     }
 
