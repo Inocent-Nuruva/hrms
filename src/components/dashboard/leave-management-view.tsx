@@ -49,6 +49,7 @@ import {
   ChevronRight,
   Clock3,
   Download,
+  ShieldOff,
   Info,
   MoreHorizontal,
   Pencil,
@@ -86,6 +87,7 @@ import {
   getLeaveRequest,
   getLeaveWorkflow,
   leaveRequestApprovalAction,
+  revokeLeaveVerificationCode,
   listBranches,
   listDepartments,
   listEmployeeGrades,
@@ -5196,6 +5198,50 @@ export function LeaveManagementView({
     }
   }
 
+  async function revokeRequestVerificationCode(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const form = await fluentForm(
+      [
+        {
+          name: "reason",
+          label: "Reason",
+          type: "textarea",
+          required: true,
+          hint: "At least 5 characters. Recorded in the audit log.",
+          placeholder: "e.g. Printed copy was altered",
+        },
+      ],
+      {
+        title: "Revoke QR verification code",
+        message:
+          "Anyone scanning a PDF already issued for this request will see \"Approval revoked\". The leave request itself is not changed. The next PDF download gets a new code.",
+        confirmLabel: "Revoke code",
+      },
+    );
+    if (!form) return;
+    if (form.reason.length < 5) {
+      showErrorAlert("Give a reason of at least 5 characters.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await revokeLeaveVerificationCode(token, id, form.reason);
+      showSuccessAlert(
+        "Verification code revoked. Download the PDF again to issue a new code.",
+      );
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not revoke the verification code.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function downloadRequestPdf(row: AdminRecord) {
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
@@ -6594,6 +6640,22 @@ export function LeaveManagementView({
                           <Download className="size-3.5" />
                           PDF
                         </button>
+                        {canOverrideManager ? (
+                          <button
+                            type="button"
+                            className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                            disabled={saving}
+                            title="Withdraw the QR verification code printed on this request's PDFs"
+                            onClick={() =>
+                              void revokeRequestVerificationCode(
+                                selectedLeaveRequestRow,
+                              )
+                            }
+                          >
+                            <ShieldOff className="size-3.5" />
+                            Revoke QR
+                          </button>
+                        ) : null}
                         {permissions.canApproveOrReject ? (
                           <>
                             <button
