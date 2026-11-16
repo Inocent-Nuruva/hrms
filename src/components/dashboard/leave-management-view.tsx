@@ -322,18 +322,6 @@ function LeaveTypeField({
 const leaveTypeControlClass =
   "mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-foreground";
 
-function deriveLeaveTypeCode(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .split(/[^A-Z0-9]+/)
-    .filter((part) => part && part !== "LEAVE")
-    .join("_")
-    .slice(0, 48)
-    .replace(/_+$/, "");
-}
-
 function createEmptyLeaveTypeForm() {
   return {
     name: "",
@@ -1514,8 +1502,6 @@ export function LeaveManagementView({
   const [typeDialogOpen, setTypeDialogOpen] = React.useState(false);
   const [typeDialogStep, setTypeDialogStep] =
     React.useState<LeaveTypeWizardStep>("details");
-  const [typeCodeManuallyEdited, setTypeCodeManuallyEdited] =
-    React.useState(false);
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false);
   const [requestDialogStep, setRequestDialogStep] =
     React.useState<LeaveRequestWizardStep>("who");
@@ -2226,7 +2212,6 @@ export function LeaveManagementView({
     setTypeForm(createEmptyLeaveTypeForm());
     setEditingLeaveTypeRow(null);
     setTypeDialogStep("details");
-    setTypeCodeManuallyEdited(false);
   }, []);
 
   const openTypeDialogForCreate = React.useCallback(() => {
@@ -2236,7 +2221,6 @@ export function LeaveManagementView({
 
   const openTypeDialogForEdit = React.useCallback((row: AdminRecord) => {
     setTypeDialogStep("details");
-    setTypeCodeManuallyEdited(true);
     setEditingLeaveTypeRow(row);
     setTypeForm({
       name: readString(row, ["name"]) === "-" ? "" : readString(row, ["name"]),
@@ -3163,7 +3147,6 @@ export function LeaveManagementView({
     }
 
     const name = typeForm.name.trim();
-    const code = typeForm.code.trim().toUpperCase();
     const maxDays = Number(typeForm.max_days_per_year || "0");
     const carryDays =
       typeForm.max_carry_forward_days.trim() === ""
@@ -3202,22 +3185,14 @@ export function LeaveManagementView({
       showErrorAlert(message);
       return;
     }
-    if (!name || !code) {
-      const message = "Leave type name and code are required.";
+    if (!name) {
+      const message = "Leave type name is required.";
       setError(message);
       showErrorAlert(message);
       return;
     }
-    if (name.length > 120 || code.length > 50) {
-      const message =
-        "Leave type name must be 120 characters or fewer and its code must be 50 characters or fewer.";
-      setError(message);
-      showErrorAlert(message);
-      return;
-    }
-    if (!/^[A-Z0-9_-]+$/.test(code)) {
-      const message =
-        "Use only letters, numbers, hyphens, and underscores in the leave type code.";
+    if (name.length > 120) {
+      const message = "Leave type name must be 120 characters or fewer.";
       setError(message);
       showErrorAlert(message);
       return;
@@ -3249,7 +3224,6 @@ export function LeaveManagementView({
     try {
       const payload = {
         name,
-        code,
         description: typeForm.description.trim(),
         status: typeForm.status,
         is_paid: typeForm.is_paid === "true",
@@ -5308,7 +5282,7 @@ export function LeaveManagementView({
   );
 
   const canContinueLeaveTypeWizard = Boolean(
-    typeForm.name.trim() && typeForm.code.trim(),
+    typeForm.name.trim(),
   );
   const leaveTypeWizardIndex = LEAVE_TYPE_WIZARD_STEPS.findIndex(
     (item) => item.key === typeDialogStep,
@@ -5355,7 +5329,9 @@ export function LeaveManagementView({
   const leaveTypeReviewItems = [
     {
       label: "Leave type",
-      value: `${typeForm.name.trim() || "Not named"} · ${typeForm.code.trim() || "No code"}`,
+      value: typeForm.code.trim()
+        ? `${typeForm.name.trim() || "Not named"} · ${typeForm.code.trim()}`
+        : typeForm.name.trim() || "Not named",
     },
     {
       label: "Availability",
@@ -7124,31 +7100,7 @@ export function LeaveManagementView({
                       value={typeForm.name}
                       onChange={(event) => {
                         const name = event.target.value;
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          name,
-                          ...(typeCodeManuallyEdited
-                            ? {}
-                            : { code: deriveLeaveTypeCode(name) }),
-                        }));
-                      }}
-                    />
-                  </LeaveTypeField>
-                  <LeaveTypeField
-                    label="Short code"
-                    help="Created from the leave name for reports. You can change it."
-                  >
-                    <input
-                      required
-                      className={leaveTypeControlClass}
-                      placeholder="Example: SICK"
-                      value={typeForm.code}
-                      onChange={(event) => {
-                        setTypeCodeManuallyEdited(true);
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          code: event.target.value.toUpperCase(),
-                        }));
+                        setTypeForm((prev) => ({ ...prev, name }));
                       }}
                     />
                   </LeaveTypeField>
@@ -7341,16 +7293,24 @@ export function LeaveManagementView({
                     help="The most days an employee can receive in one year. Enter 0 for no limit."
                   >
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0 = no limit"
                       className={leaveTypeControlClass}
                       value={typeForm.max_days_per_year}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const raw = event.target.value.replace(/[^0-9.]/g, "");
+                        const [whole, ...rest] = raw.split(".");
+                        const next =
+                          rest.length > 0
+                            ? `${whole}.${rest.join("").slice(0, 2)}`
+                            : whole;
                         setTypeForm((prev) => ({
                           ...prev,
-                          max_days_per_year: event.target.value,
-                        }))
-                      }
+                          max_days_per_year: next,
+                        }));
+                      }}
                     />
                   </LeaveTypeField>
                   <LeaveTypeField
