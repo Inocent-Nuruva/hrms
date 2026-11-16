@@ -46,6 +46,7 @@ export function canShowKpiNavigationRoute(
   const roles = new Set(roleNames.map((role) => role.trim().toUpperCase()))
   const hasAny = (allowed: Set<string>) => [...roles].some((role) => allowed.has(role))
   const canReadAssignments = permissionLabels.includes("kpi_assignments:read")
+  const canCreateDefinitions = permissionLabels.includes("kpi_definitions:create")
   const canManageAssignments = permissionLabels.includes("kpi_assignments:create") || permissionLabels.includes("kpi_assignments:update") || permissionLabels.includes("kpi_targets:revise")
   if (path === "/dashboard/me/kpi/reports") return roles.has("EMPLOYEE")
   if (path.startsWith("/dashboard/me/")) return hasAny(KPI_PERSONAL_ROLES)
@@ -55,13 +56,13 @@ export function canShowKpiNavigationRoute(
       path.startsWith("/dashboard/kpi/evaluation-cycles") ||
       path.startsWith("/dashboard/kpi/evaluation-templates") ||
       path.startsWith("/dashboard/kpi/scoring-policies") ||
-      path.startsWith("/dashboard/kpi/scorecard-templates")) return hasAny(KPI_ADMIN_ROLES)
+      path.startsWith("/dashboard/kpi/scorecard-templates")) return hasAny(KPI_ADMIN_ROLES) || (path === "/dashboard/kpi/create" && canCreateDefinitions)
   if (path.startsWith("/dashboard/kpi/assignments") || path.startsWith("/dashboard/kpi/targets")) return hasAny(KPI_WRITE_ROLES) || canReadAssignments || canManageAssignments
   if (path.startsWith("/dashboard/kpi/reviews") ||
       path.startsWith("/dashboard/kpi/evaluations") ||
       path.startsWith("/dashboard/kpi/scorecards/new") ||
       /\/dashboard\/kpi\/scorecards\/[^/]+\/edit(?:\/|$)/.test(path)) return hasAny(KPI_WRITE_ROLES)
-  return hasAny(KPI_READ_ROLES) || (path === "/dashboard/kpi" && canReadAssignments)
+  return hasAny(KPI_READ_ROLES) || (path === "/dashboard/kpi" && (canReadAssignments || canCreateDefinitions))
 }
 
 const PERSONAL_ATTENDANCE_ROUTES = new Set([

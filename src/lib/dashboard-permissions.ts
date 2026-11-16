@@ -932,7 +932,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/kpi": null,
   "/dashboard/me/scorecards": null,
   "/dashboard/me/evaluations": null,
-  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read"], mode: "any" },
+  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read", "kpi_definitions:create"], mode: "any" },
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,

@@ -35,12 +35,7 @@ export function DashboardLandingPage() {
   });
 
   if (kind === "employee") {
-    return (
-      <>
-        <KpiHomeWidget personal />
-        <EmployeeHomeDashboard />
-      </>
-    );
+    return <EmployeeHomeDashboard />;
   }
 
   if (kind === "platform") {
@@ -63,10 +58,5 @@ export function DashboardLandingPage() {
     );
   }
 
-  return (
-    <>
-      <KpiHomeWidget personal />
-      <EmployeeHomeDashboard />
-    </>
-  );
+  return <EmployeeHomeDashboard />;
 }

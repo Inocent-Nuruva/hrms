@@ -9,7 +9,10 @@ type Item = { title: string; url?: string; items?: Item[] }
 const capture = vi.hoisted(() => {
   return { items: [] as Item[] }
 })
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard/kpi/scorecards" }))
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard/kpi/scorecards",
+  useRouter: () => ({ push: vi.fn() }),
+}))
 vi.mock("@/components/nav-main", () => ({
   NavMain: ({ items }: { items: Item[] }) => { capture.items = items; return <div data-testid="nav-main" /> },
 }))

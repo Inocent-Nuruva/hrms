@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
+import { HeaderGlobalSearch, type HeaderSearchItem } from "@/components/header-global-search"
 import {
   Sidebar,
   SidebarContent,
@@ -682,6 +683,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   identityReady?: boolean
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
+  searchItems?: HeaderSearchItem[]
 }
 
 function firstAccessibleNavUrl(
@@ -815,6 +817,7 @@ export function AppSidebar({
   identityReady = false,
   activeResource,
   onSelectResource,
+  searchItems = [],
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname()
@@ -910,6 +913,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>
       <SidebarContent className="gap-2 px-0 pb-2 pt-10">
+        {permissionsResolved && <div className="mx-3 mb-1 lg:hidden"><HeaderGlobalSearch items={searchItems} placement="sidebar" shortcutBreakpoint="small" /></div>}
         {permissionsResolved ? (
           <NavMain
             items={navData.navMain}

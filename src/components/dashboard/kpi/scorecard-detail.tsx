@@ -149,10 +149,10 @@ export function ScorecardDetail({
               <h1 className="text-2xl font-semibold">
                 {card.currentVersion.name}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                {card.code} · {card.subjectType} #{card.subjectId} ·{" "}
-                {card.period.label} · <KpiStatusBadge status={card.status} />
-              </p>
+              <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+                <span>{card.code} · {card.subjectType} #{card.subjectId} · {card.period.label}</span>
+                <KpiStatusBadge status={card.status} />
+              </div>
               <p className="mt-1 text-sm">{card.currentVersion.description}</p>
             </div>
             {canEdit && card.status !== "archived" && (

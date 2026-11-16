@@ -5,19 +5,17 @@ import {
   Button, Card, Dialog, DialogActions, DialogBody, DialogContent,
   DialogSurface, DialogTitle, Dropdown, Field, Input, MessageBar,
   MessageBarBody, Option, Table, TableBody, TableCell,
-  TableRow, Textarea,
+  TableRow, Textarea, Tooltip,
 } from "@fluentui/react-components"
-import { CheckmarkCircle24Filled } from "@fluentui/react-icons"
+import { CheckmarkCircle24Filled, Info20Regular } from "@fluentui/react-icons"
 import { kpiApi, type KpiDefinition, type KpiDefinitionForm, type KpiPeriod } from "@/lib/kpi-api"
 import { validateKpiDefinition, validateKpiDefinitionStep } from "./kpi-definition-validation"
-import { KpiWizardProgress } from "./kpi-guided-flow"
 
 const initial: KpiDefinitionForm = {
   code: "", name: "", description: "", category: "", strategicObjective: "",
   measurementType: "numeric", measurementUnit: "", direction: "higher", frequency: "monthly",
 }
 
-const steps = ["Basic information", "Measurement", "Target & period planning", "Review & save", "Next actions"] as const
 const types = [
   ["percentage", "Percentage"], ["numeric", "Number or count"], ["currency", "Monetary value"],
   ["duration", "Time or duration"], ["binary", "Yes or no"], ["milestone", "Milestone"],
@@ -35,7 +33,7 @@ function Choice({ value, choices, onChange, label }: {
   value: string; choices: readonly (readonly [string, string])[]; onChange: (value: string) => void; label: string
 }) {
   const selected = choices.find(([key]) => key === value)
-  return <Dropdown aria-label={label} value={selected?.[1] ?? ""} selectedOptions={[value]} onOptionSelect={(_, data) => onChange(data.optionValue ?? "")}>
+  return <Dropdown aria-label={label} value={selected?.[1] ?? ""} selectedOptions={[value]} onOptionSelect={(_, data) => onChange(data.optionValue ?? "")} className="w-full min-w-0 [&_.fui-Dropdown__button]:!w-full [&_.fui-Dropdown__button]:!min-w-0">
     {choices.map(([key, text]) => <Option key={key} value={key} text={text}>{text}</Option>)}
   </Dropdown>
 }
@@ -94,38 +92,35 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
   }
 
   return <div className="space-y-5" aria-label="Guided KPI creation">
-    <KpiWizardProgress steps={steps.map((title) => ({ title, description: title === "Target & period planning" ? "Targets belong to assignments, not to this definition." : "Complete this stage before continuing." }))} step={step - 1} />
-
     {error && <MessageBar intent="error" role="alert"><MessageBarBody>{error}</MessageBarBody></MessageBar>}
     {notice && <MessageBar intent="success" role="status"><MessageBarBody>{notice}</MessageBarBody></MessageBar>}
 
-    {step === 1 && <Card className="grid gap-4 p-5 md:grid-cols-2">
-      <div className="md:col-span-2"><h3 className="font-semibold">Describe what will be measured</h3><p className="text-sm text-muted-foreground">Illustrative insurance examples: Monthly Policy Renewal Rate, Premium Collection Achievement, Claims Processing Time, Customer Complaint Resolution Rate, or New Business Conversion Rate. These examples do not set company policy.</p></div>
-      <Field label="KPI name" required><Input value={form.name} maxLength={160} onChange={(_, data) => change("name", data.value)} placeholder="e.g. Monthly Policy Renewal Rate" /></Field>
-      <Field label="KPI code" required hint="2–80 letters, digits, underscores or hyphens; start with a letter."><Input value={form.code} maxLength={80} onChange={(_, data) => change("code", data.value.toUpperCase())} placeholder="e.g. RENEWAL_RATE" /></Field>
-      <Field label="Category" required><Input value={form.category} maxLength={100} onChange={(_, data) => change("category", data.value)} placeholder="e.g. Sales" /></Field>
-      <Field label="Strategic objective or purpose"><Input value={form.strategicObjective ?? ""} onChange={(_, data) => change("strategicObjective", data.value)} /></Field>
-      <Field label="Description" className="md:col-span-2"><Textarea value={form.description ?? ""} onChange={(_, data) => change("description", data.value)} rows={3} placeholder="What does this KPI measure, and why?" /></Field>
-    </Card>}
+    {step === 1 && <div className="grid gap-4 md:grid-cols-2">
+      <div className="md:col-span-2"><h3 className="font-semibold">Describe what will be measured</h3><p className="text-sm text-muted-foreground">Choose a clear result you can measure, such as tasks completed, customer ratings, time to resolve a request, or orders delivered on time.</p></div>
+      <Field label="KPI name" required className="content-start"><Input value={form.name} maxLength={160} onChange={(_, data) => change("name", data.value)} placeholder="e.g. Monthly Policy Renewal Rate" /></Field>
+      <Field label="KPI code" required hint="2–80 letters, digits, underscores or hyphens; start with a letter." className="content-start"><Input value={form.code} maxLength={80} onChange={(_, data) => change("code", data.value.toUpperCase())} placeholder="e.g. RENEWAL_RATE" /></Field>
+      <Field label="Category" required className="content-start"><Input value={form.category} maxLength={100} onChange={(_, data) => change("category", data.value)} placeholder="e.g. Sales" /></Field>
+      <Field label="Strategic objective or purpose" className="content-start"><Input value={form.strategicObjective ?? ""} onChange={(_, data) => change("strategicObjective", data.value)} /></Field>
+      <Field label="Description" className="content-start md:col-span-2"><Textarea value={form.description ?? ""} onChange={(_, data) => change("description", data.value)} rows={3} placeholder="What does this KPI measure, and why?" /></Field>
+    </div>}
 
-    {step === 2 && <Card className="grid gap-4 p-5 md:grid-cols-2">
+    {step === 2 && <div className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2"><h3 className="font-semibold">Choose a measurement rule</h3><p className="text-sm text-muted-foreground">The definition describes the measure. Actual values and targets are recorded later on assignments; scorecards use the existing scoring policy.</p></div>
-      <Field label="Measurement type" required><Choice label="Measurement type" value={form.measurementType} choices={types} onChange={(value) => setForm((current) => ({ ...current, measurementType: value, measurementUnit: value === "percentage" ? "%" : "", direction: ["binary", "milestone", "qualitative"].includes(value) ? "not_applicable" : "higher" }))} /></Field>
-      {!["binary", "milestone", "qualitative"].includes(form.measurementType) && <Field label="Performance direction" required hint="Higher is better for rates or volume; lower is better for time or cost."><Choice label="Performance direction" value={form.direction} choices={directions} onChange={(value) => change("direction", value)} /></Field>}
-      {form.measurementType === "currency" && <Field label="Currency code" required hint="Use a three-letter ISO code such as TZS."><Input value={form.measurementUnit ?? ""} maxLength={3} onChange={(_, data) => change("measurementUnit", data.value.toUpperCase())} /></Field>}
-      {form.measurementType === "duration" && <Field label="Duration unit" required><Choice label="Duration unit" value={form.measurementUnit ?? ""} choices={[["seconds", "Seconds"], ["minutes", "Minutes"], ["hours", "Hours"], ["days", "Days"]]} onChange={(value) => change("measurementUnit", value)} /></Field>}
-      {form.measurementType === "numeric" && <Field label="Measurement unit" hint="Optional, for example policies or claims."><Input value={form.measurementUnit ?? ""} onChange={(_, data) => change("measurementUnit", data.value)} /></Field>}
-      {form.measurementType === "percentage" && <Field label="Measurement unit"><Input value="%" disabled /></Field>}
+      <Field label="Measurement type" required className="min-w-0 content-start"><Choice label="Measurement type" value={form.measurementType} choices={types} onChange={(value) => setForm((current) => ({ ...current, measurementType: value, measurementUnit: value === "percentage" ? "%" : "", direction: ["binary", "milestone", "qualitative"].includes(value) ? "not_applicable" : "higher" }))} /></Field>
+      {!["binary", "milestone", "qualitative"].includes(form.measurementType) && <Field label="Performance direction" required hint="Higher is better for rates or volume; lower is better for time or cost." className="min-w-0 content-start"><Choice label="Performance direction" value={form.direction} choices={directions} onChange={(value) => change("direction", value)} /></Field>}
+      {form.measurementType === "currency" && <Field label="Currency code" required hint="Use a three-letter ISO code such as TZS." className="min-w-0 content-start"><Input value={form.measurementUnit ?? ""} maxLength={3} onChange={(_, data) => change("measurementUnit", data.value.toUpperCase())} /></Field>}
+      {form.measurementType === "duration" && <Field label="Duration unit" required className="min-w-0 content-start"><Choice label="Duration unit" value={form.measurementUnit ?? ""} choices={[["seconds", "Seconds"], ["minutes", "Minutes"], ["hours", "Hours"], ["days", "Days"]]} onChange={(value) => change("measurementUnit", value)} /></Field>}
+      {form.measurementType === "numeric" && <Field label="Measurement unit" hint="Optional, for example policies or claims." className="min-w-0 content-start"><Input value={form.measurementUnit ?? ""} onChange={(_, data) => change("measurementUnit", data.value)} /></Field>}
+      {form.measurementType === "percentage" && <Field label="Measurement unit" className="min-w-0 content-start"><Input value="%" disabled /></Field>}
       {["binary", "milestone", "qualitative"].includes(form.measurementType) && <p className="md:col-span-2 text-sm text-muted-foreground">This measurement has no numeric direction. Any rubric or scoring rule must come from an approved scoring policy.</p>}
-    </Card>}
+    </div>}
 
-    {step === 3 && <Card className="space-y-4 p-5">
-      <div><h3 className="font-semibold">Plan the reporting period and target</h3><p className="text-sm text-muted-foreground">Choose how often the KPI is reported. Employee-specific targets are set only when the KPI is assigned. This wizard will not change an employee record or assign a target.</p></div>
-      <div className="grid gap-4 md:grid-cols-2"><Field label="Reporting frequency" required><Choice label="Reporting frequency" value={form.frequency} choices={frequencies} onChange={(value) => { change("frequency", value); setPeriodId("") }} /></Field>
-        <Field label="Period for the next assignment" hint="Optional. This selection is only carried to the assignment form after saving."><Choice label="Period for the next assignment" value={periodId} choices={[["", "Choose later"], ...matchingPeriods.map((period) => [String(period.id), period.label] as const)]} onChange={setPeriodId} /></Field></div>
-      {matchingPeriods.length === 0 && <MessageBar intent="info"><MessageBarBody>No {form.frequency} period is configured yet. Save the definition, then create a reporting period before assignment.</MessageBarBody></MessageBar>}
-      <p className="text-sm text-muted-foreground">Next: publish the definition, assign it to an authorized employee or organizational subject, set its target, and add it to a scorecard.</p>
-    </Card>}
+    {step === 3 && <div className="space-y-4">
+      <div className="flex items-center gap-2"><h3 className="font-semibold">Plan the reporting period and target</h3><Tooltip content="Choose how often the KPI is reported. Employee-specific targets are set only when the KPI is assigned. This wizard will not change an employee record or assign a target." relationship="description"><Button appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About reporting periods" /></Tooltip></div>
+      <div className="grid gap-4 md:grid-cols-2"><Field label="Reporting frequency" required className="content-start"><Choice label="Reporting frequency" value={form.frequency} choices={frequencies} onChange={(value) => { change("frequency", value); setPeriodId("") }} /></Field>
+        <Field label="Period for the next assignment" hint="Optional. This selection is only carried to the assignment form after saving." className="content-start"><Choice label="Period for the next assignment" value={periodId} choices={[["", "Choose later"], ...matchingPeriods.map((period) => [String(period.id), period.label] as const)]} onChange={setPeriodId} /></Field></div>
+      {matchingPeriods.length === 0 && <div role="status" className="flex items-start gap-3 rounded-md px-4 py-3 text-sm" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}><Info20Regular className="mt-0.5 shrink-0" aria-hidden="true" /><p>No {form.frequency} period is configured yet. Save the definition, then create a reporting period before assignment.</p></div>}
+    </div>}
 
     {step === 4 && <Card className="space-y-4 p-5"><div><h3 className="font-semibold">Review your KPI</h3><p className="text-sm text-muted-foreground">Saving creates a draft. Publishing makes the version available for assignments. Neither action assigns employees or sets targets.</p></div>
       <Table aria-label="KPI definition review"><TableBody>{[

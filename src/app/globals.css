@@ -361,6 +361,14 @@ a:hover {
   text-decoration: underline;
 }
 
+.kpi-assignment-card-link,
+.kpi-assignment-card-link:hover,
+.kpi-assignment-card-link:focus,
+.kpi-assignment-card-link:focus-visible {
+  color: inherit;
+  text-decoration: none !important;
+}
+
 a.dashboard-metric-card,
 a.dashboard-metric-card:hover,
 a.dashboard-metric-card:focus,
@@ -1704,6 +1712,15 @@ main.relative.flex table:not(.fui-Table):not([role="grid"]) > tbody > tr > td {
   background: var(--sidebar-accent) !important;
   color: var(--sidebar-accent-foreground) !important;
   box-shadow: none;
+}
+
+/* Fluent UI draws the selected navigation rail with its own brand token. */
+.fui-NavItem[aria-current="page"]::after,
+.fui-NavSubItem[aria-current="page"]::after,
+.fui-NavCategoryItem[aria-current="page"]::after {
+  background: var(--sidebar-active-link-color, var(--primary)) !important;
+  background-color: var(--sidebar-active-link-color, var(--primary)) !important;
+  animation: none !important;
 }
 
 .dark .app-sidebar-surface,

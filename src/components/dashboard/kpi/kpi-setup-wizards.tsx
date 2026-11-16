@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { Button, Card, Field, Input, MessageBar, MessageBarBody, Option, Dropdown, Textarea, Table, TableBody, TableCell, TableRow } from "@fluentui/react-components"
+import { Button, Card, Field, Input, MessageBar, MessageBarBody, Option, Dropdown, Combobox, Textarea, Table, TableBody, TableCell, TableRow, ProgressBar, Tooltip } from "@fluentui/react-components"
+import { Info16Regular } from "@fluentui/react-icons"
+import { toast } from "@/components/ui/fluent-toast-store"
 import { DateInput } from "@/components/ui/date-input"
 import { listBranches, listDepartments, listEmployees, type AdminRecord } from "@/lib/admin-api"
 import { kpiApi, type KpiAssignment, type KpiDefinition, type KpiDefinitionForm, type KpiPeriod, type KpiTemplate } from "@/lib/kpi-api"
@@ -9,14 +11,42 @@ import { KpiWizardControls, KpiWizardProgress, type KpiFlowStep } from "./kpi-gu
 import { validateKpiDefinition } from "./kpi-definition-validation"
 import { targetFor } from "./kpi-target-input"
 
-function Choice({ label, value, options, onChange }: { label: string; value: string; options: Array<[string, string]>; onChange: (value: string) => void }) {
-  return <Field label={label} required><Dropdown aria-label={label} value={options.find(([id]) => id === value)?.[1] ?? ""} selectedOptions={[value]} onOptionSelect={(_, data) => onChange(data.optionValue ?? "")}>{options.map(([id, name]) => <Option key={id} value={id}>{name}</Option>)}</Dropdown></Field>
+function Choice({ label, value, options, onChange, info }: { label: string; value: string; options: Array<[string, string]>; onChange: (value: string) => void; info?: string }) {
+  return <Field label={info ? <span className="inline-flex items-center gap-1">{label}<Tooltip content={info} relationship="description"><Button type="button" appearance="subtle" size="small" icon={<Info16Regular aria-hidden />} aria-label={`About ${label}`} /></Tooltip></span> : label} required><Dropdown aria-label={label} value={options.find(([id]) => id === value)?.[1] ?? ""} selectedOptions={[value]} onOptionSelect={(_, data) => onChange(data.optionValue ?? "")}>{options.map(([id, name]) => <Option key={id} value={id}>{name}</Option>)}</Dropdown></Field>
 }
 function Summary({ rows }: { rows: Array<[string, string]> }) {
   return <Table aria-label="Review configuration"><TableBody>{rows.map(([label, value]) => <TableRow key={label}><TableCell className="font-semibold">{label}</TableCell><TableCell>{value || "—"}</TableCell></TableRow>)}</TableBody></Table>
 }
 function Saved({ text, onDone, error }: { text: string; onDone: () => void; error?: string }) {
   return <Card className="space-y-3 p-5"><MessageBar intent="success" role="status"><MessageBarBody>{text}</MessageBarBody></MessageBar>{error && <MessageBar intent="error" role="alert"><MessageBarBody>{error}</MessageBarBody></MessageBar>}<Button appearance="primary" onClick={onDone}>Return to list</Button></Card>
+}
+function subjectLabel(row: AdminRecord, subjectType: string) {
+  const value = (...keys: string[]) => {
+    for (const key of keys) {
+      const item = row[key]
+      if (typeof item === "string" && item.trim()) return item.trim()
+    }
+    return ""
+  }
+  if (subjectType === "employee") {
+    const name = value("full_name", "fullName", "name") || [value("first_name", "firstName"), value("last_name", "lastName")].filter(Boolean).join(" ")
+    const number = value("employee_no", "employee_number", "employeeNumber", "employeeNo")
+    return [name || `Employee #${row.id}`, number ? `(${number})` : ""].filter(Boolean).join(" ")
+  }
+  return value("name", "department_name", "departmentName", "branch_name", "branchName", "title") || `#${row.id}`
+}
+function departmentIdForEmployee(row: AdminRecord | undefined) {
+  if (!row) return undefined
+  const asId = (value: unknown) => {
+    const raw = value && typeof value === "object" ? (value as AdminRecord).id ?? (value as AdminRecord).department_id ?? (value as AdminRecord).departmentId : value
+    const id = Number(raw)
+    return Number.isInteger(id) && id > 0 ? id : undefined
+  }
+  const direct = asId(row.primary_department_id ?? row.primaryDepartmentId ?? row.department_id ?? row.departmentId ?? row.primary_department ?? row.primaryDepartment ?? row.department)
+  if (direct) return direct
+  const departments = Array.isArray(row.departments) ? row.departments as AdminRecord[] : []
+  const primary = departments.find((item) => item.is_primary === true || item.isPrimary === true || item.is_primary === 1)
+  return asId(primary) ?? asId(departments[0])
 }
 
 const templateInitial: KpiDefinitionForm = { code: "", name: "", description: "", category: "", strategicObjective: "", measurementType: "numeric", measurementUnit: "", direction: "higher", frequency: "monthly" }
@@ -76,7 +106,22 @@ export function KpiPeriodWizard({ token, onDone, onCancel }: { token: string; on
   function next() { if (step === 0 && !label.trim()) { setError("Enter a period name."); return } if (step === 1 && (!startDate || !endDate || endDate < startDate)) { setError("Enter a valid start and end date."); return } setError(""); setStep((value) => value + 1) }
   async function submit() { if (savingRef.current || busy || saved) return; savingRef.current = true; setBusy(true); setError(""); try { setSaved(await kpiApi.createPeriod(token, { label: label.trim(), frequency, startDate, endDate })) } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save period") } finally { savingRef.current = false; setBusy(false) } }
   if (saved) return <Saved text={`Reporting period ${saved.label} created.`} onDone={onDone} />
-  return <div className="space-y-4"><KpiWizardProgress steps={periodSteps} step={step} />{step === 0 && <Card className="grid gap-3 p-5 md:grid-cols-2"><Field label="Period name" required><Input value={label} onChange={(_, data) => setLabel(data.value)} /></Field><Choice label="Frequency" value={frequency} options={[["monthly","Monthly"],["quarterly","Quarterly"],["semiannual","Semiannual"],["annual","Annual"]]} onChange={setFrequency} /></Card>}{step === 1 && <Card className="grid gap-3 p-5 md:grid-cols-2"><Field label="Start date" required><DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field><Field label="End date" required><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field></Card>}{step === 2 && <Card className="p-5"><Summary rows={[["Name",label],["Frequency",frequency],["Start",startDate],["End",endDate]]} /></Card>}<KpiWizardControls step={step} steps={periodSteps} busy={busy} error={error} onBack={() => setStep((value) => value - 1)} onNext={next} onCancel={onCancel} onFinish={() => void submit()} finishLabel="Create period" confirmFinish /></div>
+  return <div className="space-y-5">
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div><h2 className="font-semibold">{periodSteps[step].title}</h2><p className="text-sm text-muted-foreground">{periodSteps[step].description}</p></div>
+        <span className="shrink-0 text-sm text-muted-foreground">Step {step + 1} of {periodSteps.length}</span>
+      </div>
+      <ProgressBar value={(step + 1) / periodSteps.length} aria-label={`Step ${step + 1} of ${periodSteps.length}`} />
+    </div>
+    {step === 0 && <div className="grid gap-4 md:grid-cols-2">
+      <Field label="Period name" required><Input value={label} onChange={(_, data) => setLabel(data.value)} /></Field>
+      <Choice label="Frequency" value={frequency} options={[["monthly", "Monthly"], ["quarterly", "Quarterly"], ["semiannual", "Twice a year"], ["annual", "Yearly"]]} onChange={setFrequency} info="Frequency means how often results are reported: Monthly is every month; Quarterly is every 3 months; Twice a year is every 6 months; Yearly is once a year." />
+    </div>}
+    {step === 1 && <div className="grid gap-4 md:grid-cols-2"><Field label="Start date" required><DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field><Field label="End date" required><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field></div>}
+    {step === 2 && <Summary rows={[["Name", label], ["Frequency", frequency.replace("semiannual", "twice a year").replace("annual", "yearly")], ["Start", startDate], ["End", endDate]]} />}
+    <KpiWizardControls step={step} steps={periodSteps} busy={busy} error={error} onBack={() => setStep((value) => value - 1)} onNext={next} onCancel={onCancel} onFinish={() => void submit()} finishLabel="Create period" confirmFinish />
+  </div>
 }
 
 const assignmentSteps: KpiFlowStep[] = [
@@ -84,17 +129,19 @@ const assignmentSteps: KpiFlowStep[] = [
   { title: "Select KPI", description: "Only published definitions can be assigned." },
   { title: "Reporting period", description: "The period must match the KPI reporting frequency." },
   { title: "Set target", description: "The target belongs to this assignment, not the KPI definition." },
-  { title: "Review assignment", description: "Check subject, KPI, period and target." },
-  { title: "Confirm", description: "Create one assignment. The backend checks scope and overlap." },
+  { title: "Review assignment", description: "Check subject, KPI, period and target, then create the assignment." },
 ]
 export function KpiAssignmentWizard({ token, definitions, periods, onDone, onCancel }: { token: string; definitions: KpiDefinition[]; periods: KpiPeriod[]; onDone: () => void; onCancel: () => void }) {
   const [step, setStep] = React.useState(0), [subjectType, setSubjectType] = React.useState("employee"), [subjectId, setSubjectId] = React.useState("")
   const [subjectSearch, setSubjectSearch] = React.useState("")
   const [definitionId, setDefinitionId] = React.useState(""), [periodId, setPeriodId] = React.useState(""), [target, setTarget] = React.useState("")
-  const [managerId, setManagerId] = React.useState(""), [subjects, setSubjects] = React.useState<AdminRecord[]>([])
-  const [busy, setBusy] = React.useState(false), [error, setError] = React.useState(""), [saved, setSaved] = React.useState<KpiAssignment | null>(null)
+  const [managerId, setManagerId] = React.useState(""), [managerSearch, setManagerSearch] = React.useState(""), [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([]), [subjects, setSubjects] = React.useState<AdminRecord[]>([])
+  const [busy, setBusy] = React.useState(false), [error, setError] = React.useState("")
   const savingRef = React.useRef(false)
-  React.useEffect(() => { let active = true; const timer = setTimeout(() => { const params = { limit: 100, search: subjectSearch.trim() }; const request = subjectType === "department" ? listDepartments(token, params) : subjectType === "branch" ? listBranches(token, params) : listEmployees(token, params); void request.then((data) => { if (active) setSubjects(data.rows) }).catch(() => { if (active) setSubjects([]) }) }, 200); return () => { active = false; clearTimeout(timer) } }, [token, subjectType, subjectSearch])
+  const selectedSubject = subjects.find((row) => String(row.id) === subjectId)
+  const managerDepartmentId = subjectType === "department" && Number(subjectId) > 0 ? Number(subjectId) : subjectType === "employee" ? departmentIdForEmployee(selectedSubject) : undefined
+  React.useEffect(() => { let active = true; const timer = setTimeout(() => { const params = { limit: 100, search: subjectId ? "" : subjectSearch.trim() }; const request = subjectType === "department" ? listDepartments(token, params) : subjectType === "branch" ? listBranches(token, params) : listEmployees(token, params); void request.then((data) => { if (active) setSubjects(data.rows) }).catch(() => { if (active) setSubjects([]) }) }, 200); return () => { active = false; clearTimeout(timer) } }, [token, subjectType, subjectSearch, subjectId])
+  React.useEffect(() => { let active = true; const timer = setTimeout(() => { void listEmployees(token, { limit: 100, search: managerId ? "" : managerSearch.trim(), department_id: managerDepartmentId }).then((data) => { if (active) setManagerOptions(data.rows) }).catch(() => { if (active) setManagerOptions([]) }) }, 200); return () => { active = false; clearTimeout(timer) } }, [token, managerSearch, managerId, managerDepartmentId])
   const definition = definitions.find((row) => row.id === Number(definitionId))
   const matchingPeriods = periods.filter((row) => row.frequency === definition?.currentVersion?.frequency)
   function next() {
@@ -106,19 +153,22 @@ export function KpiAssignmentWizard({ token, definitions, periods, onDone, onCan
     if (issue) { setError(issue); return } setError(""); setStep((value) => value + 1)
   }
   async function submit() {
-    if (savingRef.current || busy || saved || !definition?.currentVersion) return
+    if (savingRef.current || busy || !definition?.currentVersion) return
     savingRef.current = true; setBusy(true); setError("")
-    try { setSaved(await kpiApi.createAssignment(token, { subjectType, subjectId: Number(subjectId), definitionId: definition.id, periodId: Number(periodId), managerEmployeeId: managerId ? Number(managerId) : undefined, target: targetFor(definition.currentVersion.measurementType, definition.currentVersion.direction, target) })) }
+    try {
+      const assignment = await kpiApi.createAssignment(token, { subjectType, subjectId: Number(subjectId), definitionId: definition.id, periodId: Number(periodId), managerEmployeeId: managerId ? Number(managerId) : undefined, target: targetFor(definition.currentVersion.measurementType, definition.currentVersion.direction, target) })
+      toast.success(`Assignment #${assignment.id} created for ${assignment.definitionVersion?.name ?? definition.currentVersion.name}.`)
+      onDone()
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create assignment") }
     finally { savingRef.current = false; setBusy(false) }
   }
-  if (saved) return <Saved text={`Assignment #${saved.id} created for ${saved.definitionVersion?.name ?? definition?.currentVersion?.name}.`} onDone={onDone} />
   return <div className="space-y-4"><KpiWizardProgress steps={assignmentSteps} step={step} />
-    {step === 0 && <Card className="grid gap-3 p-5 md:grid-cols-2"><Choice label="Subject type" value={subjectType} options={[["employee","Employee"],["department","Department"],["branch","Branch"],["manager_group","Manager reporting group"]]} onChange={(value) => { setSubjectType(value); setSubjectId(""); setSubjectSearch("") }} /><Field label="Search subjects" hint="Search the existing HRMS records; results remain permission scoped."><Input value={subjectSearch} onChange={(_, data) => setSubjectSearch(data.value)} /></Field><Choice label="Authorized subject" value={subjectId} options={[["","Select a subject"], ...subjects.map((row) => [String(row.id), String(row.name ?? `#${row.id}`)] as [string,string])]} onChange={setSubjectId} /><Field label="Responsible manager employee ID" hint="Use an existing authorized manager where required."><Input type="number" value={managerId} onChange={(_, data) => setManagerId(data.value)} /></Field><p className="text-sm md:col-span-2">If a subject is not listed, ask HR to verify your scope. The backend checks every reference.</p></Card>}
+    {step === 0 && <div className="grid gap-4 md:grid-cols-2"><Choice label="Subject type" value={subjectType} options={[["employee","Employee"],["department","Department"],["branch","Branch"],["manager_group","Manager reporting group"]]} onChange={(value) => { setSubjectType(value); setSubjectId(""); setSubjectSearch(""); setManagerId(""); setManagerSearch("") }} /><div className="md:col-span-2"><Field label="Authorized subject" hint="Search and select an existing subject. Results are limited to your permission scope."><div className="relative"><Combobox aria-label="Authorized subject" placeholder="Search by name" value={subjectSearch} selectedOptions={subjectId ? [subjectId] : []} onChange={(event) => { setSubjectSearch(event.target.value); setSubjectId(""); setManagerId(""); setManagerSearch("") }} onOptionSelect={(_, data) => { const selected = subjects.find((row) => String(row.id) === data.optionValue); if (selected) { setSubjectId(String(selected.id)); setSubjectSearch(subjectLabel(selected, subjectType)); setManagerId(""); setManagerSearch("") } }} className="!w-full">{subjects.map((row) => <Option key={String(row.id)} value={String(row.id)} text={subjectLabel(row, subjectType)}>{subjectLabel(row, subjectType)}</Option>)}</Combobox></div></Field></div><div className="md:col-span-2"><Field label="Responsible manager (optional)" hint={managerDepartmentId ? "Choose a manager from the selected employee’s department. Leave blank if no separate manager is needed." : "Choose the manager who will oversee this assignment. Leave blank if no separate manager is needed."}><div className="relative"><Combobox aria-label="Responsible manager (optional)" placeholder="Search by name" value={managerSearch} selectedOptions={managerId ? [managerId] : []} onChange={(event) => { setManagerSearch(event.target.value); setManagerId("") }} onOptionSelect={(_, data) => { const selected = managerOptions.find((row) => String(row.id) === data.optionValue); if (selected) { setManagerId(String(selected.id)); setManagerSearch(subjectLabel(selected, "employee")) } }} className="!w-full">{managerOptions.map((row) => <Option key={String(row.id)} value={String(row.id)} text={subjectLabel(row, "employee")}>{subjectLabel(row, "employee")}</Option>)}</Combobox></div>{managerDepartmentId && managerOptions.length === 0 && <p className="mt-1 text-sm text-muted-foreground">No manager is available in this department.</p>}</Field></div><p className="text-sm md:col-span-2">Can&apos;t find a subject? Ask HR to check that it is available to you.</p></div>}
     {step === 1 && <Card className="space-y-3 p-5"><Choice label="Published KPI" value={definitionId} options={[["","Select a KPI"], ...definitions.filter((row) => row.status === "published" && row.currentVersion?.publishedAt).map((row) => [String(row.id), `${row.code} · ${row.currentVersion?.name ?? ""}`] as [string,string])]} onChange={(value) => { setDefinitionId(value); setPeriodId("") }} /><p className="text-sm">Definitions describe the measure. This assignment will record a specific subject, period and target.</p></Card>}
     {step === 2 && <Card className="space-y-3 p-5"><Choice label="Reporting period" value={periodId} options={[["","Select a period"], ...matchingPeriods.map((row) => [String(row.id), row.label] as [string,string])]} onChange={setPeriodId} />{matchingPeriods.length === 0 && <MessageBar intent="info"><MessageBarBody>No matching period exists. Create a reporting period first.</MessageBarBody></MessageBar>}</Card>}
     {step === 3 && <Card className="space-y-3 p-5"><Field label={`Target ${definition?.currentVersion?.measurementUnit ?? ""}`} required hint="Numeric value, true/false, description, or min,max for a range."><Input value={target} onChange={(_, data) => setTarget(data.value)} /></Field><p className="text-sm">Target changes later require a reason and create a revision history.</p></Card>}
-    {step >= 4 && <Card className="space-y-3 p-5"><Summary rows={[["Subject",`${subjectType} #${subjectId}`],["KPI",definition?.currentVersion?.name ?? ""],["Period",periods.find((row) => row.id === Number(periodId))?.label ?? ""],["Target",target],["Manager",managerId || "Not specified"]]} />{step === 5 && <MessageBar intent="info"><MessageBarBody>This action creates a real assignment. Overlaps and organization scope are validated by the backend.</MessageBarBody></MessageBar>}</Card>}
-    <KpiWizardControls step={step} steps={assignmentSteps} busy={busy} error={error} onBack={() => setStep((value) => value - 1)} onNext={next} onCancel={onCancel} onFinish={() => void submit()} finishLabel="Create assignment" confirmFinish />
+    {step === 4 && <Card className="space-y-3 p-5"><Summary rows={[["Subject",subjects.find((row) => String(row.id) === subjectId) ? subjectLabel(subjects.find((row) => String(row.id) === subjectId)!, subjectType) : subjectType],["KPI",definition?.currentVersion?.name ?? ""],["Period",periods.find((row) => row.id === Number(periodId))?.label ?? ""],["Target",target],["Manager",managerOptions.find((row) => String(row.id) === managerId) ? subjectLabel(managerOptions.find((row) => String(row.id) === managerId)!, "employee") : "Not specified"]]} /></Card>}
+    <KpiWizardControls step={step} steps={assignmentSteps} busy={busy} error={error} onBack={() => setStep((value) => value - 1)} onNext={next} onCancel={onCancel} onFinish={() => void submit()} finishLabel="Create assignment" />
   </div>
 }

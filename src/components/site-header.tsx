@@ -177,7 +177,9 @@ export function SiteHeader({
           !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
         )}
       >
-        <HeaderGlobalSearch items={searchItems} />
+        <div className="hidden min-w-0 flex-1 lg:block">
+          <HeaderGlobalSearch items={searchItems} shortcutBreakpoint="large" />
+        </div>
 
         <SidebarTrigger
           // Menu first on small screens so the squeezed search box can't sit on top of it.

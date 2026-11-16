@@ -9,6 +9,25 @@ export type AchievementEvidence = {
   fileSize: number;
   createdAt: string;
 };
+export type AchievementActivityEvidence = Omit<AchievementEvidence, "revisionId"> & {
+  activityId: number;
+};
+export type AchievementActivity = {
+  id: number;
+  companyId: number;
+  assignmentId: number;
+  revisionId: number;
+  employeeId: number;
+  periodId: number;
+  activityDate: string;
+  title: string;
+  details: string;
+  measurableResult: unknown | null;
+  comments: string | null;
+  rowVersion: number;
+  status: string;
+  evidence: AchievementActivityEvidence[];
+};
 export type AchievementRevision = {
   id: number;
   revision: number;
@@ -22,6 +41,7 @@ export type AchievementRevision = {
   reviewComment: string | null;
   evidenceRequired: boolean;
   evidence: AchievementEvidence[];
+  activities?: AchievementActivity[];
 };
 export type AchievementEvent = {
   id: number;
@@ -110,6 +130,42 @@ export const achievementApi = {
       token,
       method: "POST",
     }),
+  addActivity: (
+    token: string,
+    id: number,
+    activity: Pick<AchievementActivity, "activityDate" | "title" | "details" | "measurableResult" | "comments">,
+  ) => adminRequest<Achievement>(`${root}/achievements/${id}/activities`, {
+    token,
+    method: "POST",
+    body: activity,
+  }),
+  updateActivity: (
+    token: string,
+    id: number,
+    activityId: number,
+    activity: Pick<AchievementActivity, "activityDate" | "title" | "details" | "measurableResult" | "comments" | "rowVersion">,
+  ) => adminRequest<Achievement>(`${root}/achievements/${id}/activities/${activityId}`, {
+    token,
+    method: "PATCH",
+    body: activity,
+  }),
+  removeActivity: (token: string, id: number, activityId: number, rowVersion: number) =>
+    adminRequest<Achievement>(`${root}/achievements/${id}/activities/${activityId}`, {
+      token,
+      method: "DELETE",
+      body: { rowVersion },
+    }),
+  uploadActivityEvidence: (
+    token: string,
+    id: number,
+    activityId: number,
+    rowVersion: number,
+    file: { fileName: string; fileSize: number; mimeType: string; fileString: string },
+  ) => adminRequest<Achievement>(`${root}/achievements/${id}/activities/${activityId}/evidence`, {
+    token,
+    method: "POST",
+    body: { rowVersion, file },
+  }),
   upload: (
     token: string,
     id: number,
@@ -146,6 +202,25 @@ export const achievementApi = {
     );
     if (!response.ok)
       throw new Error(`Unable to download evidence (${response.status})`);
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = evidence.fileName;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+  async downloadActivityEvidence(
+    token: string,
+    achievementId: number,
+    activity: AchievementActivity,
+    evidence: AchievementActivityEvidence,
+  ) {
+    const response = await fetch(
+      `${root}/achievements/${achievementId}/activities/${activity.id}/evidence/${evidence.id}`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+    );
+    if (!response.ok)
+      throw new Error(`Unable to download activity evidence (${response.status})`);
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a");
     anchor.href = url;
