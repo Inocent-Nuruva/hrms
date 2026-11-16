@@ -81,7 +81,7 @@ describe("groupLeaveBalancesByEmployee", () => {
     expect(grouped[0]?.typeCount).toBe(2)
   })
 
-  it("merges same-name rows when each leave type has a unique employee_id", () => {
+  it("keeps employees with distinct IDs separate even when names match", () => {
     const grouped = groupLeaveBalancesByEmployee(
       [
         { employee_id: 101, employee_name: "Audifas August Riwa", leave_type_name: "Sick Leave", allocated_days: 126, remaining_days: 126 },
@@ -93,9 +93,10 @@ describe("groupLeaveBalancesByEmployee", () => {
 
     expect(grouped.map((group) => group.employeeName)).toEqual([
       "Audifas August Riwa",
+      "Audifas August Riwa",
       "Paulina Sebastian Mpanduji",
     ])
-    expect(grouped[0]?.typeCount).toBe(2)
+    expect(grouped[0]?.typeCount).toBe(1)
     expect(grouped[1]?.typeCount).toBe(1)
   })
 

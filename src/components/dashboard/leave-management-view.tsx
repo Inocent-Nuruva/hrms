@@ -102,6 +102,7 @@ import {
   listLeaveOpeningPreviewReviews,
   recordLeaveOpeningPreviewReview,
   listAllLeaveBalances,
+  listEmployeesWithoutLeaveBalances,
   listLeaveHolidays,
   listLeavePolicies,
   listLeaveRequests,
@@ -149,7 +150,6 @@ import { Switch } from "@/components/ui/switch";
 import { DatePickerPresets } from "@/components/ui/date-picker-presets";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import {
-  TalentDoodle,
   TalentDoodleSprites,
 } from "@/components/dashboard/talent-visuals";
 import ExampleProgress from "@/components/ui/progress-1";
@@ -1451,6 +1451,16 @@ export function LeaveManagementView({
     React.useState("all");
 
   const [balances, setBalances] = React.useState<AdminRecord[]>([]);
+  const [balanceYear, setBalanceYear] = React.useState(String(new Date().getFullYear()));
+  const [balanceSearch, setBalanceSearch] = React.useState("");
+  const [balanceType, setBalanceType] = React.useState("all");
+  const [balanceStatus, setBalanceStatus] = React.useState("all");
+  const [balanceDepartment, setBalanceDepartment] = React.useState("all");
+  const [missingBalances, setMissingBalances] = React.useState<AdminRecord[]>([]);
+  const [missingPage, setMissingPage] = React.useState(1);
+  const [missingTotalPages, setMissingTotalPages] = React.useState<number | null>(null);
+  const [missingError, setMissingError] = React.useState("");
+  const [missingLoading, setMissingLoading] = React.useState(false);
   const [balanceAdjustments, setBalanceAdjustments] = React.useState<
     AdminRecord[]
   >([]);
@@ -1536,6 +1546,10 @@ export function LeaveManagementView({
     React.useState<LeaveBalanceEmployeeGroup | null>(null);
   const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] =
     React.useState(false);
+  const [balanceHistory, setBalanceHistory] = React.useState<AdminRecord[]>([]);
+  const [balanceHistoryPage, setBalanceHistoryPage] = React.useState(1);
+  const [balanceHistoryError, setBalanceHistoryError] = React.useState("");
+  const [balanceHistoryLoading, setBalanceHistoryLoading] = React.useState(false);
   const [returnToEmployeeBalances, setReturnToEmployeeBalances] =
     React.useState(false);
   const returnToEmployeeBalancesRef = React.useRef(false);
@@ -2625,11 +2639,25 @@ export function LeaveManagementView({
 
   const groupedBalances = React.useMemo(
     () =>
-      groupLeaveBalancesByEmployee(balances, (row) =>
+      groupLeaveBalancesByEmployee(balances.filter((row) => readBalanceFiscalYear(row) === balanceYear && (balanceDepartment === "all" || String(readNumber(asRecord(asRecord(row.employee)?.department) ?? {}, ["id"])) === balanceDepartment) && (balanceType === "all" || String(readNumber(row, ["leave_type_id"])) === balanceType) && (balanceStatus === "all" || (balanceStatus === "negative" ? readBalanceDays(row, ["available_days", "remaining_days"]) < 0 : readBalanceDays(row, ["available_days", "remaining_days"]) <= 5))), (row) =>
         employeeLabelFromRow(row),
-      ),
-    [balances, employeeLabelFromRow],
+      ).filter((group) => `${group.employeeName} ${group.employeeId ?? ""} ${readString(asRecord(group.rows[0]?.employee) ?? {}, ["employee_number", "employee_no"])}`.toLowerCase().includes(balanceSearch.trim().toLowerCase())),
+    [balances, employeeLabelFromRow, balanceYear, balanceSearch, balanceType, balanceStatus, balanceDepartment],
   );
+
+  const allEmployeeBalancesForYear = React.useMemo(
+    () => groupLeaveBalancesByEmployee(
+      balances.filter((row) => readBalanceFiscalYear(row) === balanceYear),
+      employeeLabelFromRow,
+    ),
+    [balances, balanceYear, employeeLabelFromRow],
+  );
+
+  const balanceDepartments = React.useMemo(() => {
+    const options = new Map<string, string>();
+    balances.forEach((row) => { const department = asRecord(asRecord(row.employee)?.department); if (department && department.id != null) options.set(String(department.id), readString(department, ["name"])); });
+    return Array.from(options, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [balances]);
 
   const balanceGroupColumns = React.useMemo(
     () => [
@@ -2640,6 +2668,7 @@ export function LeaveManagementView({
         sortValue: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
         render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
       },
+      { key: "department", label: "Department", render: (group: LeaveBalanceEmployeeGroup) => readString(asRecord(asRecord(group.rows[0]?.employee)?.department) ?? {}, ["name"]) },
       {
         key: "types",
         label: "Leave Types",
@@ -2657,31 +2686,14 @@ export function LeaveManagementView({
           group.fiscalYears.join(", ") || "-",
       },
       {
-        key: "allocated_days",
-        label: "Alloc",
-        defaultWidth: 70,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.allocatedDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.allocatedDays),
-      },
-      {
-        key: "used_days",
-        label: "Used",
-        defaultWidth: 60,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.usedDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.usedDays),
-      },
-      {
-        key: "remaining",
-        label: "Rem",
-        defaultWidth: 60,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.remainingDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.remainingDays),
+        key: "balances",
+        label: "Available by leave type",
+        defaultWidth: 300,
+        ...(balanceType === "all" ? {} : { sortValue: (group: LeaveBalanceEmployeeGroup) => readBalanceDays(group.rows[0] ?? {}, ["available_days", "remaining_days"]) }),
+        render: (group: LeaveBalanceEmployeeGroup) => group.rows.map((row) =>           `${leaveTypeLabelFromRow(row)}: ${formatBalanceDays(readBalanceDays(row, ["available_days", "remaining_days"]))}`).join(" | "),
       },
     ],
-    [],
+    [leaveTypeLabelFromRow, balanceType],
   );
 
   React.useEffect(() => {
@@ -2690,10 +2702,10 @@ export function LeaveManagementView({
         return current;
       }
       return (
-        groupedBalances.find((group) => group.key === current.key) ?? current
+        allEmployeeBalancesForYear.find((group) => group.key === current.key) ?? null
       );
     });
-  }, [groupedBalances]);
+  }, [allEmployeeBalancesForYear]);
 
   const selectedBalanceGroupRows = React.useMemo(
     () =>
@@ -2704,6 +2716,30 @@ export function LeaveManagementView({
         : [],
     [selectedBalanceGroup, leaveTypeLabelFromRow],
   );
+
+  React.useEffect(() => {
+    const employeeId = selectedBalanceGroup?.employeeId;
+    const token = readStoredToken();
+    if (!employeeBalanceDetailsOpen || !employeeId || !token) return;
+    let cancelled = false;
+    setBalanceHistoryLoading(true); setBalanceHistoryError(""); setBalanceHistory([]);
+    listLeaveBalanceTransactions(token, { employee_id: employeeId, fiscal_year: balanceYear, page: balanceHistoryPage, limit: 20 })
+      .then((rows) => { if (!cancelled) setBalanceHistory(rows); })
+      .catch((error: unknown) => { if (!cancelled) setBalanceHistoryError(error instanceof Error ? error.message : "Could not load transaction history."); })
+      .finally(() => { if (!cancelled) setBalanceHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [employeeBalanceDetailsOpen, selectedBalanceGroup?.employeeId, balanceYear, balanceHistoryPage]);
+
+  React.useEffect(() => {
+    if (tab !== "balances" || !/^\d{4}$/.test(balanceYear)) return;
+    const token = readStoredToken(); if (!token) return;
+    let cancelled = false; setMissingLoading(true); setMissingError("");
+    listEmployeesWithoutLeaveBalances(token, balanceYear, missingPage)
+      .then((result) => { if (!cancelled) { setMissingBalances(result.rows); setMissingTotalPages(result.totalPages); } })
+      .catch((error: unknown) => { if (!cancelled) { setMissingBalances([]); setMissingError(error instanceof Error ? error.message : "Could not load employees without balances."); } })
+      .finally(() => { if (!cancelled) setMissingLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, balanceYear, missingPage, balances]);
 
   const resetBalanceForm = React.useCallback(() => {
     setBalanceForm(emptyBalanceForm());
@@ -3505,7 +3541,8 @@ export function LeaveManagementView({
   }
 
   function openEmployeeBalanceDetails(group: LeaveBalanceEmployeeGroup) {
-    setSelectedBalanceGroup(group);
+    setSelectedBalanceGroup(allEmployeeBalancesForYear.find((item) => item.key === group.key) ?? group);
+    setBalanceHistoryPage(1);
     setEmployeeBalanceDetailsOpen(true);
   }
 
@@ -7649,49 +7686,26 @@ export function LeaveManagementView({
           {selectedBalanceGroup ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
               <TalentDoodleSprites />
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  {
-                    label: "Allocated",
-                    value: selectedBalanceGroup.allocatedDays,
-                  },
-                  { label: "Used", value: selectedBalanceGroup.usedDays },
-                  {
-                    label: "Remaining",
-                    value: selectedBalanceGroup.remainingDays,
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="relative overflow-hidden rounded-2xl p-3 text-white"
-                    style={{ backgroundColor: "var(--primary)" }}
-                  >
-                    <TalentDoodle />
-                    <div className="relative z-10">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">
-                        {item.label}
-                      </p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums leading-none">
-                        {formatBalanceDays(item.value)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
+              <p className="text-xs text-muted-foreground">Available days exclude pending and approved future leave. Each leave type has a separate balance.</p>
+              {selectedBalanceGroupRows.map((row, index) => (
+                <div key={String(row.id ?? index)} className="rounded-md border border-border p-3 text-xs">
+                  <p className="font-semibold">{leaveTypeLabelFromRow(row)} - Available {formatBalanceDays(readBalanceDays(row, ["available_days", "remaining_days"]))} days</p>
+                  <p className="mt-2 text-muted-foreground">{[["Opening", "opening_balance_days"], ["Carried forward", "carried_forward_days"], ["Entitlement", "entitlement_days"], ["Accrued", "accrued_days"], ["Adjustment", "adjusted_days"], ["Used", "used_days"], ["Pending", "pending_days"], ["Approved future", "approved_future_days"], ["Expired", "expired_days"], ["Attendance deduction", "attendance_deduction_days"]].map(([label, key]) =>                     `${label}: ${formatBalanceDays(readBalanceDays(row, [key]))}`).join(" | ")}</p>
+                </div>
+              ))}
               <div className="overflow-hidden rounded-md border border-slate-200">
                 <div
                   className={cn(
                     "grid gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500",
                     canAdjustBalances
-                      ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
-                      : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]",
+                      ? "grid-cols-[minmax(0,1fr)_4.5rem_3.5rem_4.5rem_2rem]"
+                      : "grid-cols-[minmax(0,1fr)_4.5rem_3.5rem_4.5rem]",
                   )}
                 >
                   <span>Type</span>
-                  <span className="text-right">Alloc</span>
+                  <span className="text-right">Allocated</span>
                   <span className="text-right">Used</span>
-                  <span className="text-right">Rem</span>
+                  <span className="text-right">Available</span>
                   {canAdjustBalances ? (
                     <span className="sr-only">Actions</span>
                   ) : null}
@@ -7770,6 +7784,17 @@ export function LeaveManagementView({
             </div>
           ) : null}
 
+          {selectedBalanceGroup && employeeBalanceDetailsOpen ? (
+            <section className="shrink-0 border-t border-border pt-2 text-xs">
+              <div className="flex items-center justify-between"><h3 className="font-semibold">Transaction history - FY {balanceYear}</h3><div className="flex gap-2"><button type="button" disabled={balanceHistoryPage === 1 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page - 1)}>Previous</button><span>Page {balanceHistoryPage}</span><button type="button" disabled={balanceHistory.length < 20 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page + 1)}>Next</button></div></div>
+              <div className="mt-2 max-h-36 space-y-1 overflow-y-auto">
+                {balanceHistoryLoading ? <p>Loading history...</p> : balanceHistoryError ? <p role="alert">{balanceHistoryError}</p> : balanceHistory.length === 0 ? <p>No transactions found.</p> : balanceHistory.map((row, index) => {
+                  const historyActor = asRecord(row.created_by) ?? {};
+                  return <div key={String(row.id ?? index)} className="rounded border border-border p-2"><span className="font-medium">{readString(row, ["effective_date", "created_at"])} - {readString(row, ["transaction_type"])}</span><span> | {leaveTypeLabelFromRow(row)} | Days: {readString(row, ["amount_days"])}</span><p>Reason: {readString(row, ["reason"])} | By: {personName(historyActor, "System")}</p></div>;
+                })}
+              </div>
+            </section>
+          ) : null}
           <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
             <button
               type="button"
@@ -8307,6 +8332,16 @@ export function LeaveManagementView({
             title="Leave Balances"
             toolbarActions={
               <>
+                <input aria-label="Balance fiscal year" inputMode="numeric" maxLength={4} className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs" value={balanceYear} onChange={(event) => { setBalanceYear(event.target.value.replace(/[^\d]/g, "").slice(0, 4)); setMissingPage(1); }} />
+                <input aria-label="Search employee balances" placeholder="Employee name or ID" className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs" value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} />
+                <select aria-label="Filter department" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceDepartment} onChange={(event) => setBalanceDepartment(event.target.value)}><option value="all">All departments</option>{balanceDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
+                <select aria-label="Filter leave type" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceType} onChange={(event) => setBalanceType(event.target.value)}>
+                  <option value="all">All leave types</option>
+                  {types.map((type) => <option key={String(type.id)} value={String(type.id)}>{readString(type, ["name", "code"])}</option>)}
+                </select>
+                <select aria-label="Filter available balance" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceStatus} onChange={(event) => setBalanceStatus(event.target.value)}>
+                  <option value="all">All balances</option><option value="low">5 days or less</option><option value="negative">Negative</option>
+                </select>
                 <input
                   aria-label="Reconciliation fiscal year"
                   inputMode="numeric"
@@ -8386,6 +8421,10 @@ export function LeaveManagementView({
             loading={loading}
             storageKey="leave-balances-by-employee"
           />
+          <section className="rounded-lg border border-border bg-card p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Employees with missing balance records</h3><p className="text-xs text-muted-foreground">FY {balanceYear}. Shows missing records for active leave types, matching balance generation. Review policy eligibility before using a balance.</p></div><div className="flex gap-2 text-xs"><button type="button" disabled={missingPage <= 1 || missingLoading} onClick={() => setMissingPage((page) => page - 1)}>Previous</button><span>Page {missingPage}</span><button type="button" disabled={missingLoading || (missingTotalPages !== null ? missingPage >= missingTotalPages : missingBalances.length < 20)} onClick={() => setMissingPage((page) => page + 1)}>Next</button></div></div>
+            {!/^\d{4}$/.test(balanceYear) ? <p className="mt-2">Enter a four-digit fiscal year.</p> : missingLoading ? <p className="mt-2">Loading...</p> : missingError ? <p role="alert" className="mt-2">{missingError}</p> : missingBalances.length ? <ul className="mt-2 space-y-1">{missingBalances.map((employee) => <li key={String(employee.id)}>{personName(employee, "Employee")} - {readString(employee, ["employee_number"])} - {readString(asRecord(employee.department) ?? {}, ["name"])} - Missing: {Array.isArray(employee.missing_leave_types) ? employee.missing_leave_types.map((type: unknown) => readString(asRecord(type) ?? {}, ["name", "code"])).join(", ") : "-"}</li>)}</ul> : <p className="mt-2">{ /^\d{4}$/.test(balanceYear) ? "No missing records for active employees and leave types." : "Enter a four-digit fiscal year." }</p>}
+          </section>
           <LeaveHrOperationsPanel
             token={readStoredToken()}
             leaveTypeLabel={leaveTypeLabel}
