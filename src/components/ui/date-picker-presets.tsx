@@ -9,6 +9,7 @@ type DatePickerPresetsProps = {
   placeholder?: string
   className?: string
   id?: string
+  min?: string
   /** `onPrimary` matches glass buttons on brand/header backgrounds. */
   appearance?: "default" | "onPrimary"
 }
@@ -20,12 +21,14 @@ export function DatePickerPresets({
   placeholder = "Select date",
   className,
   id,
+  min,
   appearance = "default",
 }: DatePickerPresetsProps) {
   return (
     <DateInput
       aria-label={placeholder}
       id={id}
+      min={min}
       value={value}
       onValueChange={onChange}
       placeholder={placeholder}

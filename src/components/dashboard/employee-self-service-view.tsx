@@ -1,6 +1,6 @@
 "use client"
 
-import { requiresEvidenceBeforeSubmission } from "@/lib/leave-evidence"
+import { evidenceDayThreshold, requiresEvidenceBeforeSubmission } from "@/lib/leave-evidence"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
@@ -170,6 +170,7 @@ import {
 } from "@/components/animate-ui/components/base/dialog"
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
+import { LeaveEncashmentSelfPanel } from "@/components/leave/leave-encashment-self-panel"
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
@@ -7305,6 +7306,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           ))}
         </div> : null}
         {balances.length > 0 ? <LeaveAccrualProjectionCard token={token} /> : null}
+        <LeaveEncashmentSelfPanel token={token} balances={balances} />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {balances.map((row, index) => (
             <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">
@@ -7581,7 +7583,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 </p>
               ) : null}
               {selectedLeaveTypeRequiresAttachment ? (
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "A supporting attachment is required before submission." : `You can submit now and upload evidence within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.`}</p>
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `A supporting attachment is required for requests longer than ${evidenceDayThreshold(selectedLeaveTypeRecord)} working day(s)${selectedLeaveTypeRecord?.allow_deferred_attachment === true || selectedLeaveTypeRecord?.allow_deferred_attachment === "true" ? `. It can be uploaded within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.` : " and must be added before submission."}` : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "A supporting attachment is required before submission." : `You can submit now and upload evidence within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.`}</p>
               ) : null}
               {requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
                 <p className="text-xs text-muted-foreground">
@@ -7607,8 +7609,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               </FluentDropdown>
             </FluentField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { end_date: value }) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
-              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
+              <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(value && (prev.duration_type !== "FULL_DAY" || !prev.end_date || prev.end_date < value) ? { end_date: value } : {}) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
+              <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} min={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
             </div>
             {requestForm.duration_type === "HALF_DAY" ? (
               <FluentField label="Half-day session" hint="Half-day leave uses the same start and end date.">
@@ -7624,7 +7626,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
               </div>
             ) : null}
-            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "(required to submit)" : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
+            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `(required beyond ${evidenceDayThreshold(selectedLeaveTypeRecord)} day(s))` : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "(required to submit)" : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-3 file:py-1.5" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
             </FluentField>
             <FluentField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>

@@ -63,6 +63,7 @@ import {
   adjustLeaveBalance,
   type LeaveBalanceAdjustMode,
   cancelLeaveRequest,
+  endLeaveEarly,
   carryForwardLeaveBalances,
   createLeaveHoliday,
   createLeavePolicy,
@@ -93,8 +94,13 @@ import {
   confirmLeaveRequestsImport,
   listLeaveBalanceAdjustments,
   listLeaveBalanceTransactions,
+  decideLeaveEncashmentRequest,
   listLeaveEncashmentRequests,
+  recordLeaveEncashmentPayment,
+  recordLeaveEncashmentPayrollHandoff,
   listAllLeaveBalanceReconciliation,
+  listLeaveOpeningPreviewReviews,
+  recordLeaveOpeningPreviewReview,
   listAllLeaveBalances,
   listLeaveHolidays,
   listLeavePolicies,
@@ -130,6 +136,7 @@ import {
 } from "@/lib/leave-balance-groups";
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
 import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
+import { LeaveHrOperationsPanel } from "@/components/leave/leave-hr-operations-panel";
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
 import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
 import {
@@ -188,6 +195,7 @@ type WorkflowCreateDraft = {
     is_default: string;
     reminder_after_days?: string;
     escalate_after_days?: string;
+    max_escalations?: string;
   };
   steps: AdminRecord[];
   stage: "details" | "path";
@@ -314,18 +322,6 @@ function LeaveTypeField({
 const leaveTypeControlClass =
   "mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-border dark:bg-background dark:text-foreground";
 
-function deriveLeaveTypeCode(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .split(/[^A-Z0-9]+/)
-    .filter((part) => part && part !== "LEAVE")
-    .join("_")
-    .slice(0, 48)
-    .replace(/_+$/, "");
-}
-
 function createEmptyLeaveTypeForm() {
   return {
     name: "",
@@ -336,6 +332,8 @@ function createEmptyLeaveTypeForm() {
     requires_attachment: "false",
     allow_deferred_attachment: "false",
     attachment_grace_days: "3",
+    attachment_required_after_days: "",
+    auto_approve_after_days: "",
     is_carry_forward_allowed: "false",
     sandwich_rule: "false",
     max_carry_forward_days: "0",
@@ -405,6 +403,9 @@ const TRANSACTION_TYPE_DESCRIPTIONS: Record<string, string> = {
   MANUAL_CORRECTION:
     "A direct correction made to resolve a balance discrepancy.",
   ATTENDANCE_DEDUCTION: "Days deducted by an attendance or absence rule.",
+  ENCASHMENT: "Unused days paid out as money instead of leave.",
+  LAPSED:
+    "Unused days not carried into the next year; recorded at year end.",
 };
 
 function formatTransactionType(value: string) {
@@ -785,6 +786,10 @@ type LeaveActor = {
   email: string;
   employeeId: number | null;
   isCompanyAdmin: boolean;
+  /** Approvers/HR may cancel any open or approved request (backend: leave_requests:approve). */
+  canCancelAny?: boolean;
+  /** HR may act in place of an unavailable manager (leave_requests:override). */
+  canOverride?: boolean;
 };
 
 type LeaveApprovalRecord = {
@@ -1056,11 +1061,19 @@ function getLeaveRequestPermissions(
         readNumber(nestedEmployee ?? {}, ["user_id", "userId"]) ===
           actor.userId));
 
+  // Owners may cancel approved leave too; the backend enforces start date and cutoff rules.
   const canCancel =
     !isTerminal &&
-    status !== "approved" &&
     Boolean(actor) &&
-    (isOwner || Boolean(actor?.isCompanyAdmin));
+    (isOwner || Boolean(actor?.isCompanyAdmin) || Boolean(actor?.canCancelAny));
+
+  // HR stepping in for an unavailable manager (backend: hr_override at level 1).
+  const canOverride =
+    !canApproveOrReject &&
+    !isOwner &&
+    row.routing_required !== true &&
+    status === "pending_department_manager" &&
+    Boolean(actor?.canOverride);
 
   const pendingNames = pendingAtCurrent
     .map((approval) => approval.name)
@@ -1090,6 +1103,7 @@ function getLeaveRequestPermissions(
     isTerminal,
     canApproveOrReject,
     canCancel,
+    canOverride,
     currentLevel,
     myPending,
     pendingAtCurrent,
@@ -1106,7 +1120,7 @@ function getLeaveRequestPermissions(
       ? "You can cancel this request."
       : isTerminal
         ? "This request is already closed."
-        : "Only the requester or a company admin can cancel this request.",
+        : "Only the requester, an approver or a company admin can cancel this request.",
   };
 }
 
@@ -1320,6 +1334,10 @@ export function LeaveManagementView({
     permissions: ["leave_requests:approve"],
     mode: "any",
   });
+  const canOverrideManager = canPerformPermission(
+    actor.permissionLabels,
+    "leave_requests:override",
+  );
   const canAdjustBalances = canPerformPermission(actor.permissionLabels, {
     permissions: [
       "leave_balances:update",
@@ -1484,8 +1502,6 @@ export function LeaveManagementView({
   const [typeDialogOpen, setTypeDialogOpen] = React.useState(false);
   const [typeDialogStep, setTypeDialogStep] =
     React.useState<LeaveTypeWizardStep>("details");
-  const [typeCodeManuallyEdited, setTypeCodeManuallyEdited] =
-    React.useState(false);
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false);
   const [requestDialogStep, setRequestDialogStep] =
     React.useState<LeaveRequestWizardStep>("who");
@@ -1635,6 +1651,7 @@ export function LeaveManagementView({
     is_default: "false",
     reminder_after_days: "",
     escalate_after_days: "",
+    max_escalations: "",
   });
 
   const [workflowStepForm, setWorkflowStepForm] = React.useState({
@@ -2195,7 +2212,6 @@ export function LeaveManagementView({
     setTypeForm(createEmptyLeaveTypeForm());
     setEditingLeaveTypeRow(null);
     setTypeDialogStep("details");
-    setTypeCodeManuallyEdited(false);
   }, []);
 
   const openTypeDialogForCreate = React.useCallback(() => {
@@ -2205,7 +2221,6 @@ export function LeaveManagementView({
 
   const openTypeDialogForEdit = React.useCallback((row: AdminRecord) => {
     setTypeDialogStep("details");
-    setTypeCodeManuallyEdited(true);
     setEditingLeaveTypeRow(row);
     setTypeForm({
       name: readString(row, ["name"]) === "-" ? "" : readString(row, ["name"]),
@@ -2225,6 +2240,12 @@ export function LeaveManagementView({
         : "false",
       attachment_grace_days: String(
         readNumber(row, ["attachment_grace_days"]) ?? 3,
+      ),
+      attachment_required_after_days: String(
+        readNumber(row, ["attachment_required_after_days"]) ?? "",
+      ),
+      auto_approve_after_days: String(
+        readNumber(row, ["auto_approve_after_days"]) ?? "",
       ),
       is_carry_forward_allowed: readBoolean(row, ["is_carry_forward_allowed"])
         ? "true"
@@ -2518,16 +2539,16 @@ export function LeaveManagementView({
     void getCurrentAdmin(token)
       .then((profile) => {
         if (cancelled) return;
-        setCurrentActor(resolveLeaveActor(token, profile));
+        setCurrentActor({ ...resolveLeaveActor(token, profile), canCancelAny: canBulkDecide, canOverride: canOverrideManager });
       })
       .catch(() => {
         if (cancelled) return;
-        setCurrentActor(resolveLeaveActor(token, null));
+        setCurrentActor({ ...resolveLeaveActor(token, null), canCancelAny: canBulkDecide, canOverride: canOverrideManager });
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canBulkDecide, canOverrideManager]);
 
   const leaveTypeLabel = React.useCallback(
     (leaveTypeId: number | null) => {
@@ -3126,29 +3147,52 @@ export function LeaveManagementView({
     }
 
     const name = typeForm.name.trim();
-    const code = typeForm.code.trim().toUpperCase();
     const maxDays = Number(typeForm.max_days_per_year || "0");
     const carryDays =
       typeForm.max_carry_forward_days.trim() === ""
         ? null
         : Number(typeForm.max_carry_forward_days);
     const graceDays = Number(typeForm.attachment_grace_days || "3");
-    if (!name || !code) {
-      const message = "Leave type name and code are required.";
+    const attachmentAfterDays =
+      typeForm.requires_attachment === "true" &&
+      typeForm.attachment_required_after_days.trim() !== ""
+        ? Number(typeForm.attachment_required_after_days)
+        : null;
+    const autoApproveDays =
+      typeForm.auto_approve_after_days.trim() === ""
+        ? null
+        : Number(typeForm.auto_approve_after_days);
+    if (
+      autoApproveDays !== null &&
+      (!Number.isInteger(autoApproveDays) ||
+        autoApproveDays < 1 ||
+        autoApproveDays > 90)
+    ) {
+      const message = "Auto-approve after must be a whole number from 1 to 90 days.";
       setError(message);
       showErrorAlert(message);
       return;
     }
-    if (name.length > 120 || code.length > 50) {
+    if (
+      attachmentAfterDays !== null &&
+      (!Number.isFinite(attachmentAfterDays) ||
+        attachmentAfterDays < 0 ||
+        attachmentAfterDays > 365)
+    ) {
       const message =
-        "Leave type name must be 120 characters or fewer and its code must be 50 characters or fewer.";
+        "Days before a document is required must be between 0 and 365.";
       setError(message);
       showErrorAlert(message);
       return;
     }
-    if (!/^[A-Z0-9_-]+$/.test(code)) {
-      const message =
-        "Use only letters, numbers, hyphens, and underscores in the leave type code.";
+    if (!name) {
+      const message = "Leave type name is required.";
+      setError(message);
+      showErrorAlert(message);
+      return;
+    }
+    if (name.length > 120) {
+      const message = "Leave type name must be 120 characters or fewer.";
       setError(message);
       showErrorAlert(message);
       return;
@@ -3180,7 +3224,6 @@ export function LeaveManagementView({
     try {
       const payload = {
         name,
-        code,
         description: typeForm.description.trim(),
         status: typeForm.status,
         is_paid: typeForm.is_paid === "true",
@@ -3188,6 +3231,8 @@ export function LeaveManagementView({
         allow_deferred_attachment:
           typeForm.allow_deferred_attachment === "true",
         attachment_grace_days: Number(typeForm.attachment_grace_days),
+        attachment_required_after_days: attachmentAfterDays,
+        auto_approve_after_days: autoApproveDays,
         is_carry_forward_allowed: typeForm.is_carry_forward_allowed === "true",
         sandwich_rule: typeForm.sandwich_rule === "true",
         max_carry_forward_days: carryDays,
@@ -3541,6 +3586,36 @@ export function LeaveManagementView({
     }
   }
 
+  async function reviewOpeningPreview(row: AdminRecord) {
+    const token = readStoredToken();
+    const balanceId = readNumber(row, ["balance_id"]);
+    const fingerprint = readString(row, ["opening_preview_fingerprint"]);
+    if (!token || balanceId === null || fingerprint === "-") return;
+    const reason = window
+      .prompt(
+        "What did you check? (Recorded in the audit log; not cutover sign-off.)",
+      )
+      ?.trim();
+    if (!reason) return;
+    try {
+      await recordLeaveOpeningPreviewReview(token, {
+        balance_id: balanceId,
+        fingerprint,
+        reason,
+      });
+      const history = await listLeaveOpeningPreviewReviews(token, balanceId);
+      showSuccessAlert(
+        `Review recorded (${history.length} review${history.length === 1 ? "" : "s"} for this balance).`,
+      );
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not record the review.",
+      );
+    }
+  }
+
   async function downloadLeaveReport() {
     const token = readStoredToken();
     if (!token) {
@@ -3719,6 +3794,121 @@ export function LeaveManagementView({
       );
     } finally {
       setLeaveReportLoading(false);
+    }
+  }
+
+  async function sendEncashmentToPayroll(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const periodCode = window.prompt(
+      "Payroll period code to pay this in (an open period, e.g. 2026-11)",
+      new Date().toISOString().slice(0, 7),
+    );
+    if (!periodCode?.trim()) return;
+    const amountText = window.prompt(
+      `Amount to pay for ${String(row.approved_days ?? "")} day(s)`,
+      row.payable_amount != null ? String(row.payable_amount) : "",
+    );
+    if (!amountText?.trim()) return;
+    const amount = Number(amountText);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showErrorAlert("Enter an amount greater than zero.");
+      return;
+    }
+    const currency = (
+      window.prompt("Currency (3 letters)", readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : "TZS") ?? ""
+    )
+      .trim()
+      .toUpperCase();
+    if (currency.length !== 3) {
+      showErrorAlert("Currency must be a 3-letter code such as TZS.");
+      return;
+    }
+    try {
+      await recordLeaveEncashmentPayrollHandoff(token, id, {
+        payroll_period_code: periodCode.trim(),
+        currency,
+        payable_amount: amount,
+      });
+      showSuccessAlert(
+        "Sent to payroll as a draft input. Payroll must approve it before the run.",
+      );
+      await loadEncashmentRows();
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not send the encashment to payroll.",
+      );
+    }
+  }
+
+  async function decideEncashment(row: AdminRecord, approve: boolean) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    let approvedDays: number | undefined;
+    if (approve) {
+      const text = window.prompt(
+        "Days to approve (leave as requested to approve in full)",
+        readString(row, ["requested_days"]),
+      );
+      if (!text?.trim()) return;
+      approvedDays = Number(text);
+      if (!Number.isFinite(approvedDays) || approvedDays <= 0) {
+        showErrorAlert("Enter a number of days greater than zero.");
+        return;
+      }
+    }
+    const comments = window.prompt(approve ? "Comment (optional)" : "Reason for rejecting")?.trim();
+    if (!approve && !comments) return;
+    try {
+      await decideLeaveEncashmentRequest(token, id, {
+        approve,
+        approved_days: approvedDays,
+        comments: comments || undefined,
+      });
+      showSuccessAlert(approve ? "Encashment approved." : "Encashment rejected.");
+      await loadEncashmentRows();
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error ? errorObject.message : "Could not record the decision.",
+      );
+    }
+  }
+
+  async function recordEncashmentPayment(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const reference = window.prompt("Payment reference (payslip or bank reference)")?.trim();
+    if (!reference) return;
+    const paidAt = window.prompt("Paid on (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))?.trim();
+    if (!paidAt || !/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
+      showErrorAlert("Use the YYYY-MM-DD format.");
+      return;
+    }
+    const amount = Number(row.payable_amount);
+    const currency = readString(row, ["currency"]);
+    if (!Number.isFinite(amount) || amount <= 0 || currency === "-") {
+      showErrorAlert("This encashment has no payroll amount yet.");
+      return;
+    }
+    if (!window.confirm(`Record payment of ${amount} ${currency} (${reference})?`)) return;
+    try {
+      await recordLeaveEncashmentPayment(token, id, {
+        payment_reference: reference,
+        paid_at: paidAt,
+        currency,
+        amount,
+      });
+      showSuccessAlert("Payment recorded.");
+      await loadEncashmentRows();
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error ? errorObject.message : "Could not record the payment.",
+      );
     }
   }
 
@@ -4134,6 +4324,9 @@ export function LeaveManagementView({
           escalate_after_days: workflowForm.escalate_after_days
             ? Number(workflowForm.escalate_after_days)
             : null,
+          max_escalations: workflowForm.max_escalations
+            ? Number(workflowForm.max_escalations)
+            : 1,
           steps: workflowSteps.map((row) =>
             buildWorkflowStepPayload({
               approval_level: String(readNumber(row, ["approval_level"]) ?? 1),
@@ -4172,6 +4365,9 @@ export function LeaveManagementView({
           escalate_after_days: workflowForm.escalate_after_days
             ? Number(workflowForm.escalate_after_days)
             : null,
+          max_escalations: workflowForm.max_escalations
+            ? Number(workflowForm.max_escalations)
+            : 1,
         });
       }
       setWorkflowForm({
@@ -4181,6 +4377,7 @@ export function LeaveManagementView({
         is_default: "false",
         reminder_after_days: "",
         escalate_after_days: "",
+        max_escalations: "",
       });
       setEditingWorkflowId(null);
       setSelectedWorkflowId("");
@@ -4222,6 +4419,7 @@ export function LeaveManagementView({
           is_default: draft.form.is_default === "true" ? "true" : "false",
           reminder_after_days: draft.form.reminder_after_days ?? "",
           escalate_after_days: draft.form.escalate_after_days ?? "",
+          max_escalations: draft.form.max_escalations ?? "",
         });
         setWorkflowSteps(Array.isArray(draft.steps) ? draft.steps : []);
         setWorkflowStartStage(draft.stage === "path" ? "path" : "details");
@@ -4234,6 +4432,7 @@ export function LeaveManagementView({
           is_default: "false",
           reminder_after_days: "",
           escalate_after_days: "",
+          max_escalations: "",
         });
         setWorkflowStartStage("details");
       }
@@ -4267,6 +4466,7 @@ export function LeaveManagementView({
       is_default: readBoolean(row, ["is_default"]) ? "true" : "false",
       reminder_after_days: String(readNumber(row, ["reminder_after_days"]) ?? ""),
       escalate_after_days: String(readNumber(row, ["escalate_after_days"]) ?? ""),
+      max_escalations: String(readNumber(row, ["max_escalations"]) ?? ""),
     });
     setSelectedWorkflowId(String(workflowId));
     setWorkflowStartStage("path");
@@ -4313,9 +4513,11 @@ export function LeaveManagementView({
 
     if (
       !Number.isFinite(stepPayload.approval_level) ||
-      stepPayload.approval_level < 1
+      stepPayload.approval_level < 1 ||
+      stepPayload.approval_level > 2
     ) {
-      const message = "Approval level must be 1 or higher.";
+      const message =
+        "Use level 1 (department manager) or level 2 (HR). For a third approval, add a management approval rule.";
       setError(message);
       showErrorAlert(message);
       return;
@@ -4716,6 +4918,52 @@ export function LeaveManagementView({
     }
   }
 
+  async function overrideRequest(
+    row: AdminRecord,
+    action: "approve" | "reject" | "return_for_correction",
+  ) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const reason = window
+      .prompt(
+        "Reason for acting in place of the manager (recorded on the request and in the audit log):",
+      )
+      ?.trim();
+    if (!reason) return;
+    if (reason.length < 5) {
+      showErrorAlert("Give a reason of at least 5 characters.");
+      return;
+    }
+    setSaving(true);
+    try {
+      // API: POST /api/leave/requests/{id}/approval-action with hr_override (needs leave_requests:override)
+      await leaveRequestApprovalAction(token, id, {
+        action,
+        comments: reason,
+        hr_override: true,
+      });
+      showSuccessAlert(
+        action === "approve"
+          ? "Manager stage completed by HR. The request moves to the HR stage."
+          : action === "reject"
+            ? "Leave request rejected by HR in place of the manager."
+            : "Leave request returned for correction by HR.",
+      );
+      await reloadAll(tab, true);
+      setSelectedLeaveRequestRow(null);
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Failed to update leave request.";
+      setError(message);
+      showErrorAlert(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function cancelRequest(row: AdminRecord, reason: string) {
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
@@ -4742,6 +4990,42 @@ export function LeaveManagementView({
         errorObject instanceof Error
           ? errorObject.message
           : "Failed to cancel leave request.";
+      setError(message);
+      showErrorAlert(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function endRequestEarly(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const start = String(row.start_date ?? "").slice(0, 10);
+    const end = String(row.end_date ?? "").slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const suggested = today > start && today < end ? today : start;
+    const newEnd = window.prompt(
+      `New last day of leave (YYYY-MM-DD, from ${start} to the day before ${end}). Unused days return to the employee's balance.`,
+      suggested,
+    );
+    if (!newEnd) return;
+    const reason = window.prompt("Reason (optional)", "Returned to work early");
+    setSaving(true);
+    try {
+      await endLeaveEarly(token, id, {
+        new_end_date: newEnd.trim(),
+        reason: reason?.trim() || undefined,
+      });
+      showSuccessAlert("Leave shortened. Unused days were returned to the balance.");
+      await reloadAll(tab, true);
+      setLeaveRequestDetailsOpen(false);
+      setSelectedLeaveRequestRow(null);
+    } catch (errorObject) {
+      const message =
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not end leave early.";
       setError(message);
       showErrorAlert(message);
     } finally {
@@ -4998,7 +5282,7 @@ export function LeaveManagementView({
   );
 
   const canContinueLeaveTypeWizard = Boolean(
-    typeForm.name.trim() && typeForm.code.trim(),
+    typeForm.name.trim(),
   );
   const leaveTypeWizardIndex = LEAVE_TYPE_WIZARD_STEPS.findIndex(
     (item) => item.key === typeDialogStep,
@@ -5045,7 +5329,9 @@ export function LeaveManagementView({
   const leaveTypeReviewItems = [
     {
       label: "Leave type",
-      value: `${typeForm.name.trim() || "Not named"} · ${typeForm.code.trim() || "No code"}`,
+      value: typeForm.code.trim()
+        ? `${typeForm.name.trim() || "Not named"} · ${typeForm.code.trim()}`
+        : typeForm.name.trim() || "Not named",
     },
     {
       label: "Availability",
@@ -5057,7 +5343,12 @@ export function LeaveManagementView({
     },
     {
       label: "Document",
-      value: typeForm.requires_attachment === "true" ? "Required" : "Optional",
+      value:
+        typeForm.requires_attachment !== "true"
+          ? "Optional"
+          : typeForm.attachment_required_after_days.trim() !== ""
+            ? `Required over ${typeForm.attachment_required_after_days} day(s)`
+            : "Required",
     },
     {
       label: "Unused days",
@@ -6174,6 +6465,40 @@ export function LeaveManagementView({
                             </button>
                           </>
                         ) : null}
+                        {permissions.canOverride ? (
+                          <>
+                            <button
+                              type="button"
+                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
+                              disabled={saving}
+                              title="Approve at the manager stage in place of an unavailable manager (reason required, audited)."
+                              onClick={() =>
+                                void overrideRequest(
+                                  selectedLeaveRequestRow,
+                                  "approve",
+                                )
+                              }
+                            >
+                              <Check className="size-3.5" />
+                              Approve for manager
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
+                              disabled={saving}
+                              title="Reject at the manager stage in place of an unavailable manager (reason required, audited)."
+                              onClick={() =>
+                                void overrideRequest(
+                                  selectedLeaveRequestRow,
+                                  "reject",
+                                )
+                              }
+                            >
+                              <X className="size-3.5" />
+                              Reject for manager
+                            </button>
+                          </>
+                        ) : null}
                         {permissions.canCancel ? (
                           <button
                             type="button"
@@ -6188,6 +6513,32 @@ export function LeaveManagementView({
                             Cancel request
                           </button>
                         ) : null}
+                        {(() => {
+                          const row = selectedLeaveRequestRow;
+                          const today = new Date().toISOString().slice(0, 10);
+                          const end = String(row.end_date ?? "").slice(0, 10);
+                          const start = String(row.start_date ?? "").slice(0, 10);
+                          const fullDay =
+                            String(row.duration_type ?? "FULL_DAY").toUpperCase() ===
+                            "FULL_DAY";
+                          const canEndEarly =
+                            String(row.status ?? "").toLowerCase() === "approved" &&
+                            fullDay &&
+                            end > start &&
+                            end > today;
+                          if (!canEndEarly) return null;
+                          return (
+                            <button
+                              type="button"
+                              className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
+                              disabled={saving}
+                              title="Shorten this leave; unused days return to the balance"
+                              onClick={() => void endRequestEarly(row)}
+                            >
+                              End early
+                            </button>
+                          );
+                        })()}
                       </div>
                     );
                   })()}
@@ -6452,6 +6803,9 @@ export function LeaveManagementView({
                           setRequestForm((prev) => ({
                             ...prev,
                             start_date: value,
+                            ...(value && (!prev.end_date || prev.end_date < value)
+                              ? { end_date: value }
+                              : {}),
                           }))
                         }
                         placeholder="Start date"
@@ -6465,6 +6819,7 @@ export function LeaveManagementView({
                     <div className="mt-1">
                       <DatePickerPresets
                         value={requestForm.end_date}
+                        min={requestForm.start_date}
                         onChange={(value) =>
                           setRequestForm((prev) => ({
                             ...prev,
@@ -6745,31 +7100,7 @@ export function LeaveManagementView({
                       value={typeForm.name}
                       onChange={(event) => {
                         const name = event.target.value;
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          name,
-                          ...(typeCodeManuallyEdited
-                            ? {}
-                            : { code: deriveLeaveTypeCode(name) }),
-                        }));
-                      }}
-                    />
-                  </LeaveTypeField>
-                  <LeaveTypeField
-                    label="Short code"
-                    help="Created from the leave name for reports. You can change it."
-                  >
-                    <input
-                      required
-                      className={leaveTypeControlClass}
-                      placeholder="Example: SICK"
-                      value={typeForm.code}
-                      onChange={(event) => {
-                        setTypeCodeManuallyEdited(true);
-                        setTypeForm((prev) => ({
-                          ...prev,
-                          code: event.target.value.toUpperCase(),
-                        }));
+                        setTypeForm((prev) => ({ ...prev, name }));
                       }}
                     />
                   </LeaveTypeField>
@@ -6865,6 +7196,26 @@ export function LeaveManagementView({
                   />
                   {typeForm.requires_attachment === "true" ? (
                     <>
+                      <LeaveTypeField
+                        label="Only require it for requests longer than (days)"
+                        help="Counted leave days, after weekends and holidays are excluded. Leave blank to always require it. Example: 2 means a sick note is needed from the 3rd day."
+                      >
+                        <Input
+                          type="number"
+                          min={0}
+                          max={365}
+                          step={0.5}
+                          placeholder="Always required"
+                          value={typeForm.attachment_required_after_days}
+                          onChange={(event) =>
+                            setTypeForm((prev) => ({
+                              ...prev,
+                              attachment_required_after_days:
+                                event.target.value,
+                            }))
+                          }
+                        />
+                      </LeaveTypeField>
                       <MarkCheckbox
                         checked={typeForm.allow_deferred_attachment === "true"}
                         onCheckedChange={(checked) =>
@@ -6899,6 +7250,24 @@ export function LeaveManagementView({
                       ) : null}
                     </>
                   ) : null}
+                  <LeaveTypeField
+                    label="Auto-approve after (days)"
+                    help="Off by default. Only use for special leave types: a request still waiting this many days after it was applied is approved by the system and the remaining approvers are skipped. Leave blank to keep it off."
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      max={90}
+                      placeholder="Off"
+                      value={typeForm.auto_approve_after_days}
+                      onChange={(event) =>
+                        setTypeForm((prev) => ({
+                          ...prev,
+                          auto_approve_after_days: event.target.value,
+                        }))
+                      }
+                    />
+                  </LeaveTypeField>
                   {typeForm.is_carry_forward_allowed === "true" ? (
                     <LeaveTypeField
                       label="Days that can move forward"
@@ -6924,16 +7293,24 @@ export function LeaveManagementView({
                     help="The most days an employee can receive in one year. Enter 0 for no limit."
                   >
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0 = no limit"
                       className={leaveTypeControlClass}
                       value={typeForm.max_days_per_year}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const raw = event.target.value.replace(/[^0-9.]/g, "");
+                        const [whole, ...rest] = raw.split(".");
+                        const next =
+                          rest.length > 0
+                            ? `${whole}.${rest.join("").slice(0, 2)}`
+                            : whole;
                         setTypeForm((prev) => ({
                           ...prev,
-                          max_days_per_year: event.target.value,
-                        }))
-                      }
+                          max_days_per_year: next,
+                        }));
+                      }}
                     />
                   </LeaveTypeField>
                   <LeaveTypeField
@@ -7845,15 +8222,61 @@ export function LeaveManagementView({
                             {readString(type, ["name", "code"])} · FY {readString(row, ["fiscal_year"])}
                           </td>
                           <td className="px-3 py-2">
-                            {readString(row, ["approved_days"]) || "—"} / {readString(row, ["requested_days"])}
+                            {String(row.approved_days ?? "—")} / {String(row.requested_days ?? "—")}
                           </td>
-                          <td className="px-3 py-2">{readString(row, ["status"])}</td>
                           <td className="px-3 py-2">
-                            {readString(row, ["payroll_handoff_reference"]) || "Not handed off"}
+                            {readString(row, ["status"])}
+                            {canBulkDecide && readString(row, ["status"]).toLowerCase() === "pending" ? (
+                              <span className="ml-2 inline-flex gap-1">
+                                <button
+                                  type="button"
+                                  className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                                  onClick={() => void decideEncashment(row, true)}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-rose-300 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                                  onClick={() => void decideEncashment(row, false)}
+                                >
+                                  Reject
+                                </button>
+                              </span>
+                            ) : null}
                           </td>
-                          <td className="px-3 py-2">{readString(row, ["payroll_period_code"]) || "—"}</td>
-                          <td className="px-3 py-2">{readString(row, ["payable_amount"]) || "—"} {readString(row, ["currency"])}</td>
-                          <td className="px-3 py-2">{readString(row, ["payment_status"]) || "Not paid"}</td>
+                          <td className="px-3 py-2">
+                            {readString(row, ["payroll_handoff_reference"]) !== "-" ? readString(row, ["payroll_handoff_reference"]) :
+                              (readString(row, ["status"]).toLowerCase() === "approved" && canAdjustBalances ? (
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                                  onClick={() => void sendEncashmentToPayroll(row)}
+                                >
+                                  Send to payroll
+                                </button>
+                              ) : (
+                                "Not handed off"
+                              ))}
+                          </td>
+                          <td className="px-3 py-2">{readString(row, ["payroll_period_code"]) !== "-" ? readString(row, ["payroll_period_code"]) : "—"}</td>
+                          <td className="px-3 py-2">{row.payable_amount != null && row.payable_amount !== "" ? `${String(row.payable_amount)} ${readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : ""}` : "—"}</td>
+                          <td className="px-3 py-2">
+                            {readString(row, ["payment_status"]).toUpperCase() === "PAID"
+                              ? "Paid"
+                              : canAdjustBalances &&
+                                  readString(row, ["payroll_handoff_reference"]) !== "-"
+                                ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                                    onClick={() => void recordEncashmentPayment(row)}
+                                  >
+                                    Record payment
+                                  </button>
+                                )
+                                : "Not paid"}
+                          </td>
                         </tr>
                       );
                       })}
@@ -7962,6 +8385,10 @@ export function LeaveManagementView({
             itemsPerPage={20}
             loading={loading}
             storageKey="leave-balances-by-employee"
+          />
+          <LeaveHrOperationsPanel
+            token={readStoredToken()}
+            leaveTypeLabel={leaveTypeLabel}
           />
           {balanceAdjustments.length > 0 ? (
             <ResizableTable
@@ -8182,6 +8609,19 @@ export function LeaveManagementView({
                 render: (r) => readString(r, ["holiday_date"]),
               },
               {
+                key: "branch_name",
+                label: "Applies to",
+                defaultWidth: 80,
+                render: (r) =>
+                  r.branch_id == null ? (
+                    "All branches"
+                  ) : (
+                    <span title="Branch holiday. Manage it under Attendance > Holidays.">
+                      {readString(r, ["branch_name"]) || `Branch #${String(r.branch_id)}`}
+                    </span>
+                  ),
+              },
+              {
                 key: "is_recurring",
                 label: "Recur",
                 defaultWidth: 50,
@@ -8189,9 +8629,9 @@ export function LeaveManagementView({
                   <Switch
                     size="sm"
                     checked={readBoolean(r, ["is_recurring"])}
-                    disabled={!canUpdateHolidays}
+                    disabled={!canUpdateHolidays || r.editable_here === false}
                     onCheckedChange={
-                      canUpdateHolidays
+                      canUpdateHolidays && r.editable_here !== false
                         ? () => void toggleHolidayRecurring(r)
                         : undefined
                     }
@@ -8214,7 +8654,13 @@ export function LeaveManagementView({
                         >
                           <button
                             type="button"
-                            className="rounded-md border border-rose-200 p-2 text-rose-600"
+                            className="rounded-md border border-rose-200 p-2 text-rose-600 disabled:opacity-40"
+                            disabled={row.editable_here === false}
+                            title={
+                              row.editable_here === false
+                                ? "Branch holiday. Manage it under Attendance > Holidays."
+                                : undefined
+                            }
                             onClick={() => setPendingHolidayDelete(row)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -8421,6 +8867,7 @@ export function LeaveManagementView({
                 is_default: "false",
                 reminder_after_days: "",
                 escalate_after_days: "",
+                max_escalations: "",
               });
               setWorkflowSteps([]);
               setWorkflowStartStage("details");
@@ -8549,6 +8996,7 @@ export function LeaveManagementView({
                     "Pending: balance / ledger",
                     "Adjusted: balance / ledger",
                     "Status",
+                    "Opening review",
                   ].map((heading) => (
                     <th key={heading} className="px-3 py-2 font-semibold">
                       {heading}
@@ -8594,6 +9042,19 @@ export function LeaveManagementView({
                             ? "Mismatch"
                             : "Reconciled"}
                       </td>
+                      <td className="px-3 py-2">
+                        {canAdjustBalances &&
+                        readString(row, ["opening_preview_fingerprint"]) !== "-" ? (
+                          <button
+                            type="button"
+                            className="rounded-md border border-border px-2 py-1 text-xs"
+                            title="Record that you checked this legacy opening preview. This is not cutover sign-off and posts nothing."
+                            onClick={() => void reviewOpeningPreview(row)}
+                          >
+                            Record review
+                          </button>
+                        ) : null}
+                      </td>
                     </tr>
                   );
                 })}
@@ -8601,7 +9062,7 @@ export function LeaveManagementView({
                   <tr>
                     <td
                       className="px-3 py-8 text-center text-muted-foreground"
-                      colSpan={7}
+                      colSpan={8}
                     >
                       No balances found for FY {reconciliationYear}.
                     </td>

@@ -6,23 +6,20 @@ import { Loader2 } from "lucide-react"
 import type { ContractStatus, ContractType, ContractValidity } from "@/lib/contracts-api"
 import { errorMessage, fetchContractFile } from "@/lib/contracts-api"
 import { cn } from "@/lib/utils"
+import { contractWorkspaceMessages } from "./contract-workspace-messages"
 
-export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
-  UNSPECIFIED: "Unspecified period (permanent)",
-  FIXED_TERM: "Fixed term",
-  SPECIFIC_TASK: "Specific task",
-}
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = contractWorkspaceMessages.contractTypes
 
 const STATUS: Record<ContractStatus, { label: string; tone: string }> = {
-  DRAFT: { label: "Draft", tone: "border-slate-300 bg-slate-100 text-slate-700" },
-  PENDING_HR_SIGNATURE: { label: "Awaiting company signature", tone: "border-amber-300 bg-amber-50 text-amber-800" },
-  PENDING_EMPLOYEE_SIGNATURE: { label: "Awaiting employee signature", tone: "border-amber-300 bg-amber-50 text-amber-800" },
-  PENDING_VERIFICATION: { label: "Upload to verify", tone: "border-sky-300 bg-sky-50 text-sky-800" },
-  SIGNED: { label: "Signed", tone: "border-emerald-300 bg-emerald-50 text-emerald-800" },
-  CANCELLED: { label: "Cancelled", tone: "border-slate-300 bg-slate-50 text-slate-500" },
-  SUPERSEDED: { label: "Superseded", tone: "border-slate-300 bg-slate-50 text-slate-500" },
-  TERMINATED: { label: "Ended (exit)", tone: "border-rose-300 bg-rose-50 text-rose-700" },
-  ISSUED: { label: "Awaiting employee signature", tone: "border-amber-300 bg-amber-50 text-amber-800" },
+  DRAFT: { label: "Draft", tone: "border-border bg-muted text-foreground" },
+  PENDING_HR_SIGNATURE: { label: "Awaiting company signature", tone: "border-border bg-accent text-accent-foreground" },
+  PENDING_EMPLOYEE_SIGNATURE: { label: "Awaiting employee signature", tone: "border-border bg-accent text-accent-foreground" },
+  PENDING_VERIFICATION: { label: "Upload to verify", tone: "border-border bg-accent text-accent-foreground" },
+  SIGNED: { label: "Signed", tone: "border-primary bg-primary text-primary-foreground" },
+  CANCELLED: { label: "Cancelled", tone: "border-border bg-muted text-muted-foreground" },
+  SUPERSEDED: { label: "Superseded", tone: "border-border bg-muted text-muted-foreground" },
+  TERMINATED: { label: "Ended (exit)", tone: "border-destructive bg-background text-destructive" },
+  ISSUED: { label: "Awaiting employee signature", tone: "border-border bg-accent text-accent-foreground" },
 }
 
 const VALIDITY: Record<ContractValidity, { label: string; tone: string }> = {
@@ -36,7 +33,7 @@ const VALIDITY: Record<ContractValidity, { label: string; tone: string }> = {
 }
 
 export function ContractStatusBadge({ status }: { status: ContractStatus }) {
-  const meta = STATUS[status] ?? { label: status, tone: "border-slate-300 bg-slate-50 text-slate-600" }
+  const meta = STATUS[status] ?? { label: status, tone: "border-border bg-muted text-foreground" }
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap", meta.tone)}>
       {meta.label}

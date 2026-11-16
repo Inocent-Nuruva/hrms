@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Link from "next/link"
@@ -40,6 +40,9 @@ import { ContractFieldsPanel } from "./contract-fields-panel"
 import { useContractDialogs } from "./contract-dialogs"
 import { ActivityPanel, PanelSection, SignatoriesPanel, SummaryPanel, VersionsPanel } from "./contract-page-panels"
 import { ContractSigningPanel } from "./contract-signing-panel"
+import { ContractWorkspaceShell } from "./contract-workspace-shell"
+import { contractWorkspaceMessages } from "./contract-workspace-messages"
+import { getContractFieldMetadata, type ContractFieldMetadata } from "@/lib/contracts-api"
 import {
   CONTRACT_TYPE_LABELS,
   ContractPdfViewer,
@@ -511,7 +514,7 @@ async function printContract(token: string, contractId: number) {
   document.body.appendChild(frame)
 }
 
-export function ContractDetailView({ contractId, token }: { contractId: number; token: string }) {
+function LegacyContractDetailView({ contractId, token }: { contractId: number; token: string }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const amendMovement = Number(searchParams?.get("amend_movement")) || null
@@ -666,7 +669,7 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
 
             <PanelSection title="Actions">
               <div className="grid gap-2">
-                {contract.documentId ? (
+                {contract.documentId && contract.can_view_document ? (
                   <>
                     <button type="button" className={cn(btn, actionButton)} onClick={download}>
                       <Download className="size-4" /> Download PDF
@@ -719,7 +722,7 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
             </PanelSection>
 
             <VersionsPanel token={token} contract={contract} />
-            {contract.files.length ? (
+            {contract.can_view_document && contract.files.length ? (
               <PanelSection title="Files" count={contract.files.length} defaultOpen={false}>
                 <ul className="grid gap-1">
                   {contract.files.map((file) => (
@@ -747,7 +750,7 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
 
           <div className="grid min-w-0 content-start gap-4 lg:order-1">
             {contract.status === "PENDING_VERIFICATION" && canManage ? (
-              <VerifyUpload token={token} contract={contract} onDone={() => void load()} />
+              contract.can_view_document ? <VerifyUpload token={token} contract={contract} onDone={() => void load()} /> : <p>Waiting for an authorized reviewer.</p>
             ) : null}
             {contract.signing.my_party || (awaitingCompany && canManage) ? (
               <ContractSigningPanel
@@ -759,7 +762,7 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
                 onChanged={() => void load()}
               />
             ) : null}
-            {!isDraft ? (
+            {!isDraft && contract.can_view_document ? (
               <ContractPdfViewer token={token} contractId={contract.id} documentId={contract.signing.current_document_id} onLoaded={() => setOpened(true)} />
             ) : null}
             {contract.status === "SIGNED" && canManage ? <RenewPanel token={token} contract={contract} movementId={amendMovement} /> : null}
@@ -768,4 +771,23 @@ export function ContractDetailView({ contractId, token }: { contractId: number; 
       )}
     </div>
   )
+}
+
+export function ContractDetailView({ contractId, token }: { contractId: number; token: string }) {
+  const [result, setResult] = React.useState<{ contract: ContractDetail; metadata: ContractFieldMetadata[] } | null>(null)
+  const [error, setError] = React.useState(false)
+  const [attempt, setAttempt] = React.useState(0)
+  React.useEffect(() => {
+    let cancelled = false
+    setResult(null)
+    setError(false)
+    getContract(token, contractId).then(async (contract) => {
+      const metadata = contract.field_metadata ?? (contract.canManage ? (await getContractFieldMetadata(token)).fields : [])
+      return { contract, metadata }
+    }).then((value) => { if (!cancelled) setResult(value) }).catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [token, contractId, attempt])
+  if (error) return <div role="alert"><p>{contractWorkspaceMessages.loadError}</p><button type="button" onClick={() => setAttempt((value) => value + 1)}>{contractWorkspaceMessages.retry}</button></div>
+  if (result === null) return <p>{contractWorkspaceMessages.loadingContract}</p>
+  return <ContractWorkspaceShell key={result.contract.id} token={token} contract={result.contract} metadata={result.metadata} />
 }

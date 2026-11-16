@@ -268,6 +268,7 @@ export function SupportChatWidget() {
 
   return (
     <div
+      data-support-widget
       className="pointer-events-none fixed z-[80] size-12"
       style={widgetPositionStyle}
     >

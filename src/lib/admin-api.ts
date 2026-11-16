@@ -1007,7 +1007,7 @@ function getBaseUrl() {
   return env.NEXT_PUBLIC_API_BASE_URL.replace(/\/api$/i, "");
 }
 
-function buildUrl(path: string) {
+export function buildUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
@@ -10059,15 +10059,83 @@ export async function decideLeaveEncashmentRequest(
   });
 }
 
+/**
+ * Sends an approved encashment to payroll: the server creates a draft payroll
+ * input (component LEAVE_ENCASHMENT) in the given open period for payroll to
+ * approve. `reference` is optional and defaults to PAYROLL-INPUT-<id>.
+ */
 export async function recordLeaveEncashmentPayrollHandoff(
   token: string,
   id: string | number,
-  reference: string,
+  data: {
+    payroll_period_code: string;
+    currency: string;
+    payable_amount: number;
+    reference?: string;
+  },
 ) {
   return adminRequest<unknown>(`/api/leave/encashments/${id}/payroll-handoff`, {
     method: "POST",
     token,
-    body: { reference },
+    body: data,
+  });
+}
+
+export async function recordLeaveEncashmentPayment(
+  token: string,
+  id: string | number,
+  data: { payment_reference: string; paid_at: string; currency: string; amount: number },
+) {
+  return adminRequest<unknown>(`/api/leave/encashments/${id}/payment`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Leave settlements calculated at employee exit (GET/POST /api/leave/exit-settlements). */
+export async function listLeaveExitSettlements(token: string, employeeId?: number) {
+  const query = employeeId ? `?employee_id=${employeeId}` : "";
+  return normalizeList(
+    await adminRequest<unknown>(`/api/leave/exit-settlements${query}`, { token, cacheTtlMs: 0 }),
+  );
+}
+
+export async function runLeaveExitSettlement(
+  token: string,
+  data: { employee_id: number; exit_date: string },
+) {
+  return adminRequest<unknown>("/api/leave/exit-settlements/run", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+/** Manual carry-forward run for the company (POST /api/leave/carry-forward/run). */
+export async function runLeaveCarryForward(token: string, fiscalYear?: string) {
+  const query = fiscalYear ? `?fiscal_year=${encodeURIComponent(fiscalYear)}` : "";
+  return adminRequest<unknown>(`/api/leave/carry-forward/run${query}`, {
+    method: "POST",
+    token,
+  });
+}
+
+/** Reviews of the legacy opening-balance preview (not cutover sign-off). */
+export async function listLeaveOpeningPreviewReviews(token: string, balanceId: number) {
+  return normalizeList(
+    await adminRequest<unknown>(`/api/leave/opening-preview-reviews/${balanceId}`, { token, cacheTtlMs: 0 }),
+  );
+}
+
+export async function recordLeaveOpeningPreviewReview(
+  token: string,
+  data: { balance_id: number; fingerprint: string; reason: string },
+) {
+  return adminRequest<unknown>("/api/leave/opening-preview-reviews", {
+    method: "POST",
+    token,
+    body: data,
   });
 }
 

@@ -76,7 +76,6 @@ import {
 import {
   KeyRound,
   Trash2,
-  UsersIcon,
 } from "lucide-react";
 import {
   PERMANENT_DELETE_CONFIRMATION,
@@ -86,6 +85,7 @@ import {
 } from "@/lib/employee-permanent-delete";
 import { toast } from "@/components/ui/fluent-toast-store";
 import { pageBleedClass } from "@/components/dashboard/talent-visuals";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken";
@@ -1220,39 +1220,28 @@ export function EmployeesListView({
         "mt-2 overflow-hidden border-y border-border bg-background shadow-sm sm:border-x",
       )}
     >
-      <div className="flex flex-col gap-2 border-b border-border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">
-            {directoryMode === "inactive" ? "Inactive employees" : "All employees"}
-          </h1>
-          {directoryMode === "inactive" ? (
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              Review former employees and retained employment records
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-            <UsersIcon className="size-3.5 text-primary" />
-            {total ?? rows.length} {(total ?? rows.length) === 1 ? "person" : "people"}
-          </span>
-          <span>{rows.length} shown</span>
-          {directoryMode === "current" ? (
-            <>
-              <span className="text-emerald-600 dark:text-emerald-400">
-                {directoryStats.active} active
-              </span>
-              <span className="text-sky-600 dark:text-sky-400">
-                {directoryStats.onboarding} onboarding
-              </span>
-            </>
-          ) : (
-            <span className="text-rose-600 dark:text-rose-400">
-              {directoryStats.inactive} inactive
-            </span>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        className="border-b border-border px-3 py-3"
+        title={directoryMode === "inactive" ? "Inactive employees" : "All employees"}
+        description={
+          directoryMode === "inactive"
+            ? "Review former employees and retained employment records"
+            : "Search, filter and open employee records."
+        }
+        stats={
+          directoryMode === "current"
+            ? [
+                { label: "People", value: total ?? rows.length },
+                { label: "Active", value: directoryStats.active, tone: "success" },
+                { label: "Onboarding", value: directoryStats.onboarding, tone: "info" },
+              ]
+            : [
+                { label: "People", value: total ?? rows.length },
+                { label: "Inactive", value: directoryStats.inactive, tone: "danger" },
+              ]
+        }
+      />
+      <p className="sr-only">{rows.length} shown</p>
 
       {error ? (
         <div className="border-b border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">
@@ -1276,6 +1265,7 @@ export function EmployeesListView({
         enableAnimations
         enableColumnVisibility
         compact
+        modern
         itemsPerPage={query.limit}
         page={page}
         totalPages={totalPages}

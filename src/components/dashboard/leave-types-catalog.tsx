@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { evidenceRuleText } from "@/lib/leave-evidence"
 import { Switch } from "@/components/ui/switch"
 import { ListFilter, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react"
 import { SearchSparkle20Regular as Search } from "@fluentui/react-icons"
@@ -470,7 +471,7 @@ export function LeaveTypesCatalog({
                     },
                     {
                       label: "Attachment",
-                      value: readBool(selected, ["requires_attachment", "requiresAttachment"]) ? (readBool(selected, ["allow_deferred_attachment"]) ? `Due ${selected.attachment_grace_days ?? 3} days after submission` : "Required before submission") : "Optional",
+                      value: evidenceRuleText({ ...selected, requires_attachment: readBool(selected, ["requires_attachment", "requiresAttachment"]), allow_deferred_attachment: readBool(selected, ["allow_deferred_attachment"]) }),
                     },
                     {
                       label: "Carry forward",

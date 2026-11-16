@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 
-import { ContractWizard } from "@/components/dashboard/contracts/contract-wizard"
+import { ContractCreate } from "@/components/dashboard/contracts/contract-create"
 import { readAccessToken } from "@/lib/contracts-api"
 
 function NewContract() {
@@ -12,16 +12,15 @@ function NewContract() {
   React.useEffect(() => setToken(readAccessToken()), [])
   if (!token) return null
   return (
-    <ContractWizard
+    <ContractCreate
       token={token}
-      contractId={null}
       presetEmployeeId={Number(searchParams?.get("employee_id")) || null}
       fromContractId={Number(searchParams?.get("from")) || null}
     />
   )
 }
 
-/** New contract: step 1 creates the draft, then the wizard continues on /[id]/edit. */
+/** Create a live draft and open its detail page. */
 export default function NewContractPage() {
   return (
     <React.Suspense fallback={null}>

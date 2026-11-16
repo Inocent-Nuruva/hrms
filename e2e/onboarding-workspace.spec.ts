@@ -18,7 +18,7 @@ async function prepareWorkspace(page: Page, canActivate = true, extraPermissions
   const employee = { id: 501, first_name: "Amina", last_name: "Test", employee_no: "TEST-501", employment_status: "onboarding", primary_department: { id: 1, name: "Finance" } }
   const requirement = { id: "signed employment contract", label: "Signed contract covering the start date", group: "Contract", owner: "HR / Employee", required: true, status: "pending", action: "contracts" }
   const readiness = () => ({ employee_id: 501, employee_status: state.completed ? "active" : "onboarding", request_status: state.completed ? "completed" : "in_progress", ready_to_activate: state.ready && !state.completed, closed: state.completed, blocker_count: state.ready ? 0 : 1, completed_required: state.ready ? 10 : 9, total_required: 10, next_action: state.ready ? null : requirement, requirements: [{ ...requirement, status: state.ready ? "complete" : "pending" }] })
-  const request = () => ({ id: 55, employee_id: 501, employee: { ...employee, employment_status: state.completed ? "active" : "onboarding" }, onboarding_no: "TEST-ONB-55", title: "Onboarding for Amina Test", status: state.completed ? "completed" : "in_progress", progress_percentage: "100.00", tasks: [], approvals: [] })
+  const request = () => ({ id: 55, employee_id: 501, employee: { ...employee, employment_status: state.completed ? "active" : "onboarding" }, onboarding_no: "TEST-ONB-55", title: "Onboarding for Amina Test", status: state.completed ? "completed" : "in_progress", progress_percentage: "100.00", tasks: [], approvals: [], employee_details_review: { status: "submitted", sections: [{ key: "personal", label: "Personal details", status: "pending", fields: [{ label: "Full name", value: "Amina Test" }] }, { key: "contact", label: "Contact details", status: "changes_requested", fields: [{ label: "Email", value: "amina@example.test" }] }] } })
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname
     let payload: unknown = { data: [] }
@@ -53,6 +53,29 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
   test.beforeEach(async ({ page }) => {
     page.setDefaultNavigationTimeout(120_000)
   })
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  test(`reviews employee details at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await prepareWorkspace(page, true, ["onboarding_requests:update"])
+    await page.goto("/dashboard/employees/onboarding")
+    await page.getByRole("button", { name: "Review onboarding for Amina Test" }).click()
+    await page.getByRole("tab", { name: "Employee details" }).click()
+    const workspace = page.getByRole("region", { name: "Employee onboarding workspace" })
+    await expect(workspace.getByText("1 of 2 sections reviewed")).toBeVisible()
+    await expect(workspace.getByText("Awaiting review", { exact: true })).toBeVisible()
+    await expect(workspace.getByText("Amina Test", { exact: true })).toBeVisible()
+    await expect(workspace.getByRole("button", { name: "Request changes & notify employee" })).toBeDisabled()
+    await workspace.getByRole("textbox", { name: "Review note" }).fill("Please check this information.")
+    await expect(workspace.getByRole("button", { name: "Request changes & notify employee" })).toBeEnabled()
+    await workspace.getByRole("button", { name: "Next section" }).click()
+    await expect(workspace.getByText("amina@example.test")).toBeVisible()
+    await workspace.getByRole("button", { name: "Previous section" }).click()
+    await expect(workspace.getByRole("textbox", { name: "Review note" })).toHaveText("Please check this information.")
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.screenshot({ path: test.info().outputPath("employee-review.png"), fullPage: true })
+  })
+  }
 
   for (const [theme, accent] of [["light", "#303194"], ["dark", "#303194"], ["light", "#0078D4"], ["dark", "#0078D4"]]) {
     test(`keeps onboarding navigation and support readable in ${theme} mode with ${accent}`, async ({ page }) => {
@@ -104,7 +127,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       await expect(page.getByRole("button", { name: "Clear filters", exact: true })).not.toBeVisible()
       await expect(page.getByText("1 of 1 open requests", { exact: false })).toBeVisible()
       await page.getByRole("button", { name: "Review onboarding for Amina Test", exact: true }).click()
-      await expect(page.getByText("Activation overview · Amina Test")).toBeVisible()
+      await expect(page.getByRole("region", { name: "Activation overview · Amina Test" })).toBeVisible()
       await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
       await expect(page.getByRole("button", { name: "Manage contract for Signed contract covering the start date", exact: true })).toBeVisible()
       const dialog = page.getByRole("region", { name: "Employee onboarding workspace", exact: true })
@@ -122,7 +145,8 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       expect(Math.round(bounds?.width ?? Infinity)).toBeLessThanOrEqual(viewport.width)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       if (viewport.width < 640) {
-        const label = dialog.locator("p").filter({ hasText: /^Signed contract covering the start date$/ })
+        const label = dialog.getByRole("heading", { name: "Signed contract covering the start date", exact: true })
+        await expect(label).toBeVisible()
         expect((await label.boundingBox())?.width).toBeGreaterThan(150)
       }
       await page.screenshot({ path: test.info().outputPath("readiness-dialog.png"), fullPage: true })
@@ -148,7 +172,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     const state = await prepareWorkspace(page, false)
     state.ready = true
     await page.goto("/dashboard/employees/onboarding?request_id=55")
-    await expect(page.getByText("Activation overview · Amina Test")).toBeVisible()
+    await expect(page.getByRole("region", { name: "Activation overview · Amina Test" })).toBeVisible()
     await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     expect(state.activationCalls).toBe(0)
   })
@@ -192,7 +216,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
     await page.route("**/api/onboarding/requests/55/readiness", (route) => route.fulfill({ json: { employee_id: 501, employee_status: "onboarding", request_status: "in_progress", closed: false, ready_to_activate: false, blocker_count: 1, completed_required: 0, total_required: 1, next_action: approval, requirements: [approval] } }))
     await page.goto("/dashboard/employees/onboarding?request_id=55")
     await page.getByRole("button", { name: "More information about Starting salary review", exact: true }).hover()
-    await expect(page.getByText("Waiting on a prerequisite:", { exact: false })).toBeVisible()
+    await expect(page.getByRole("tooltip")).toContainText("Waiting on a prerequisite: Waiting for earlier required workflow steps to complete.")
     await expect(page.getByRole("button", { name: "Activate employee", exact: true })).toHaveCount(0)
     await page.screenshot({ path: test.info().outputPath("waiting-on-approval.png"), fullPage: true })
   })
@@ -210,7 +234,7 @@ test.describe("onboarding HR workspace with isolated API fixtures", () => {
       return route.fulfill({ json: { data: [{ employeeId: 501, payrollNumber: "PAY-501", effectiveFrom: "2026-10-01", taxpayerIdentificationNumber: "*****6789", socialSecurityNumber: "*****3456", healthInsuranceNumber: "*****1234", version: 4 }] } })
     })
     await page.goto("/dashboard/employees/onboarding?request_id=55")
-    await page.getByRole("button", { name: "Open requirement for Tax identification number", exact: true }).click()
+    await page.getByRole("button", { name: "Open payroll for Tax identification number", exact: true }).click()
     const drawer = page.getByRole("dialog", { name: "Payroll setup", exact: true })
     await expect(drawer.getByLabel("Tax identification number", { exact: true })).toHaveValue("")
     await drawer.getByRole("textbox", { name: /^Payroll number/ }).fill("PAY-502")

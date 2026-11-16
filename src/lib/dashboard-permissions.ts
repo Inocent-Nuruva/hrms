@@ -1118,6 +1118,10 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     permissions: ["leave-balances.view", "leave-balances.manage"],
     mode: "any",
   },
+  "/dashboard/leave-management/mainland": {
+    permissions: ["leave-balances.view", "leave_policies:read"],
+    mode: "any",
+  },
   "/dashboard/leave-management/balance-import": {
     permissions: [
       "leave-balances.export",
@@ -1126,7 +1130,11 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
     ],
     mode: "any",
   },
-  "/dashboard/leave-management/reports": ATTENDANCE_REPORTS_ROUTE_PERMISSION,
+  // Same set as backend leave-reports.controller (PermissionsAny).
+  "/dashboard/leave-management/reports": {
+    permissions: ["leave_reports.view", "leave-balances.view", "leave-balances.export", "leave_requests:approve"],
+    mode: "any",
+  },
   "/dashboard/leave-management/business-trips": ATTENDANCE_BUSINESS_TRIPS_ROUTE_PERMISSION,
   "/dashboard/leave-management/holidays": {
     permissions: ["holidays:read", "attendance_holidays:read"],
@@ -1278,8 +1286,24 @@ function isGlobalBypassLabel(label: string) {
   return GLOBAL_BYPASS_LABELS.has(canonicalizePermissionLabel(label))
 }
 
+// Mirrors backend PERMISSION_ALIASES (backend/src/common/utils/permission.util.ts):
+// a required permission is also satisfied by any of its aliases. Canonical form.
+const PERMISSION_ALIASES: Record<string, string[]> = {
+  "leave-balances:view": ["leave_balances:read"],
+  "leave-balances:view-own": ["leave_balances:read"],
+  "leave-balances:manage": ["leave_balances:read", "leave_balances:adjust"],
+  "leave-balances:adjust": ["leave_balances:adjust"],
+  "leave-balances:generate": ["leave_balances:adjust"],
+  "leave-balances:carry-forward": ["leave_balances:adjust"],
+  "users:enable-2fa": ["users:manage-2fa"],
+  "users:disable-2fa": ["users:manage-2fa"],
+}
+
 function permissionMatches(owned: string, required: string) {
   if (owned === required) {
+    return true
+  }
+  if (PERMISSION_ALIASES[required]?.includes(owned)) {
     return true
   }
   if (isGlobalBypassLabel(owned)) {

@@ -19,8 +19,10 @@ import {
   revokeSignatory,
   saveContractTemplate,
   updateCompanyLegal,
+  updateContractBranding,
   updateContractSigningSettings,
   type CompanyLegal,
+  type ContractBranding,
   type ContractSection,
   type ContractSettings,
   type ContractTemplate,
@@ -63,13 +65,34 @@ function Section({ title, description, children }: { title: string; description?
 
 export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: boolean }) {
   const [legal, setLegal] = React.useState<CompanyLegal | null>(null)
+  const [branding, setBranding] = React.useState<ContractBranding>({ logo_data_url: null, tagline: null })
   const [busy, setBusy] = React.useState(false)
   React.useEffect(() => {
     getContractSettings(token)
-      .then((result) => setLegal(result.legal))
+      .then((result) => {
+        setLegal(result.legal)
+        if (result.contract_branding) setBranding(result.contract_branding)
+      })
       .catch((cause: unknown) => toast.error(errorMessage(cause, "Could not load company details")))
   }, [token])
   if (!legal) return <p className="text-sm text-muted-foreground">Loading…</p>
+  const pickLogo = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      toast.error("The logo must be a PNG or JPEG image")
+      return
+    }
+    if (file.size > 300 * 1024) {
+      toast.error("The logo must be smaller than 300 KB")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setBranding((current) => ({ ...current, logo_data_url: String(reader.result) }))
+    reader.onerror = () => toast.error("Could not read the image")
+    reader.readAsDataURL(file)
+  }
   const set = (key: keyof CompanyLegal) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setLegal({ ...legal, [key]: event.target.value })
   const save = async () => {
@@ -83,8 +106,13 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
         phone: legal.phone ?? "",
         email: legal.email || undefined,
       })
-      setLegal(result.legal)
-      toast.success("Company legal details saved")
+      const saved = await updateContractBranding(token, {
+        logo_data_url: branding.logo_data_url ?? "",
+        tagline: branding.tagline ?? "",
+      })
+      setLegal(saved.legal ?? result.legal)
+      if (saved.contract_branding) setBranding(saved.contract_branding)
+      toast.success("Company details saved")
     } catch (cause) {
       toast.error(errorMessage(cause, "Could not save"))
     } finally {
@@ -94,6 +122,44 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
   return (
     <Section title="Company legal details" description="Printed in the header of every contract.">
       <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Logo" hint="PNG or JPEG, up to 300 KB. Printed centred at the top of page 1.">
+          <div className="flex items-center gap-3">
+            <div className="flex h-16 w-40 items-center justify-center rounded-md border border-dashed border-border bg-slate-50">
+              {branding.logo_data_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- local data URL preview
+                <img src={branding.logo_data_url} alt="Company logo" className="max-h-14 max-w-36 object-contain" />
+              ) : (
+                <span className="text-xs text-muted-foreground">No logo</span>
+              )}
+            </div>
+            {canEdit ? (
+              <div className="flex flex-col gap-1">
+                <span className="cursor-pointer text-sm font-medium text-primary">
+                  {branding.logo_data_url ? "Replace" : "Upload"}
+                  <input type="file" accept="image/png,image/jpeg" className="sr-only" onChange={pickLogo} />
+                </span>
+                {branding.logo_data_url ? (
+                  <button
+                    type="button"
+                    className="text-left text-sm text-red-600"
+                    onClick={() => setBranding({ ...branding, logo_data_url: null })}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </Field>
+        <Field label="Tagline" hint="Optional. Printed in italics under the company name.">
+          <input
+            className={input}
+            maxLength={150}
+            value={branding.tagline ?? ""}
+            onChange={(event) => setBranding({ ...branding, tagline: event.target.value })}
+            disabled={!canEdit}
+          />
+        </Field>
         <Field label="Registered (legal) name">
           <input className={input} value={legal.legal_name ?? ""} onChange={set("legal_name")} disabled={!canEdit} />
         </Field>
@@ -126,7 +192,7 @@ export function CompanyLegalForm({ token, canEdit }: { token: string; canEdit: b
 
 // ─────────────────────────── signatories & signing ───────────────────────────
 
-function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminRecord) => void }) {
+export function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminRecord) => void }) {
   const [search, setSearch] = React.useState("")
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   React.useEffect(() => {
@@ -146,19 +212,19 @@ function EmployeePicker({ token, onPick }: { token: string; onPick: (row: AdminR
       <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-slate-400" />
       <input className={cn(input, "pl-8")} placeholder="Add signatory: search an active employee" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Search employees" />
       {rows.length ? (
-        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-white shadow-md">
+        <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md">
           {rows.map((row) => (
             <li key={String(row.id)}>
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                className="w-full px-3 py-2 text-left text-sm text-popover-foreground hover:bg-accent"
                 onClick={() => {
                   onPick(row)
                   setSearch("")
                 }}
               >
-                {String(row.first_name ?? "")} {String(row.last_name ?? "")}{" "}
-                <span className="text-xs text-muted-foreground">{String(row.employee_no ?? "")}</span>
+                {String(row.fullName ?? row.full_name ?? [row.first_name ?? row.firstName, row.middle_name ?? row.middleName, row.last_name ?? row.lastName].filter(Boolean).join(" "))}{" "}
+                <span className="text-xs text-muted-foreground">{String(row.employee_no ?? row.employeeNo ?? "")}</span>
               </button>
             </li>
           ))}

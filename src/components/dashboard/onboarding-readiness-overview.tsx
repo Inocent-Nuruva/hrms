@@ -151,7 +151,6 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ow
           })}
         </div>
         {readiness.activation_failure && !readiness.closed ? <MessageBar intent="error"><MessageBarBody><strong>Activation failed</strong><p>The last activation attempt{readiness.activation_failure.failed_at ? ` on ${new Date(readiness.activation_failure.failed_at).toLocaleString()}` : ""} was rolled back: {readiness.activation_failure.message}</p><p>Nothing was applied. Fix the cause, then activate again.</p></MessageBarBody></MessageBar> : null}
-        {summaryTarget ? createPortal(summary, summaryTarget) : summary}
 
         <div className="min-w-0">
           <div className="flex min-w-0 flex-col gap-4">
@@ -160,7 +159,18 @@ export function OnboardingReadinessOverview({ token, requestId, employeeName, ow
               <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-3 py-2">
                 <h3 className="text-sm font-semibold">Next steps</h3><p className="text-xs text-muted-foreground">{outstanding.length ? `${outstanding.length} required action${outstanding.length === 1 ? "" : "s"} remaining` : "All required actions complete"}</p>
               </header>
-              <div className="max-w-full overflow-x-auto rounded-b-xl">
+              <div className="divide-y divide-border/70 md:hidden">
+                {outstanding.map((requirement) => <article key={requirement.id} className="space-y-3 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0"><h4 className="break-words text-sm font-semibold">{requirement.label}</h4>{requirement.due_date ? <p className="mt-1 text-xs text-muted-foreground">Due {new Date(requirement.due_date).toLocaleDateString()}</p> : null}</div>
+                    <Badge appearance="tint" color={requirement.status === "blocked" ? "danger" : "warning"} size="small">{requirement.status === "blocked" ? "Needs attention" : "Awaiting"}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Responsible: {requirement.owner}</p>
+                  <p className="text-sm text-muted-foreground">{requirement.waiting_reason ? `Waiting on a prerequisite: ${requirement.waiting_reason}` : requirementGuidance(requirement)}</p>
+                  <div className="flex flex-wrap gap-2"><Button appearance="primary" icon={<ArrowRight20Regular />} onClick={() => onNavigate(requirement.action, requirement.id)} aria-label={`${requirementActionLabel(requirement)} for ${requirement.label}`}>{requirementActionLabel(requirement)}</Button>{onDiscuss ? <Button onClick={() => onDiscuss(requirement.id, requirement.label)}>Handoff</Button> : null}</div>
+                </article>)}
+              </div>
+              <div className="hidden max-w-full overflow-x-auto rounded-b-xl md:block">
                 <table className="w-full min-w-[850px] border-collapse text-left text-sm">
                   <caption className="sr-only">All required onboarding steps and their responsible owners</caption>
                   <thead className="bg-muted/40 text-xs text-muted-foreground"><tr>

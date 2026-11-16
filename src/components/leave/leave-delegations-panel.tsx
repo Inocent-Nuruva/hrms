@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { Button } from "@/components/ui/button"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { FluentSelect } from "@/components/ui/fluent-select"
 import {
   cancelLeaveDelegation,
@@ -41,9 +42,11 @@ export function LeaveDelegationsPanel({
   currentCompanyUserId?: number | null
 }) {
   const actor = useDashboardActor()
-  const isApprover = actor.permissionLabels.some((label) =>
-    ["leave_requests:approve", "self_service_requests:manager_review", "leave_workflows:update"].includes(label),
-  )
+  // Same set as the backend leave-delegations controller (PermissionsAny).
+  const isApprover = canPerformPermission(actor.permissionLabels, {
+    permissions: ["leave_requests:approve", "self_service_requests:manager_review", "leave_workflows:update"],
+    mode: "any",
+  })
   const [rows, setRows] = React.useState<AdminRecord[]>([])
   const [people, setPeople] = React.useState<Option[]>([])
   const [form, setForm] = React.useState({ delegator: "", delegate: "", start: today(), end: today(), reason: "" })

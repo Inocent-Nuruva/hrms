@@ -79,6 +79,7 @@ export type ContractRow = {
   amendmentReason: string | null
   sourceMovementId: number | null
   templateId?: number | null
+  templateVersion?: number | null
   /** D4: salary masked for this user. */
   salaryHidden?: boolean
   updatedAt: string
@@ -109,6 +110,11 @@ export type ContractFileRow = {
 }
 
 export type ContractDetail = ContractRow & {
+  can_view_document: boolean
+  can_edit_salary?: boolean
+  salary_override_reason_valid?: boolean
+  field_metadata?: ContractFieldMetadata[]
+  effective_draft_sections?: ContractSection[]
   signatory: { id: number; displayName: string; jobTitle: string; isActive: boolean } | null
   signatures: ContractSignatureRow[]
   allowedActions: string[]
@@ -160,7 +166,15 @@ export type ContractSettings = {
   governing_law: string
 }
 
-export type ContractSettingsResponse = { company_name: string; legal: CompanyLegal; contract_settings: ContractSettings }
+/** Logo (PNG/JPEG data URL, ≤ 300 KB) and tagline printed on contracts. */
+export type ContractBranding = { logo_data_url: string | null; tagline: string | null }
+
+export type ContractSettingsResponse = {
+  company_name: string
+  legal: CompanyLegal
+  contract_settings: ContractSettings
+  contract_branding?: ContractBranding
+}
 
 export type ContractTemplate = {
   contract_type: ContractType
@@ -247,6 +261,10 @@ const post = <T>(token: string, path: string, body: unknown = {}) =>
   adminRequest<T>(path, { method: "POST", token, body, dedupe: false })
 const patch = <T>(token: string, path: string, body: unknown) =>
   adminRequest<T>(path, { method: "PATCH", token, body, dedupe: false })
+/** POST that only reads (readiness, resolve, preview): must not invalidate the GET cache,
+ *  or GETs running at the same time (e.g. /fields) are aborted as stale. */
+const readPost = <T>(token: string, path: string, body: unknown = {}) =>
+  adminRequest<T>(path, { method: "POST", token, body, dedupe: false, invalidateCache: false })
 const put = <T>(token: string, path: string, body: unknown) =>
   adminRequest<T>(path, { method: "PUT", token, body, dedupe: false })
 
@@ -263,14 +281,21 @@ export function listContracts(
 }
 
 export const getContract = (token: string, id: number) => adminRequest<ContractDetail>(`${BASE}/${id}`, { token })
+export type ContractFieldMetadata = { key: string; labelKey: string; group: string; inputKind: "text" | "longtext" | "date" | "money" | "number" | "enum" | "reference"; owner: string; overridePolicy: "none" | "with-reason" | "reference-only"; referenceKey?: string }
+export type ContractReadiness = { ready: boolean; field_errors: Record<string, string>; missing_fields: string[]; warnings: Record<string, string>; signatory_id: number | null }
+export const getContractFieldMetadata = (token: string) => adminRequest<{ fields: ContractFieldMetadata[] }>(`${BASE}/field-metadata`, { token })
+export const resolveContractDraftFields = (token: string, id: number, body: Record<string, unknown>) => readPost<ContractField[]>(token, `${BASE}/${id}/fields/resolve`, body)
+export const getContractReadiness = (token: string, id: number, body: Record<string, unknown>) => readPost<ContractReadiness>(token, `${BASE}/${id}/readiness`, body)
 export const listMyContracts = (token: string) => adminRequest<ContractRow[]>(`${BASE}/me`, { token })
 export const getContractPrefill = (token: string, employeeId: number) =>
   adminRequest<Record<string, unknown>>(`${BASE}/prefill/${employeeId}`, { token })
 export const createContractDraft = (token: string, body: Record<string, unknown>) => post<ContractRow>(token, BASE, body)
 export const updateContractDraft = (token: string, id: number, body: Record<string, unknown>) =>
   patch<ContractRow>(token, `${BASE}/${id}`, body)
+export const deleteContractDraft = (token: string, id: number) =>
+  adminRequest<{ deleted: boolean }>(`${BASE}/${id}`, { method: "DELETE", token, dedupe: false })
 export const previewContract = (token: string, id: number) =>
-  post<{ content_base64: string; file_name: string; missing_fields: string[] }>(token, `${BASE}/${id}/preview`)
+  post<{ content_base64: string; file_name: string; missing_fields: string[]; preview_hash: string; page_count: number }>(token, `${BASE}/${id}/preview`)
 export const sendContract = (token: string, id: number, assignedSignatoryId?: number | null) =>
   post<ContractRow>(token, `${BASE}/${id}/send`, assignedSignatoryId ? { assigned_signatory_id: assignedSignatoryId } : {})
 export const cancelContract = (token: string, id: number, reason: string) =>
@@ -278,7 +303,7 @@ export const cancelContract = (token: string, id: number, reason: string) =>
 export const renewContract = (
   token: string,
   id: number,
-  body: { kind: "RENEWAL" | "AMENDMENT"; reason: string; start_date?: string; end_date?: string; contract_type?: ContractType; source_movement_id?: number },
+  body: { kind: "RENEWAL" | "AMENDMENT"; reason: string; start_date?: string; end_date?: string | null; contract_type?: ContractType; source_movement_id?: number; override_reasons?: Record<string, string> },
 ) => post<ContractRow>(token, `${BASE}/${id}/renew`, body)
 export const reassignContractSignatory = (token: string, id: number, signatoryId: number) =>
   patch<ContractRow>(token, `${BASE}/${id}/signatory`, { signatory_id: signatoryId })
@@ -311,9 +336,14 @@ export const uploadSignedContract = (
 export const getContractSettings = (token: string) => adminRequest<ContractSettingsResponse>(`${BASE}/settings`, { token })
 export const updateCompanyLegal = (token: string, body: Partial<CompanyLegal>) =>
   put<ContractSettingsResponse>(token, `${BASE}/settings/legal`, body)
+
+/** Omitted fields are kept; null or "" clears them. */
+export const updateContractBranding = (token: string, body: Partial<ContractBranding>) =>
+  put<ContractSettingsResponse>(token, `${BASE}/settings/branding`, body)
 export const updateContractSigningSettings = (token: string, body: Partial<ContractSettings>) =>
   put<ContractSettingsResponse>(token, `${BASE}/settings/signing`, body)
 export const listContractTemplates = (token: string) => adminRequest<ContractTemplate[]>(`${BASE}/templates`, { token })
+export const listContractTemplateSummaries = (token: string) => adminRequest<Array<Omit<ContractTemplate, "sections">>>(`${BASE}/templates?summary=true`, { token })
 export const saveContractTemplate = (
   token: string,
   body: { contract_type: ContractType; title: string; sections: ContractSection[] },
@@ -360,9 +390,11 @@ export async function fetchContractFile(token: string, id: number, documentId?: 
   if (!response.ok) {
     let message = "The contract file could not be opened"
     try {
-      const payload = (await response.json()) as { message?: unknown }
+      const payload = (await response.json()) as { message?: unknown; code?: unknown }
+      if (payload.code === "CONTRACT_DOCUMENT_SALARY_ACCESS_REQUIRED") throw new Error("This file is restricted. Ask an authorized reviewer to open it.")
       if (typeof payload.message === "string") message = payload.message
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "This file is restricted. Ask an authorized reviewer to open it.") throw error
       /* not JSON */
     }
     throw new Error(message)
@@ -401,6 +433,9 @@ export type ContractField = {
   /** Needs HR attention, e.g. probation policy not in whole months. */
   warning?: string | null
   override_reason?: string | null
+  reference_id?: number | null
+  automatic_reference_id?: number | null
+  automatic_reference_label?: string | null
   /** true once sent: the value is frozen. */
   frozen?: boolean
   /** D4: salary hidden from this user (no payroll permission). */
@@ -460,18 +495,20 @@ export type ContractActivityItem = {
   title: string | null
   detail: string | null
   actor_name: string | null
+  actor_id?: number | null
   outcome: string
   changed_fields: string[]
   old_values: Record<string, unknown> | null
   new_values: Record<string, unknown> | null
 }
-export const getContractActivity = (token: string, id: number) =>
-  adminRequest<{ contract_id: number; items: ContractActivityItem[]; truncated?: boolean }>(`${BASE}/${id}/activity`, { token })
+export const getContractActivity = (token: string, id: number, cursor?: string) =>
+  adminRequest<{ contract_id: number; items: ContractActivityItem[]; truncated?: boolean; next_cursor?: string | null; group_window_minutes?: number }>(`${BASE}/${id}/activity${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, { token })
 
 /** New draft copied from an existing contract (same employee). */
 export const duplicateContract = (
   token: string,
   source: { id: number; employeeId: number; contractType: ContractType; startDate: string; endDate: string | null },
+  overrideReasons?: Record<string, string>,
 ) =>
   createContractDraft(token, {
     employee_id: source.employeeId,
@@ -479,11 +516,13 @@ export const duplicateContract = (
     start_date: source.startDate,
     ...(source.endDate ? { end_date: source.endDate } : {}),
     from_contract_id: source.id,
+    mode: "live",
+    ...(overrideReasons && Object.keys(overrideReasons).length ? { override_reasons: overrideReasons } : {}),
   })
 
 /** Live preview of unsaved editor state (not stored, not audited). */
 export const previewContractDraft = (token: string, id: number, body: Record<string, unknown>) =>
-  post<{ content_base64: string; file_name: string; missing_fields: string[]; warnings?: Record<string, string> }>(
+  readPost<{ content_base64: string; file_name: string; missing_fields: string[]; warnings?: Record<string, string>; preview_hash: string; page_count: number }>(
     token,
     `${BASE}/${id}/preview`,
     body,

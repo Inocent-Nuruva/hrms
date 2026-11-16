@@ -198,27 +198,49 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
   }
   return (
     <Card size="sm">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Onboarding readiness</CardTitle>
-          <Tooltip relationship="description" content="The stage shows each request’s first mandatory blocker. Invitations and registration have separate tabs; completed requests remain in All requests.">
-            <FluentButton appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About onboarding readiness" />
-          </Tooltip>
+      <CardHeader className="gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              <CardTitle className="text-base font-semibold">Onboarding readiness</CardTitle>
+              <Tooltip relationship="description" content="The stage shows each request’s first mandatory blocker. Invitations and registration have separate tabs; completed requests remain in All requests.">
+                <FluentButton appearance="subtle" size="small" icon={<Info20Regular />} aria-label="About onboarding readiness" />
+              </Tooltip>
+            </div>
+            <CardDescription>See what’s blocking employee activation.</CardDescription>
+          </div>
+          {!loading && !error ? <div className="grid grid-cols-3 gap-2 sm:flex" aria-hidden="true">
+            {[
+              { label: "Open", value: rows.length, tone: "text-foreground" },
+              { label: "Ready", value: rows.filter((row) => row.readiness.ready_to_activate).length, tone: "text-emerald-600 dark:text-emerald-400" },
+              { label: "Overdue", value: rows.filter((row) => row.overdue).length, tone: "text-amber-600 dark:text-amber-400" },
+            ].map((stat) => <div key={stat.label} className="min-w-20 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-center">
+              <div className={`text-lg font-semibold tabular-nums ${stat.tone}`}>{stat.value}</div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{stat.label}</div>
+            </div>)}
+          </div> : null}
         </div>
-        <CardDescription>See what’s blocking employee activation.</CardDescription>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
-        <div role="search" aria-label="Filter onboarding overview" className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 flex-1"><Input aria-label="Search onboarding overview" placeholder="Search employee or request…" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} /></div>
-          <FluentButton icon={<Filter20Regular />} aria-label="Filters" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
-            Filters {activeFilters.length ? <CounterBadge size="small" aria-label={`${activeFilters.length} active filters`}>{activeFilters.length}</CounterBadge> : null}
-          </FluentButton>
-          <Tooltip relationship="label" content="Refresh overview"><FluentButton icon={<ArrowClockwise20Regular />} aria-label="Refresh overview" disabled={loading} onClick={() => setRevision((value) => value + 1)} /></Tooltip>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-3" aria-label="Quick filters and order">
-          <FluentSelect label="Stage" size="small" value={filters.stage} options={filterFields[0].options} onChange={(stage) => setFilters((current) => ({ ...current, stage }))} />
-          <FluentSelect label="Department" size="small" value={filters.department} options={filterFields[1].options} onChange={(department) => setFilters((current) => ({ ...current, department }))} />
-          <FluentSelect label="Order" size="small" value={order} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]} onChange={(value) => setOrder(value === "oldest" ? "oldest" : "newest")} />
+        <div role="search" aria-label="Filter onboarding overview" className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-muted/20 p-2 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="min-w-0 flex-1"><Input aria-label="Search onboarding overview" placeholder="Search employee or request…" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} /></div>
+            <FluentButton className="lg:hidden" icon={<Filter20Regular />} aria-label="Filters" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+              {activeFilters.length ? <CounterBadge size="small" aria-label={`${activeFilters.length} active filters`}>{activeFilters.length}</CounterBadge> : null}
+            </FluentButton>
+            <Tooltip relationship="label" content="Refresh overview"><FluentButton className="lg:hidden" icon={<ArrowClockwise20Regular />} aria-label="Refresh overview" disabled={loading} onClick={() => setRevision((value) => value + 1)} /></Tooltip>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:w-auto lg:items-center" aria-label="Quick filters and order">
+            <div className="lg:w-44"><FluentSelect ariaLabel="Stage" size="small" value={filters.stage} options={filterFields[0].options} onChange={(stage) => setFilters((current) => ({ ...current, stage }))} /></div>
+            <div className="lg:w-44"><FluentSelect ariaLabel="Department" size="small" value={filters.department} options={filterFields[1].options} onChange={(department) => setFilters((current) => ({ ...current, department }))} /></div>
+            <div className="col-span-2 sm:col-span-1 lg:w-36"><FluentSelect ariaLabel="Order" size="small" value={order} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]} onChange={(value) => setOrder(value === "oldest" ? "oldest" : "newest")} /></div>
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
+            <FluentButton icon={<Filter20Regular />} aria-label="More filters" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}>
+              Filters {activeFilters.length ? <CounterBadge size="small">{activeFilters.length}</CounterBadge> : null}
+            </FluentButton>
+            <Tooltip relationship="label" content="Refresh overview"><FluentButton icon={<ArrowClockwise20Regular />} aria-label="Refresh" disabled={loading} onClick={() => setRevision((value) => value + 1)} /></Tooltip>
+          </div>
         </div>
         {hasFilters ? <div className="flex flex-wrap items-center gap-2" aria-label="Active onboarding filters">
           {activeFilters.map((field) => {
@@ -242,50 +264,56 @@ export function OnboardingHrOverview({ token, detailsOpen, onOpen }: {
           <Alert variant="destructive"><AlertTitle>Overview unavailable</AlertTitle><AlertDescription>{error} No readiness counts are shown until the complete overview loads. Refresh to retry.</AlertDescription></Alert>
         ) : (
           <>
-            <p role="status">{visible.length} of {rows.length} open requests · {rows.filter((row) => row.readiness.ready_to_activate).length} ready for activation · {rows.filter((row) => row.overdue).length} overdue</p>
+            <p role="status" className="text-xs text-muted-foreground">{visible.length} of {rows.length} open requests · {rows.filter((row) => row.readiness.ready_to_activate).length} ready for activation · {rows.filter((row) => row.overdue).length} overdue</p>
             {visible.length === 0 ? <p>No open requests match these filters.</p> : null}
-            {pageRows.length ? <div className="max-w-full overflow-x-auto rounded-lg border border-border">
-              <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-                <caption className="sr-only">Open onboarding requests and their next required actions</caption>
-                <thead className="bg-muted/50 text-xs text-muted-foreground">
-                  <tr>
-                    <th scope="col" className="sticky left-0 z-10 min-w-52 bg-muted px-4 py-3 font-semibold">Employee</th>
-                    <th scope="col" className="min-w-36 px-3 py-3 font-semibold">Stage</th>
-
-                    <th scope="col" className="min-w-32 px-3 py-3 font-semibold">Readiness</th>
-                    <th scope="col" className="min-w-48 px-3 py-3 font-semibold">Next required action</th>
-                    <th scope="col" className="min-w-28 px-3 py-3 font-semibold">Responsible</th>
-                    <th scope="col" className="min-w-32 px-3 py-3 font-semibold">Status</th>
-                    <th scope="col" className="min-w-52 px-4 py-3 text-right font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {pageRows.map((row) => {
-                    const nextAction = row.readiness.next_action ?? row.blockers[0]
-                    return <tr key={row.id} className="hover:bg-muted/30">
-                      <th scope="row" className="sticky left-0 z-10 bg-background px-4 py-3 text-left font-normal">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 text-muted-foreground">
-                            {employeePhotos[row.employee_id] ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={employeePhotos[row.employee_id]} alt="" className="size-full object-cover" />
-                            ) : <Person20Regular />}
-                          </span>
-                          <span className="min-w-0"><span className="block truncate font-semibold text-foreground" title={row.employee_name || row.employee_no}>{row.employee_name || row.employee_no}</span><span className="block truncate text-xs text-muted-foreground" title={`${row.employee_no} · ${row.department} · ${row.onboarding_no}`}>{row.employee_no} · {row.department}</span></span>
-                        </div>
-                      </th>
-                      <td className="px-3 py-3"><FluentBadge appearance="outline">{row.stage}</FluentBadge></td>
-
-                      <td className="px-3 py-3"><div className="space-y-1.5"><span className="tabular-nums text-muted-foreground">{row.readiness.completed_required}/{row.readiness.total_required}</span><ProgressBar value={row.readiness.total_required ? row.readiness.completed_required / row.readiness.total_required : 0} thickness="medium" /></div></td>
-                      <td className="px-3 py-3 font-medium" title={nextAction?.label ?? "Ready for authorized HR to review and activate"}>{nextAction?.label ?? "Ready for HR activation"}</td>
-                      <td className="px-3 py-3 text-muted-foreground">{nextAction?.owner ?? "HR"}</td>
-                      <td className="px-3 py-3"><div className="flex flex-col items-start gap-1">{row.overdue ? <FluentBadge appearance="tint" color="warning">Overdue</FluentBadge> : null}{row.attention_reasons?.length ? <Tooltip relationship="description" content={row.attention_reasons.join(" · ")}><FluentBadge appearance="outline" color="warning" tabIndex={0}>Needs attention</FluentBadge></Tooltip> : null}{!row.overdue && !row.attention_reasons?.length ? <span className="text-muted-foreground">—</span> : null}</div></td>
-                      <td className="px-4 py-3"><div className="flex items-center justify-end gap-1"><FluentButton size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${row.employee_name || row.employee_no}`} onClick={() => void startScan(row)}>Scan pending</FluentButton><FluentButton size="small" appearance="primary" aria-label={`Review onboarding for ${row.employee_name || row.employee_no}`} onClick={() => onOpen(row.id)}>Review</FluentButton></div></td>
-
-                    </tr>
-                  })}
-                </tbody>
-              </table>
+            {pageRows.length ? <div className="overflow-hidden rounded-xl border border-border bg-background">
+              <div aria-hidden="true" className="hidden grid-cols-[minmax(220px,1.4fr)_minmax(150px,1fr)_minmax(200px,1.5fr)_minmax(120px,0.8fr)_auto] gap-4 border-b border-border bg-muted/50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:grid">
+                <span>Employee</span><span>Stage &amp; readiness</span><span>Next required action</span><span>Status</span><span className="w-[190px] text-right">Actions</span>
+              </div>
+              <ul aria-label="Open onboarding requests and their next required actions" className="divide-y divide-border">
+                {pageRows.map((row) => {
+                  const nextAction = row.readiness.next_action ?? row.blockers[0]
+                  const name = row.employee_name || row.employee_no
+                  const done = row.readiness.completed_required
+                  const total = row.readiness.total_required
+                  const pct = total ? Math.round((done / total) * 100) : 0
+                  return <li key={row.id} className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/30 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1.4fr)_minmax(150px,1fr)_minmax(200px,1.5fr)_minmax(120px,0.8fr)_auto] lg:items-center lg:gap-4 lg:py-3">
+                    <div className="flex min-w-0 items-center gap-3 sm:col-span-2 lg:col-span-1">
+                      <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted/40 text-muted-foreground">
+                        {employeePhotos[row.employee_id] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={employeePhotos[row.employee_id]} alt="" className="size-full object-cover" />
+                        ) : <Person20Regular />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-foreground" title={name}>{name}</span>
+                        <span className="block truncate text-xs text-muted-foreground" title={`${row.employee_no} · ${row.department} · ${row.onboarding_no}`}>{row.employee_no} · {row.department}</span>
+                      </span>
+                    </div>
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex max-w-full items-center truncate rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary" title={row.stage}>{row.stage}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{done}/{total} · {pct}%</span>
+                      </div>
+                      <ProgressBar aria-label={`Readiness ${done} of ${total}`} value={total ? done / total : 0} thickness="medium" color={pct === 100 ? "success" : "brand"} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-xs text-muted-foreground lg:hidden">Next required action</span>
+                      <span className="block text-sm font-medium leading-snug" title={nextAction?.label ?? "Ready for authorized HR to review and activate"}>{nextAction?.label ?? "Ready for HR activation"}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">Responsible: {nextAction?.owner ?? "HR"}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {row.overdue ? <FluentBadge appearance="tint" color="warning">Overdue</FluentBadge> : null}
+                      {row.attention_reasons?.length ? <Tooltip relationship="description" content={row.attention_reasons.join(" · ")}><FluentBadge appearance="outline" color="warning" tabIndex={0}>Needs attention</FluentBadge></Tooltip> : null}
+                      {!row.overdue && !row.attention_reasons?.length ? <FluentBadge appearance="tint" color="success">On track</FluentBadge> : null}
+                    </div>
+                    <div className="flex items-center gap-2 sm:justify-end lg:w-[190px]">
+                      <FluentButton className="flex-1 sm:flex-none" size="small" icon={<Scan20Regular />} aria-label={`Scan pending onboarding items for ${name}`} onClick={() => void startScan(row)}>Scan</FluentButton>
+                      <FluentButton className="flex-1 sm:flex-none" size="small" appearance="primary" aria-label={`Review onboarding for ${name}`} onClick={() => onOpen(row.id)}>Review</FluentButton>
+                    </div>
+                  </li>
+                })}
+              </ul>
             </div> : null}
             {visible.length > pageSize ? <nav aria-label="Onboarding results pages" className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
               <p role="status" className="text-xs text-muted-foreground">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, visible.length)} of {visible.length} · Page {page} of {pageCount}</p>
