@@ -3,7 +3,12 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Field } from "@fluentui/react-components"
+import { Dismiss20Regular, Search20Regular } from "@fluentui/react-icons"
 import { FluentSearchBox } from "@/components/common/fluent-search-box"
+
+// Matches the other header icon buttons (see site-header.tsx).
+const mobileIconButtonClass =
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-5"
 
 import { cn } from "@/lib/utils"
 
@@ -43,7 +48,30 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
   const [open, setOpen] = React.useState(false)
   const [activeIndex, setActiveIndex] = React.useState(0)
   const [recentItems, setRecentItems] = React.useState<HeaderSearchItem[]>([])
+  // Below the `sm` breakpoint the field is collapsed to an icon button and
+  // opens as an overlay across the header row. CSS alone decides which
+  // variant shows, so `expanded` has no effect on wider screens.
+  const [expanded, setExpanded] = React.useState(false)
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
+
+  // The trigger is display:none while expanded, so focus can only move back to
+  // it after the collapse has rendered.
+  const restoreFocusRef = React.useRef(false)
+  const collapse = React.useCallback((restoreFocus = false) => {
+    restoreFocusRef.current = restoreFocus
+    setOpen(false)
+    setExpanded(false)
+  }, [])
+
+  React.useEffect(() => {
+    if (expanded) {
+      inputRef.current?.focus()
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      triggerRef.current?.focus()
+    }
+  }, [expanded])
 
   React.useEffect(() => {
     try {
@@ -79,6 +107,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && (event.key === "/" || event.key.toLowerCase() === "k")) {
         event.preventDefault()
+        setExpanded(true)
         setOpen(true)
         inputRef.current?.focus()
       }
@@ -92,19 +121,41 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
     setRecentItems(nextRecent)
     window.localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(nextRecent))
     setQuery("")
-    setOpen(false)
+    collapse()
     router.push(item.url)
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="relative min-w-0 w-full max-w-56 flex-1 sm:max-w-xs"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+    <>
+    <button
+      ref={triggerRef}
+      type="button"
+      className={cn(mobileIconButtonClass, "sm:hidden", expanded && "hidden")}
+      aria-label="Search HRMS"
+      aria-expanded={expanded}
+      onClick={() => {
+        setExpanded(true)
+        setOpen(true)
       }}
     >
-      <Field label="Search in HRMS" size="medium" className="min-w-0 gap-0 [&_label]:sr-only">
+      <Search20Regular />
+    </button>
+    <div
+      ref={containerRef}
+      className={cn(
+        "relative min-w-0 w-full max-w-56 flex-1 sm:flex sm:max-w-xs sm:items-center",
+        expanded
+          ? "max-sm:absolute max-sm:inset-x-0 max-sm:top-0 max-sm:z-[60] max-sm:flex max-sm:h-(--header-height) max-sm:max-w-none max-sm:items-center max-sm:gap-1 max-sm:bg-card max-sm:px-2.5"
+          : "max-sm:hidden",
+      )}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false)
+          if (!query) setExpanded(false)
+        }
+      }}
+    >
+      <Field label="Search in HRMS" size="medium" className="min-w-0 flex-1 gap-0 [&_label]:sr-only">
         <FluentSearchBox
           ref={inputRef}
           size="medium"
@@ -129,8 +180,12 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
                 navigateToResult(result)
               }
             } else if (event.key === "Escape") {
-              setOpen(false)
-              inputRef.current?.blur()
+              if (expanded) {
+                collapse(true)
+              } else {
+                setOpen(false)
+                inputRef.current?.blur()
+              }
             }
           }}
           role="combobox"
@@ -140,6 +195,17 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
           className="w-full min-w-0 max-w-full !px-3.5 !py-2 text-sm sm:pr-16"
         />
       </Field>
+      <button
+        type="button"
+        className={cn(mobileIconButtonClass, "sm:hidden")}
+        aria-label="Close search"
+        onClick={() => {
+          setQuery("")
+          collapse(true)
+        }}
+      >
+        <Dismiss20Regular />
+      </button>
       {!query ? (
         <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-blue-200 bg-blue-50 px-1 py-px text-[9px] font-semibold leading-none text-blue-700 sm:inline-flex dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
           <span>Ctrl</span>
@@ -150,7 +216,7 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
       {open ? (
         <div
           id="header-search-results"
-          className="absolute left-0 top-[calc(100%+0.45rem)] z-[400] w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+          className="absolute left-0 top-[calc(100%+0.45rem)] z-[400] w-80 max-w-[calc(100vw-1rem)] max-sm:left-2.5 max-sm:right-2.5 max-sm:top-full max-sm:w-auto overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
         >
           <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {normalizedQuery ? "Results" : recentItems.length > 0 ? "Recent" : "Quick navigation"}
@@ -181,5 +247,6 @@ export function HeaderGlobalSearch({ items }: { items: HeaderSearchItem[] }) {
         </div>
       ) : null}
     </div>
+    </>
   )
 }

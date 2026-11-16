@@ -72,9 +72,9 @@ function HeaderPageControls({
         size="icon-sm"
         direction="right"
         modes={["light", "dark"]}
-        className={cn(headerActionButtonClass, "hidden sm:inline-flex")}
+        className={cn(headerActionButtonClass, "max-sm:!hidden")}
       />
-      <AccentColorPicker className={cn(headerActionButtonClass, "hidden sm:inline-flex")} />
+      <AccentColorPicker className={cn(headerActionButtonClass, "max-sm:!hidden")} />
       <Button
         variant="ghost"
         size="icon-sm"
@@ -82,7 +82,7 @@ function HeaderPageControls({
         disabled={loading || refreshing}
         aria-label="Refresh page data"
         title="Refresh page data"
-        className={cn(headerActionButtonClass, "hidden sm:inline-flex")}
+        className={cn(headerActionButtonClass, "max-sm:!hidden")}
       >
         <ArrowSync16Regular className={cn("size-4 text-blue-600 dark:text-blue-400", (loading || refreshing) && "animate-spin")} />
       </Button>
@@ -173,14 +173,15 @@ export function SiteHeader({
     >
       <div
         className={cn(
-          "flex min-h-(--header-height) w-full min-w-0 items-center gap-2 px-2.5 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
+          "flex min-h-(--header-height) w-full min-w-0 items-center gap-1 px-2 transition-[padding] sm:gap-3 sm:px-3 lg:px-4",
           !isMobile && sidebarState === "collapsed" && "pl-12 sm:pl-12 lg:pl-12",
         )}
       >
         <HeaderGlobalSearch items={searchItems} />
 
         <SidebarTrigger
-          className={cn(headerActionButtonClass, "md:!hidden")}
+          // Menu first on small screens so the squeezed search box can't sit on top of it.
+          className={cn(headerActionButtonClass, "order-first shrink-0 md:!hidden")}
           aria-label="Open navigation"
           title="Navigation"
         />
@@ -213,7 +214,7 @@ export function SiteHeader({
             type="button"
             size="icon-sm"
             variant="ghost"
-            className={cn(headerActionButtonClass, "hidden sm:inline-flex")}
+            className={cn(headerActionButtonClass, "max-sm:!hidden")}
             onClick={() => void toggleFullscreen()}
             aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             title={fullscreen ? "Exit fullscreen" : "Fullscreen"}

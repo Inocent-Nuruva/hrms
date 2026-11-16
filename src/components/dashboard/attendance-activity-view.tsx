@@ -1,5 +1,6 @@
 "use client"
 
+import { AttendanceTodayPanel } from "@/components/dashboard/dashboard-attendance-actions"
 import { DateInput } from "@/components/ui/date-input"
 import { DateTimeInput } from "@/components/ui/date-time-input"
 import * as React from "react"
@@ -4420,9 +4421,7 @@ export function AttendanceActivityView({ section }: { section: string }) {
 
   if (activeSection === 'punch-action') {
     return (
-      <div className="py-4 text-sm text-muted-foreground">
-        Punch actions are only available in the mobile app.
-      </div>
+      <AttendanceTodayPanel />
     )
   }
 
