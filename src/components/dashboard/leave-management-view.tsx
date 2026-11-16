@@ -1473,9 +1473,8 @@ export function LeaveManagementView({
   >([]);
   const [reconciliationLoading, setReconciliationLoading] =
     React.useState(false);
-  const [reconciliationYear, setReconciliationYear] = React.useState(
-    String(new Date().getFullYear()),
-  );
+  // Reconcile uses the same year as the balance list filter.
+  const reconciliationYear = balanceYear;
   const [leaveReportKind, setLeaveReportKind] = React.useState<
     "balances" | "taken" | "pending" | "encashments"
   >("taken");
@@ -7836,11 +7835,47 @@ export function LeaveManagementView({
           {selectedBalanceGroup && employeeBalanceDetailsOpen ? (
             <section className="shrink-0 border-t border-border pt-2 text-xs">
               <div className="flex items-center justify-between"><h3 className="font-semibold">Transaction history - FY {balanceYear}</h3><div className="flex gap-2"><button type="button" disabled={balanceHistoryPage === 1 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page - 1)}>Previous</button><span>Page {balanceHistoryPage}</span><button type="button" disabled={balanceHistory.length < 20 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page + 1)}>Next</button></div></div>
-              <div className="mt-2 max-h-36 space-y-1 overflow-y-auto">
-                {balanceHistoryLoading ? <p>Loading history...</p> : balanceHistoryError ? <p role="alert">{balanceHistoryError}</p> : balanceHistory.length === 0 ? <p>No transactions found.</p> : balanceHistory.map((row, index) => {
-                  const historyActor = asRecord(row.created_by) ?? {};
-                  return <div key={String(row.id ?? index)} className="rounded border border-border p-2"><span className="font-medium">{readString(row, ["effective_date", "created_at"])} - {readString(row, ["transaction_type"])}</span><span> | {leaveTypeLabelFromRow(row)} | Days: {readString(row, ["amount_days"])}</span><p>Reason: {readString(row, ["reason"])} | By: {personName(historyActor, "System")}</p></div>;
-                })}
+              <div className="mt-2 max-h-36 overflow-auto rounded-md border border-slate-200">
+                {balanceHistoryLoading ? (
+                  <p className="p-2">Loading history...</p>
+                ) : balanceHistoryError ? (
+                  <p role="alert" className="p-2">{balanceHistoryError}</p>
+                ) : balanceHistory.length === 0 ? (
+                  <p className="p-2">No transactions found.</p>
+                ) : (
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="sticky top-0 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-2 py-1">Date</th>
+                        <th className="px-2 py-1">Type</th>
+                        <th className="px-2 py-1">Leave</th>
+                        <th className="px-2 py-1 text-right">Days</th>
+                        <th className="px-2 py-1">By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {balanceHistory.map((row, index) => (
+                        <tr
+                          key={String(row.id ?? index)}
+                          className="border-t border-slate-100"
+                          title={`Reason: ${readString(row, ["reason"])}`}
+                        >
+                          <td className="whitespace-nowrap px-2 py-1">
+                            {readString(row, ["effective_date", "created_at"]).slice(0, 10)}
+                          </td>
+                          <td className="px-2 py-1">{readString(row, ["transaction_type"])}</td>
+                          <td className="px-2 py-1">{leaveTypeLabelFromRow(row)}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">
+                            {readString(row, ["amount_days"])}
+                          </td>
+                          <td className="px-2 py-1">
+                            {personName(asRecord(row.created_by) ?? {}, "System")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </section>
           ) : null}
@@ -8391,18 +8426,6 @@ export function LeaveManagementView({
                 <select aria-label="Filter available balance" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceStatus} onChange={(event) => setBalanceStatus(event.target.value)}>
                   <option value="all">All balances</option><option value="low">5 days or less</option><option value="negative">Negative</option>
                 </select>
-                <input
-                  aria-label="Reconciliation fiscal year"
-                  inputMode="numeric"
-                  maxLength={4}
-                  className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs"
-                  value={reconciliationYear}
-                  onChange={(event) =>
-                    setReconciliationYear(
-                      event.target.value.replace(/[^\d]/g, "").slice(0, 4),
-                    )
-                  }
-                />
                 <button
                   type="button"
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium disabled:opacity-60"
