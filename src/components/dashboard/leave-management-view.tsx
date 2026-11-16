@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { fluentConfirm, fluentForm } from "@/components/ui/fluent-dialog-service";
 import { Input } from "@/components/ui/input";
 import { leaveEvidenceMessage } from "@/lib/leave-evidence";
 import {
@@ -1555,6 +1556,11 @@ export function LeaveManagementView({
   const selectedBalanceGroupRef =
     React.useRef<LeaveBalanceEmployeeGroup | null>(null);
   selectedBalanceGroupRef.current = selectedBalanceGroup;
+  const [overrideDialog, setOverrideDialog] = React.useState<{
+    row: AdminRecord;
+    action: "approve" | "reject" | "return_for_correction";
+  } | null>(null);
+  const [overrideReason, setOverrideReason] = React.useState("");
   const [balanceBulkDialog, setBalanceBulkDialog] = React.useState<
     null | "generate" | "carry-forward"
   >(null);
@@ -2174,13 +2180,27 @@ export function LeaveManagementView({
       if (!token || selectedRequestIds.length === 0) return;
       let comments: string | undefined;
       if (action === "reject") {
-        const reason = window.prompt(
-          `Reason for rejecting ${selectedRequestIds.length} request(s):`,
+        const form = await fluentForm(
+          [
+            {
+              name: "reason",
+              label: "Reason for rejecting",
+              type: "textarea",
+              required: true,
+            },
+          ],
+          {
+            title: `Reject ${selectedRequestIds.length} request(s)`,
+            confirmLabel: "Reject",
+          },
         );
-        if (!reason?.trim()) return;
-        comments = reason.trim();
+        if (!form?.reason) return;
+        comments = form.reason;
       } else if (
-        !window.confirm(`Approve ${selectedRequestIds.length} request(s)?`)
+        !(await fluentConfirm(`Approve ${selectedRequestIds.length} request(s)?`, {
+          title: "Approve requests",
+          confirmLabel: "Approve",
+        }))
       ) {
         return;
       }
@@ -3856,26 +3876,44 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const periodCode = window.prompt(
-      "Payroll period code to pay this in (an open period, e.g. 2026-11)",
-      new Date().toISOString().slice(0, 7),
+    const form = await fluentForm(
+      [
+        {
+          name: "periodCode",
+          label: "Payroll period code",
+          defaultValue: new Date().toISOString().slice(0, 7),
+          required: true,
+          hint: "An open payroll period, e.g. 2026-11.",
+        },
+        {
+          name: "amount",
+          label: `Amount for ${String(row.approved_days ?? "")} day(s)`,
+          type: "number",
+          defaultValue:
+            row.payable_amount != null ? String(row.payable_amount) : "",
+          required: true,
+        },
+        {
+          name: "currency",
+          label: "Currency",
+          defaultValue:
+            readString(row, ["currency"]) !== "-"
+              ? readString(row, ["currency"])
+              : "TZS",
+          required: true,
+          hint: "3-letter code, e.g. TZS.",
+        },
+      ],
+      { title: "Send encashment to payroll", confirmLabel: "Send to payroll" },
     );
-    if (!periodCode?.trim()) return;
-    const amountText = window.prompt(
-      `Amount to pay for ${String(row.approved_days ?? "")} day(s)`,
-      row.payable_amount != null ? String(row.payable_amount) : "",
-    );
-    if (!amountText?.trim()) return;
-    const amount = Number(amountText);
+    if (!form) return;
+    const periodCode = form.periodCode;
+    const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       showErrorAlert("Enter an amount greater than zero.");
       return;
     }
-    const currency = (
-      window.prompt("Currency (3 letters)", readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : "TZS") ?? ""
-    )
-      .trim()
-      .toUpperCase();
+    const currency = form.currency.toUpperCase();
     if (currency.length !== 3) {
       showErrorAlert("Currency must be a 3-letter code such as TZS.");
       return;
@@ -3903,21 +3941,43 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
+    const requested = readString(row, ["requested_days"]);
+    const form = await fluentForm(
+      approve
+        ? [
+            {
+              name: "days",
+              label: "Days to approve",
+              type: "number",
+              defaultValue: requested !== "-" ? requested : "",
+              required: true,
+              hint: "Leave as requested to approve in full.",
+            },
+            { name: "comments", label: "Comment (optional)", type: "textarea" },
+          ]
+        : [
+            {
+              name: "comments",
+              label: "Reason for rejecting",
+              type: "textarea",
+              required: true,
+            },
+          ],
+      {
+        title: approve ? "Approve encashment" : "Reject encashment",
+        confirmLabel: approve ? "Approve" : "Reject",
+      },
+    );
+    if (!form) return;
     let approvedDays: number | undefined;
     if (approve) {
-      const text = window.prompt(
-        "Days to approve (leave as requested to approve in full)",
-        readString(row, ["requested_days"]),
-      );
-      if (!text?.trim()) return;
-      approvedDays = Number(text);
+      approvedDays = Number(form.days);
       if (!Number.isFinite(approvedDays) || approvedDays <= 0) {
         showErrorAlert("Enter a number of days greater than zero.");
         return;
       }
     }
-    const comments = window.prompt(approve ? "Comment (optional)" : "Reason for rejecting")?.trim();
-    if (!approve && !comments) return;
+    const comments = form.comments;
     try {
       await decideLeaveEncashmentRequest(token, id, {
         approve,
@@ -3937,20 +3997,41 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const reference = window.prompt("Payment reference (payslip or bank reference)")?.trim();
-    if (!reference) return;
-    const paidAt = window.prompt("Paid on (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))?.trim();
-    if (!paidAt || !/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
-      showErrorAlert("Use the YYYY-MM-DD format.");
-      return;
-    }
     const amount = Number(row.payable_amount);
     const currency = readString(row, ["currency"]);
     if (!Number.isFinite(amount) || amount <= 0 || currency === "-") {
       showErrorAlert("This encashment has no payroll amount yet.");
       return;
     }
-    if (!window.confirm(`Record payment of ${amount} ${currency} (${reference})?`)) return;
+    const form = await fluentForm(
+      [
+        {
+          name: "reference",
+          label: "Payment reference",
+          required: true,
+          placeholder: "Payslip or bank reference",
+        },
+        {
+          name: "paidAt",
+          label: "Paid on",
+          type: "date",
+          defaultValue: new Date().toISOString().slice(0, 10),
+          required: true,
+        },
+      ],
+      {
+        title: "Record encashment payment",
+        message: `Amount: ${amount} ${currency}`,
+        confirmLabel: "Record payment",
+      },
+    );
+    if (!form) return;
+    const reference = form.reference;
+    const paidAt = form.paidAt;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
+      showErrorAlert("Choose a valid payment date.");
+      return;
+    }
     try {
       await recordLeaveEncashmentPayment(token, id, {
         payment_reference: reference,
@@ -4980,12 +5061,17 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const reason = window
-      .prompt(
-        "Reason for acting in place of the manager (recorded on the request and in the audit log):",
-      )
-      ?.trim();
-    if (!reason) return;
+    setOverrideDialog({ row, action });
+    setOverrideReason("");
+  }
+
+  async function submitOverrideRequest() {
+    if (!overrideDialog) return;
+    const { action } = overrideDialog;
+    const token = readStoredToken();
+    const id = readNumber(overrideDialog.row, ["id"]);
+    if (!token || id === null) return;
+    const reason = overrideReason.trim();
     if (reason.length < 5) {
       showErrorAlert("Give a reason of at least 5 characters.");
       return;
@@ -5005,6 +5091,8 @@ export function LeaveManagementView({
             ? "Leave request rejected by HR in place of the manager."
             : "Leave request returned for correction by HR.",
       );
+      setOverrideDialog(null);
+      setOverrideReason("");
       await reloadAll(tab, true);
       setSelectedLeaveRequestRow(null);
     } catch (errorObject) {
@@ -5060,12 +5148,32 @@ export function LeaveManagementView({
     const end = String(row.end_date ?? "").slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
     const suggested = today > start && today < end ? today : start;
-    const newEnd = window.prompt(
-      `New last day of leave (YYYY-MM-DD, from ${start} to the day before ${end}). Unused days return to the employee's balance.`,
-      suggested,
+    const form = await fluentForm(
+      [
+        {
+          name: "newEnd",
+          label: "New last day of leave",
+          type: "date",
+          defaultValue: suggested,
+          required: true,
+          hint: `From ${start} to the day before ${end}.`,
+        },
+        {
+          name: "reason",
+          label: "Reason (optional)",
+          type: "textarea",
+          defaultValue: "Returned to work early",
+        },
+      ],
+      {
+        title: "End leave early",
+        message: "Unused days return to the employee's balance.",
+        confirmLabel: "End leave",
+      },
     );
-    if (!newEnd) return;
-    const reason = window.prompt("Reason (optional)", "Returned to work early");
+    if (!form?.newEnd) return;
+    const newEnd = form.newEnd;
+    const reason = form.reason;
     setSaving(true);
     try {
       await endLeaveEarly(token, id, {
@@ -6605,6 +6713,69 @@ export function LeaveManagementView({
       ) : null}
 
       {tab === "team-calendar" ? <LeaveTeamCalendar /> : null}
+
+      <Dialog
+        open={overrideDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            setOverrideDialog(null);
+            setOverrideReason("");
+          }
+        }}
+      >
+        <DialogPopup from="bottom" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {overrideDialog?.action === "approve"
+                ? "Approve in place of manager"
+                : overrideDialog?.action === "reject"
+                  ? "Reject in place of manager"
+                  : "Return for correction in place of manager"}
+            </DialogTitle>
+            <DialogDescription>
+              The reason is recorded on the request and in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1.5 text-sm font-medium text-foreground">
+            Reason
+            <textarea
+              autoFocus
+              rows={3}
+              className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-normal"
+              placeholder="e.g. Manager on leave until next week"
+              value={overrideReason}
+              disabled={saving}
+              onChange={(event) => setOverrideReason(event.target.value)}
+            />
+            <span className="block text-xs font-normal text-muted-foreground">
+              At least 5 characters.
+            </span>
+          </label>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-border px-4 py-2 text-sm"
+              disabled={saving}
+              onClick={() => {
+                setOverrideDialog(null);
+                setOverrideReason("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={`rounded-md px-4 py-2 text-sm font-medium !text-white disabled:opacity-60 ${
+                overrideDialog?.action === "reject" ? "bg-rose-600" : "bg-primary"
+              }`}
+              disabled={saving || overrideReason.trim().length < 5}
+              onClick={() => void submitOverrideRequest()}
+            >
+              {saving ? "Saving…" : "Confirm"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
 
       <Dialog
         open={requestImportOpen}
