@@ -4934,6 +4934,11 @@ export async function listLeaveTeamCalendar(
   };
 }
 
+export async function listEmployeesWithoutLeaveBalances(token: string, fiscalYear: string, page: number) {
+  const payload = await adminRequest<unknown>(`/api/leave/balances/missing?fiscal_year=${encodeURIComponent(fiscalYear)}&page=${page}&limit=20`, { token, cacheTtlMs: 0 });
+  return { rows: normalizeList(payload), ...extractUsersPagination(payload, page, 20) };
+}
+
 export async function listLeaveBalances(
   token: string,
   params: LeaveBalancesQueryParams = {},

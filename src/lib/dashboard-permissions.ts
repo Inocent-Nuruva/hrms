@@ -932,7 +932,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/me/kpi": null,
   "/dashboard/me/scorecards": null,
   "/dashboard/me/evaluations": null,
-  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read"], mode: "any" },
+  "/dashboard/kpi": { permissions: ["data_scope:company", "data_scope:department", "data_scope:branch", "data_scope:team", "kpi_assignments:read", "kpi_definitions:create"], mode: "any" },
   "/dashboard/me/profile": null,
   "/dashboard/me/organization": null,
   "/dashboard/me/promotion": null,
@@ -1116,10 +1116,6 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/leave-management/transactions": {
     // Matches GET /leave/balances{,/transactions} (leave-balances.view).
     permissions: ["leave-balances.view", "leave-balances.manage"],
-    mode: "any",
-  },
-  "/dashboard/leave-management/mainland": {
-    permissions: ["leave-balances.view", "leave_policies:read"],
     mode: "any",
   },
   "/dashboard/leave-management/balance-import": {
@@ -1929,6 +1925,16 @@ export function canAccessDashboardRoute(
 
   if (path === "/dashboard") {
     return true
+  }
+
+  // Broad legacy read permissions also support personal screens. They must not
+  // expose operational workspaces to users whose data scope is self only.
+  const normalizedLabels = normalizePermissionLabels(permissionLabels)
+  const selfOnly = normalizedLabels.includes("data_scope:self") &&
+    !["data_scope:company", "data_scope:branch", "data_scope:department", "data_scope:team"].some((scope) => normalizedLabels.includes(scope))
+  const personalAttendance = ["today", "punch-action", "attendance-history", "schedule-preview", "corrections", "work-from-home-requests"]
+  if (selfOnly && (path === "/dashboard/employees" || path.startsWith("/dashboard/employees/") || path === "/dashboard/leave-management" || path.startsWith("/dashboard/leave-management/") || path === "/dashboard/operations" || path.startsWith("/dashboard/operations/") || (path.startsWith("/dashboard/attendance/") && !personalAttendance.some((part) => path === `/dashboard/attendance/${part}` || path.startsWith(`/dashboard/attendance/${part}/`))))) {
+    return false
   }
 
   const requiredShell = resolveDashboardRouteShellRequirement(path)

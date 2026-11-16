@@ -11,16 +11,30 @@ import {
   DialogTitle,
   Field,
   Input,
+  Textarea,
 } from "@fluentui/react-components";
 
+export type FormField = {
+  name: string;
+  label: string;
+  type?: "text" | "number" | "date" | "textarea";
+  defaultValue?: string;
+  required?: boolean;
+  hint?: string;
+  placeholder?: string;
+};
+
+type DialogValue = boolean | string | Record<string, string> | null;
+
 type DialogRequest = {
-  kind: "confirm" | "prompt";
+  kind: "confirm" | "prompt" | "form";
   title: string;
   message: string;
   confirmLabel: string;
   cancelLabel: string;
   defaultValue: string;
-  resolve: (value: boolean | string | null) => void;
+  fields?: FormField[];
+  resolve: (value: DialogValue) => void;
 };
 
 type DialogOptions = {
@@ -73,10 +87,34 @@ export function fluentPrompt(
   });
 }
 
+/**
+ * Opens one popup with several fields. Resolves to trimmed values keyed by
+ * field name, or null when cancelled. Required fields block submit until filled.
+ */
+export function fluentForm(
+  fields: FormField[],
+  options: DialogOptions & { message?: string } = {},
+) {
+  return new Promise<Record<string, string> | null>((resolve) => {
+    enqueue({
+      kind: "form",
+      title: options.title ?? "Enter details",
+      message: options.message ?? "",
+      confirmLabel: options.confirmLabel ?? "Continue",
+      cancelLabel: options.cancelLabel ?? "Cancel",
+      defaultValue: "",
+      fields,
+      resolve: (value) =>
+        resolve(value && typeof value === "object" ? value : null),
+    });
+  });
+}
+
 export function FluentDialogService() {
   const [, refresh] = React.useReducer((value) => value + 1, 0);
   const request = queue[0];
   const [input, setInput] = React.useState("");
+  const [values, setValues] = React.useState<Record<string, string>>({});
 
   React.useEffect(() => {
     listeners.add(refresh);
@@ -87,15 +125,40 @@ export function FluentDialogService() {
 
   React.useEffect(() => {
     setInput(request?.defaultValue ?? "");
+    setValues(
+      Object.fromEntries(
+        (request?.fields ?? []).map((f) => [f.name, f.defaultValue ?? ""]),
+      ),
+    );
   }, [request]);
 
-  const finish = React.useCallback((value: boolean | string | null) => {
+  const finish = React.useCallback((value: DialogValue) => {
     const current = queue.shift();
     current?.resolve(value);
     publish();
   }, []);
 
   if (!request) return null;
+
+  const formMissing =
+    request.kind === "form" &&
+    (request.fields ?? []).some(
+      (f) => f.required && !(values[f.name] ?? "").trim(),
+    );
+
+  const submit = () => {
+    if (request.kind === "confirm") return finish(true);
+    if (request.kind === "prompt") return finish(input);
+    if (formMissing) return;
+    finish(
+      Object.fromEntries(
+        (request.fields ?? []).map((f) => [f.name, (values[f.name] ?? "").trim()]),
+      ),
+    );
+  };
+
+  const setField = (name: string, value: string) =>
+    setValues((prev) => ({ ...prev, [name]: value }));
 
   return (
     <Dialog
@@ -109,9 +172,11 @@ export function FluentDialogService() {
         <DialogBody>
           <DialogTitle>{request.title}</DialogTitle>
           <DialogContent className="space-y-4">
-            <p className="text-sm leading-6 text-muted-foreground">
-              {request.message}
-            </p>
+            {request.message ? (
+              <p className="text-sm leading-6 text-muted-foreground">
+                {request.message}
+              </p>
+            ) : null}
             {request.kind === "prompt" ? (
               <Field label="Response">
                 <Input
@@ -119,11 +184,41 @@ export function FluentDialogService() {
                   value={input}
                   onChange={(_event, data) => setInput(data.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") finish(input);
+                    if (event.key === "Enter") submit();
                   }}
                 />
               </Field>
             ) : null}
+            {request.kind === "form"
+              ? (request.fields ?? []).map((f, index) => (
+                  <Field
+                    key={f.name}
+                    label={f.label}
+                    required={f.required}
+                    hint={f.hint}
+                  >
+                    {f.type === "textarea" ? (
+                      <Textarea
+                        autoFocus={index === 0}
+                        placeholder={f.placeholder}
+                        value={values[f.name] ?? ""}
+                        onChange={(_event, data) => setField(f.name, data.value)}
+                      />
+                    ) : (
+                      <Input
+                        autoFocus={index === 0}
+                        type={f.type ?? "text"}
+                        placeholder={f.placeholder}
+                        value={values[f.name] ?? ""}
+                        onChange={(_event, data) => setField(f.name, data.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") submit();
+                        }}
+                      />
+                    )}
+                  </Field>
+                ))
+              : null}
           </DialogContent>
           <DialogActions>
             <Button
@@ -135,7 +230,8 @@ export function FluentDialogService() {
             <Button
               appearance="primary"
               autoFocus={request.kind === "confirm"}
-              onClick={() => finish(request.kind === "confirm" ? true : input)}
+              disabled={formMissing}
+              onClick={submit}
             >
               {request.confirmLabel}
             </Button>

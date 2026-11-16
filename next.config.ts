@@ -19,7 +19,7 @@ export function resolveBackendOrigin() {
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ["127.0.0.1", "192.168.1.165"],
+  allowedDevOrigins: ["127.0.0.1", "192.168.1.165", "192.168.2.22"],
   bundlePagesRouterDependencies: true,
   // Dashboard routes are large. Keep only the active one resident so a long
   // dev session does not pin every visited page in memory.

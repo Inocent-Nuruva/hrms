@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { fluentConfirm, fluentForm } from "@/components/ui/fluent-dialog-service";
 import { Input } from "@/components/ui/input";
 import { leaveEvidenceMessage } from "@/lib/leave-evidence";
 import {
@@ -102,6 +103,7 @@ import {
   listLeaveOpeningPreviewReviews,
   recordLeaveOpeningPreviewReview,
   listAllLeaveBalances,
+  listEmployeesWithoutLeaveBalances,
   listLeaveHolidays,
   listLeavePolicies,
   listLeaveRequests,
@@ -149,7 +151,6 @@ import { Switch } from "@/components/ui/switch";
 import { DatePickerPresets } from "@/components/ui/date-picker-presets";
 import { FluentSelect } from "@/components/ui/fluent-select";
 import {
-  TalentDoodle,
   TalentDoodleSprites,
 } from "@/components/dashboard/talent-visuals";
 import ExampleProgress from "@/components/ui/progress-1";
@@ -1451,6 +1452,16 @@ export function LeaveManagementView({
     React.useState("all");
 
   const [balances, setBalances] = React.useState<AdminRecord[]>([]);
+  const [balanceYear, setBalanceYear] = React.useState(String(new Date().getFullYear()));
+  const [balanceSearch, setBalanceSearch] = React.useState("");
+  const [balanceType, setBalanceType] = React.useState("all");
+  const [balanceStatus, setBalanceStatus] = React.useState("all");
+  const [balanceDepartment, setBalanceDepartment] = React.useState("all");
+  const [missingBalances, setMissingBalances] = React.useState<AdminRecord[]>([]);
+  const [missingPage, setMissingPage] = React.useState(1);
+  const [missingTotalPages, setMissingTotalPages] = React.useState<number | null>(null);
+  const [missingError, setMissingError] = React.useState("");
+  const [missingLoading, setMissingLoading] = React.useState(false);
   const [balanceAdjustments, setBalanceAdjustments] = React.useState<
     AdminRecord[]
   >([]);
@@ -1463,9 +1474,8 @@ export function LeaveManagementView({
   >([]);
   const [reconciliationLoading, setReconciliationLoading] =
     React.useState(false);
-  const [reconciliationYear, setReconciliationYear] = React.useState(
-    String(new Date().getFullYear()),
-  );
+  // Reconcile uses the same year as the balance list filter.
+  const reconciliationYear = balanceYear;
   const [leaveReportKind, setLeaveReportKind] = React.useState<
     "balances" | "taken" | "pending" | "encashments"
   >("taken");
@@ -1536,12 +1546,21 @@ export function LeaveManagementView({
     React.useState<LeaveBalanceEmployeeGroup | null>(null);
   const [employeeBalanceDetailsOpen, setEmployeeBalanceDetailsOpen] =
     React.useState(false);
+  const [balanceHistory, setBalanceHistory] = React.useState<AdminRecord[]>([]);
+  const [balanceHistoryPage, setBalanceHistoryPage] = React.useState(1);
+  const [balanceHistoryError, setBalanceHistoryError] = React.useState("");
+  const [balanceHistoryLoading, setBalanceHistoryLoading] = React.useState(false);
   const [returnToEmployeeBalances, setReturnToEmployeeBalances] =
     React.useState(false);
   const returnToEmployeeBalancesRef = React.useRef(false);
   const selectedBalanceGroupRef =
     React.useRef<LeaveBalanceEmployeeGroup | null>(null);
   selectedBalanceGroupRef.current = selectedBalanceGroup;
+  const [overrideDialog, setOverrideDialog] = React.useState<{
+    row: AdminRecord;
+    action: "approve" | "reject" | "return_for_correction";
+  } | null>(null);
+  const [overrideReason, setOverrideReason] = React.useState("");
   const [balanceBulkDialog, setBalanceBulkDialog] = React.useState<
     null | "generate" | "carry-forward"
   >(null);
@@ -2161,13 +2180,27 @@ export function LeaveManagementView({
       if (!token || selectedRequestIds.length === 0) return;
       let comments: string | undefined;
       if (action === "reject") {
-        const reason = window.prompt(
-          `Reason for rejecting ${selectedRequestIds.length} request(s):`,
+        const form = await fluentForm(
+          [
+            {
+              name: "reason",
+              label: "Reason for rejecting",
+              type: "textarea",
+              required: true,
+            },
+          ],
+          {
+            title: `Reject ${selectedRequestIds.length} request(s)`,
+            confirmLabel: "Reject",
+          },
         );
-        if (!reason?.trim()) return;
-        comments = reason.trim();
+        if (!form?.reason) return;
+        comments = form.reason;
       } else if (
-        !window.confirm(`Approve ${selectedRequestIds.length} request(s)?`)
+        !(await fluentConfirm(`Approve ${selectedRequestIds.length} request(s)?`, {
+          title: "Approve requests",
+          confirmLabel: "Approve",
+        }))
       ) {
         return;
       }
@@ -2625,11 +2658,25 @@ export function LeaveManagementView({
 
   const groupedBalances = React.useMemo(
     () =>
-      groupLeaveBalancesByEmployee(balances, (row) =>
+      groupLeaveBalancesByEmployee(balances.filter((row) => readBalanceFiscalYear(row) === balanceYear && (balanceDepartment === "all" || String(readNumber(asRecord(asRecord(row.employee)?.department) ?? {}, ["id"])) === balanceDepartment) && (balanceType === "all" || String(readNumber(row, ["leave_type_id"])) === balanceType) && (balanceStatus === "all" || (balanceStatus === "negative" ? readBalanceDays(row, ["available_days", "remaining_days"]) < 0 : readBalanceDays(row, ["available_days", "remaining_days"]) <= 5))), (row) =>
         employeeLabelFromRow(row),
-      ),
-    [balances, employeeLabelFromRow],
+      ).filter((group) => `${group.employeeName} ${group.employeeId ?? ""} ${readString(asRecord(group.rows[0]?.employee) ?? {}, ["employee_number", "employee_no"])}`.toLowerCase().includes(balanceSearch.trim().toLowerCase())),
+    [balances, employeeLabelFromRow, balanceYear, balanceSearch, balanceType, balanceStatus, balanceDepartment],
   );
+
+  const allEmployeeBalancesForYear = React.useMemo(
+    () => groupLeaveBalancesByEmployee(
+      balances.filter((row) => readBalanceFiscalYear(row) === balanceYear),
+      employeeLabelFromRow,
+    ),
+    [balances, balanceYear, employeeLabelFromRow],
+  );
+
+  const balanceDepartments = React.useMemo(() => {
+    const options = new Map<string, string>();
+    balances.forEach((row) => { const department = asRecord(asRecord(row.employee)?.department); if (department && department.id != null) options.set(String(department.id), readString(department, ["name"])); });
+    return Array.from(options, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [balances]);
 
   const balanceGroupColumns = React.useMemo(
     () => [
@@ -2640,48 +2687,51 @@ export function LeaveManagementView({
         sortValue: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
         render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
       },
-      {
-        key: "types",
-        label: "Leave Types",
-        defaultWidth: 85,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.typeCount,
-        render: (group: LeaveBalanceEmployeeGroup) => String(group.typeCount),
-      },
-      {
-        key: "fiscal_year",
-        label: "FY",
-        defaultWidth: 70,
-        sortValue: (group: LeaveBalanceEmployeeGroup) =>
-          group.fiscalYears.join(", "),
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          group.fiscalYears.join(", ") || "-",
-      },
-      {
-        key: "allocated_days",
-        label: "Alloc",
-        defaultWidth: 70,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.allocatedDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.allocatedDays),
-      },
-      {
-        key: "used_days",
-        label: "Used",
-        defaultWidth: 60,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.usedDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.usedDays),
-      },
-      {
-        key: "remaining",
-        label: "Rem",
-        defaultWidth: 60,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.remainingDays,
-        render: (group: LeaveBalanceEmployeeGroup) =>
-          formatBalanceDays(group.remainingDays),
-      },
+      { key: "department", label: "Department", render: (group: LeaveBalanceEmployeeGroup) => readString(asRecord(asRecord(group.rows[0]?.employee)?.department) ?? {}, ["name"]) },
+      ...(["annual", "sick"] as const).map((kind) => {
+        // Matches the leave type by name, e.g. "Annual Leave" / "Sick Leave".
+        const findRow = (group: LeaveBalanceEmployeeGroup) =>
+          group.rows.find((row) =>
+            leaveTypeLabelFromRow(row).toLowerCase().includes(kind),
+          );
+        const available = (row: Record<string, unknown>) =>
+          readBalanceDays(row, ["available_days", "remaining_days"]);
+        return {
+          key: `${kind}_left`,
+          label: kind === "annual" ? "Annual leave left" : "Sick leave left",
+          defaultWidth: 110,
+          sortValue: (group: LeaveBalanceEmployeeGroup) => {
+            const row = findRow(group);
+            return row ? available(row) : -Infinity;
+          },
+          render: (group: LeaveBalanceEmployeeGroup) => {
+            const row = findRow(group);
+            if (!row) return "—";
+            const allocated = readBalanceDays(row, [
+              "allocated_days",
+              "allocated",
+              "allocatedDays",
+            ]);
+            const left = available(row);
+            return (
+              <span
+                className={cn(
+                  "tabular-nums",
+                  left < 0 && "font-semibold text-destructive",
+                )}
+              >
+                {formatBalanceDays(left)}
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {formatBalanceDays(allocated)}
+                </span>
+              </span>
+            );
+          },
+        };
+      }),
     ],
-    [],
+    [leaveTypeLabelFromRow],
   );
 
   React.useEffect(() => {
@@ -2690,10 +2740,10 @@ export function LeaveManagementView({
         return current;
       }
       return (
-        groupedBalances.find((group) => group.key === current.key) ?? current
+        allEmployeeBalancesForYear.find((group) => group.key === current.key) ?? null
       );
     });
-  }, [groupedBalances]);
+  }, [allEmployeeBalancesForYear]);
 
   const selectedBalanceGroupRows = React.useMemo(
     () =>
@@ -2704,6 +2754,30 @@ export function LeaveManagementView({
         : [],
     [selectedBalanceGroup, leaveTypeLabelFromRow],
   );
+
+  React.useEffect(() => {
+    const employeeId = selectedBalanceGroup?.employeeId;
+    const token = readStoredToken();
+    if (!employeeBalanceDetailsOpen || !employeeId || !token) return;
+    let cancelled = false;
+    setBalanceHistoryLoading(true); setBalanceHistoryError(""); setBalanceHistory([]);
+    listLeaveBalanceTransactions(token, { employee_id: employeeId, fiscal_year: balanceYear, page: balanceHistoryPage, limit: 20 })
+      .then((rows) => { if (!cancelled) setBalanceHistory(rows); })
+      .catch((error: unknown) => { if (!cancelled) setBalanceHistoryError(error instanceof Error ? error.message : "Could not load transaction history."); })
+      .finally(() => { if (!cancelled) setBalanceHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [employeeBalanceDetailsOpen, selectedBalanceGroup?.employeeId, balanceYear, balanceHistoryPage]);
+
+  React.useEffect(() => {
+    if (tab !== "balances" || !/^\d{4}$/.test(balanceYear)) return;
+    const token = readStoredToken(); if (!token) return;
+    let cancelled = false; setMissingLoading(true); setMissingError("");
+    listEmployeesWithoutLeaveBalances(token, balanceYear, missingPage)
+      .then((result) => { if (!cancelled) { setMissingBalances(result.rows); setMissingTotalPages(result.totalPages); } })
+      .catch((error: unknown) => { if (!cancelled) { setMissingBalances([]); setMissingError(error instanceof Error ? error.message : "Could not load employees without balances."); } })
+      .finally(() => { if (!cancelled) setMissingLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab, balanceYear, missingPage, balances]);
 
   const resetBalanceForm = React.useCallback(() => {
     setBalanceForm(emptyBalanceForm());
@@ -3505,7 +3579,8 @@ export function LeaveManagementView({
   }
 
   function openEmployeeBalanceDetails(group: LeaveBalanceEmployeeGroup) {
-    setSelectedBalanceGroup(group);
+    setSelectedBalanceGroup(allEmployeeBalancesForYear.find((item) => item.key === group.key) ?? group);
+    setBalanceHistoryPage(1);
     setEmployeeBalanceDetailsOpen(true);
   }
 
@@ -3801,26 +3876,44 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const periodCode = window.prompt(
-      "Payroll period code to pay this in (an open period, e.g. 2026-11)",
-      new Date().toISOString().slice(0, 7),
+    const form = await fluentForm(
+      [
+        {
+          name: "periodCode",
+          label: "Payroll period code",
+          defaultValue: new Date().toISOString().slice(0, 7),
+          required: true,
+          hint: "An open payroll period, e.g. 2026-11.",
+        },
+        {
+          name: "amount",
+          label: `Amount for ${String(row.approved_days ?? "")} day(s)`,
+          type: "number",
+          defaultValue:
+            row.payable_amount != null ? String(row.payable_amount) : "",
+          required: true,
+        },
+        {
+          name: "currency",
+          label: "Currency",
+          defaultValue:
+            readString(row, ["currency"]) !== "-"
+              ? readString(row, ["currency"])
+              : "TZS",
+          required: true,
+          hint: "3-letter code, e.g. TZS.",
+        },
+      ],
+      { title: "Send encashment to payroll", confirmLabel: "Send to payroll" },
     );
-    if (!periodCode?.trim()) return;
-    const amountText = window.prompt(
-      `Amount to pay for ${String(row.approved_days ?? "")} day(s)`,
-      row.payable_amount != null ? String(row.payable_amount) : "",
-    );
-    if (!amountText?.trim()) return;
-    const amount = Number(amountText);
+    if (!form) return;
+    const periodCode = form.periodCode;
+    const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       showErrorAlert("Enter an amount greater than zero.");
       return;
     }
-    const currency = (
-      window.prompt("Currency (3 letters)", readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : "TZS") ?? ""
-    )
-      .trim()
-      .toUpperCase();
+    const currency = form.currency.toUpperCase();
     if (currency.length !== 3) {
       showErrorAlert("Currency must be a 3-letter code such as TZS.");
       return;
@@ -3848,21 +3941,43 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
+    const requested = readString(row, ["requested_days"]);
+    const form = await fluentForm(
+      approve
+        ? [
+            {
+              name: "days",
+              label: "Days to approve",
+              type: "number",
+              defaultValue: requested !== "-" ? requested : "",
+              required: true,
+              hint: "Leave as requested to approve in full.",
+            },
+            { name: "comments", label: "Comment (optional)", type: "textarea" },
+          ]
+        : [
+            {
+              name: "comments",
+              label: "Reason for rejecting",
+              type: "textarea",
+              required: true,
+            },
+          ],
+      {
+        title: approve ? "Approve encashment" : "Reject encashment",
+        confirmLabel: approve ? "Approve" : "Reject",
+      },
+    );
+    if (!form) return;
     let approvedDays: number | undefined;
     if (approve) {
-      const text = window.prompt(
-        "Days to approve (leave as requested to approve in full)",
-        readString(row, ["requested_days"]),
-      );
-      if (!text?.trim()) return;
-      approvedDays = Number(text);
+      approvedDays = Number(form.days);
       if (!Number.isFinite(approvedDays) || approvedDays <= 0) {
         showErrorAlert("Enter a number of days greater than zero.");
         return;
       }
     }
-    const comments = window.prompt(approve ? "Comment (optional)" : "Reason for rejecting")?.trim();
-    if (!approve && !comments) return;
+    const comments = form.comments;
     try {
       await decideLeaveEncashmentRequest(token, id, {
         approve,
@@ -3882,20 +3997,41 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const reference = window.prompt("Payment reference (payslip or bank reference)")?.trim();
-    if (!reference) return;
-    const paidAt = window.prompt("Paid on (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))?.trim();
-    if (!paidAt || !/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
-      showErrorAlert("Use the YYYY-MM-DD format.");
-      return;
-    }
     const amount = Number(row.payable_amount);
     const currency = readString(row, ["currency"]);
     if (!Number.isFinite(amount) || amount <= 0 || currency === "-") {
       showErrorAlert("This encashment has no payroll amount yet.");
       return;
     }
-    if (!window.confirm(`Record payment of ${amount} ${currency} (${reference})?`)) return;
+    const form = await fluentForm(
+      [
+        {
+          name: "reference",
+          label: "Payment reference",
+          required: true,
+          placeholder: "Payslip or bank reference",
+        },
+        {
+          name: "paidAt",
+          label: "Paid on",
+          type: "date",
+          defaultValue: new Date().toISOString().slice(0, 10),
+          required: true,
+        },
+      ],
+      {
+        title: "Record encashment payment",
+        message: `Amount: ${amount} ${currency}`,
+        confirmLabel: "Record payment",
+      },
+    );
+    if (!form) return;
+    const reference = form.reference;
+    const paidAt = form.paidAt;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) {
+      showErrorAlert("Choose a valid payment date.");
+      return;
+    }
     try {
       await recordLeaveEncashmentPayment(token, id, {
         payment_reference: reference,
@@ -4925,12 +5061,17 @@ export function LeaveManagementView({
     const token = readStoredToken();
     const id = readNumber(row, ["id"]);
     if (!token || id === null) return;
-    const reason = window
-      .prompt(
-        "Reason for acting in place of the manager (recorded on the request and in the audit log):",
-      )
-      ?.trim();
-    if (!reason) return;
+    setOverrideDialog({ row, action });
+    setOverrideReason("");
+  }
+
+  async function submitOverrideRequest() {
+    if (!overrideDialog) return;
+    const { action } = overrideDialog;
+    const token = readStoredToken();
+    const id = readNumber(overrideDialog.row, ["id"]);
+    if (!token || id === null) return;
+    const reason = overrideReason.trim();
     if (reason.length < 5) {
       showErrorAlert("Give a reason of at least 5 characters.");
       return;
@@ -4950,6 +5091,8 @@ export function LeaveManagementView({
             ? "Leave request rejected by HR in place of the manager."
             : "Leave request returned for correction by HR.",
       );
+      setOverrideDialog(null);
+      setOverrideReason("");
       await reloadAll(tab, true);
       setSelectedLeaveRequestRow(null);
     } catch (errorObject) {
@@ -5005,12 +5148,32 @@ export function LeaveManagementView({
     const end = String(row.end_date ?? "").slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
     const suggested = today > start && today < end ? today : start;
-    const newEnd = window.prompt(
-      `New last day of leave (YYYY-MM-DD, from ${start} to the day before ${end}). Unused days return to the employee's balance.`,
-      suggested,
+    const form = await fluentForm(
+      [
+        {
+          name: "newEnd",
+          label: "New last day of leave",
+          type: "date",
+          defaultValue: suggested,
+          required: true,
+          hint: `From ${start} to the day before ${end}.`,
+        },
+        {
+          name: "reason",
+          label: "Reason (optional)",
+          type: "textarea",
+          defaultValue: "Returned to work early",
+        },
+      ],
+      {
+        title: "End leave early",
+        message: "Unused days return to the employee's balance.",
+        confirmLabel: "End leave",
+      },
     );
-    if (!newEnd) return;
-    const reason = window.prompt("Reason (optional)", "Returned to work early");
+    if (!form?.newEnd) return;
+    const newEnd = form.newEnd;
+    const reason = form.reason;
     setSaving(true);
     try {
       await endLeaveEarly(token, id, {
@@ -6552,6 +6715,69 @@ export function LeaveManagementView({
       {tab === "team-calendar" ? <LeaveTeamCalendar /> : null}
 
       <Dialog
+        open={overrideDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            setOverrideDialog(null);
+            setOverrideReason("");
+          }
+        }}
+      >
+        <DialogPopup from="bottom" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {overrideDialog?.action === "approve"
+                ? "Approve in place of manager"
+                : overrideDialog?.action === "reject"
+                  ? "Reject in place of manager"
+                  : "Return for correction in place of manager"}
+            </DialogTitle>
+            <DialogDescription>
+              The reason is recorded on the request and in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1.5 text-sm font-medium text-foreground">
+            Reason
+            <textarea
+              autoFocus
+              rows={3}
+              className="block w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-normal"
+              placeholder="e.g. Manager on leave until next week"
+              value={overrideReason}
+              disabled={saving}
+              onChange={(event) => setOverrideReason(event.target.value)}
+            />
+            <span className="block text-xs font-normal text-muted-foreground">
+              At least 5 characters.
+            </span>
+          </label>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded-md border border-border px-4 py-2 text-sm"
+              disabled={saving}
+              onClick={() => {
+                setOverrideDialog(null);
+                setOverrideReason("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={`rounded-md px-4 py-2 text-sm font-medium !text-white disabled:opacity-60 ${
+                overrideDialog?.action === "reject" ? "bg-rose-600" : "bg-primary"
+              }`}
+              disabled={saving || overrideReason.trim().length < 5}
+              onClick={() => void submitOverrideRequest()}
+            >
+              {saving ? "Saving…" : "Confirm"}
+            </button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
         open={requestImportOpen}
         onOpenChange={(open) => {
           if (!requestImportBusy) setRequestImportOpen(open);
@@ -7630,6 +7856,7 @@ export function LeaveManagementView({
         <DialogPopup
           from="bottom"
           className="flex max-h-[min(92dvh,40rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:max-w-xl sm:p-4"
+          bodyClassName="!max-h-[min(92dvh,40rem)] overscroll-contain"
         >
           <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
             <DialogTitle className="text-base leading-snug sm:text-lg">
@@ -7647,51 +7874,30 @@ export function LeaveManagementView({
           </DialogHeader>
 
           {selectedBalanceGroup ? (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
+            <div className="shrink-0 space-y-3 py-2">
               <TalentDoodleSprites />
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  {
-                    label: "Allocated",
-                    value: selectedBalanceGroup.allocatedDays,
-                  },
-                  { label: "Used", value: selectedBalanceGroup.usedDays },
-                  {
-                    label: "Remaining",
-                    value: selectedBalanceGroup.remainingDays,
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="relative overflow-hidden rounded-2xl p-3 text-white"
-                    style={{ backgroundColor: "var(--primary)" }}
-                  >
-                    <TalentDoodle />
-                    <div className="relative z-10">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">
-                        {item.label}
-                      </p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums leading-none">
-                        {formatBalanceDays(item.value)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Available by leave type
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Available days exclude pending and approved future leave.
+                  Tap a type to see how its balance is made up.
+                </p>
               </div>
-
               <div className="overflow-hidden rounded-md border border-slate-200">
                 <div
                   className={cn(
                     "grid gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500",
                     canAdjustBalances
-                      ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
-                      : "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem]",
+                      ? "grid-cols-[minmax(0,1fr)_4.5rem_3.5rem_4.5rem_2rem]"
+                      : "grid-cols-[minmax(0,1fr)_4.5rem_3.5rem_4.5rem]",
                   )}
                 >
                   <span>Type</span>
-                  <span className="text-right">Alloc</span>
+                  <span className="text-right">Allocated</span>
                   <span className="text-right">Used</span>
-                  <span className="text-right">Rem</span>
+                  <span className="text-right">Available</span>
                   {canAdjustBalances ? (
                     <span className="sr-only">Actions</span>
                   ) : null}
@@ -7706,7 +7912,7 @@ export function LeaveManagementView({
                     <div
                       key={rowKey}
                       className={cn(
-                        "grid items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
+                        "grid items-start gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
                         index % 2 === 1 ? "bg-primary/[0.08]" : "bg-background",
                         canAdjustBalances
                           ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
@@ -7714,12 +7920,39 @@ export function LeaveManagementView({
                       )}
                     >
                       <div className="min-w-0">
-                        <p
-                          className="truncate font-medium text-slate-900"
-                          title={typeName}
-                        >
-                          {typeName}
-                        </p>
+                        <details className="group">
+                          <summary
+                            className="cursor-pointer list-none truncate font-medium text-slate-900 underline-offset-2 hover:underline"
+                            title={typeName}
+                          >
+                            {typeName}
+                          </summary>
+                          <dl className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                            {(
+                              [
+                                ["Opening", "opening_balance_days"],
+                                ["Carried forward", "carried_forward_days"],
+                                ["Entitlement", "entitlement_days"],
+                                ["Accrued", "accrued_days"],
+                                ["Adjustment", "adjusted_days"],
+                                ["Used", "used_days"],
+                                ["Pending", "pending_days"],
+                                ["Approved future", "approved_future_days"],
+                                ["Expired", "expired_days"],
+                                ["Attendance deduction", "attendance_deduction_days"],
+                              ] as const
+                            )
+                              .filter(([, key]) => readBalanceDays(row, [key]) !== 0)
+                              .map(([label, key]) => (
+                                <div key={key} className="flex justify-between gap-2">
+                                  <dt>{label}</dt>
+                                  <dd className="tabular-nums">
+                                    {formatBalanceDays(readBalanceDays(row, [key]))}
+                                  </dd>
+                                </div>
+                              ))}
+                          </dl>
+                        </details>
                         {selectedBalanceGroup.fiscalYears.length > 1 ? (
                           <p className="text-[10px] text-muted-foreground">
                             FY {readBalanceFiscalYear(row) || "-"}
@@ -7744,9 +7977,10 @@ export function LeaveManagementView({
                           ]),
                         )}
                       </span>
-                      <span className="text-right tabular-nums font-medium text-slate-900">
+                      <span className="self-start text-right tabular-nums font-medium text-slate-900">
                         {formatBalanceDays(
                           readBalanceDays(row, [
+                            "available_days",
                             "remaining_days",
                             "remaining",
                             "remainingDays",
@@ -7770,6 +8004,53 @@ export function LeaveManagementView({
             </div>
           ) : null}
 
+          {selectedBalanceGroup && employeeBalanceDetailsOpen ? (
+            <section className="shrink-0 border-t border-border pt-2 text-xs">
+              <div className="flex items-center justify-between"><h3 className="font-semibold">Transaction history - FY {balanceYear}</h3><div className="flex gap-2"><button type="button" disabled={balanceHistoryPage === 1 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page - 1)}>Previous</button><span>Page {balanceHistoryPage}</span><button type="button" disabled={balanceHistory.length < 20 || balanceHistoryLoading} onClick={() => setBalanceHistoryPage((page) => page + 1)}>Next</button></div></div>
+              <div className="mt-2 overflow-x-auto rounded-md border border-slate-200">
+                {balanceHistoryLoading ? (
+                  <p className="p-2">Loading history...</p>
+                ) : balanceHistoryError ? (
+                  <p role="alert" className="p-2">{balanceHistoryError}</p>
+                ) : balanceHistory.length === 0 ? (
+                  <p className="p-2">No transactions found.</p>
+                ) : (
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-2 py-1">Date</th>
+                        <th className="px-2 py-1">Type</th>
+                        <th className="px-2 py-1">Leave</th>
+                        <th className="px-2 py-1 text-right">Days</th>
+                        <th className="px-2 py-1">By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {balanceHistory.map((row, index) => (
+                        <tr
+                          key={String(row.id ?? index)}
+                          className="border-t border-slate-100"
+                          title={`Reason: ${readString(row, ["reason"])}`}
+                        >
+                          <td className="whitespace-nowrap px-2 py-1">
+                            {readString(row, ["effective_date", "created_at"]).slice(0, 10)}
+                          </td>
+                          <td className="px-2 py-1">{readString(row, ["transaction_type"])}</td>
+                          <td className="px-2 py-1">{leaveTypeLabelFromRow(row)}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">
+                            {readString(row, ["amount_days"])}
+                          </td>
+                          <td className="px-2 py-1">
+                            {personName(asRecord(row.created_by) ?? {}, "System")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          ) : null}
           <DialogFooter className="mt-2 shrink-0 border-t border-slate-100 pt-2 sm:justify-end">
             <button
               type="button"
@@ -8307,18 +8588,16 @@ export function LeaveManagementView({
             title="Leave Balances"
             toolbarActions={
               <>
-                <input
-                  aria-label="Reconciliation fiscal year"
-                  inputMode="numeric"
-                  maxLength={4}
-                  className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs"
-                  value={reconciliationYear}
-                  onChange={(event) =>
-                    setReconciliationYear(
-                      event.target.value.replace(/[^\d]/g, "").slice(0, 4),
-                    )
-                  }
-                />
+                <input aria-label="Balance fiscal year" inputMode="numeric" maxLength={4} className="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs" value={balanceYear} onChange={(event) => { setBalanceYear(event.target.value.replace(/[^\d]/g, "").slice(0, 4)); setMissingPage(1); }} />
+                <input aria-label="Search employee balances" placeholder="Employee name or ID" className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs" value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} />
+                <select aria-label="Filter department" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceDepartment} onChange={(event) => setBalanceDepartment(event.target.value)}><option value="all">All departments</option>{balanceDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select>
+                <select aria-label="Filter leave type" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceType} onChange={(event) => setBalanceType(event.target.value)}>
+                  <option value="all">All leave types</option>
+                  {types.map((type) => <option key={String(type.id)} value={String(type.id)}>{readString(type, ["name", "code"])}</option>)}
+                </select>
+                <select aria-label="Filter available balance" className="h-8 rounded-md border border-border bg-background px-2 text-xs" value={balanceStatus} onChange={(event) => setBalanceStatus(event.target.value)}>
+                  <option value="all">All balances</option><option value="low">5 days or less</option><option value="negative">Negative</option>
+                </select>
                 <button
                   type="button"
                   className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium disabled:opacity-60"
@@ -8386,6 +8665,10 @@ export function LeaveManagementView({
             loading={loading}
             storageKey="leave-balances-by-employee"
           />
+          <section className="rounded-lg border border-border bg-card p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Employees with missing balance records</h3><p className="text-xs text-muted-foreground">FY {balanceYear}. Shows missing records for active leave types, matching balance generation. Review policy eligibility before using a balance.</p></div><div className="flex gap-2 text-xs"><button type="button" disabled={missingPage <= 1 || missingLoading} onClick={() => setMissingPage((page) => page - 1)}>Previous</button><span>Page {missingPage}</span><button type="button" disabled={missingLoading || (missingTotalPages !== null ? missingPage >= missingTotalPages : missingBalances.length < 20)} onClick={() => setMissingPage((page) => page + 1)}>Next</button></div></div>
+            {!/^\d{4}$/.test(balanceYear) ? <p className="mt-2">Enter a four-digit fiscal year.</p> : missingLoading ? <p className="mt-2">Loading...</p> : missingError ? <p role="alert" className="mt-2">{missingError}</p> : missingBalances.length ? <ul className="mt-2 space-y-1">{missingBalances.map((employee) => <li key={String(employee.id)}>{personName(employee, "Employee")} - {readString(employee, ["employee_number"])} - {readString(asRecord(employee.department) ?? {}, ["name"])} - Missing: {Array.isArray(employee.missing_leave_types) ? employee.missing_leave_types.map((type: unknown) => readString(asRecord(type) ?? {}, ["name", "code"])).join(", ") : "-"}</li>)}</ul> : <p className="mt-2">{ /^\d{4}$/.test(balanceYear) ? "No missing records for active employees and leave types." : "Enter a four-digit fiscal year." }</p>}
+          </section>
           <LeaveHrOperationsPanel
             token={readStoredToken()}
             leaveTypeLabel={leaveTypeLabel}

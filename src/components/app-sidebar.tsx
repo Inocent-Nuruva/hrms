@@ -4,6 +4,7 @@ import * as React from "react"
 import { usePathname } from "next/navigation"
 
 import { NavMain } from "@/components/nav-main"
+import { HeaderGlobalSearch, type HeaderSearchItem } from "@/components/header-global-search"
 import {
   Sidebar,
   SidebarContent,
@@ -308,7 +309,6 @@ const adminData: SidebarData = {
         "/dashboard/leave-management/requests",
         "/dashboard/leave-management/balances",
         "/dashboard/leave-management/balance-import",
-        "/dashboard/leave-management/mainland",
         "/dashboard/leave-management/transactions",
         "/dashboard/leave-management/business-trips",
         "/dashboard/leave-management/holidays",
@@ -583,7 +583,6 @@ const adminSearchIndex = [
   { title: "Leave Management / Leave Requests", url: "/dashboard/leave-management/requests", section: "Leave", keywords: ["leave", "request", "approval"] },
   { title: "Leave Management / Leave Balances", url: "/dashboard/leave-management/balances", section: "Leave", keywords: ["leave", "balance", "quota"] },
   { title: "Leave Management / Balance Import", url: "/dashboard/leave-management/balance-import", section: "Leave", keywords: ["leave", "balance", "bulk", "import", "excel", "adjustment"] },
-  { title: "Leave Management / Mainland Tanzania", url: "/dashboard/leave-management/mainland", section: "Leave", keywords: ["leave", "mainland", "tanzania", "cutover", "carry-over", "anniversary", "liability", "policy revision"] },
   { title: "Leave Management / Business Trips", url: "/dashboard/leave-management/business-trips", section: "Leave", keywords: ["leave", "business trip", "travel", "client visit"] },
   { title: "Leave Management / Holidays", url: "/dashboard/leave-management/holidays", section: "Leave", keywords: ["leave", "holiday", "calendar"] },
   { title: "Leave Management / Policies", url: "/dashboard/leave-management/policies", section: "Leave", keywords: ["leave", "policy", "quota"] },
@@ -684,6 +683,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   identityReady?: boolean
   activeResource?: AdminResourceKey
   onSelectResource?: (resource: AdminResourceKey) => void
+  searchItems?: HeaderSearchItem[]
 }
 
 function firstAccessibleNavUrl(
@@ -817,6 +817,7 @@ export function AppSidebar({
   identityReady = false,
   activeResource,
   onSelectResource,
+  searchItems = [],
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname()
@@ -912,6 +913,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="offcanvas" className="app-sidebar" {...props}>
       <SidebarContent className="gap-2 px-0 pb-2 pt-10">
+        {permissionsResolved && <div className="mx-3 mb-1 lg:hidden"><HeaderGlobalSearch items={searchItems} placement="sidebar" shortcutBreakpoint="small" /></div>}
         {permissionsResolved ? (
           <NavMain
             items={navData.navMain}

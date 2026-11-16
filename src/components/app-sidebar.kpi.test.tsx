@@ -9,7 +9,10 @@ type Item = { title: string; url?: string; items?: Item[] }
 const capture = vi.hoisted(() => {
   return { items: [] as Item[] }
 })
-vi.mock("next/navigation", () => ({ usePathname: () => "/dashboard/kpi/scorecards" }))
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard/kpi/scorecards",
+  useRouter: () => ({ push: vi.fn() }),
+}))
 vi.mock("@/components/nav-main", () => ({
   NavMain: ({ items }: { items: Item[] }) => { capture.items = items; return <div data-testid="nav-main" /> },
 }))
@@ -47,10 +50,10 @@ function kpiLinks(items: Item[]): string[] {
   return items.flatMap((item) => item.items ? kpiLinks(item.items) : item.url?.startsWith("/dashboard/kpi") ? [item.url] : [])
 }
 
-async function renderFor(role: string, permission: string, accessMode: "admin" | "employee" = "admin") {
+async function renderFor(role: string, permission: string | string[], accessMode: "admin" | "employee" = "admin") {
   await act(async () => {
     root = createRoot(container)
-    root.render(<AppSidebar accessMode={accessMode} scope="company" roleNames={[role]} permissionLabels={[permission]} identityReady />)
+    root.render(<AppSidebar accessMode={accessMode} scope="company" roleNames={[role]} permissionLabels={Array.isArray(permission) ? permission : [permission]} identityReady />)
   })
   return kpiLinks(capture.items)
 }
@@ -90,5 +93,20 @@ describe("existing sidebar KPI integration", () => {
     const employee = await renderFor("EMPLOYEE", "data_scope:own", "employee")
     expect(employee).toEqual([])
     expect(capture.items.find((item) => item.title === "KPI & Performance")?.items?.map((item) => item.title)).toEqual(["My KPI & Performance"])
+  })
+})
+
+
+describe("employee-only sidebar", () => {
+  it("keeps personal navigation and hides employee, leave and attendance administration", async () => {
+    await renderFor("EMPLOYEE", ["data_scope:self", "employees:read", "leave_requests:read", "leave_balances:read", "leave_types:read", "attendance_summaries:read", "attendance_policies:read", "offboarding_requests:read"], "employee")
+    function paths(items: Item[]): string[] { return items.flatMap((item) => [item.url ?? "", ...paths(item.items ?? [])]) }
+    const links = paths(capture.items)
+    expect(links).toContain("/dashboard/me/profile")
+    expect(links.some((url) => url.startsWith("/dashboard/employees/"))).toBe(false)
+    expect(links.some((url) => url.startsWith("/dashboard/leave-management/"))).toBe(false)
+    expect(links).not.toContain("/dashboard/attendance/daily-summaries")
+    expect(links).not.toContain("/dashboard/attendance/policies")
+    expect(links.some((url) => url.startsWith("/dashboard/me/team/"))).toBe(false)
   })
 })

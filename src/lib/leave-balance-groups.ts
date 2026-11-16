@@ -156,58 +156,6 @@ function compareText(left: string, right: string): number {
   return left.localeCompare(right, undefined, { sensitivity: "base", numeric: true })
 }
 
-function mergeBalanceGroups(
-  left: LeaveBalanceEmployeeGroup,
-  right: LeaveBalanceEmployeeGroup,
-  key: string,
-): LeaveBalanceEmployeeGroup {
-  const fiscalYears = new Set([...left.fiscalYears, ...right.fiscalYears])
-  return {
-    key,
-    employeeId: left.employeeId ?? right.employeeId,
-    employeeName: left.employeeName || right.employeeName,
-    fiscalYears: Array.from(fiscalYears).sort(compareText),
-    typeCount: countLeaveTypes([...left.rows, ...right.rows]),
-    allocatedDays: left.allocatedDays + right.allocatedDays,
-    usedDays: left.usedDays + right.usedDays,
-    remainingDays: left.remainingDays + right.remainingDays,
-    rows: [...left.rows, ...right.rows],
-  }
-}
-
-function collapseGroupsWithSameEmployeeName(
-  groups: LeaveBalanceEmployeeGroup[],
-): LeaveBalanceEmployeeGroup[] {
-  if (groups.length <= 1 || !groups.every((group) => group.typeCount === 1)) {
-    return groups
-  }
-
-  const byName = new Map<string, LeaveBalanceEmployeeGroup>()
-  const leftovers: LeaveBalanceEmployeeGroup[] = []
-
-  groups.forEach((group) => {
-    const nameKey = group.employeeName.trim().toLowerCase()
-    if (!nameKey || nameKey === "unknown employee") {
-      leftovers.push(group)
-      return
-    }
-    const existing = byName.get(nameKey)
-    byName.set(
-      nameKey,
-      existing ? mergeBalanceGroups(existing, group, `name:${nameKey}`) : { ...group, key: `name:${nameKey}` },
-    )
-  })
-
-  const merged = Array.from(byName.values())
-  if (merged.length === groups.length) {
-    return groups
-  }
-
-  return [...merged, ...leftovers].sort((left, right) =>
-    compareText(left.employeeName, right.employeeName),
-  )
-}
-
 export function groupLeaveBalancesByEmployee(
   rows: LeaveBalanceRow[],
   resolveEmployeeName: (row: LeaveBalanceRow) => string,
@@ -250,11 +198,7 @@ export function groupLeaveBalancesByEmployee(
     })
   })
 
-  return collapseGroupsWithSameEmployeeName(
-    Array.from(groups.values()).sort((left, right) =>
-      compareText(left.employeeName, right.employeeName),
-    ),
-  )
+  return Array.from(groups.values()).sort((left, right) => compareText(left.employeeName, right.employeeName))
 }
 
 export function sortLeaveBalanceRows(

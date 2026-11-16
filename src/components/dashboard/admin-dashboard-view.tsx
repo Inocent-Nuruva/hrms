@@ -1292,7 +1292,7 @@ export default function AdminDashboardView({
       return;
     }
 
-    if (isSelfServiceDashboardRoute(currentPath)) {
+    if (isSelfServiceDashboardRoute(currentPath) && !currentPath.startsWith("/dashboard/me/team")) {
       return;
     }
 
@@ -1347,6 +1347,12 @@ export default function AdminDashboardView({
           roleNames={actorSnapshot.roleNames}
           activeResource={resolvedActiveResource}
           onSelectResource={navigateToResource}
+          searchItems={navigationReady ? resolveDashboardSearchItems({
+            scope: actorSnapshot.scope,
+            permissionLabels: effectivePermissionLabels,
+            accessMode,
+            homeDashboardKind: effectiveHomeDashboardKind,
+          }) : []}
         />
         <SidebarTrigger
           className="fixed left-3 top-[calc((var(--header-height)-2.5rem)/2)] z-[60] !hidden !size-10 !min-w-10 text-[var(--sidebar-icon-color)] transition-colors duration-200 hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-active-link-color)] md:!inline-flex [&_svg]:!size-5"

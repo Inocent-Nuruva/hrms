@@ -8,7 +8,7 @@ import { KpiFluentButton } from "./kpi-fluent-button";
 import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
 import Link from "next/link";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
-import { achievementApi, type Achievement } from "@/lib/achievement-api";
+import { achievementApi, type Achievement, type AchievementActivity } from "@/lib/achievement-api";
 import { achievementsEnabled, readKpiToken } from "@/lib/kpi-session";
 import { KpiWorkflowGuidancePanel } from "./kpi-workflow-guidance";
 
@@ -246,6 +246,15 @@ export function AchievementReviewDetail({ id }: { id: number }) {
               </KpiFluentButton>
             ))}
           </section>
+          <section className="space-y-3 rounded-lg border p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">Supporting activity log</h2>
+              <span className="rounded-full border px-2 py-1 text-xs">{record.current.activities?.length ?? 0} activities</span>
+            </div>
+            {!record.current.activities?.length && <p>No detailed activities were attached to this revision. Review the submitted final actual and comments.</p>}
+            {record.current.activities?.map((activity) => <ReviewActivity key={activity.id} activity={activity} achievementId={id} token={token} onError={setError} />)}
+            {!!record.current.activities?.length && <p className="text-xs text-muted-foreground">Activity results are supporting evidence. No total is inferred because this KPI has no configured activity aggregation rule.</p>}
+          </section>
           {["submitted", "under_review"].includes(record.current.status) && (
             <section className="space-y-3 rounded-lg border p-4 text-sm">
               <h2 className="font-semibold">Decision</h2>
@@ -356,11 +365,14 @@ export function AchievementReviewDetail({ id }: { id: number }) {
           <section className="space-y-2 rounded-lg border p-4 text-sm">
             <h2 className="font-semibold">Revision history</h2>
             {record.revisions.map((revision) => (
-              <p key={revision.id}>
+              <div key={revision.id} className="space-y-2 border-b py-2 last:border-0">
+                <p>
                 Revision {revision.revision}: {revision.effectiveStatus} ·
                 actual {text(revision.actual)} · feedback{" "}
                 {revision.reviewComment || "—"}
-              </p>
+                </p>
+                {revision.id !== record.current.id && revision.activities?.map((activity) => <ReviewActivity key={activity.id} activity={activity} achievementId={id} token={token} onError={setError} />)}
+              </div>
             ))}
             <h3 className="font-medium">Audit events</h3>
             {record.history.map((event) => (
@@ -374,4 +386,26 @@ export function AchievementReviewDetail({ id }: { id: number }) {
       )}
     </div>
   );
+}
+
+function ReviewActivity({
+  activity,
+  achievementId,
+  token,
+  onError,
+}: {
+  activity: AchievementActivity;
+  achievementId: number;
+  token: string;
+  onError: (message: string) => void;
+}) {
+  return <article className="rounded-lg border bg-muted/20 p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{activity.activityDate} · {activity.title}</p><KpiStatusBadge status={activity.status} /></div>
+    <p className="mt-2 whitespace-pre-wrap">{activity.details}</p>
+    <p className="mt-1 text-muted-foreground">Measured result: {text(activity.measurableResult)} · Comments: {activity.comments || "—"}</p>
+    <div className="mt-2 flex flex-wrap gap-2">
+      {activity.evidence.map((file) => <KpiFluentButton key={file.id} className="text-primary underline" onClick={() => void achievementApi.downloadActivityEvidence(token, achievementId, activity, file).catch((e: unknown) => onError(e instanceof Error ? e.message : "Download failed"))}>{file.fileName} · {(file.fileSize / 1024).toFixed(1)} KB</KpiFluentButton>)}
+      {!activity.evidence.length && <span className="text-xs text-muted-foreground">No activity evidence</span>}
+    </div>
+  </article>;
 }

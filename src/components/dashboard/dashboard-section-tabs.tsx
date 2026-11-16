@@ -50,7 +50,7 @@ export function DashboardSectionTabs({
       .map((group) => ({
         ...group,
         items: group.items.filter((item) =>
-          canShowKpiNavigationRoute(item.url, actor.roleNames, actor.scope) &&
+          canShowKpiNavigationRoute(item.url, actor.roleNames, actor.scope, actor.permissionLabels) &&
           canSeeDashboardPage(item.url, actor.permissionLabels, actor.accessMode, {
             roleNames: actor.roleNames,
             scope: actor.scope,

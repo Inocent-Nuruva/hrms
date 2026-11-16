@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Comfortaa } from "next/font/google";
+import { Comfortaa, Fredoka } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,6 +17,11 @@ const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
   subsets: ["latin"],
   weight: ["400", "700"],
+});
+const fredoka = Fredoka({
+  variable: "--font-fredoka",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -62,6 +67,7 @@ export default function RootLayout({
         "h-full",
         "antialiased",
         comfortaa.variable,
+        fredoka.variable,
         comfortaa.className,
       )}
     >

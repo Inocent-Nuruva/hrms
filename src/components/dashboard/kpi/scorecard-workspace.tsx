@@ -1,31 +1,46 @@
 "use client"
 
-import { Button, Card, Checkbox, Spinner, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, Text } from "@fluentui/react-components";
-import { KpiFluentInput, KpiFluentSelect } from "./kpi-fluent-fields";
+import { Badge, Button, Card, Checkbox, Dialog, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, Option, ProgressBar, Spinner, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell, Text, Tooltip } from "@fluentui/react-components";
+import { Info16Regular } from "@fluentui/react-icons";
+import { KpiFluentInput } from "./kpi-fluent-fields";
 import * as React from "react"
 import { KpiFluentButton } from "./kpi-fluent-button"
 import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements"
-import { KpiModeSelector, KpiWizardControls, KpiWizardProgress, type KpiEntryMode } from "./kpi-guided-flow"
 import { useRouter } from "next/navigation"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { listBranches, listDepartments, listEmployees, type AdminRecord } from "@/lib/admin-api"
 import { kpiApi, type KpiAssignment, type KpiPeriod } from "@/lib/kpi-api"
 import { readKpiToken, scorecardsEnabled } from "@/lib/kpi-session"
 import { scorecardApi, type Scorecard, type ScorecardCreate, type ScorecardDraft, type ScoringPolicy } from "@/lib/scorecard-api"
-import { KpiWorkflowGuidancePanel } from "./kpi-workflow-guidance"
-import type { KpiWorkflowGuidance } from "@/lib/kpi-workflow-api"
 
 const input = "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+const selectInput = "w-full min-w-0"
 const button = "rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
 const roles = ["COMPANY_ADMIN", "HR_MANAGER", "DEPARTMENT_MANAGER", "BRANCH_MANAGER"]
 function errorText(error: unknown) { return error instanceof Error ? error.message : "Request failed" }
+function directoryLabel(row: AdminRecord) {
+  const read = (...keys: string[]) => keys.map((key) => row[key]).find((part): part is string => typeof part === "string" && !!part.trim())?.trim() ?? ""
+  const fullName = [read("first_name", "firstName"), read("middle_name", "middleName"), read("last_name", "lastName")].filter(Boolean).join(" ")
+  const name = fullName || read("full_name", "fullName", "display_name", "displayName", "name", "employee_name", "employeeName", "department_name", "departmentName", "branch_name", "branchName", "title")
+  if (name) return name
+  const employeeNo = read("employee_no", "employeeNo", "employee_number", "employeeNumber")
+  return employeeNo ? `Employee (${employeeNo})` : "Unnamed"
+}
+function recordId(row: AdminRecord) { return Number(row.id ?? row.employee_id ?? row.employeeId ?? row.department_id ?? row.departmentId ?? row.branch_id ?? row.branchId) }
+function targetSummary(target: Record<string, unknown> | undefined) { return target ? Object.values(target).map(String).join(" · ") : "Not set" }
 function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
   return <label className="block space-y-1 text-sm"><span className="font-medium">{label}</span><KpiFluentInput className={input} type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} /></label>
+}
+function ScorecardDropdown({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void; disabled?: boolean }) {
+  const selected = options.find((option) => option.value === value)
+  return <Dropdown aria-label={label} className={selectInput} button={{ className: "!w-full !min-w-0" }} value={selected?.label ?? ""} selectedOptions={selected ? [selected.value] : []} disabled={disabled} onOptionSelect={(_, data) => onChange(data.optionValue ?? "")}>
+    {options.map((option) => <Option key={option.value} value={option.value} text={option.label}>{option.label}</Option>)}
+  </Dropdown>
 }
 function weightTotal(rows: Array<{ weight: string }>) { return rows.reduce((sum, row) => sum + (Number.isFinite(Number(row.weight)) ? Math.round(Number(row.weight) * 10000) : 0), 0) / 10000 }
 
 export function ScorecardList() {
-  const actor = useDashboardActor()
-  const [workflowGuidance, setWorkflowGuidance] = React.useState<KpiWorkflowGuidance | null>(null)
+  const actor = useDashboardActor(), router = useRouter()
   const [rows, setRows] = React.useState<Scorecard[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
@@ -37,28 +52,19 @@ export function ScorecardList() {
   }, [actor.ready])
   if (!scorecardsEnabled) return <p className="p-6">Scorecards are disabled in this environment.</p>
   const canCreate = actor.roleNames.some((r) => roles.includes(r))
-  const blockedCreate = workflowGuidance?.actions.find((action) => action.id === "create-scorecard" && action.blocked)
   return <div className="space-y-4 pt-3">
-    <Card appearance="outline" className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2 shadow-sm">
-      <div className="min-w-0 space-y-0.5">
-        <Text as="h1" size={400} weight="semibold">Scorecards</Text>
-        <Text as="p" size={200} className="max-w-3xl text-muted-foreground">Configure weighted KPIs and review approved results. Incomplete scorecards remain awaiting data.</Text>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {canCreate && (blockedCreate ? <Button appearance="primary" disabled title={blockedCreate.reason}>New scorecard</Button> : <Button as="a" href="/dashboard/kpi/scorecards/new" appearance="primary">New scorecard</Button>)}
-        {actor.roleNames.some((r) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(r)) && <>
-          <Button as="a" href="/dashboard/kpi/scoring-policies" appearance="secondary">Scoring policies</Button>
-          <Button as="a" href="/dashboard/kpi/scorecard-templates" appearance="secondary">Templates</Button>
-        </>}
-      </div>
-    </Card>
-    <KpiWorkflowGuidancePanel compact onGuidance={setWorkflowGuidance} />
+    <KpiPageHeader title="Scorecards" description="A scorecard brings one person’s KPIs together for a reporting period, so their progress can be reviewed in one place. You can give each KPI a share of the overall score or track status without combining scores." actions={<>
+      {canCreate && <Button appearance="subtle" onClick={() => router.push("/dashboard/kpi/scorecards/new")}>New scorecard</Button>}
+      {actor.roleNames.some((r) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(r)) && <>
+        <Button as="a" href="/dashboard/kpi/scoring-policies" appearance="subtle">Scoring policies</Button>
+        <Button as="a" href="/dashboard/kpi/scorecard-templates" appearance="subtle">Templates</Button>
+      </>}
+    </>} />
     {loading && <div className="py-4"><Spinner size="small" label="Loading scorecards" /></div>}
     {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
     {!loading && !error && rows.length === 0 && <Card appearance="outline" className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl p-8 text-center">
       <Text as="h2" size={400} weight="semibold">No scorecards yet</Text>
-      <Text as="p" size={300} className="max-w-lg text-muted-foreground">Create a scorecard from existing KPI assignments to combine measures and review approved results.</Text>
-      {canCreate && !blockedCreate && <Button as="a" href="/dashboard/kpi/scorecards/new" appearance="primary" className="mt-2">Create scorecard</Button>}
+      <Text as="p" size={300} className="max-w-lg text-muted-foreground">A scorecard is a simple summary of someone’s KPIs for a set period. It helps a manager review progress together instead of checking each KPI separately. Create one from the person’s existing KPI assignments.</Text>
     </Card>}
     {!loading && !error && rows.length > 0 && <Card appearance="outline" className="overflow-hidden rounded-xl p-0 shadow-sm">
       <div className="overflow-x-auto"><Table aria-label="KPI scorecards" size="small" className="w-full text-left text-sm">
@@ -72,6 +78,9 @@ export function ScorecardList() {
 export function ScorecardBuilder({ scorecardId }: { scorecardId?: number }) {
   const router = useRouter(), actor = useDashboardActor(), token = readKpiToken()
   const [assignments, setAssignments] = React.useState<KpiAssignment[]>([])
+  const [employees, setEmployees] = React.useState<AdminRecord[]>([])
+  const [departments, setDepartments] = React.useState<AdminRecord[]>([])
+  const [branches, setBranches] = React.useState<AdminRecord[]>([])
   const [periods, setPeriods] = React.useState<KpiPeriod[]>([])
   const [policies, setPolicies] = React.useState<ScoringPolicy[]>([])
   const [existing, setExisting] = React.useState<Scorecard | null>(null)
@@ -81,34 +90,30 @@ export function ScorecardBuilder({ scorecardId }: { scorecardId?: number }) {
   const [policyId, setPolicyId] = React.useState(""), [items, setItems] = React.useState<Array<{ assignmentId: number; weight: string; required: boolean }>>([])
   const [selected, setSelected] = React.useState(""), [error, setError] = React.useState(""), [notice, setNotice] = React.useState("")
   const [loading, setLoading] = React.useState(true), [busy, setBusy] = React.useState(false)
-  const [entryMode, setEntryMode] = React.useState<KpiEntryMode>(scorecardId ? "manual" : "choose")
-  const [wizardStep, setWizardStep] = React.useState(0)
-  const [publishAfterSave, setPublishAfterSave] = React.useState(false)
   const formRef = React.useRef<HTMLFormElement>(null)
   const savingRef = React.useRef(false)
-  const wizardSteps = [
-    { title: "Scorecard details", description: "Choose an existing subject and reporting period." },
-    { title: "Select assigned KPIs", description: "Only matching, active KPI assignments can be added." },
-    { title: "Configure weights", description: "Weighted scorecards need exactly 100% when published." },
-    { title: "Scoring policy", description: "Use an existing published policy; unapproved actuals never contribute." },
-    { title: "Review and save", description: "Save a draft, then publish from scorecard details after validation." },
-  ]
   React.useEffect(() => {
     if (!actor.ready || !scorecardsEnabled || !token) return
     void Promise.all([kpiApi.assignments(token), kpiApi.periods(token), scorecardApi.policies(token), scorecardId ? scorecardApi.get(token, scorecardId) : Promise.resolve(null)])
       .then(([a, p, s, card]) => { setAssignments(a); setPeriods(p); setPolicies(s); if (card) { setExisting(card); setCode(card.code); setName(card.currentVersion.name); setDescription(card.currentVersion.description ?? ""); setSubjectType(card.subjectType); setSubjectId(String(card.subjectId)); setPeriodId(String(card.periodId)); setManagerId(card.managerEmployeeId ? String(card.managerEmployeeId) : ""); setMode(card.currentVersion.mode); setPolicyId(card.currentVersion.policyVersionId ? String(card.currentVersion.policyVersionId) : ""); setItems(card.currentVersion.entries.map((e) => ({ assignmentId: e.assignmentId, weight: e.weight, required: e.required }))) } })
       .catch((e: unknown) => setError(errorText(e))).finally(() => setLoading(false))
   }, [actor.ready, token, scorecardId])
+  React.useEffect(() => {
+    if (!actor.ready || !token) return
+    let active = true
+    void Promise.allSettled([listEmployees(token, { limit: 100 }), listDepartments(token, { limit: 100 }), listBranches(token, { limit: 100 })]).then(([employeeResult, departmentResult, branchResult]) => {
+      if (!active) return
+      if (employeeResult.status === "fulfilled") setEmployees(employeeResult.value.rows)
+      if (departmentResult.status === "fulfilled") setDepartments(departmentResult.value.rows)
+      if (branchResult.status === "fulfilled") setBranches(branchResult.value.rows)
+    })
+    return () => { active = false }
+  }, [actor.ready, token])
   const canEdit = actor.roleNames.some((r) => roles.includes(r))
   const available = assignments.filter((a) => a.status === "active" && a.period?.id === Number(periodId) &&
     (subjectType === "organization" || (a.subjectType === subjectType && a.subjectId === Number(subjectId))) && !items.some((i) => i.assignmentId === a.id))
+  const subjects = subjectType === "employee" ? employees : subjectType === "department" ? departments : subjectType === "branch" ? branches : []
   const total = weightTotal(items)
-  function advanceWizard() {
-    if (wizardStep === 0 && (!code.trim() || !name.trim() || !Number(subjectId) || !Number(periodId))) { setError("Enter a code, name, subject and reporting period."); return }
-    if (wizardStep === 1 && !items.length) { setError("Add at least one matching KPI assignment."); return }
-    if (wizardStep === 2 && (items.some((item) => !Number.isFinite(Number(item.weight)) || Number(item.weight) < 0) || (mode === "weighted" && total !== 100))) { setError("Enter valid weights totaling 100% for a weighted scorecard."); return }
-    setError(""); setWizardStep((current) => Math.min(current + 1, wizardSteps.length - 1))
-  }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (savingRef.current) return
     if (!items.length) { setError("Add at least one eligible KPI assignment. An authorized manager can create one in KPI Assignments."); return }
@@ -120,13 +125,42 @@ export function ScorecardBuilder({ scorecardId }: { scorecardId?: number }) {
       const card = existing ? await scorecardApi.update(token, existing.id, draft) : await scorecardApi.create(token, { ...draft, code, subjectType, subjectId: Number(subjectId), periodId: Number(periodId), managerEmployeeId: managerId ? Number(managerId) : undefined } as ScorecardCreate)
       setExisting(card)
       draftSaved = true
-      if (entryMode === "guided" && publishAfterSave) await scorecardApi.publish(token, card.id)
-      setNotice(entryMode === "guided" && publishAfterSave ? "Scorecard configuration published" : "Draft scorecard saved"); router.push(`/dashboard/kpi/scorecards/${card.id}`)
-    } catch (e) { setError(draftSaved ? `Draft saved, but publication failed: ${errorText(e)}` : errorText(e)) } finally { savingRef.current = false; setBusy(false) }
+      setNotice("Draft scorecard saved"); router.push(`/dashboard/kpi/scorecards/${card.id}`)
+    } catch (e) { setError(errorText(e)) } finally { savingRef.current = false; setBusy(false) }
   }
   if (!scorecardsEnabled) return <p className="p-6">Scorecards are disabled in this environment.</p>
   if (!actor.ready || loading) return <p className="p-6">Loading scorecard builder…</p>
   if (!canEdit) return <p role="alert" className="p-6">Scorecard editing is not available to your role.</p>
   if (existing?.currentVersion.publishedAt) return <p className="p-6">This configuration is published. Create a draft revision from its details page.</p>
-  return <div className="space-y-4 pt-3"><KpiPageHeader title={existing ? "Edit Draft Scorecard" : "Create Scorecard"} description="Configure eligible KPI assignments, weights and an approved scoring policy." actions={<Button as="a" href="/dashboard/kpi/scorecards" appearance="secondary">Back to Scorecards</Button>} />{!existing && entryMode === "choose" && <KpiModeSelector title="Scorecard" description="Follow the existing scorecard configuration in five guided stages." onSelect={setEntryMode} blockedReason={!periods.length ? "Create a reporting period before configuring a scorecard." : !assignments.some((row) => row.status === "active" && !!row.currentTarget) ? "Create an active KPI assignment with a target before configuring a scorecard." : undefined} resolveHref={!periods.length ? "/dashboard/kpi/periods" : "/dashboard/kpi/assignments"} owner="HR or authorized manager" />}{entryMode === "guided" && <KpiWizardProgress steps={wizardSteps} step={wizardStep} />}{error && <KpiFeedback intent="error">{error}</KpiFeedback>}{notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}{entryMode !== "choose" && <form ref={formRef} onSubmit={(event) => void save(event)} className="space-y-6"><div hidden={entryMode === "guided" && wizardStep !== 0 && wizardStep !== 3} className="grid gap-4 rounded-lg border p-5 md:grid-cols-2"><Field label="Scorecard identifier" value={code} onChange={setCode} required /><Field label="Scorecard name" value={name} onChange={setName} required /><Field label="Description" value={description} onChange={setDescription} /><label className="space-y-1 text-sm"><span>Scorecard type</span><KpiFluentSelect className={input} value={subjectType} disabled={!!existing} onChange={(e) => { setSubjectType(e.target.value); setItems([]) }}>{["employee", "department", "branch", "manager_group", "organization"].map((s) => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}</KpiFluentSelect></label><Field label="Owner or subject ID" type="number" value={subjectId} onChange={(v) => { setSubjectId(v); setItems([]) }} required /><label className="space-y-1 text-sm"><span>Reporting period</span><KpiFluentSelect aria-label="Reporting period" className={input} value={periodId} disabled={!!existing} onChange={(e) => { setPeriodId(e.target.value); setItems([]) }} required><option value="">Select period</option>{periods.map((p) => <option key={p.id} value={p.id}>{p.label} · {p.frequency}</option>)}</KpiFluentSelect></label><Field label="Responsible manager employee ID" type="number" value={managerId} onChange={setManagerId} /><label className="space-y-1 text-sm"><span>Scorecard mode</span><KpiFluentSelect aria-label="Scorecard mode" className={input} value={mode} onChange={(e) => { setMode(e.target.value as "weighted" | "strategic"); setItems((rows) => rows.map((row) => ({ ...row, weight: e.target.value === "strategic" ? "0" : row.weight }))) }}><option value="weighted">Weighted evaluation</option><option value="strategic">Strategic status only</option></KpiFluentSelect></label><label className="space-y-1 text-sm"><span>Scoring policy</span><KpiFluentSelect aria-label="Scoring policy" className={input} value={policyId} onChange={(e) => setPolicyId(e.target.value)}><option value="">Select a published policy</option>{policies.flatMap((policy) => policy.versions.filter((v) => v.publishedAt).map((v) => <option key={v.id} value={v.id}>{policy.code} · v{v.version} · {v.name}</option>))}</KpiFluentSelect></label></div><section hidden={entryMode === "guided" && wizardStep !== 1 && wizardStep !== 2} className="space-y-3 rounded-lg border p-5"><h2 className="text-lg font-semibold">KPI assignments</h2><p className="text-sm text-muted-foreground">Choose existing active assignments for the selected subject and period.</p><div className="flex flex-wrap gap-2"><KpiFluentSelect aria-label="Available KPI assignment" className={`${input} max-w-xl`} value={selected} onChange={(e) => setSelected(e.target.value)}><option value="">Select an assignment</option>{available.map((a) => <option key={a.id} value={a.id}>{a.definitionVersion?.name} · #{a.id} · {a.period?.label}</option>)}</KpiFluentSelect><KpiFluentButton type="button" className={button} disabled={!selected} onClick={() => { const id = Number(selected); if (items.some((i) => i.assignmentId === id)) return; setItems((rows) => [...rows, { assignmentId: id, weight: mode === "strategic" ? "0" : "", required: true }]); setSelected("") }}>Add KPI</KpiFluentButton></div>{available.length === 0 && <p className="text-sm text-muted-foreground">No matching assignments available. Create assignments in KPI Management first.</p>}<div className="space-y-2">{items.map((item) => { const a = assignments.find((row) => row.id === item.assignmentId); return <div key={item.assignmentId} className="grid items-end gap-2 rounded border p-3 sm:grid-cols-[1fr_8rem_7rem_auto]"><div><b>{a?.definitionVersion?.name ?? `Assignment #${item.assignmentId}`}</b><p className="text-xs text-muted-foreground">Target revision {a?.currentTarget?.revision ?? "—"}</p></div><Field label={`Weight for ${a?.definitionVersion?.name ?? item.assignmentId} (%)`} type="number" value={item.weight} onChange={(value) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, weight: value } : r))} /><Checkbox label="Required" checked={item.required} onChange={(_, data) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, required: data.checked === true } : r))} /><KpiFluentButton type="button" className="text-sm text-red-700 underline" onClick={() => setItems((rows) => rows.filter((r) => r.assignmentId !== item.assignmentId))}>Remove</KpiFluentButton></div> })}</div><p className={`text-sm font-medium ${mode === "weighted" && total !== 100 ? "text-amber-700" : "text-green-700"}`}>Draft weight total: {total.toFixed(4)}% {mode === "weighted" && total !== 100 ? "· Must equal 100% to publish" : ""}</p></section><section hidden={entryMode === "guided" && wizardStep !== 4} className="rounded-lg border p-5"><h2 className="font-semibold">Structure preview</h2><p className="mt-1 text-sm">{name || "Untitled scorecard"} · {subjectType} #{subjectId || "—"} · {periods.find((p) => p.id === Number(periodId))?.label ?? "No period"}</p><p className="mt-1 text-sm text-muted-foreground">Actuals and results: Awaiting Data</p>{entryMode === "guided" && <label className="mt-4 block max-w-sm text-sm">Save action<KpiFluentSelect aria-label="Save action" value={publishAfterSave ? "publish" : "draft"} onChange={(event) => setPublishAfterSave(event.target.value === "publish")}><option value="draft">Save draft</option><option value="publish">Save and publish</option></KpiFluentSelect></label>}</section>{entryMode === "manual" && <KpiFluentButton className={button} disabled={busy}>{busy ? "Saving…" : "Save draft scorecard"}</KpiFluentButton>}</form>}{entryMode === "guided" && <KpiWizardControls step={wizardStep} steps={wizardSteps} busy={busy} onBack={() => { setError(""); setWizardStep((current) => current - 1) }} onNext={advanceWizard} onCancel={() => setEntryMode("choose")} onFinish={() => formRef.current?.requestSubmit()} finishLabel={publishAfterSave ? "Save and publish" : "Save draft scorecard"} confirmFinish={publishAfterSave} error={error} />}</div>
+  return <Dialog open onOpenChange={(_, data) => { if (!data.open && !busy) router.push("/dashboard/kpi/scorecards") }}>
+    <DialogSurface style={{ width: "min(72rem, calc(100vw - 2rem))", maxWidth: "calc(100vw - 2rem)" }} className="max-h-[90vh] overflow-y-auto">
+      <DialogBody>
+        <DialogTitle><div className="flex items-center justify-between gap-4"><span>{existing ? "Edit draft scorecard" : "Create scorecard"}</span><Button appearance="secondary" disabled={busy} onClick={() => router.push("/dashboard/kpi/scorecards")}>Close</Button></div></DialogTitle>
+        <DialogContent className="max-h-[calc(90vh-7rem)] space-y-5 overflow-y-auto">
+          <p className="text-sm text-muted-foreground">Choose who the scorecard is for, select a reporting period, then add the matching KPI assignments.</p>
+          {error && <KpiFeedback intent="error">{error}</KpiFeedback>}{notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
+          <form ref={formRef} onSubmit={(event) => void save(event)} className="space-y-4">
+            <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+              <Field label="Scorecard identifier" value={code} onChange={setCode} required />
+              <Field label="Scorecard name" value={name} onChange={setName} required />
+              <Field label="Description" value={description} onChange={setDescription} />
+              <label className="space-y-1 text-sm"><span>Scorecard for</span><ScorecardDropdown label="Scorecard for" value={subjectType} disabled={!!existing} onChange={(value) => { setSubjectType(value); setSubjectId(""); setItems([]) }} options={["employee", "department", "branch", "manager_group", "organization"].map((value) => ({ value, label: value.replaceAll("_", " ") }))} /></label>
+              {subjectType === "organization" ? <label className="space-y-1 text-sm"><span>Organization</span><ScorecardDropdown label="Organization" value={subjectId || "0"} disabled={!!existing} onChange={(value) => { setSubjectId(value); setItems([]) }} options={[{ value: "0", label: "Entire organization" }]} /></label> : subjectType === "manager_group" ? <Field label="Manager group ID" type="number" value={subjectId} onChange={(v) => { setSubjectId(v); setItems([]) }} required /> : <label className="space-y-1 text-sm"><span>{subjectType === "employee" ? "Employee" : subjectType === "department" ? "Department" : "Branch"}</span><ScorecardDropdown label={subjectType === "employee" ? "Employee" : subjectType === "department" ? "Department" : "Branch"} value={subjectId} disabled={!!existing} onChange={(value) => { setSubjectId(value); setItems([]) }} options={[{ value: "", label: `Select ${subjectType.replaceAll("_", " ")}` }, ...subjects.flatMap((row) => { const id = recordId(row); return Number.isInteger(id) && id > 0 ? [{ value: String(id), label: directoryLabel(row) }] : [] })]} /></label>}
+              <label className="space-y-1 text-sm"><span>Reporting period</span><ScorecardDropdown label="Reporting period" value={periodId} disabled={!!existing} onChange={(value) => { setPeriodId(value); setItems([]) }} options={[{ value: "", label: "Select period" }, ...periods.map((period) => ({ value: String(period.id), label: `${period.label} · ${period.frequency}` }))]} /></label>
+              <label className="space-y-1 text-sm"><span>Responsible manager <span className="text-muted-foreground">(optional)</span></span><ScorecardDropdown label="Responsible manager" value={managerId} onChange={setManagerId} options={[{ value: "", label: "No separate manager" }, ...employees.flatMap((row) => { const id = recordId(row); return Number.isInteger(id) && id > 0 ? [{ value: String(id), label: directoryLabel(row) }] : [] })]} /></label>
+              <label className="space-y-1 text-sm"><span className="flex items-center gap-1.5">Scorecard mode<Tooltip relationship="description" content={<span><strong>Weighted evaluation:</strong> combines KPI results using their weights; weights must total 100%.<br /><strong>Strategic status only:</strong> tracks KPI statuses without a weighted overall score; weights are ignored.</span>}><Button type="button" appearance="subtle" size="small" icon={<Info16Regular aria-hidden />} aria-label="Explain scorecard modes" /></Tooltip></span><ScorecardDropdown label="Scorecard mode" value={mode} onChange={(value) => { setMode(value as "weighted" | "strategic"); setItems((rows) => rows.map((row) => ({ ...row, weight: value === "strategic" ? "0" : row.weight }))) }} options={[{ value: "weighted", label: "Weighted evaluation" }, { value: "strategic", label: "Strategic status only" }]} /></label>
+              <label className="space-y-1 text-sm"><span>Scoring policy <span className="text-muted-foreground">(optional)</span></span><ScorecardDropdown label="Scoring policy" value={policyId} onChange={setPolicyId} options={[{ value: "", label: "Choose a published policy" }, ...policies.flatMap((policy) => policy.versions.filter((version) => version.publishedAt).map((version) => ({ value: String(version.id), label: version.name })))]} /></label>
+            </div>
+            <section className="space-y-4 border-t border-border pt-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-semibold">KPI assignments</h2><p className="mt-1 text-sm text-muted-foreground">Only active assignments for this subject and reporting period are available.</p></div><Badge appearance="outline" color={available.length ? "brand" : "informative"}>{items.length} selected</Badge></div>
+              <div className="flex flex-wrap gap-2"><div className="min-w-0 flex-1"><ScorecardDropdown label="Available KPI assignment" value={selected} onChange={setSelected} options={[{ value: "", label: "Select an eligible KPI" }, ...available.map((assignment) => ({ value: String(assignment.id), label: `${assignment.definitionVersion?.name ?? "KPI"} · Target ${targetSummary(assignment.currentTarget?.target)}` }))]} /></div><KpiFluentButton type="button" className={button} disabled={!selected} onClick={() => { const id = Number(selected); if (items.some((i) => i.assignmentId === id)) return; setItems((rows) => [...rows, { assignmentId: id, weight: mode === "strategic" ? "0" : "", required: true }]); setSelected("") }}>Add KPI</KpiFluentButton></div>
+              {available.length === 0 && <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{!subjectId || !periodId ? "Select a subject and reporting period to see eligible KPI assignments." : "No matching active assignments. Create an assignment for this subject and period first."}</p>}
+              <div>{items.map((item) => { const a = assignments.find((row) => row.id === item.assignmentId); return <div key={item.assignmentId} className="grid items-end gap-3 border-b border-border py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_8rem_7rem_auto]"><div className="min-w-0"><b className="block truncate">{a?.definitionVersion?.name ?? "KPI assignment"}</b><p className="mt-1 text-xs text-muted-foreground">Target: {targetSummary(a?.currentTarget?.target)}</p></div><Field label={`Weight (%)`} type="number" value={item.weight} onChange={(value) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, weight: value } : r))} /><Checkbox label="Required" checked={item.required} onChange={(_, data) => setItems((rows) => rows.map((r) => r.assignmentId === item.assignmentId ? { ...r, required: data.checked === true } : r))} /><KpiFluentButton type="button" className="text-sm text-red-700 underline" onClick={() => setItems((rows) => rows.filter((r) => r.assignmentId !== item.assignmentId))}>Remove</KpiFluentButton></div> })}</div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"><div><div className="mb-1 flex items-center justify-between text-sm"><span className="font-medium">Weight total</span><span>{total.toFixed(2)}%</span></div><ProgressBar value={mode === "weighted" ? Math.max(0, Math.min(total / 100, 1)) : 1} /></div><Badge color={mode === "strategic" || total === 100 ? "success" : "warning"}>{mode === "strategic" ? "Weights not used" : total === 100 ? "Ready to publish" : "Weighted scorecards need 100%"}</Badge></div>
+            </section>
+            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-card/95 py-3 backdrop-blur-sm"><Button appearance="secondary" disabled={busy} onClick={() => router.push("/dashboard/kpi/scorecards")}>Cancel</Button><Button type="submit" appearance="primary" disabled={busy}>{busy ? "Saving…" : "Save draft scorecard"}</Button></div>
+          </form>
+        </DialogContent>
+      </DialogBody>
+    </DialogSurface>
+  </Dialog>
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { evidenceDayThreshold, requiresEvidenceBeforeSubmission } from "@/lib/leave-evidence"
+import { fluentForm } from "@/components/ui/fluent-dialog-service";
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import { EmployeeProfileRequiredState } from "@/components/dashboard/employee-profile-required-state"
@@ -6906,10 +6907,24 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     if (!token) return
     const end = String(row.end_date ?? "").slice(0, 10)
     const suggested = new Date().toISOString().slice(0, 10)
-    const newEnd = window.prompt(
-      `New last day of leave (YYYY-MM-DD, before ${end}). Unused days return to your balance.`,
-      suggested,
+    const form = await fluentForm(
+      [
+        {
+          name: "newEnd",
+          label: "New last day of leave",
+          type: "date",
+          defaultValue: suggested,
+          required: true,
+          hint: `Must be before ${end}.`,
+        },
+      ],
+      {
+        title: "End leave early",
+        message: "Unused days return to your balance.",
+        confirmLabel: "End leave",
+      },
     )
+    const newEnd = form?.newEnd
     if (!newEnd) return
     setLoading(true)
     setMessage(null)

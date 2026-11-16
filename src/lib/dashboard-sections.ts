@@ -279,7 +279,6 @@ export const managementKpiSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "KPI Library", url: "/dashboard/kpi" },
       { title: "Templates", url: "/dashboard/kpi/templates" },
       { title: "Assignments", url: "/dashboard/kpi/assignments" },
-      { title: "Target Revisions", url: "/dashboard/kpi/targets" },
       { title: "Scorecards", url: "/dashboard/kpi/scorecards" },
       { title: "Scoring Policies", url: "/dashboard/kpi/scoring-policies" },
       { title: "Achievement Reviews", url: "/dashboard/kpi/reviews" },
@@ -537,10 +536,6 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       {
         title: "Balance Import",
         url: "/dashboard/leave-management/balance-import",
-      },
-      {
-        title: "Mainland Tanzania",
-        url: "/dashboard/leave-management/mainland",
       },
       {
         title: "Balance Transactions",

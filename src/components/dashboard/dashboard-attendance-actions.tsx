@@ -492,10 +492,23 @@ export function AttendancePunchActions({
     return () => { cancelled = true }
   }, [])
 
+  // Synchronous guard: state updates are async, so a fast double click could
+  // otherwise start two submissions before `busyAction` re-renders.
+  const inFlightRef = React.useRef(false)
+  // Reused across retries of the same punch so the server's clientRequestId
+  // idempotency replays it instead of recording a second punch.
+  const requestIdRef = React.useRef<{ action: "in" | "out"; id: string } | null>(null)
+
   const submitPunch = React.useCallback(
     async (action: "in" | "out") => {
+      if (inFlightRef.current) return
+      inFlightRef.current = true
       setMessage(null)
       setBusyAction(action)
+      if (requestIdRef.current?.action !== action) {
+        requestIdRef.current = { action, id: crypto.randomUUID() }
+      }
+      const clientRequestId = requestIdRef.current.id
 
       try {
         const selfieRequired = action === "in"
@@ -521,7 +534,7 @@ export function AttendancePunchActions({
 
         const connection = getBrowserConnection()
         const payload: AdminRecord = {
-          clientRequestId: crypto.randomUUID(),
+          clientRequestId,
           latitude: locationResult.location.latitude,
           longitude: locationResult.location.longitude,
           accuracyMeters: locationResult.location.accuracy,
@@ -536,20 +549,28 @@ export function AttendancePunchActions({
           payload.overrideReason = exceptionReason.trim()
         }
 
-        if (action === "in") {
-          await createMyAttendanceCheckIn(token, payload)
-        } else {
-          await createMyAttendanceCheckOut(token, payload)
-        }
+        const result = action === "in"
+          ? await createMyAttendanceCheckIn(token, payload)
+          : await createMyAttendanceCheckOut(token, payload)
 
+        // A punch that failed location validation but carried an exception
+        // reason is stored as PENDING_OVERRIDE and does not count as attendance
+        // until a manager approves it — don't tell the employee it was recorded.
+        const punch = (result as { punch?: { validationStatus?: string } } | null)?.punch
+        const pendingReview = punch?.validationStatus === "PENDING_OVERRIDE"
+        const label = action === "in" ? "Check-in" : "Check-out"
         setMessage({
           tone: "success",
-          text: action === "in" ? "Check-in recorded." : "Check-out recorded.",
+          text: pendingReview
+            ? `${label} submitted for manager approval. It will count once approved.`
+            : `${label} recorded.`,
         })
+        requestIdRef.current = null
         setSelfieFile(null)
         setExceptionReason("")
         setPendingAction(null)
         await onAttendanceChanged?.().catch(() => undefined)
+        window.dispatchEvent(new Event(ATTENDANCE_CHANGED_EVENT))
       } catch (errorObject) {
         setMessage({
           tone: "error",
@@ -559,6 +580,7 @@ export function AttendancePunchActions({
               : `Unable to check ${action === "in" ? "in" : "out"}.`,
         })
       } finally {
+        inFlightRef.current = false
         setBusyAction(null)
       }
     },
@@ -569,6 +591,7 @@ export function AttendancePunchActions({
     <div className={cn("mt-2 flex flex-col gap-1.5", className)}>
       <Dialog open={pendingAction !== null} onOpenChange={(open) => {
         if (!open && busyAction === null) {
+          requestIdRef.current = null
           setPendingAction(null)
           setSelfieFile(null)
           setExceptionReason("")
@@ -603,6 +626,7 @@ export function AttendancePunchActions({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busyAction !== null} onClick={() => {
+              requestIdRef.current = null
               setPendingAction(null)
               setSelfieFile(null)
               setExceptionReason("")
@@ -695,8 +719,14 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
     }
 
     const todayRecord = asRecord(todayResult)
+    // /me/attendance/today is the authoritative punch state (it counts punches
+    // still awaiting approval). The employee dashboard endpoint can be
+    // forbidden for admin-type accounts, so it is only a fallback.
     const actionFlags =
-      asRecord(dashboardRecord?.action_flags) ?? asRecord(dashboardRecord?.actionFlags)
+      asRecord(todayRecord?.action_flags) ??
+      asRecord(todayRecord?.actionFlags) ??
+      asRecord(dashboardRecord?.action_flags) ??
+      asRecord(dashboardRecord?.actionFlags)
     const checkIn = readAttendanceTime(todayRecord, CHECK_IN_KEYS)
     const checkOut = readAttendanceTime(todayRecord, CHECK_OUT_KEYS)
     const explicitCanCheckIn = readBoolean(actionFlags, ["can_check_in", "canCheckIn"])
@@ -715,6 +745,7 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
   React.useEffect(() => {
     void loadAttendance()
   }, [loadAttendance])
+  useAttendanceChangedListener(loadAttendance)
 
   if (!checked || !state) return null
 
@@ -749,5 +780,120 @@ export function DashboardAttendanceQuickActions({ mobile = false }: { mobile?: b
         className="relative mt-0 items-center"
       />
     </div>
+  )
+}
+
+// Fired after any successful punch so every attendance widget on the page
+// (header quick actions, the Today panel) reloads the same server state.
+export const ATTENDANCE_CHANGED_EVENT = "hrms:attendance-changed"
+
+function useAttendanceChangedListener(reload: () => Promise<void>) {
+  React.useEffect(() => {
+    const handler = () => { void reload() }
+    window.addEventListener(ATTENDANCE_CHANGED_EVENT, handler)
+    return () => window.removeEventListener(ATTENDANCE_CHANGED_EVENT, handler)
+  }, [reload])
+}
+
+type TodayPunch = { punch_type?: string; punch_time?: string; validation_status?: string }
+
+function formatClock(value: unknown, timeZone?: string) {
+  if (typeof value !== "string" || !value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone })
+}
+
+function formatMinutes(value: unknown) {
+  const minutes = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`
+}
+
+const STATE_COPY: Record<string, { label: string; tone: string }> = {
+  not_checked_in: { label: "Not checked in", tone: "bg-slate-400" },
+  checked_in: { label: "Checked in", tone: "bg-emerald-500" },
+  checked_out: { label: "Day complete", tone: "bg-sky-500" },
+}
+
+export function AttendanceTodayPanel() {
+  const [today, setToday] = React.useState<AdminRecord | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async () => {
+    const token = readStoredSessionTokens().accessToken
+    if (!token) { setError("Your session has expired. Please sign in again."); return }
+    try {
+      setToday(asRecord(await getMyAttendanceToday(token)))
+      setError(null)
+    } catch (errorObject) {
+      setError(errorObject instanceof Error ? errorObject.message : "Could not load today's attendance.")
+    }
+  }, [])
+
+  React.useEffect(() => { void load() }, [load])
+  useAttendanceChangedListener(load)
+
+  if (error) return <p role="alert" className="py-4 text-sm text-destructive">{error}</p>
+  if (!today) return <div className="py-6"><FluentLoadingIndicator /></div>
+
+  const summary = asRecord(today.summary)
+  const flags = asRecord(today.action_flags)
+  const timeZone = typeof summary?.timezone === "string" ? summary.timezone : undefined
+  const punches = (Array.isArray(today.punches) ? today.punches : []) as TodayPunch[]
+  const live = punches.filter((p) => p.validation_status !== "REJECTED" && p.validation_status !== "OVERRIDE_REJECTED")
+  const checkInPunch = live.find((p) => p.punch_type === "CHECK_IN")
+  const checkOutPunch = [...live].reverse().find((p) => p.punch_type === "CHECK_OUT")
+  const pendingReview = live.some((p) => p.validation_status === "PENDING_OVERRIDE")
+  const state = STATE_COPY[String(today.punch_state)] ?? STATE_COPY.not_checked_in
+  const late = Number(summary?.late_minutes ?? 0)
+  const early = Number(summary?.early_departure_minutes ?? 0)
+
+  const stats: Array<{ label: string; value: string; hint?: string }> = [
+    {
+      label: "Shift",
+      value: summary?.schedule_start_at
+        ? `${formatClock(summary.schedule_start_at, timeZone)} – ${formatClock(summary.schedule_end_at, timeZone)}`
+        : "No shift assigned",
+    },
+    { label: "Check-in", value: formatClock(summary?.check_in_at ?? checkInPunch?.punch_time, timeZone), hint: late > 0 ? `${late} min late` : undefined },
+    { label: "Check-out", value: formatClock(summary?.check_out_at ?? checkOutPunch?.punch_time, timeZone), hint: early > 0 ? `${early} min early` : undefined },
+    { label: "Worked", value: formatMinutes(summary?.work_minutes) },
+  ]
+
+  return (
+    <section aria-labelledby="attendance-today-title" className="flex max-w-3xl flex-col gap-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-1">
+          <h2 id="attendance-today-title" className="text-sm font-semibold text-foreground">Today</h2>
+          <span className="flex items-center gap-2 text-sm text-foreground" aria-live="polite">
+            <span aria-hidden className={cn("size-2 rounded-full", state.tone)} />
+            {state.label}
+            {/* The summary status lags pending punches (it says "absent" until a
+                manager approves), so only show it once the summary has a check-in. */}
+            {summary?.attendance_status && summary?.check_in_at ? (
+              <span className="text-xs text-muted-foreground">· {String(summary.attendance_status).replace(/_/g, " ").toLowerCase()}</span>
+            ) : null}
+          </span>
+          {pendingReview ? (
+            <span className="text-xs text-amber-700 dark:text-amber-400">A punch is awaiting manager approval and will count once approved.</span>
+          ) : null}
+        </div>
+        <AttendancePunchActions
+          canCheckIn={flags?.can_check_in === true}
+          canCheckOut={flags?.can_check_out === true}
+          onAttendanceChanged={load}
+          className="mt-0 items-end"
+        />
+      </div>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {stats.map((item) => (
+          <div key={item.label} className="rounded-lg border border-border bg-card p-3">
+            <dt className="text-xs text-muted-foreground">{item.label}</dt>
+            <dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{item.value}</dd>
+            {item.hint ? <dd className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">{item.hint}</dd> : null}
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }

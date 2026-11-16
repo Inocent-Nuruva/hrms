@@ -97,10 +97,19 @@ const useStyles = makeStyles({
     '&[data-active-category="true"] .fui-NavCategoryItem__icon': {
       color: "var(--sidebar-active-link-color, var(--primary))",
     },
+    '&[aria-current="page"], &[data-active="true"]': {
+      color: "var(--sidebar-active-link-color, var(--primary))",
+      "&::after": {
+        backgroundColor: "var(--sidebar-active-link-color, var(--primary)) !important",
+      },
+      "& .fui-NavItem__icon": {
+        color: "var(--sidebar-active-link-color, var(--primary))",
+      },
+    },
     "::after": {
       width: "3px",
       marginInlineStart: "-6px",
-      backgroundColor: tokens.colorBrandBackground,
+      backgroundColor: "var(--sidebar-active-link-color, var(--primary))",
     },
     ":hover": {
       backgroundColor: "var(--sidebar-accent)",
@@ -114,10 +123,19 @@ const useStyles = makeStyles({
     fontFamily: 'var(--font-comfortaa), "Comfortaa", sans-serif',
     fontSize: "11px",
     lineHeight: "16px",
+    '&[aria-current="page"], &[data-active="true"]': {
+      color: "var(--sidebar-active-link-color, var(--primary))",
+      "&::after": {
+        backgroundColor: "var(--sidebar-active-link-color, var(--primary)) !important",
+      },
+      "& .fui-NavItem__icon": {
+        color: "var(--sidebar-active-link-color, var(--primary))",
+      },
+    },
     "::after": {
       width: "3px",
       marginInlineStart: "-13px",
-      backgroundColor: tokens.colorBrandBackground,
+      backgroundColor: "var(--sidebar-active-link-color, var(--primary))",
     },
     ":hover": {
       backgroundColor: "var(--sidebar-accent)",
