@@ -2669,7 +2669,7 @@ export function LeaveManagementView({
         render: (group: LeaveBalanceEmployeeGroup) => group.employeeName,
       },
       { key: "department", label: "Department", render: (group: LeaveBalanceEmployeeGroup) => readString(asRecord(asRecord(group.rows[0]?.employee)?.department) ?? {}, ["name"]) },
-      ...(["annual", "sick"] as const).map((kind) => {
+      ...(["annual"] as const).map((kind) => {
         // Matches the leave type by name, e.g. "Annual Leave" / "Sick Leave".
         const findRow = (group: LeaveBalanceEmployeeGroup) =>
           group.rows.find((row) =>
@@ -2679,7 +2679,7 @@ export function LeaveManagementView({
           readBalanceDays(row, ["available_days", "remaining_days"]);
         return {
           key: `${kind}_left`,
-          label: kind === "annual" ? "Annual left" : "Sick left",
+          label: "Annual leave left",
           defaultWidth: 110,
           sortValue: (group: LeaveBalanceEmployeeGroup) => {
             const row = findRow(group);
@@ -2711,19 +2711,6 @@ export function LeaveManagementView({
           },
         };
       }),
-      {
-        key: "other_types",
-        label: "Other types",
-        defaultWidth: 100,
-        sortValue: (group: LeaveBalanceEmployeeGroup) => group.typeCount,
-        render: (group: LeaveBalanceEmployeeGroup) => {
-          const others = group.rows.filter((row) => {
-            const label = leaveTypeLabelFromRow(row).toLowerCase();
-            return !label.includes("annual") && !label.includes("sick");
-          }).length;
-          return others > 0 ? `${others} more` : "—";
-        },
-      },
     ],
     [leaveTypeLabelFromRow],
   );
@@ -7718,13 +7705,15 @@ export function LeaveManagementView({
           {selectedBalanceGroup ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
               <TalentDoodleSprites />
-              <p className="text-xs text-muted-foreground">Available days exclude pending and approved future leave. Each leave type has a separate balance.</p>
-              {selectedBalanceGroupRows.map((row, index) => (
-                <div key={String(row.id ?? index)} className="rounded-md border border-border p-3 text-xs">
-                  <p className="font-semibold">{leaveTypeLabelFromRow(row)} - Available {formatBalanceDays(readBalanceDays(row, ["available_days", "remaining_days"]))} days</p>
-                  <p className="mt-2 text-muted-foreground">{[["Opening", "opening_balance_days"], ["Carried forward", "carried_forward_days"], ["Entitlement", "entitlement_days"], ["Accrued", "accrued_days"], ["Adjustment", "adjusted_days"], ["Used", "used_days"], ["Pending", "pending_days"], ["Approved future", "approved_future_days"], ["Expired", "expired_days"], ["Attendance deduction", "attendance_deduction_days"]].map(([label, key]) =>                     `${label}: ${formatBalanceDays(readBalanceDays(row, [key]))}`).join(" | ")}</p>
-                </div>
-              ))}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Available by leave type
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Available days exclude pending and approved future leave.
+                  Tap a type to see how its balance is made up.
+                </p>
+              </div>
               <div className="overflow-hidden rounded-md border border-slate-200">
                 <div
                   className={cn(
@@ -7752,7 +7741,7 @@ export function LeaveManagementView({
                     <div
                       key={rowKey}
                       className={cn(
-                        "grid items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
+                        "grid items-start gap-2 border-b border-slate-100 px-2.5 py-2 text-xs last:border-b-0",
                         index % 2 === 1 ? "bg-primary/[0.08]" : "bg-background",
                         canAdjustBalances
                           ? "grid-cols-[minmax(0,1fr)_4.25rem_3.5rem_3.5rem_2rem]"
@@ -7760,12 +7749,39 @@ export function LeaveManagementView({
                       )}
                     >
                       <div className="min-w-0">
-                        <p
-                          className="truncate font-medium text-slate-900"
-                          title={typeName}
-                        >
-                          {typeName}
-                        </p>
+                        <details className="group">
+                          <summary
+                            className="cursor-pointer list-none truncate font-medium text-slate-900 underline-offset-2 hover:underline"
+                            title={typeName}
+                          >
+                            {typeName}
+                          </summary>
+                          <dl className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                            {(
+                              [
+                                ["Opening", "opening_balance_days"],
+                                ["Carried forward", "carried_forward_days"],
+                                ["Entitlement", "entitlement_days"],
+                                ["Accrued", "accrued_days"],
+                                ["Adjustment", "adjusted_days"],
+                                ["Used", "used_days"],
+                                ["Pending", "pending_days"],
+                                ["Approved future", "approved_future_days"],
+                                ["Expired", "expired_days"],
+                                ["Attendance deduction", "attendance_deduction_days"],
+                              ] as const
+                            )
+                              .filter(([, key]) => readBalanceDays(row, [key]) !== 0)
+                              .map(([label, key]) => (
+                                <div key={key} className="flex justify-between gap-2">
+                                  <dt>{label}</dt>
+                                  <dd className="tabular-nums">
+                                    {formatBalanceDays(readBalanceDays(row, [key]))}
+                                  </dd>
+                                </div>
+                              ))}
+                          </dl>
+                        </details>
                         {selectedBalanceGroup.fiscalYears.length > 1 ? (
                           <p className="text-[10px] text-muted-foreground">
                             FY {readBalanceFiscalYear(row) || "-"}
@@ -7790,9 +7806,10 @@ export function LeaveManagementView({
                           ]),
                         )}
                       </span>
-                      <span className="text-right tabular-nums font-medium text-slate-900">
+                      <span className="self-start text-right tabular-nums font-medium text-slate-900">
                         {formatBalanceDays(
                           readBalanceDays(row, [
+                            "available_days",
                             "remaining_days",
                             "remaining",
                             "remainingDays",
