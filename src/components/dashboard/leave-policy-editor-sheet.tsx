@@ -235,6 +235,31 @@ function PolicyTypeAccrualCarryForward({
       />
       {custom && enabled ? (
         <>
+          <ChoiceRow
+            label="How much is carried"
+            hint="All unused days, up to a limit, or a percentage of unused days (still capped by the limit when one is set)."
+            value={assignment.carry_forward_method}
+            layoutId={`policy-type-cf-method-${index}`}
+            options={[
+              ["", "Automatic"],
+              ["all", "All unused"],
+              ["limited", "Up to a limit"],
+              ["percentage", "Percentage"],
+            ]}
+            onChange={(next) => onChange({ carry_forward_method: next })}
+          />
+          {assignment.carry_forward_method === "percentage" ? (
+            <Field label="Percentage carried" hint="Share of unused days carried into the new leave year (0–100).">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className={inputClass}
+                value={assignment.carry_forward_percentage}
+                onChange={(event) => onChange({ carry_forward_percentage: event.target.value })}
+              />
+            </Field>
+          ) : null}
           <Field label="Max days carried" hint="Leave blank for no cap.">
             <input
               type="number"
@@ -305,6 +330,94 @@ function PolicyTypeAccrualCarryForward({
           />
         </>
       ) : null}
+      <div className="sm:col-span-2 mt-1 border-t border-slate-200 pt-2 dark:border-border">
+        <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+          Leave Carry-Forward, Expiry &amp; Encashment Rules
+        </p>
+        <p className="text-[11px] text-slate-500">
+          Applied at year-end rollover, in this order: carry forward, automatic encashment, then lapse. Protected days are never lapsed.
+        </p>
+      </div>
+      <BoolPair
+        label="Unused days may lapse"
+        hint="If not, days that are neither carried nor encashed are kept as retained days on the new year for HR to resolve."
+        value={assignment.lapse_enabled}
+        layoutId={`policy-type-lapse-${index}`}
+        trueLabel="May lapse"
+        falseLabel="Retain"
+        onChange={(next) => onChange({ lapse_enabled: next })}
+      />
+      <Field
+        label="Protected days (never lapse)"
+        hint="Minimum unused days that must be kept (e.g. a statutory or contractual minimum). A stricter statutory rule applies automatically."
+      >
+        <input
+          type="number"
+          min={0}
+          step="0.5"
+          className={inputClass}
+          value={assignment.protected_minimum_days}
+          onChange={(event) => onChange({ protected_minimum_days: event.target.value })}
+        />
+      </Field>
+      <BoolPair
+        label="Automatic year-end encashment"
+        hint="Pay out unused days left after carry-forward. Payment goes to payroll as a draft input and is marked paid only when payroll pays it."
+        value={assignment.auto_encash_enabled}
+        layoutId={`policy-type-auto-encash-${index}`}
+        trueLabel="On"
+        falseLabel="Off"
+        onChange={(next) => onChange({ auto_encash_enabled: next })}
+      />
+      {assignment.auto_encash_enabled === "true" ? (
+        <>
+          <ChoiceRow
+            label="How much is encashed"
+            value={assignment.auto_encash_method}
+            layoutId={`policy-type-ae-method-${index}`}
+            options={[
+              ["all", "All eligible"],
+              ["limited", "Up to a limit"],
+              ["percentage", "Percentage"],
+            ]}
+            onChange={(next) => onChange({ auto_encash_method: next })}
+          />
+          {assignment.auto_encash_method !== "all" ? (
+            <Field label="Max days encashed" hint="Leave blank for no limit.">
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={assignment.auto_encash_max_days}
+                onChange={(event) => onChange({ auto_encash_max_days: event.target.value })}
+              />
+            </Field>
+          ) : null}
+          {assignment.auto_encash_method === "percentage" ? (
+            <Field label="Percentage encashed" hint="Share of the remaining days paid out (0–100).">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className={inputClass}
+                value={assignment.auto_encash_percentage}
+                onChange={(event) => onChange({ auto_encash_percentage: event.target.value })}
+              />
+            </Field>
+          ) : null}
+        </>
+      ) : null}
+      <ChoiceRow
+        label="Encashment salary basis"
+        hint="Daily rate = this salary ÷ the encashment rate divisor."
+        value={assignment.encashment_salary_basis}
+        layoutId={`policy-type-salary-basis-${index}`}
+        options={[
+          ["basic", "Basic salary"],
+          ["gross", "Gross (basic + allowances)"],
+        ]}
+        onChange={(next) => onChange({ encashment_salary_basis: next })}
+      />
     </>
   )
 }
@@ -1238,6 +1351,81 @@ export function LeavePolicyEditorSheet({
                               onChange={(event) => onValueChange({ maximum_accumulation_days: event.target.value })}
                             />
                           </Field>
+                          <ChoiceRow
+                            label="Leave year"
+                            hint="Calendar year (Jan–Dec), each employee's employment anniversary, or a custom start date. Existing calendar-year balances are not converted automatically."
+                            value={value.leave_year_type}
+                            layoutId="policy-leave-year"
+                            options={[
+                              ["calendar", "Calendar year"],
+                              ["anniversary", "Employment anniversary"],
+                              ["custom", "Custom start"],
+                            ]}
+                            onChange={(next) => onValueChange({ leave_year_type: next })}
+                          />
+                          {value.leave_year_type === "custom" ? (
+                            <>
+                              <Field label="Starts in month" hint="1–12">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={12}
+                                  className={inputClass}
+                                  value={value.leave_year_start_month}
+                                  onChange={(event) => onValueChange({ leave_year_start_month: event.target.value })}
+                                />
+                              </Field>
+                              <Field label="Starts on day" hint="1–31 (clamped to the month's last day)">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={31}
+                                  className={inputClass}
+                                  value={value.leave_year_start_day}
+                                  onChange={(event) => onValueChange({ leave_year_start_day: event.target.value })}
+                                />
+                              </Field>
+                            </>
+                          ) : null}
+                          <ChoiceRow
+                            label="Year-end rollover"
+                            hint="HR reviews and approves each rollover (recommended), or it posts automatically after the leave year ends."
+                            value={value.rollover_execution_mode}
+                            layoutId="policy-rollover-mode"
+                            options={[
+                              ["manual_approval", "HR approval"],
+                              ["automatic", "Automatic"],
+                            ]}
+                            onChange={(next) => onValueChange({ rollover_execution_mode: next })}
+                          />
+                          <Field
+                            label="Change takes effect"
+                            hint="For a change to an approved policy: the new version applies from this date (blank = today). Earlier versions stay for history."
+                          >
+                            <input
+                              type="date"
+                              className={inputClass}
+                              value={value.effective_from}
+                              onChange={(event) => onValueChange({ effective_from: event.target.value })}
+                            />
+                          </Field>
+                          <Field label="Reason for change" hint="Recorded in the policy history and audit log.">
+                            <input
+                              type="text"
+                              className={inputClass}
+                              value={value.change_reason}
+                              onChange={(event) => onValueChange({ change_reason: event.target.value })}
+                            />
+                          </Field>
+                          <BoolPair
+                            label="Save as draft version"
+                            hint="Keep the change as a draft to review its impact before submitting it for approval."
+                            value={value.save_as_draft}
+                            layoutId="policy-save-draft"
+                            trueLabel="Draft"
+                            falseLabel="Submit"
+                            onChange={(next) => onValueChange({ save_as_draft: next })}
+                          />
                           <Field label="Priority" hint="If two policies apply, the one with the higher number is used.">
                             <input
                               type="number"

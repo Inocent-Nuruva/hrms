@@ -1138,6 +1138,16 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   },
   "/dashboard/leave-management/policies": "leave_policies:read",
   "/dashboard/leave-management/workflows": "leave_workflows:read",
+  "/dashboard/leave-management/rollover": "leave_rollover:read",
+  "/dashboard/leave-management/statutory": "leave_statutory:read",
+  "/dashboard/leave-management/payroll-integration": {
+    permissions: [
+      "leave-balances.manage",
+      "leave-balances.adjust",
+      "leave_encashment:finance_confirm",
+    ],
+    mode: "any",
+  },
   // Any shell restriction is handled separately so this remains the permission source of truth.
   "/dashboard/company-overview": COMPANY_DASHBOARD_PERMISSION,
   "/dashboard/operations/promotion": MOVEMENT_ROUTE_PERMISSION,

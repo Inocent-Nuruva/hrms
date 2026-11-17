@@ -143,7 +143,20 @@ export function LeaveEncashmentSelfPanel({ token, balances }: { token: string | 
                   <td className="px-2 py-1.5">{text(row.requested_days)}</td>
                   <td className="px-2 py-1.5">{text(row.approved_days)}</td>
                   <td className="px-2 py-1.5">{text(row.status)}</td>
-                  <td className="px-2 py-1.5">{String(row.payment_status ?? "").toUpperCase() === "PAID" ? "Paid" : row.payroll_handoff_reference ? "With payroll" : "—"}</td>
+                  <td className="px-2 py-1.5">
+                    {(() => {
+                      const payment = String(row.payment_status ?? "").toUpperCase()
+                      if (payment === "PAID") return "Paid"
+                      if (payment === "IN_PAYROLL") return "In payroll, awaiting payment"
+                      if (payment === "REVERSED") return "Payment reversed — HR will follow up"
+                      return row.status === "approved" ? "Approved, not yet sent to payroll" : "—"
+                    })()}
+                    {row.calculated_amount ? (
+                      <span className="block text-xs text-muted-foreground">
+                        {String(row.payable_amount ?? row.calculated_amount)} {String(row.currency ?? "")}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-2 py-1.5 text-right">
                     {String(row.status) === "pending" ? (
                       <Button size="sm" variant="outline" onClick={() => void cancel(row)}>

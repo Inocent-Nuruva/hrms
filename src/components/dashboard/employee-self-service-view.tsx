@@ -173,6 +173,7 @@ import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
 import { LeaveEncashmentSelfPanel } from "@/components/leave/leave-encashment-self-panel"
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
+import { LeaveRequestPreviewPanel, useLeaveRequestPreview } from "@/components/leave/leave-request-preview"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
 import { useDashboardActor } from "@/hooks/use-dashboard-actor"
 import { canAccessDashboardRoute } from "@/lib/dashboard-permissions"
@@ -6378,6 +6379,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     start_time: "09:00",
     end_time: "13:00",
     reason: "",
+    event_date: "",
   })
   const [leaveAttachmentFile, setLeaveAttachmentFile] = React.useState<File | null>(null)
   // Set while the dialog edits an existing draft or returned request.
@@ -6537,6 +6539,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const selectedLeaveTypeRequiresAttachment =
     selectedLeaveTypeRecord?.requires_attachment === true ||
     selectedLeaveTypeRecord?.requires_attachment === "true"
+  // Family leave relates to a birth: statutory rules check the date.
+  const selectedLeaveTypeIsFamilyLeave = /MATERNITY|PATERNITY/i.test(
+    String(selectedLeaveTypeRecord?.code ?? ""),
+  )
 
   const selectedLeaveBalance = React.useMemo(() => {
     if (!requestForm.leave_type_id) {
@@ -6566,7 +6572,25 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
   }, [balances, requestForm.leave_type_id])
 
-  const requestedLeaveDays = React.useMemo(() => {
+  // The server counts working days, weekly offs and holidays; this form
+  // shows its answer instead of a calendar-day estimate.
+  const leavePreviewPayload = React.useMemo(() => {
+    if (!requestForm.leave_type_id || !requestForm.start_date || !requestForm.end_date) return null
+    if (requestForm.end_date < requestForm.start_date) return null
+    return {
+      leave_type_id: Number(requestForm.leave_type_id),
+      duration_type: requestForm.duration_type,
+      start_date: requestForm.start_date,
+      end_date: requestForm.end_date,
+      ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
+      ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
+      ...(editingLeaveRequest ? { ignore_request_id: editingLeaveRequest.id } : {}),
+      ...(requestForm.event_date ? { event_date: requestForm.event_date } : {}),
+    }
+  }, [requestForm.event_date, editingLeaveRequest, requestForm.duration_type, requestForm.end_date, requestForm.end_time, requestForm.half_day_session, requestForm.leave_type_id, requestForm.start_date, requestForm.start_time])
+  const leavePreview = useLeaveRequestPreview({ token: token || null, mode: "self", payload: leavePreviewPayload })
+
+  const clientRequestedLeaveDays = React.useMemo(() => {
     if (requestForm.duration_type === "HALF_DAY") return 0.5
     if (requestForm.duration_type === "SHORT_LEAVE") {
       const [startHour, startMinute] = requestForm.start_time.split(":").map(Number)
@@ -6576,15 +6600,19 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     }
     return countInclusiveLeaveDays(requestForm.start_date, requestForm.end_date)
   }, [requestForm.duration_type, requestForm.end_date, requestForm.end_time, requestForm.start_date, requestForm.start_time])
+  const requestedLeaveDays = leavePreview.preview?.chargeable_days ?? clientRequestedLeaveDays
 
-  const leaveSubmissionBalanceError = React.useMemo(
-    () =>
-      validateLeaveSubmissionBalance({
-        availableDays: selectedLeaveBalance?.availableDays ?? null,
-        requestedDays: requestedLeaveDays,
-      }),
-    [requestedLeaveDays, selectedLeaveBalance?.availableDays]
-  )
+  const leaveSubmissionBalanceError = React.useMemo(() => {
+    // Prefer the server's answer: it knows accrual by the leave dates.
+    if (leavePreview.preview) return leavePreview.preview.can_submit ? null : leavePreview.preview.issues.join(" ")
+    return validateLeaveSubmissionBalance({
+      availableDays: selectedLeaveBalance?.availableDays ?? null,
+      requestedDays: requestedLeaveDays,
+    })
+  }, [leavePreview.preview, requestedLeaveDays, selectedLeaveBalance?.availableDays])
+  const evidenceNeededBeforeSubmit = leavePreview.preview
+    ? leavePreview.preview.evidence.required && !leavePreview.preview.evidence.allow_deferred
+    : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord)
 
   const readEndpointError = React.useCallback(
     (errorObject: unknown, fallbackMessage: string) => {
@@ -6756,7 +6784,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       setActionErrorMessage(leaveSubmissionBalanceError)
       return
     }
-    if (submit && requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) && !leaveAttachmentFile) {
+    if (submit && evidenceNeededBeforeSubmit && !leaveAttachmentFile) {
       setActionErrorMessage("This leave type requires a supporting attachment before submission.")
       return
     }
@@ -6780,6 +6808,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           end_date: requestForm.end_date,
           ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
           ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
+          ...(selectedLeaveTypeIsFamilyLeave && requestForm.event_date ? { event_date: requestForm.event_date } : {}),
           reason: requestForm.reason.trim() || "Draft",
         })
         if (leaveAttachmentFile) {
@@ -6802,6 +6831,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           start_time: "09:00",
           end_time: "13:00",
           reason: "",
+          event_date: "",
         })
         setLeaveAttachmentFile(null)
         setMessage(submit ? "Leave request updated and sent for approval." : "Leave request changes saved.")
@@ -6819,6 +6849,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         end_date: requestForm.end_date,
         ...(requestForm.duration_type === "HALF_DAY" ? { half_day_session: requestForm.half_day_session } : {}),
         ...(requestForm.duration_type === "SHORT_LEAVE" ? { start_time: requestForm.start_time, end_time: requestForm.end_time } : {}),
+        ...(selectedLeaveTypeIsFamilyLeave && requestForm.event_date ? { event_date: requestForm.event_date } : {}),
         reason: requestForm.reason.trim() || (submit ? "" : "Draft"),
         submit: submit === true && !leaveAttachmentFile,
       })
@@ -6858,6 +6889,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         start_time: "09:00",
         end_time: "13:00",
         reason: "",
+        event_date: "",
       })
       setLeaveAttachmentFile(null)
       setMessage(submit ? "Leave request submitted for approval." : "Leave request saved as a draft.")
@@ -6876,12 +6908,13 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   }, [
     availableLeaveTypes.length,
     editingLeaveRequest,
+    evidenceNeededBeforeSubmit,
+    selectedLeaveTypeIsFamilyLeave,
     employeeId,
     leaveSubmissionBalanceError,
     loadData,
     requestForm,
     leaveAttachmentFile,
-    selectedLeaveTypeRecord,
     selectedLeaveBalance?.availableDays,
     token,
   ])
@@ -6960,6 +6993,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       start_time: readTime(row.start_time, "09:00"),
       end_time: readTime(row.end_time, "13:00"),
       reason: readString(row, ["reason"], "") === "-" ? "" : readString(row, ["reason"], ""),
+      event_date: row.event_date ? readDate(row.event_date) : "",
     })
     setLeaveAttachmentFile(null)
     setRequestDialogOpen(true)
@@ -6978,6 +7012,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         start_time: "09:00",
         end_time: "13:00",
         reason: "",
+        event_date: "",
       })
       setLeaveAttachmentFile(null)
     }
@@ -7600,12 +7635,15 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
               {selectedLeaveTypeRequiresAttachment ? (
                 <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `A supporting attachment is required for requests longer than ${evidenceDayThreshold(selectedLeaveTypeRecord)} working day(s)${selectedLeaveTypeRecord?.allow_deferred_attachment === true || selectedLeaveTypeRecord?.allow_deferred_attachment === "true" ? `. It can be uploaded within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.` : " and must be added before submission."}` : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "A supporting attachment is required before submission." : `You can submit now and upload evidence within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.`}</p>
               ) : null}
-              {requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
+              {leavePreviewPayload ? (
+                <LeaveRequestPreviewPanel preview={leavePreview.preview} error={leavePreview.error} loading={leavePreview.loading} />
+              ) : null}
+              {!leavePreview.preview && requestedLeaveDays !== null && requestForm.start_date && requestForm.end_date ? (
                 <p className="text-xs text-muted-foreground">
                   Requested duration: {requestedLeaveDays.toFixed(2)} day(s)
                 </p>
               ) : null}
-              {leaveSubmissionBalanceError ? (
+              {leaveSubmissionBalanceError && !leavePreview.preview ? (
                 <p className="text-xs text-rose-600">{leaveSubmissionBalanceError}</p>
               ) : null}
             </div>
@@ -7625,6 +7663,9 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
             </FluentField>
             <div className="grid gap-3 sm:grid-cols-2">
               <FluentField label="Start date"><DatePickerPresets value={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, start_date: value, ...(value && (prev.duration_type !== "FULL_DAY" || !prev.end_date || prev.end_date < value) ? { end_date: value } : {}) }))} placeholder="Select start date" className="max-w-none" /></FluentField>
+              {selectedLeaveTypeIsFamilyLeave ? (
+                <FluentField label="Date of birth"><DatePickerPresets value={requestForm.event_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, event_date: value }))} placeholder="Date of the birth" className="max-w-none" /></FluentField>
+              ) : null}
               <FluentField label="End date"><DatePickerPresets value={requestForm.end_date} min={requestForm.start_date} onChange={(value) => setRequestForm((prev) => ({ ...prev, end_date: value, ...(prev.duration_type === "FULL_DAY" ? {} : { start_date: value }) }))} placeholder="Select end date" className="max-w-none" /></FluentField>
             </div>
             {requestForm.duration_type === "HALF_DAY" ? (

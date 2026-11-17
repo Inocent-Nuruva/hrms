@@ -8978,6 +8978,48 @@ export async function deleteLeaveType(token: string, id: string | number) {
   });
 }
 
+export type LeaveRequestPreview = {
+  employee_id: number
+  leave_type_id: number
+  start_date: string
+  end_date: string
+  calendar_days: number
+  chargeable_days: number
+  weekly_off_days: number
+  public_holiday_days: number
+  included_dates: string[]
+  excluded_dates: Array<{ date: string; reason: string }>
+  evidence: {
+    required: boolean
+    requires_attachment: boolean
+    required_after_days: number | null
+    allow_deferred: boolean
+    grace_days: number
+  }
+  notice: {
+    minimum_days: number
+    days_until_start: number
+    satisfied: boolean
+    override_applied: boolean
+  }
+  balance: {
+    available_now: number | null
+    bookable_for_dates: number | null
+    allow_negative: boolean
+  }
+  issues: string[]
+  can_submit: boolean
+}
+
+/** Server-side dry run of a leave request filed by HR or a manager. */
+export async function previewLeaveRequest(token: string, data: AdminRecord) {
+  return adminRequest<LeaveRequestPreview>("/api/leave/requests/preview", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
 export async function createLeaveRequest(token: string, data: AdminRecord) {
   return adminRequest<unknown>("/api/leave/requests", {
     method: "POST",
@@ -9446,6 +9488,15 @@ export function previewLeaveRequests(token: string, file: File) {
 
 export function confirmLeaveRequestsImport(token: string, file: File) {
   return uploadLeaveRequestImport(token, file, "confirm");
+}
+
+/** Server-side dry run of the signed-in employee's leave request. */
+export async function previewMyLeaveRequest(token: string, data: AdminRecord) {
+  return adminRequest<LeaveRequestPreview>("/api/me/leave/requests/preview", {
+    method: "POST",
+    token,
+    body: data,
+  });
 }
 
 export async function createMyLeaveRequest(token: string, data: AdminRecord) {
@@ -10074,8 +10125,11 @@ export async function recordLeaveEncashmentPayrollHandoff(
   id: string | number,
   data: {
     payroll_period_code: string;
-    currency: string;
-    payable_amount: number;
+    /** Defaults to the calculated amount's currency. */
+    currency?: string;
+    /** Omit to use the policy-calculated amount; a different value is an override. */
+    payable_amount?: number;
+    override_reason?: string;
     reference?: string;
   },
 ) {

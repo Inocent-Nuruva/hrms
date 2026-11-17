@@ -549,6 +549,12 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "Holidays", url: "/dashboard/leave-management/holidays" },
       { title: "Policies", url: "/dashboard/leave-management/policies" },
       { title: "Workflows", url: "/dashboard/leave-management/workflows" },
+      { title: "Year-end Rollover", url: "/dashboard/leave-management/rollover" },
+      { title: "Statutory Rules", url: "/dashboard/leave-management/statutory" },
+      {
+        title: "Leave Payroll",
+        url: "/dashboard/leave-management/payroll-integration",
+      },
     ],
   },
 ];

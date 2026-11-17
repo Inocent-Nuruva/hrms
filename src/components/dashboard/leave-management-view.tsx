@@ -144,8 +144,15 @@ import { LeaveHrOperationsPanel } from "@/components/leave/leave-hr-operations-p
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
 import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
 import {
+  LeaveRequestPreviewPanel,
+  useLeaveRequestPreview,
+} from "@/components/leave/leave-request-preview";
+import { LeavePolicyVersionsPanel } from "@/components/leave/leave-policy-versions-panel";
+import { reverseLeaveEncashment } from "@/lib/leave-engine-api";
+import {
   leavePolicyRecordToForm,
   leavePolicyTypeCarryForwardPayload,
+  leavePolicyEnginePayload,
   type LeavePolicyFormValue,
 } from "@/lib/leave-policy-form";
 import { cn } from "@/lib/utils";
@@ -279,6 +286,7 @@ function emptyLeaveRequestForm() {
     start_date: "",
     end_date: "",
     reason: "",
+    notice_override_reason: "",
     submit: "true",
   };
 }
@@ -1654,6 +1662,47 @@ export function LeaveManagementView({
   const [typeForm, setTypeForm] = React.useState(createEmptyLeaveTypeForm);
 
   const [requestForm, setRequestForm] = React.useState(emptyLeaveRequestForm);
+  // Server dry run of the request being filed (day count, documents,
+  // notice, balance) once employee, type and dates are chosen.
+  const requestPreviewPayload = React.useMemo(() => {
+    if (
+      !requestDialogOpen ||
+      requestDialogStep === "who" ||
+      !requestForm.employee_id ||
+      !requestForm.leave_type_id ||
+      !requestForm.start_date ||
+      !requestForm.end_date ||
+      requestForm.end_date < requestForm.start_date
+    )
+      return null;
+    return {
+      employee_id: Number(requestForm.employee_id),
+      leave_type_id: Number(requestForm.leave_type_id),
+      start_date: requestForm.start_date,
+      end_date: requestForm.end_date,
+      ...(requestForm.notice_override_reason.trim().length >= 5
+        ? { notice_override_reason: requestForm.notice_override_reason.trim() }
+        : {}),
+    };
+  }, [
+    requestDialogOpen,
+    requestDialogStep,
+    requestForm.employee_id,
+    requestForm.leave_type_id,
+    requestForm.start_date,
+    requestForm.end_date,
+    requestForm.notice_override_reason,
+  ]);
+  const requestPreview = useLeaveRequestPreview({
+    token: requestDialogOpen ? readStoredToken() || null : null,
+    mode: "hr",
+    payload: requestPreviewPayload,
+  });
+  const noticeOverrideNeeded = Boolean(
+    requestPreview.preview &&
+      !requestPreview.preview.notice.satisfied &&
+      requestPreview.preview.notice.days_until_start > 0,
+  );
 
   const [balanceForm, setBalanceForm] = React.useState(emptyBalanceForm);
 
@@ -3382,6 +3431,16 @@ export function LeaveManagementView({
       showErrorAlert(message);
       return;
     }
+    if (
+      noticeOverrideNeeded &&
+      requestForm.notice_override_reason.trim().length < 5
+    ) {
+      const message =
+        "This leave starts inside the policy notice period. Give a notice override reason (at least 5 characters).";
+      setError(message);
+      showErrorAlert(message);
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -3392,6 +3451,9 @@ export function LeaveManagementView({
         start_date: requestForm.start_date,
         end_date: requestForm.end_date,
         reason: requestForm.reason.trim(),
+        ...(noticeOverrideNeeded
+          ? { notice_override_reason: requestForm.notice_override_reason.trim() }
+          : {}),
         submit: requestForm.submit === "true",
       });
       setRequestForm(emptyLeaveRequestForm());
@@ -3892,8 +3954,21 @@ export function LeaveManagementView({
           label: `Amount for ${String(row.approved_days ?? "")} day(s)`,
           type: "number",
           defaultValue:
-            row.payable_amount != null ? String(row.payable_amount) : "",
+            row.calculated_amount != null
+              ? String(row.calculated_amount)
+              : row.payable_amount != null
+                ? String(row.payable_amount)
+                : "",
           required: true,
+          hint:
+            row.calculated_amount != null
+              ? `Calculated from the policy: ${String(row.daily_rate ?? "")} per day (${String(row.salary_basis ?? "basic")} salary ÷ ${String(row.rate_divisor ?? "")}). Changing it is an override.`
+              : "No calculated amount (check the policy divisor and the employee's compensation). Entering one is an override.",
+        },
+        {
+          name: "overrideReason",
+          label: "Override reason (only if you changed the amount)",
+          defaultValue: "",
         },
         {
           name: "currency",
@@ -3920,11 +3995,26 @@ export function LeaveManagementView({
       showErrorAlert("Currency must be a 3-letter code such as TZS.");
       return;
     }
+    const calculated =
+      row.calculated_amount != null ? Number(row.calculated_amount) : null;
+    const isOverride =
+      calculated === null || Math.abs(calculated - amount) > 0.009;
+    if (isOverride && (form.overrideReason ?? "").trim().length < 5) {
+      showErrorAlert(
+        "You changed the calculated amount. Give an override reason (at least 5 characters).",
+      );
+      return;
+    }
     try {
       await recordLeaveEncashmentPayrollHandoff(token, id, {
         payroll_period_code: periodCode.trim(),
         currency,
-        payable_amount: amount,
+        ...(isOverride
+          ? {
+              payable_amount: amount,
+              override_reason: (form.overrideReason ?? "").trim(),
+            }
+          : {}),
       });
       showSuccessAlert(
         "Sent to payroll as a draft input. Payroll must approve it before the run.",
@@ -3935,6 +4025,35 @@ export function LeaveManagementView({
         errorObject instanceof Error
           ? errorObject.message
           : "Could not send the encashment to payroll.",
+      );
+    }
+  }
+
+  async function reverseEncashment(row: AdminRecord) {
+    const token = readStoredToken();
+    const id = readNumber(row, ["id"]);
+    if (!token || id === null) return;
+    const form = await fluentForm(
+      [
+        {
+          name: "reason",
+          label: "Why is this encashment being reversed?",
+          required: true,
+          hint: "The days are returned to the balance and any draft payroll input is withdrawn.",
+        },
+      ],
+      { title: "Reverse encashment", confirmLabel: "Reverse" },
+    );
+    if (!form?.reason?.trim()) return;
+    try {
+      await reverseLeaveEncashment(token, id, form.reason.trim());
+      showSuccessAlert("Encashment reversed and the days returned.");
+      await loadEncashmentRows();
+    } catch (errorObject) {
+      showErrorAlert(
+        errorObject instanceof Error
+          ? errorObject.message
+          : "Could not reverse the encashment.",
       );
     }
   }
@@ -4268,11 +4387,28 @@ export function LeaveManagementView({
           ),
           ...leavePolicyTypeCarryForwardPayload(row),
         })),
+        ...leavePolicyEnginePayload(policyForm),
       };
       if (editingPolicyId === null) {
         await createLeavePolicy(token, payload);
       } else {
-        await patchLeavePolicy(token, editingPolicyId, payload);
+        const saved = (await patchLeavePolicy(
+          token,
+          editingPolicyId,
+          payload,
+        )) as AdminRecord | null;
+        const lifecycle = saved ? String(saved.lifecycle_status ?? "") : "";
+        if (lifecycle === "pending_approval") {
+          showSuccessAlert(
+            "Saved as a new version awaiting approval. The current version stays in effect until it is approved.",
+          );
+        } else if (lifecycle === "draft") {
+          showSuccessAlert("Saved as a draft version.");
+        } else if (saved?.version_no) {
+          showSuccessAlert(
+            `Version ${String(saved.version_no)} is in effect from ${String(saved.effective_from ?? "today")}.`,
+          );
+        }
       }
       setPolicyForm(emptyLeavePolicyForm());
       setEditingPolicyId(null);
@@ -5526,6 +5662,14 @@ export function LeaveManagementView({
     });
   };
   const leaveRequestReviewItems = [
+    ...(requestPreview.preview
+      ? [
+          {
+            label: "Leave days charged",
+            value: `${requestPreview.preview.chargeable_days} of ${requestPreview.preview.calendar_days} calendar day(s)`,
+          },
+        ]
+      : []),
     { label: "Employee", value: requestEmployeeLabel },
     { label: "Leave type", value: requestLeaveTypeLabel },
     { label: "Start", value: formatRequestDate(requestForm.start_date) },
@@ -6564,6 +6708,22 @@ export function LeaveManagementView({
                   <p role="status" className="text-sm text-muted-foreground">
                     {leaveEvidenceMessage(selectedLeaveRequestRow)}
                   </p>
+                  {selectedLeaveRequestRow.notice_overridden_at ? (
+                    <p
+                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+                      data-testid="leave-notice-override"
+                    >
+                      <span className="font-semibold">
+                        Notice period overridden by HR
+                      </span>
+                      {" on "}
+                      {new Date(
+                        String(selectedLeaveRequestRow.notice_overridden_at),
+                      ).toLocaleString()}
+                      {": "}
+                      {String(selectedLeaveRequestRow.notice_override_reason ?? "")}
+                    </p>
+                  ) : null}
                   {selectedLeaveRequestRow.routing_required === true ? (
                     <Button
                       disabled={saving}
@@ -7127,6 +7287,11 @@ export function LeaveManagementView({
                     Start date cannot be after end date.
                   </p>
                 ) : null}
+                <LeaveRequestPreviewPanel
+                  preview={requestPreview.preview}
+                  error={requestPreview.error}
+                  loading={requestPreview.loading}
+                />
               </section>
             ) : null}
 
@@ -7147,6 +7312,29 @@ export function LeaveManagementView({
                     </div>
                   ))}
                 </div>
+                <LeaveRequestPreviewPanel
+                  preview={requestPreview.preview}
+                  error={requestPreview.error}
+                  loading={requestPreview.loading}
+                />
+                {noticeOverrideNeeded ? (
+                  <LeaveTypeField
+                    label="Notice override reason"
+                    help={`This leave starts in ${requestPreview.preview?.notice.days_until_start ?? 0} day(s); the policy needs ${requestPreview.preview?.notice.minimum_days ?? 0}. Filing it anyway is recorded as an HR override on the request and in the audit log.`}
+                  >
+                    <Textarea
+                      className="mt-1 min-h-16 rounded-md border border-amber-300 px-3 py-2 text-sm"
+                      placeholder="Why the notice period is being overridden"
+                      value={requestForm.notice_override_reason}
+                      onChange={(event) =>
+                        setRequestForm((prev) => ({
+                          ...prev,
+                          notice_override_reason: event.target.value,
+                        }))
+                      }
+                    />
+                  </LeaveTypeField>
+                ) : null}
                 <LeaveTypeField
                   label="Reason"
                   help="Why this leave is needed. Approvers will see this."
@@ -8605,20 +8793,46 @@ export function LeaveManagementView({
                           <td className="px-3 py-2">{readString(row, ["payroll_period_code"]) !== "-" ? readString(row, ["payroll_period_code"]) : "—"}</td>
                           <td className="px-3 py-2">{row.payable_amount != null && row.payable_amount !== "" ? `${String(row.payable_amount)} ${readString(row, ["currency"]) !== "-" ? readString(row, ["currency"]) : ""}` : "—"}</td>
                           <td className="px-3 py-2">
-                            {readString(row, ["payment_status"]).toUpperCase() === "PAID"
-                              ? "Paid"
-                              : canAdjustBalances &&
-                                  readString(row, ["payroll_handoff_reference"]) !== "-"
-                                ? (
-                                  <button
-                                    type="button"
-                                    className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
-                                    onClick={() => void recordEncashmentPayment(row)}
-                                  >
-                                    Record payment
-                                  </button>
-                                )
-                                : "Not paid"}
+                            {(() => {
+                              const payment = readString(row, ["payment_status"]).toUpperCase();
+                              const approved = readString(row, ["status"]).toLowerCase() === "approved";
+                              const label =
+                                payment === "PAID"
+                                  ? readString(row, ["payment_confirmed_via"]) === "payroll"
+                                    ? "Paid by payroll"
+                                    : "Paid (recorded by HR)"
+                                  : payment === "IN_PAYROLL"
+                                    ? "In payroll — awaiting payment"
+                                    : payment === "REVERSED"
+                                      ? "Reversed by payroll"
+                                      : "Not paid";
+                              return (
+                                <span className="flex flex-col gap-1">
+                                  <span data-testid="encashment-payment-status">{label}</span>
+                                  {row.amount_overridden === true ? (
+                                    <span className="text-xs text-amber-700 dark:text-amber-300">Amount overridden: {String(row.override_reason ?? "")}</span>
+                                  ) : null}
+                                  {canAdjustBalances && payment === "IN_PAYROLL" ? (
+                                    <button
+                                      type="button"
+                                      className="w-fit rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                                      onClick={() => void recordEncashmentPayment(row)}
+                                    >
+                                      Record payment outside payroll
+                                    </button>
+                                  ) : null}
+                                  {canAdjustBalances && approved && payment !== "PAID" ? (
+                                    <button
+                                      type="button"
+                                      className="w-fit rounded-md border border-rose-300 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                                      onClick={() => void reverseEncashment(row)}
+                                    >
+                                      Reverse
+                                    </button>
+                                  ) : null}
+                                </span>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -9038,6 +9252,11 @@ export function LeaveManagementView({
             onEdit={(row) => void loadPolicyIntoForm(row)}
             onDelete={(row) => setPendingPolicyDelete(row)}
             onToggleStatus={(row) => void togglePolicyStatus(row)}
+          />
+
+          <LeavePolicyVersionsPanel
+            policies={policies}
+            onChanged={() => void reloadAll(tab, true)}
           />
 
           <LeavePolicyEditorSheet

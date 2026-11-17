@@ -23,6 +23,19 @@ export type LeavePolicyTypeAssignment = {
   carry_forward_expiry_date: string
   carry_forward_auto_expire: string
   carry_forward_consume_first: string
+  /** "" = derived (limited when a cap is set) | all | limited | percentage */
+  carry_forward_method: string
+  carry_forward_percentage: string
+  /** "true" = unused days may lapse; "false" = retained */
+  lapse_enabled: string
+  protected_minimum_days: string
+  auto_encash_enabled: string
+  /** all | limited | percentage */
+  auto_encash_method: string
+  auto_encash_max_days: string
+  auto_encash_percentage: string
+  /** basic | gross */
+  encashment_salary_basis: string
 }
 
 export type LeavePolicyFormValue = {
@@ -57,6 +70,16 @@ export type LeavePolicyFormValue = {
   absent_day_deduction_days: string
   unpaid_leave_day_deduction_days: string
   half_day_deduction_days: string
+  /** calendar | anniversary | custom */
+  leave_year_type: string
+  leave_year_start_month: string
+  leave_year_start_day: string
+  /** manual_approval | automatic */
+  rollover_execution_mode: string
+  /** Versioning: when the change applies, why, and whether to keep it as a draft. */
+  effective_from: string
+  change_reason: string
+  save_as_draft: string
   leave_types: LeavePolicyTypeAssignment[]
 }
 
@@ -216,6 +239,15 @@ export function emptyLeavePolicyTypeAssignment(): LeavePolicyTypeAssignment {
     carry_forward_expiry_date: "",
     carry_forward_auto_expire: "true",
     carry_forward_consume_first: "true",
+    carry_forward_method: "",
+    carry_forward_percentage: "",
+    lapse_enabled: "true",
+    protected_minimum_days: "0",
+    auto_encash_enabled: "false",
+    auto_encash_method: "all",
+    auto_encash_max_days: "",
+    auto_encash_percentage: "",
+    encashment_salary_basis: "basic",
   }
 }
 
@@ -283,6 +315,13 @@ export function emptyLeavePolicyForm(): LeavePolicyFormValue {
     absent_day_deduction_days: "1",
     unpaid_leave_day_deduction_days: "1",
     half_day_deduction_days: "0.5",
+    leave_year_type: "calendar",
+    leave_year_start_month: "",
+    leave_year_start_day: "",
+    rollover_execution_mode: "manual_approval",
+    effective_from: "",
+    change_reason: "",
+    save_as_draft: "false",
     leave_types: [emptyLeavePolicyTypeAssignment()],
   }
 }
@@ -381,6 +420,15 @@ function readCarryForwardFields(record: PolicyRecord) {
     carry_forward_expiry_date: date,
     carry_forward_auto_expire: record.carry_forward_auto_expire === false ? "false" : "true",
     carry_forward_consume_first: record.carry_forward_consume_first === false ? "false" : "true",
+    carry_forward_method: text("carry_forward_method"),
+    carry_forward_percentage: text("carry_forward_percentage") === "" ? "" : String(Number(text("carry_forward_percentage"))),
+    lapse_enabled: record.lapse_enabled === false ? "false" : "true",
+    protected_minimum_days: text("protected_minimum_days") === "" ? "0" : String(Number(text("protected_minimum_days"))),
+    auto_encash_enabled: record.auto_encash_enabled === true ? "true" : "false",
+    auto_encash_method: text("auto_encash_method") || "all",
+    auto_encash_max_days: text("auto_encash_max_days") === "" ? "" : String(Number(text("auto_encash_max_days"))),
+    auto_encash_percentage: text("auto_encash_percentage") === "" ? "" : String(Number(text("auto_encash_percentage"))),
+    encashment_salary_basis: text("encashment_salary_basis") || "basic",
   }
 }
 
@@ -402,6 +450,36 @@ export function leavePolicyTypeCarryForwardPayload(row: LeavePolicyTypeAssignmen
         : null,
     carry_forward_auto_expire: row.carry_forward_auto_expire !== "false",
     carry_forward_consume_first: row.carry_forward_consume_first !== "false",
+    carry_forward_method: inherit || !row.carry_forward_method ? null : row.carry_forward_method,
+    carry_forward_percentage:
+      !inherit && row.carry_forward_method === "percentage" && row.carry_forward_percentage !== ""
+        ? Number(row.carry_forward_percentage)
+        : null,
+    lapse_enabled: row.lapse_enabled !== "false",
+    protected_minimum_days: Number(row.protected_minimum_days) || 0,
+    auto_encash_enabled: row.auto_encash_enabled === "true",
+    auto_encash_method: row.auto_encash_enabled === "true" ? row.auto_encash_method || "all" : null,
+    auto_encash_max_days:
+      row.auto_encash_enabled === "true" && row.auto_encash_max_days !== "" ? Number(row.auto_encash_max_days) : null,
+    auto_encash_percentage:
+      row.auto_encash_enabled === "true" && row.auto_encash_percentage !== ""
+        ? Number(row.auto_encash_percentage)
+        : null,
+    encashment_salary_basis: row.encashment_salary_basis === "gross" ? "gross" : "basic",
+  }
+}
+
+/** API payload for the policy-level leave year, rollover and version fields. */
+export function leavePolicyEnginePayload(value: LeavePolicyFormValue) {
+  const custom = value.leave_year_type === "custom"
+  return {
+    leave_year_type: value.leave_year_type || "calendar",
+    leave_year_start_month: custom && value.leave_year_start_month ? Number(value.leave_year_start_month) : null,
+    leave_year_start_day: custom && value.leave_year_start_day ? Number(value.leave_year_start_day) : null,
+    rollover_execution_mode: value.rollover_execution_mode === "automatic" ? "automatic" : "manual_approval",
+    ...(value.effective_from ? { effective_from: value.effective_from } : {}),
+    ...(value.change_reason.trim() ? { change_reason: value.change_reason.trim() } : {}),
+    ...(value.save_as_draft === "true" ? { save_as_draft: true } : {}),
   }
 }
 
@@ -527,6 +605,13 @@ export function leavePolicyRecordToForm(row: PolicyRecord | null | undefined): L
       ["half_day_deduction_days", "halfDayDeductionDays"],
       empty.half_day_deduction_days,
     ),
+    leave_year_type: typeof row.leave_year_type === "string" ? row.leave_year_type : "calendar",
+    leave_year_start_month: row.leave_year_start_month == null ? "" : String(row.leave_year_start_month),
+    leave_year_start_day: row.leave_year_start_day == null ? "" : String(row.leave_year_start_day),
+    rollover_execution_mode: row.rollover_execution_mode === "automatic" ? "automatic" : "manual_approval",
+    effective_from: "",
+    change_reason: "",
+    save_as_draft: "false",
     leave_types: assignments.length ? assignments : [emptyLeavePolicyTypeAssignment()],
   }
 }
