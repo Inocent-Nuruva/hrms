@@ -22719,3 +22719,113 @@ export async function patchMyLeaveRequestMedicalDetail(
     body: data,
   });
 }
+
+// ---------------------------------------------------------------- comp-off
+// FRS-11.1.09. The backend blocks earning until HR approves a policy.
+
+export async function getCompOffEligibility(token: string) {
+  return adminRequest<{
+    types: AdminRecord[];
+    convertible_overtime: AdminRecord[];
+  }>("/api/leave/comp-off/eligibility", { token });
+}
+
+export async function listCompOffCredits(
+  token: string,
+  params?: { employee_id?: number; status?: string; leave_year?: string },
+) {
+  const query = new URLSearchParams();
+  if (params?.employee_id) query.set("employee_id", String(params.employee_id));
+  if (params?.status) query.set("status", params.status);
+  if (params?.leave_year) query.set("leave_year", params.leave_year);
+  const suffix = query.toString() ? `?${query}` : "";
+  return normalizeList(
+    await adminRequest<unknown>(`/api/leave/comp-off/credits${suffix}`, { token }),
+  );
+}
+
+export async function listPendingCompOffCredits(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/leave/comp-off/pending", { token }),
+  );
+}
+
+export async function requestCompOff(
+  token: string,
+  data: { leave_type_id: number; overtime_request_id: number; employee_id?: number },
+) {
+  return adminRequest<unknown>("/api/leave/comp-off/credits", {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function decideCompOff(
+  token: string,
+  id: number,
+  data: { approve: boolean; reason?: string },
+) {
+  return adminRequest<unknown>(`/api/leave/comp-off/credits/${id}/decision`, {
+    method: "POST",
+    token,
+    body: data,
+  });
+}
+
+export async function reverseCompOff(token: string, id: number, reason: string) {
+  return adminRequest<unknown>(`/api/leave/comp-off/credits/${id}/reverse`, {
+    method: "POST",
+    token,
+    body: { reason },
+  });
+}
+
+export async function getCompOffHistory(token: string, id: number) {
+  return adminRequest<{ credit: AdminRecord; ledger: AdminRecord[]; audit: AdminRecord[] }>(
+    `/api/leave/comp-off/credits/${id}/history`,
+    { token },
+  );
+}
+
+export async function getCompOffUtilization(token: string, leaveYear: string) {
+  return normalizeList(
+    await adminRequest<unknown>(
+      `/api/leave/comp-off/utilization?leave_year=${encodeURIComponent(leaveYear)}`,
+      { token },
+    ),
+  );
+}
+
+export async function listCompOffPolicies(token: string) {
+  return normalizeList(
+    await adminRequest<unknown>("/api/leave/comp-off/policies", { token }),
+  );
+}
+
+export async function saveCompOffPolicy(
+  token: string,
+  data: {
+    leave_type_id: number;
+    hours_per_day: number;
+    minimum_hours?: number;
+    max_days_per_credit?: number;
+    expiry_days?: number;
+    requires_approval: boolean;
+    eligible_employment_types?: string[];
+    notes?: string;
+  },
+) {
+  return adminRequest<unknown>("/api/leave/comp-off/policies", {
+    method: "PUT",
+    token,
+    body: data,
+  });
+}
+
+export async function approveCompOffPolicy(token: string, id: number) {
+  return adminRequest<unknown>(`/api/leave/comp-off/policies/${id}/approve`, {
+    method: "POST",
+    token,
+  });
+}

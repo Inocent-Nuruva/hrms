@@ -172,6 +172,7 @@ import {
 import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
 import { LeaveEncashmentSelfPanel } from "@/components/leave/leave-encashment-self-panel"
+import { LeaveCompOffPanel } from "@/components/leave/leave-comp-off-panel"
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { LeaveRequestPreviewPanel, useLeaveRequestPreview } from "@/components/leave/leave-request-preview"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
@@ -7357,6 +7358,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
         </div> : null}
         {balances.length > 0 ? <LeaveAccrualProjectionCard token={token} /> : null}
         <LeaveEncashmentSelfPanel token={token} balances={balances} />
+        <LeaveCompOffPanel token={token} mode="self" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {balances.map((row, index) => (
             <FluentCard key={String(row.id ?? index)} appearance="outline" className="min-w-0 p-4">

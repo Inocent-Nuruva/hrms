@@ -142,6 +142,7 @@ import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
 import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
 import { LeaveHrOperationsPanel } from "@/components/leave/leave-hr-operations-panel";
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
+import { LeaveCompOffPanel } from "@/components/leave/leave-comp-off-panel";
 import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
 import {
   LeaveRequestPreviewPanel,
@@ -9393,6 +9394,12 @@ export function LeaveManagementView({
           {canUpdateWorkflows ? (
             <LeaveDelegationsPanel token={readStoredToken()} mode="hr" />
           ) : null}
+
+          <LeaveCompOffPanel
+            token={readStoredToken()}
+            mode="hr"
+            canManagePolicy={canUpdateWorkflows}
+          />
 
           <LeaveWorkflowEditorSheet
             open={workflowSheetOpen}
