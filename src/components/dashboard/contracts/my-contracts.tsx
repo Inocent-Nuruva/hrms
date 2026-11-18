@@ -26,7 +26,9 @@ const ACTION_NEEDED = ["PENDING_EMPLOYEE_SIGNATURE", "ISSUED"]
 export function MyContractsView() {
   const [token, setToken] = React.useState("")
   const [rows, setRows] = React.useState<ContractRow[] | null>(null)
-  const [signatoryPending, setSignatoryPending] = React.useState(0)
+  const [signatoryContracts, setSignatoryContracts] = React.useState<
+    NonNullable<Awaited<ReturnType<typeof mySignatoryStatus>>["contracts"]>
+  >([])
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => setToken(readAccessToken()), [])
@@ -42,7 +44,7 @@ export function MyContractsView() {
       )
       .catch((cause: unknown) => setError(errorMessage(cause, "Could not load your contracts")))
     mySignatoryStatus(token)
-      .then((result) => setSignatoryPending(result.pending))
+      .then((result) => setSignatoryContracts(result.contracts ?? []))
       .catch(() => undefined)
   }, [token])
 
@@ -52,12 +54,44 @@ export function MyContractsView() {
         <h2 className="text-xl font-semibold">My contracts</h2>
         <p className="text-sm text-muted-foreground">View, download and sign your employment contracts.</p>
       </div>
-      {signatoryPending ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {signatoryPending} contract{signatoryPending === 1 ? " is" : "s are"} waiting for your signature on behalf of the company. Open them
-          from your notifications.
-        </p>
+      {signatoryContracts.length ? (
+        <section className="grid gap-2" aria-label="Contracts to sign for the company">
+          <div>
+            <h3 className="text-base font-semibold">Contracts to sign for the company</h3>
+            <p className="text-sm text-muted-foreground">
+              You are the company signatory on these contracts.{" "}
+              {(() => {
+                const waiting = signatoryContracts.filter((c) => c.status === "PENDING_HR_SIGNATURE").length
+                return waiting ? `${waiting} ${waiting === 1 ? "is" : "are"} waiting for your signature.` : "None are waiting for you right now."
+              })()}
+            </p>
+          </div>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {signatoryContracts.map((row) => {
+              const waiting = row.status === "PENDING_HR_SIGNATURE"
+              return (
+                <li key={row.id}>
+                  <Link href={`/dashboard/me/contracts/${row.id}`} className="grid gap-1 px-4 py-3 hover:bg-slate-50">
+                    <span className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">
+                        {row.employeeName || "Employee"}
+                        {row.employeeNo ? <span className="text-sm font-normal text-muted-foreground"> · {row.employeeNo}</span> : null}
+                      </span>
+                      <ContractStatusBadge status={row.status} />
+                    </span>
+                    <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {row.title} · {row.referenceNo} · {CONTRACT_TYPE_LABELS[row.contractType]} · {formatDate(row.startDate)} –{" "}
+                      {row.endDate ? formatDate(row.endDate) : "open"}
+                      {waiting ? <span className="font-medium text-amber-700">Sign now</span> : null}
+                    </span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
       ) : null}
+      {signatoryContracts.length ? <h3 className="text-base font-semibold">My own contracts</h3> : null}
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
       {!rows ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">

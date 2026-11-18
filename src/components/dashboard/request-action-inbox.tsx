@@ -24,6 +24,8 @@ import { actionReference, actionSubject, defaultInboxFilters, filterAndGroupActi
 import { cn } from "@/lib/utils"
 import { onboardingRequestHref } from "@/lib/onboarding-workspace-link"
 import { LeaveReviewContext } from "@/components/leave/leave-review-context"
+import { useLeaveDecisionSignature } from "@/components/leave/leave-decision-sign-dialog"
+import { useDashboardIdentity } from "@/components/dashboard/dashboard-identity"
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -44,6 +46,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   const [comment, setComment] = React.useState("")
   const [evidenceId, setEvidenceId] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  const [signDialog, askSignature] = useLeaveDecisionSignature()
+  const identity = useDashboardIdentity()
   useActionInboxLiveRefresh(onRefresh, busy)
   const [error, setError] = React.useState("")
   const [documents, setDocuments] = React.useState<AdminRecord[]>([])
@@ -123,8 +127,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
   React.useEffect(() => {
     const selectionIsVisible = visibleGroups.some((group) => group.items.some((item) => rowId(item) === selectedId))
     const next = visibleGroups.flatMap((group) => group.items).find(isOpenAction) ?? visibleGroups[0]?.items[0]
-    if (!selectionIsVisible && next && !busy && !settledId) select(next)
-  }, [busy, selectedId, settledId, visibleGroups])
+    if (!selectionIsVisible && next && !busy) select(next)
+  }, [busy, selectedId, visibleGroups])
 
   React.useEffect(() => {
     if (!evidenceRequired || !requestId || !sourceType) return
@@ -171,10 +175,10 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     setEvidenceId("")
     setError("")
   }
-  function toggleGroup(groupKey: string) {
+  function toggleGroup(groupKey: string, defaultExpanded: boolean) {
     setExpandedGroups((current) => ({
       ...current,
-      [groupKey]: !(current[groupKey] ?? true),
+      [groupKey]: !(current[groupKey] ?? defaultExpanded),
     }))
   }
   async function submit(mode: "approve" | "reject" | "return" | "complete" | "issue") {
@@ -188,6 +192,22 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
     if (mode === "complete" && context.completion_evidence_required === true && !/^[1-9]\d*$/.test(evidenceId)) {
       setError("Select a supporting document before completing this item.")
       return
+    }
+    // Approve = sign for leave decisions.
+    let leaveSignature: unknown = null
+    let leaveComments = comment.trim()
+    if (reference.type === "LEAVE_REQUEST" && mode !== "issue" && mode !== "complete") {
+      const signed = await askSignature({
+        title: mode === "approve" ? "Approve leave request" : mode === "return" ? "Return leave request for correction" : "Reject leave request",
+        confirmLabel: mode === "approve" ? "Approve" : mode === "return" ? "Return" : "Reject",
+        commentRequired: mode !== "approve",
+        defaultComment: comment.trim(),
+        signerName: identity.name ?? "",
+        destructive: mode === "reject",
+      })
+      if (!signed) return
+      leaveSignature = signed.signature
+      leaveComments = signed.comments || leaveComments
     }
     setBusy(true)
     setError("")
@@ -212,7 +232,8 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       } else if (reference.type === "LEAVE_REQUEST") {
         await leaveRequestApprovalAction(token, reference.requestId, {
           action: mode === "return" ? "return_for_correction" : mode,
-          comments,
+          comments: leaveComments,
+          signature: leaveSignature as AdminRecord,
         })
       } else {
         throw new Error("Open the full request to review this action.")
@@ -229,6 +250,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {signDialog}
       <TabList
         aria-label="Request status"
         selectedValue={filters.status === "cancelled" ? "all" : filters.status}
@@ -295,18 +317,18 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
             const pendingCount = group.items.filter(isOpenAction).length
             const completedCount = group.items.filter((item) => readString(item, ["status"]).toUpperCase() === "COMPLETED").length
             const unattended = pendingCount > 0
-            const expanded = expandedGroups[group.subject.key] ?? true
+            const expanded = expandedGroups[group.subject.key] ?? (unattended || active)
             return <div key={group.subject.key} className={cn("relative before:absolute before:inset-y-0 before:left-0 before:w-1", active ? "bg-primary/10 before:bg-primary" : "before:bg-transparent")}>
               <div className="flex items-center transition hover:bg-muted/60">
-                  <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded text-foreground hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key)}>
+                  <button type="button" className="ml-2 flex size-8 shrink-0 items-center justify-center rounded text-foreground hover:bg-muted" aria-label={`${expanded ? "Collapse" : "Expand"} requests for ${group.subject.name}`} aria-expanded={expanded} onClick={() => toggleGroup(group.subject.key, unattended || active)}>
                     <ChevronRight className={cn("size-4 transition-transform", expanded && "rotate-90", active && "text-primary")} aria-hidden />
                   </button>
-                <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-1 pr-3 text-left" onClick={() => select(group.items.find(isOpenAction) ?? group.items[0])}>
-                  <Avatar name={group.subject.name} image={group.subject.photoUrl ? { src: group.subject.photoUrl } : undefined} color="brand" size={48} />
+                <button type="button" aria-label={`Review requests for ${group.subject.name}`} aria-current={active ? "true" : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-1 pr-3 text-left" onClick={() => select(group.items.find(isOpenAction) ?? group.items[0])}>
+                  <Avatar name={group.subject.name} image={group.subject.photoUrl ? { src: group.subject.photoUrl } : undefined} color="brand" size={40} />
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold text-foreground">{group.subject.name}</h2>
-                    <p className="mt-1 truncate text-sm text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee profile"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{pendingCount} pending · {completedCount} completed{group.items.length > pendingCount + completedCount ? ` · ${group.items.length - pendingCount - completedCount} closed` : ""}</p>
+                    <h2 className="truncate text-sm font-semibold text-foreground">{group.subject.name}</h2>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{[group.subject.number, group.subject.department, group.subject.position].filter(Boolean).join(" · ") || "Employee profile"}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{pendingCount} pending · {completedCount} completed{group.items.length > pendingCount + completedCount ? ` · ${group.items.length - pendingCount - completedCount} closed` : ""}</p>
                   </div>
                   <FluentBadge appearance="tint" color={unattended ? "warning" : "success"} size="small" className="shrink-0">
                     {unattended ? `${pendingCount} to complete` : completedCount === group.items.length ? "Completed" : "Closed"}
@@ -318,14 +340,16 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                 {[...group.items].sort((a, b) => Number(isOpenAction(b)) - Number(isOpenAction(a))).map((item) => {
                   const itemActive = rowId(item) === selectedId
                   const itemUnattended = isOpenAction(item)
-                  return <button key={rowId(item)} type="button" aria-label={`Review ${readString(item, ["title"], "request")}`} aria-current={itemActive ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-muted/60", itemActive && "bg-primary/5")} onClick={() => select(item)}>
+                  return <button key={rowId(item)} type="button" aria-label={`Review ${readString(item, ["title"], "request")}`} aria-current={itemActive ? "true" : undefined} className={cn("flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-muted/60", itemActive && "bg-primary/10 ring-1 ring-inset ring-primary/30")} onClick={() => select(item)}>
                     {itemUnattended ? <Circle20Regular aria-hidden className="shrink-0 text-primary" /> : readString(item, ["status"]).toUpperCase() === "COMPLETED" ? <CheckmarkCircle20Regular aria-hidden className="shrink-0 text-muted-foreground" /> : <DismissCircle20Regular aria-hidden className="shrink-0 text-muted-foreground" />}
                     <div className="min-w-0 flex-1">
                       <p className="whitespace-normal break-words text-sm font-medium text-foreground">{readString(item, ["title"], "Assigned request")}</p>
                       <p className="mt-0.5 whitespace-normal break-words text-xs text-muted-foreground">{readString(item, ["description"]) || prettify(readString(item, ["sourceModule", "source_module"], "Request"))}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="text-[11px] text-muted-foreground">{formatDate(item.dueAt ?? item.due_at)}</span>
+                      <span className="text-[11px] text-muted-foreground">{itemUnattended
+                        ? (formatDate(item.dueAt ?? item.due_at) === "—" ? "No due date" : `Due ${formatDate(item.dueAt ?? item.due_at)}`)
+                        : (formatDate(item.completedAt ?? item.completed_at) === "—" ? "" : formatDate(item.completedAt ?? item.completed_at))}</span>
                       <FluentBadge appearance="tint" color={itemUnattended ? "warning" : "success"} size="small">
                         {itemUnattended ? item.is_actionable === false ? "Waiting" : "To complete" : prettify(readString(item, ["status"], "Closed"))}
                       </FluentBadge>
@@ -341,8 +365,12 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
       {pages > 1 ? <div className="flex items-center justify-center gap-3 border-t p-3"><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setGroupPage(currentPage - 1)}>Previous</Button><span className="text-sm">{currentPage} / {pages}</span><Button variant="outline" size="sm" disabled={currentPage === pages} onClick={() => setGroupPage(currentPage + 1)}>Next</Button></div> : null}
         </aside>
         <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-          <header className="flex min-h-10 shrink-0 items-center border-b px-5 py-2">
-            <h2 className="font-semibold">{selected ? readString(selected, ["title"], "Review assigned request") : "Review assigned request"}</h2>
+          <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-5 py-2.5">
+            <div className="min-w-0">
+              <h2 className="truncate font-semibold">{selected ? readString(selected, ["title"], "Assigned request") : "Review assigned request"}</h2>
+              {selected ? <p className="truncate text-xs text-muted-foreground">{[subject?.name, sourceModule].filter(Boolean).join(" · ")}</p> : null}
+            </div>
+            {selected ? <StatusChip value={displayStatus} /> : null}
           </header>
           {selected ? <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4"><div className="flex flex-col gap-4">
               <section className="overflow-hidden rounded-xl border border-primary/20 bg-card">
@@ -354,7 +382,6 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">{decisionHelp}</p>
                     </div>
                   </div>
-                  <StatusChip value={displayStatus} />
                 </div>
                 <dl className="grid border-t sm:grid-cols-3">
                   <div className="flex gap-3 border-b p-4 sm:border-b-0 sm:border-r">
@@ -371,6 +398,13 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   </div>
                 </dl>
               </section>
+              {!isOpenAction(selected) ? <div className={cn("flex items-start gap-3 rounded-xl border p-4", selectedStatus.toUpperCase() === "CANCELLED" ? "border-slate-200 bg-slate-50" : "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10")}>
+                {selectedStatus.toUpperCase() === "CANCELLED" ? <DismissCircle20Regular aria-hidden className="mt-0.5 shrink-0 text-slate-500" /> : <CheckmarkCircle20Regular aria-hidden className="mt-0.5 shrink-0 text-emerald-600" />}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{selectedStatus.toUpperCase() === "CANCELLED" ? "Closed" : "Completed"}{formatDate(selected.completedAt ?? selected.completed_at) !== "—" ? ` on ${formatDate(selected.completedAt ?? selected.completed_at)}` : ""}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">No further action is needed. The details below are kept for reference.</p>
+                </div>
+              </div> : null}
               {!requiresDetailedReview ? <section className="rounded-xl border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -436,7 +470,7 @@ export function RequestActionInbox({ actions, loading, onRefresh }: {
                   {!requiresDetailedReview ? <Button variant="outline" disabled={busy || loading} onClick={() => void submit("issue")}>{busy ? "Saving…" : "Report issue to HR"}</Button> : null}
                 </div>
               </> : null}
-          </div></div> : <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">{justSettled ? "This item has been completed. No further action is needed." : "Select a request to review its details."}</div>}
+          </div></div> : <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">{justSettled ? "This item has been completed. No further action is needed." : groups.length ? "Select an item on the left to review it." : "Nothing to review here."}</div>}
         </section>
       </div>
     </div>

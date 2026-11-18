@@ -22,7 +22,7 @@ const button =
   "inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 
 /** Drawing pad (mouse, pen and touch). Exports a PNG data URL. */
-function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
+export function SignaturePad({ onChange }: { onChange: (dataUrl: string | null) => void }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
   const drawing = React.useRef(false)
   const hasInk = React.useRef(false)

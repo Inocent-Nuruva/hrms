@@ -8,19 +8,23 @@ export function evidenceDayThreshold(type: AdminRecord | null | undefined): numb
   return Number.isFinite(value) ? value : null
 }
 /**
- * Blocks submission client-side only when evidence is unconditionally required.
- * With a day threshold the server decides, because it counts working days.
+ * Evidence never blocks submission: it is optional when applying and must
+ * be uploaded by the end of the leave (plus the type's grace days).
  */
-export function requiresEvidenceBeforeSubmission(type: AdminRecord | null | undefined) {
-  return yes(type?.requires_attachment) && !yes(type?.allow_deferred_attachment) && evidenceDayThreshold(type) === null
+export function requiresEvidenceBeforeSubmission(_type: AdminRecord | null | undefined) {
+  return false
+}
+
+/** "Upload by the end of the leave + N days" wording for a leave type. */
+export function evidenceDueText(type: AdminRecord | null | undefined) {
+  const grace = Number(type?.attachment_grace_days ?? 3)
+  return `You can attach it now or later; it must be uploaded within ${Number.isFinite(grace) ? grace : 3} day(s) after the leave ends to close the leave.`
 }
 export function evidenceRuleText(type: AdminRecord | null | undefined) {
   if (!yes(type?.requires_attachment)) return "Optional"
   const threshold = evidenceDayThreshold(type)
   const when = threshold === null ? "" : ` for requests longer than ${threshold} day(s)`
-  return yes(type?.allow_deferred_attachment)
-    ? `Due ${type?.attachment_grace_days ?? 3} days after submission${when}`
-    : `Required before submission${when}`
+  return `Due ${type?.attachment_grace_days ?? 3} days after the leave ends${when}`
 }
 export function leaveEvidenceMessage(row: AdminRecord | null | undefined) {
   if (!row) return ""

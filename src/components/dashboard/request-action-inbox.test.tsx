@@ -19,6 +19,18 @@ const api = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/admin-api", () => api)
 vi.mock("@/lib/notifications-store", () => ({ useNotifications: () => ({}) }))
+// Approve = sign: the signing dialog resolves with a typed signature and the
+// remarks the reviewer wrote.
+vi.mock("@/components/leave/leave-decision-sign-dialog", () => ({
+  useLeaveDecisionSignature: () => [
+    null,
+    async (request: { defaultComment?: string }) => ({
+      signature: { kind: "TYPED", text: "Rita Reviewer" },
+      comments: request.defaultComment ?? "",
+    }),
+  ],
+}))
+vi.mock("@/components/dashboard/dashboard-identity", () => ({ useDashboardIdentity: () => ({ name: "Rita Reviewer" }) }))
 vi.mock("@/lib/session-client", () => ({ readStoredSessionTokens: () => ({ accessToken: "session-token" }) }))
 vi.mock("@/components/ui/fluent-toast-store", () => ({ toast: { success: vi.fn() } }))
 vi.mock("@/components/animate-ui/components/base/dialog", () => {
@@ -144,14 +156,14 @@ describe("grouped request review", () => {
     await selectRequest()
     await writeComment("Please choose other dates.")
     await click("Return for correction")
-    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "30", { action: "return_for_correction", comments: "Please choose other dates." })
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "30", { action: "return_for_correction", comments: "Please choose other dates.", signature: { kind: "TYPED", text: "Rita Reviewer" } })
   })
   it("rejects leave only through the explicit Reject action", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[{ ...task, actionType: "APPROVAL", sourceModule: "leave", sourceEntityType: "LEAVE_REQUEST", sourceEntityId: 31 }]} loading={false} onRefresh={refresh} />))
     await selectRequest()
     await writeComment("Not possible this month.")
     await click("Reject")
-    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "31", { action: "reject", comments: "Not possible this month." })
+    expect(api.leaveRequestApprovalAction).toHaveBeenCalledWith("session-token", "31", { action: "reject", comments: "Not possible this month.", signature: { kind: "TYPED", text: "Rita Reviewer" } })
   })
   it("routes employee detail submissions to their required section-by-section review", async () => {
     await act(async () => root.render(<RequestActionInbox actions={[{

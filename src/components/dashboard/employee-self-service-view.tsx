@@ -1,6 +1,6 @@
 "use client"
 
-import { evidenceDayThreshold, requiresEvidenceBeforeSubmission } from "@/lib/leave-evidence"
+import { evidenceDayThreshold, evidenceDueText } from "@/lib/leave-evidence"
 import { fluentForm } from "@/components/ui/fluent-dialog-service";
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
@@ -6611,9 +6611,8 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
       requestedDays: requestedLeaveDays,
     })
   }, [leavePreview.preview, requestedLeaveDays, selectedLeaveBalance?.availableDays])
-  const evidenceNeededBeforeSubmit = leavePreview.preview
-    ? leavePreview.preview.evidence.required && !leavePreview.preview.evidence.allow_deferred
-    : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord)
+  // Evidence is optional when applying; it is due after the leave ends.
+  const evidenceNeededBeforeSubmit = false
 
   const readEndpointError = React.useCallback(
     (errorObject: unknown, fallbackMessage: string) => {
@@ -7635,7 +7634,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 </p>
               ) : null}
               {selectedLeaveTypeRequiresAttachment ? (
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `A supporting attachment is required for requests longer than ${evidenceDayThreshold(selectedLeaveTypeRecord)} working day(s)${selectedLeaveTypeRecord?.allow_deferred_attachment === true || selectedLeaveTypeRecord?.allow_deferred_attachment === "true" ? `. It can be uploaded within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.` : " and must be added before submission."}` : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "A supporting attachment is required before submission." : `You can submit now and upload evidence within ${selectedLeaveTypeRecord?.attachment_grace_days ?? 3} calendar days after submission.`}</p>
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `A supporting attachment is needed for requests longer than ${evidenceDayThreshold(selectedLeaveTypeRecord)} working day(s). ` : "A supporting attachment is needed for this leave. "}{evidenceDueText(selectedLeaveTypeRecord)}</p>
               ) : null}
               {leavePreviewPayload ? (
                 <LeaveRequestPreviewPanel preview={leavePreview.preview} error={leavePreview.error} loading={leavePreview.loading} />
@@ -7684,7 +7683,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
                 <p className="text-xs text-muted-foreground sm:col-span-2">Short leave uses one date. The server calculates the balance deduction from the configured working-day length.</p>
               </div>
             ) : null}
-            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `(required beyond ${evidenceDayThreshold(selectedLeaveTypeRecord)} day(s))` : requiresEvidenceBeforeSubmission(selectedLeaveTypeRecord) ? "(required to submit)" : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
+            <FluentField label={`Supporting attachment ${selectedLeaveTypeRequiresAttachment ? (evidenceDayThreshold(selectedLeaveTypeRecord) !== null ? `(needed beyond ${evidenceDayThreshold(selectedLeaveTypeRecord)} day(s), can be uploaded later)` : "(can be uploaded later)") : "(optional)"}`} hint={leaveAttachmentFile ? `Selected: ${leaveAttachmentFile.name}` : undefined}>
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-3 file:py-1.5" onChange={(event) => setLeaveAttachmentFile(event.target.files?.[0] ?? null)} />
             </FluentField>
             <FluentField label="Reason" hint={requestForm.reason.trim() ? undefined : "Required to submit"}>

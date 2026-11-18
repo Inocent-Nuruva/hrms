@@ -351,7 +351,17 @@ export const saveContractTemplate = (
 
 export const listSignatories = (token: string) => adminRequest<Signatory[]>("/api/contract-signatories", { token })
 export const mySignatoryStatus = (token: string) =>
-  adminRequest<{ signatory: Signatory | null; pending: number }>("/api/contract-signatories/me", { token })
+  adminRequest<{
+    signatory: Signatory | null
+    pending: number
+    /** Contracts assigned to me as company signatory, awaiting my signature first. */
+    contracts?: Array<
+      Pick<ContractRow, "id" | "employeeId" | "referenceNo" | "title" | "version" | "contractType" | "startDate" | "endDate" | "status"> & {
+        employeeName: string | null
+        employeeNo: string | null
+      }
+    >
+  }>("/api/contract-signatories/me", { token })
 export const createSignatory = (
   token: string,
   body: { employee_id: number; display_name?: string; job_title?: string; scope_note?: string },

@@ -144,6 +144,7 @@ import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
 import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
 import { LeaveHrOperationsPanel } from "@/components/leave/leave-hr-operations-panel";
 import { LeaveSignaturesPanel } from "@/components/leave/leave-signatures-panel";
+import { useLeaveDecisionSignature } from "@/components/leave/leave-decision-sign-dialog";
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
 import { LeaveCompOffPanel } from "@/components/leave/leave-comp-off-panel";
 import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
@@ -1311,6 +1312,8 @@ export function LeaveManagementView({
   const router = useRouter();
   const actor = useDashboardActor();
   const identity = useDashboardIdentity();
+  // Approve = sign: every leave decision is signed (typed or drawn).
+  const [signDialog, askSignature] = useLeaveDecisionSignature();
   const canCreateTypes = canPerformPermission(actor.permissionLabels, {
     permissions: ["leave_types:create", "leave_types:update"],
     mode: "any",
@@ -2268,12 +2271,24 @@ export function LeaveManagementView({
       ) {
         return;
       }
+      const signed = await askSignature({
+        title: `Sign ${selectedRequestIds.length} decision(s)`,
+        description:
+          "One signature is recorded on each selected request and printed on each leave form.",
+        confirmLabel: action === "approve" ? "Approve" : "Reject",
+        commentRequired: action !== "approve",
+        defaultComment: comments ?? "",
+        signerName: identity.name ?? "",
+        destructive: action !== "approve",
+      });
+      if (!signed) return;
       setBulkBusy(true);
       try {
         const result = await bulkLeaveApprovalAction(token, {
           ids: selectedRequestIds.map(Number),
           action,
-          comments,
+          comments: signed.comments || comments,
+          signature: signed.signature,
         });
         const failed = Number(result?.failed ?? 0);
         const succeeded = Number(result?.succeeded ?? 0);
@@ -5155,6 +5170,21 @@ export function LeaveManagementView({
       showErrorAlert(permissions.reasonApprove);
       return;
     }
+    const signed = await askSignature({
+      title:
+        action === "approve"
+          ? `Approve ${leaveRequestLabel(row)}`
+          : action === "reject"
+            ? `Reject ${leaveRequestLabel(row)}`
+            : `Return ${leaveRequestLabel(row)} for correction`,
+      confirmLabel:
+        action === "approve" ? "Approve" : action === "reject" ? "Reject" : "Return",
+      commentRequired: action !== "approve",
+      commentLabel: action === "approve" ? "Remarks" : "Reason",
+      signerName: identity.name ?? "",
+      destructive: action === "reject",
+    });
+    if (!signed) return;
     setSaving(true);
     try {
       // API: POST /api/leave/requests/{id}/approval-action
@@ -5169,7 +5199,8 @@ export function LeaveManagementView({
 
       const actionResult = await leaveRequestApprovalAction(token, id, {
         action,
-        comments: defaultComment,
+        comments: signed.comments || defaultComment,
+        signature: signed.signature,
       });
 
       const successMessage =
@@ -5230,13 +5261,24 @@ export function LeaveManagementView({
       showErrorAlert("Give a reason of at least 5 characters.");
       return;
     }
+    const signed = await askSignature({
+      title: "Sign the decision you record for the manager",
+      confirmLabel: action === "approve" ? "Approve" : action === "reject" ? "Reject" : "Return",
+      commentLabel: "Reason (in place of the manager)",
+      commentRequired: true,
+      defaultComment: reason,
+      signerName: identity.name ?? "",
+      destructive: action === "reject",
+    });
+    if (!signed) return;
     setSaving(true);
     try {
       // API: POST /api/leave/requests/{id}/approval-action with hr_override (needs leave_requests:override)
       await leaveRequestApprovalAction(token, id, {
         action,
-        comments: reason,
+        comments: signed.comments || reason,
         hr_override: true,
+        signature: signed.signature,
       });
       showSuccessAlert(
         action === "approve"
@@ -7029,6 +7071,7 @@ export function LeaveManagementView({
       ) : null}
 
       {tab === "team-calendar" ? <LeaveTeamCalendar /> : null}
+      {signDialog}
 
       <Dialog
         open={overrideDialog !== null}
