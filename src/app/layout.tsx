@@ -16,12 +16,10 @@ import { FluentDialogService } from "@/components/ui/fluent-dialog-service";
 const comfortaa = Comfortaa({
   variable: "--font-comfortaa",
   subsets: ["latin"],
-  weight: ["400", "700"],
 });
 const fredoka = Fredoka({
   variable: "--font-fredoka",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
