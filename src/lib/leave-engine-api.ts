@@ -211,6 +211,47 @@ export function getPolicyImpact(token: string, policyId: number) {
 
 /* -------------------------------------------------------------- rollover */
 
+export type LeaveCycleRow = {
+  balance_id: number
+  employee_id: number
+  employee_no: string | null
+  employee_name: string
+  leave_type_id: number
+  leave_type_name: string
+  leave_year: string
+  cycle_start: string
+  cycle_end: string
+  next_rollover_date: string
+  closed_at: string | null
+  eligible_balance_estimate: string | number | null
+  last_run_id: number | null
+  last_line_status: string | null
+  carry_forward_days: string | null
+  encash_days: string | null
+  encash_amount: string | null
+  lapse_days: string | null
+  last_error: string | null
+  last_exceptions: Array<{ code: string; message: string; severity: string }> | null
+  last_execution_at: string | null
+  processing_status: "open" | "due" | "closed" | "failed"
+  retry_available: boolean
+}
+
+export function listLeaveCycles(
+  token: string,
+  query: { status?: string; search?: string; page?: number; limit?: number } = {},
+) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "") params.set(key, String(value))
+  }
+  const qs = params.toString()
+  return adminRequest<{ data: LeaveCycleRow[]; meta: { total: number; page: number; limit: number } }>(
+    `/api/leave/rollover/cycles${qs ? `?${qs}` : ""}`,
+    { token },
+  )
+}
+
 export function listRolloverRuns(token: string) {
   return adminRequest<RolloverRun[]>("/api/leave/rollover/runs", { token })
 }
@@ -373,4 +414,137 @@ export function days(value: unknown): string {
   const number = Number(value)
   if (!Number.isFinite(number)) return "-"
   return number.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+/* ----------------------------------------------------------- signatures */
+
+export type LeaveSignatureView = {
+  id: number
+  role: string
+  approval_id: number | null
+  signer_name: string
+  decision: string | null
+  signed_at: string
+  reference: string
+  method: string
+  valid: boolean
+  invalid_reason: string | null
+}
+
+export function listLeaveSignatures(token: string, requestId: number) {
+  return adminRequest<LeaveSignatureView[]>(`/api/leave/requests/${requestId}/signatures`, { token })
+}
+
+export function signLeaveApplication(token: string, requestId: number) {
+  return post<LeaveSignatureView>(`/api/leave/requests/${requestId}/sign`, token, { confirm: true })
+}
+
+export function signLeaveApproval(token: string, requestId: number, approvalId: number) {
+  return post<LeaveSignatureView>(`/api/leave/requests/${requestId}/approvals/${approvalId}/sign`, token, { confirm: true })
+}
+
+export type LeaveVerificationState = Record<string, unknown>
+
+export function getLeaveVerificationState(token: string, requestId: number) {
+  return adminRequest<LeaveVerificationState>(`/api/leave/requests/${requestId}/verification`, { token })
+}
+
+export function listMyLeaveSignatures(token: string, requestId: number | string) {
+  return adminRequest<LeaveSignatureView[]>(`/api/me/leave/requests/${requestId}/signatures`, { token })
+}
+
+export function signMyLeaveApplication(token: string, requestId: number | string) {
+  return post<LeaveSignatureView>(`/api/me/leave/requests/${requestId}/sign`, token, { confirm: true })
+}
+
+/* ------------------------------------------------------- leave operations */
+
+export type ReadinessFinding = {
+  area: string
+  severity: "ok" | "warning" | "blocker"
+  code: string
+  message: string
+  owner: string
+  subject?: string
+}
+export type ReadinessReport = {
+  generated_at: string
+  findings: ReadinessFinding[]
+  blocked_features: string[]
+  summary: Record<"ok" | "warning" | "blocker", number>
+}
+export type BackfillCandidate = {
+  leaveRequestId: number
+  employeeId: number
+  leaveNo: string
+  status: "PROPOSED" | "NEEDS_REVIEW"
+  method: string | null
+  reason: string | null
+  totalDays: number
+}
+export type BackfillPlan = {
+  scanned: number
+  proposed: number
+  needsReview: number
+  candidates: BackfillCandidate[]
+}
+export type BackfillBatch = {
+  batch_id: string
+  actor: string
+  applied: number
+  reverted: number
+  recorded_only: number
+  created_at: string
+  applied_at: string | null
+  reverted_at: string | null
+}
+export type ReconciliationResult = {
+  from: string
+  to: string
+  summary: Record<"leave_days" | "encashments" | "exit_settlements", Record<string, number>>
+  leave_days: Array<Record<string, unknown> & { status: string; notes: string }>
+  encashments: Array<Record<string, unknown> & { status: string; notes: string }>
+  exit_settlements: Array<Record<string, unknown> & { status: string; notes: string }>
+}
+
+type BackfillRange = { from?: string; to?: string; employee_id?: number }
+
+export function getLeaveReadiness(token: string) {
+  return adminRequest<ReadinessReport>("/api/leave/operations/readiness", { token })
+}
+export function previewLeaveBackfill(token: string, body: BackfillRange) {
+  return post<BackfillPlan>("/api/leave/operations/backfill/preview", token, body)
+}
+export function applyLeaveBackfill(token: string, body: BackfillRange) {
+  return post<{ batchId: string | null; applied: number; needsReview: number }>(
+    "/api/leave/operations/backfill/apply",
+    token,
+    { ...body, confirm: "APPLY" },
+  )
+}
+export function listLeaveBackfillBatches(token: string) {
+  return adminRequest<BackfillBatch[]>("/api/leave/operations/backfill/batches", { token })
+}
+export function revertLeaveBackfillBatch(token: string, batchId: string) {
+  return post<{ reverted: number }>(`/api/leave/operations/backfill/batches/${batchId}/revert`, token, {
+    confirm: "REVERT",
+  })
+}
+export function getLeavePayrollReconciliation(token: string, from: string, to: string) {
+  return adminRequest<ReconciliationResult>(
+    `/api/leave/operations/payroll-reconciliation?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    { token },
+  )
+}
+export function retryEncashmentHandoffs(token: string) {
+  return post<{ handed_off: number; failed: number; skipped: number }>(
+    "/api/leave/operations/encashments/retry-handoff",
+    token,
+  )
+}
+export function listLeaveOperationsHistory(token: string) {
+  return adminRequest<Array<{ id: number; action: string; payload: unknown; created_at: string; actor_company_user_id: number | null }>>(
+    "/api/leave/operations/audit",
+    { token },
+  )
 }

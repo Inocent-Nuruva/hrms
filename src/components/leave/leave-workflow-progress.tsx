@@ -1,6 +1,7 @@
 "use client"
 
 import { leaveEvidenceMessage } from "@/lib/leave-evidence"
+import { LeaveSignaturesPanel } from "./leave-signatures-panel"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
@@ -1465,6 +1466,18 @@ export function LeaveWorkflowDialog({
           </Button>
          </div>
         </section>
+       ) : null}
+
+       {requestId !== null && token ? (
+        <LeaveSignaturesPanel
+         key={String(requestId)}
+         token={token}
+         requestId={Number(requestId)}
+         currentCompanyUserId={null}
+         isApplicant
+         selfService
+         status={readString(detail, ["status"])}
+        />
        ) : null}
 
        {/* Supporting documents */}

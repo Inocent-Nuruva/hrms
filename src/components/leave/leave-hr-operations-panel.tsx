@@ -9,12 +9,16 @@ import {
   runLeaveCarryForward,
   runLeaveExitSettlement,
   type AdminRecord,
+  approveLeaveExitSettlement,
 } from "@/lib/admin-api"
 import { canPerformPermission } from "@/lib/dashboard-permissions"
 import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 
 const STATUS_LABEL: Record<string, string> = {
+  draft: "Draft - awaiting HR approval",
+  approved: "Approved - finalised when offboarding completes",
+  void: "Void (offboarding cancelled/rejected)",
   pending_payroll: "Waiting for payroll",
   final_settlement: "Paid through final settlement",
   paid: "Paid",
@@ -77,6 +81,26 @@ export function LeaveHrOperationsPanel({
       await load()
     } catch (error) {
       showErrorAlert(error instanceof Error ? error.message : "Could not calculate the settlement.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const approveSettlement = async (offboardingRequestId: number) => {
+    if (!token) return
+    if (
+      !window.confirm(
+        "Approve this exit leave settlement? It is finalised (future leave closed, days sent to the final settlement) when offboarding completes, or now if it already has.",
+      )
+    )
+      return
+    setBusy(true)
+    try {
+      await approveLeaveExitSettlement(token, offboardingRequestId)
+      showSuccessAlert("Exit leave settlement approved.")
+      await load()
+    } catch (error) {
+      showErrorAlert(error instanceof Error ? error.message : "Could not approve the settlement.")
     } finally {
       setBusy(false)
     }
@@ -149,7 +173,7 @@ export function LeaveHrOperationsPanel({
           <table className="w-full min-w-[720px] text-left text-xs">
             <thead className="text-muted-foreground">
               <tr>
-                {["Employee", "Leave type", "Exit date", "Earned", "Carried", "Used", "Settlement days", "Status"].map((h) => (
+                {["Employee", "Leave type", "Exit date", "Earned", "Carried", "Used", "Settlement days", "Status", ""].map((h) => (
                   <th key={h} className="px-2 py-1.5 font-semibold">
                     {h}
                   </th>
@@ -172,12 +196,24 @@ export function LeaveHrOperationsPanel({
                       {num(days)} {days < 0 ? "(recover)" : ""}
                     </td>
                     <td className="px-2 py-1.5">{STATUS_LABEL[status] ?? status}</td>
+                    <td className="px-2 py-1.5">
+                      {canManage && status === "draft" && row.offboarding_request_id ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => void approveSettlement(Number(row.offboarding_request_id))}
+                        >
+                          Approve
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
                 )
               })}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-2 py-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-2 py-6 text-center text-muted-foreground">
                     No exit settlements yet.
                   </td>
                 </tr>

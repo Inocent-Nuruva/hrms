@@ -10171,6 +10171,14 @@ export async function runLeaveExitSettlement(
   });
 }
 
+/** HR approves the draft exit leave settlement of an offboarding. */
+export async function approveLeaveExitSettlement(token: string, offboardingRequestId: number) {
+  return adminRequest<unknown>(
+    `/api/leave/exit-settlements/offboarding/${offboardingRequestId}/approve`,
+    { method: "POST", token, body: {} },
+  );
+}
+
 /** Manual carry-forward run for the company (POST /api/leave/carry-forward/run). */
 export async function runLeaveCarryForward(token: string, fiscalYear?: string) {
   const query = fiscalYear ? `?fiscal_year=${encodeURIComponent(fiscalYear)}` : "";
@@ -10421,6 +10429,8 @@ export async function adjustLeaveBalance(
     mode: LeaveBalanceAdjustMode;
     amount: number;
     reason: string;
+    /** Only honoured for holders of leave_balances:override_cap. */
+    cap_override_reason?: string;
   },
 ) {
   return adminRequest<unknown>("/api/leave/balances/adjust", {
@@ -10433,6 +10443,9 @@ export async function adjustLeaveBalance(
       mode: data.mode,
       amount: data.amount,
       reason: data.reason,
+      ...(data.cap_override_reason?.trim()
+        ? { cap_override_reason: data.cap_override_reason.trim() }
+        : {}),
     },
   });
 }
@@ -22764,7 +22777,7 @@ export async function requestCompOff(
 export async function decideCompOff(
   token: string,
   id: number,
-  data: { approve: boolean; reason?: string },
+  data: { approve: boolean; reason?: string; cap_override_reason?: string },
 ) {
   return adminRequest<unknown>(`/api/leave/comp-off/credits/${id}/decision`, {
     method: "POST",

@@ -6,6 +6,7 @@ import { LeaveManagementView } from "@/components/dashboard/leave-management-vie
 import { LeavePayrollIntegrationView } from "@/components/leave/leave-payroll-integration-view";
 import { LeaveRolloverView } from "@/components/leave/leave-rollover-view";
 import { LeaveStatutoryView } from "@/components/leave/leave-statutory-view";
+import { LeaveOperationsView } from "@/components/leave/leave-operations-view";
 
 const ALLOWED_VIEWS = new Set([
   "types",
@@ -22,6 +23,7 @@ const ALLOWED_VIEWS = new Set([
   "rollover",
   "statutory",
   "payroll-integration",
+  "operations",
 ]);
 
 type LeaveView =
@@ -65,6 +67,10 @@ export default async function LeaveManagementViewPage({
 
   if (normalized === "statutory") {
     return <LeaveStatutoryView />;
+  }
+
+  if (normalized === "operations") {
+    return <LeaveOperationsView />;
   }
 
   if (normalized === "payroll-integration") {

@@ -141,6 +141,7 @@ import {
 import { isMedicalLeaveRequest } from "@/lib/leave-request-kind";
 import { LeaveManagementRulesPanel } from "@/components/dashboard/leave-management-rules-panel";
 import { LeaveHrOperationsPanel } from "@/components/leave/leave-hr-operations-panel";
+import { LeaveSignaturesPanel } from "@/components/leave/leave-signatures-panel";
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel";
 import { LeaveCompOffPanel } from "@/components/leave/leave-comp-off-panel";
 import { LeaveReportDownloads } from "@/components/leave/leave-report-downloads";
@@ -615,6 +616,7 @@ function emptyBalanceForm() {
     amount: "0",
     remaining: "0",
     reason: "",
+    cap_override_reason: "",
   };
 }
 
@@ -639,6 +641,7 @@ function formFromBalanceRow(row: AdminRecord) {
     amount: String(remaining),
     remaining: String(remaining),
     reason: "",
+    cap_override_reason: "",
   };
 }
 
@@ -1310,6 +1313,10 @@ export function LeaveManagementView({
     permissions: ["leave_types:create", "leave_types:update"],
     mode: "any",
   });
+  const canOverrideBalanceCap = canPerformPermission(
+    actor.permissionLabels,
+    "leave_balances:override_cap",
+  );
   const canDeleteTypes = canPerformPermission(
     actor.permissionLabels,
     "leave_types:delete",
@@ -3577,6 +3584,9 @@ export function LeaveManagementView({
         mode: balanceForm.mode,
         amount,
         reason,
+        cap_override_reason: canOverrideBalanceCap
+          ? balanceForm.cap_override_reason
+          : undefined,
       });
       showSuccessAlert("Leave balance updated.");
       finishBalanceEditor();
@@ -6783,6 +6793,27 @@ export function LeaveManagementView({
                     actor={currentActor}
                   />
 
+                  {readNumber(selectedLeaveRequestRow, ["id"]) ? (
+                    <LeaveSignaturesPanel
+                      key={String(selectedLeaveRequestRow.id)}
+                      token={readStoredToken()}
+                      requestId={Number(selectedLeaveRequestRow.id)}
+                      approvals={
+                        Array.isArray(selectedLeaveRequestRow.approvals)
+                          ? (selectedLeaveRequestRow.approvals as AdminRecord[])
+                          : []
+                      }
+                      currentCompanyUserId={currentActor?.membershipId ?? null}
+                      isApplicant={
+                        currentActor?.employeeId != null &&
+                        readNumber(selectedLeaveRequestRow, ["employee_id"]) ===
+                          currentActor.employeeId
+                      }
+                      canViewVerification={canOverrideManager}
+                      status={readString(selectedLeaveRequestRow, ["status"])}
+                    />
+                  ) : null}
+
                   {(() => {
                     const permissions = getLeaveRequestPermissions(
                       selectedLeaveRequestRow,
@@ -8074,6 +8105,29 @@ export function LeaveManagementView({
                 }
               />
             </label>
+            <p className="text-xs text-slate-500">
+              Credits cannot take the balance above the policy&apos;s maximum
+              accumulation. If they would, the server refuses and states how
+              many days can still be credited.
+            </p>
+            {canOverrideBalanceCap ? (
+              <label className="space-y-1">
+                <span className="text-xs text-slate-500">
+                  Maximum accumulation override reason (optional)
+                </span>
+                <Textarea
+                  className="min-h-16 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="Only fill in to credit above the maximum accumulation. Recorded in the audit log."
+                  value={balanceForm.cap_override_reason}
+                  onChange={(event) =>
+                    setBalanceForm((prev) => ({
+                      ...prev,
+                      cap_override_reason: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ) : null}
           </div>
           <DialogFooter>
             <button

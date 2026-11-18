@@ -34,6 +34,25 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: "Rejected",
 }
 
+/**
+ * Approves a credit. If the server refuses because the credit would exceed
+ * the maximum accumulation, offers an audited override (the server still
+ * checks the leave_balances:override_cap permission).
+ */
+async function approveWithCapFallback(token: string, id: number) {
+  try {
+    return await decideCompOff(token, id, { approve: true })
+  } catch (e) {
+    const text = message(e, "")
+    if (!/maximum accumulation/i.test(text)) throw e
+    const reason = window.prompt(`${text}
+
+To credit it anyway, give an override reason (recorded in the audit log). Cancel to leave it pending.`)
+    if (!reason?.trim()) throw e
+    return decideCompOff(token, id, { approve: true, cap_override_reason: reason.trim() })
+  }
+}
+
 type Eligibility = { types: AdminRecord[]; convertible_overtime: AdminRecord[] }
 
 function CreditsTable({
@@ -291,7 +310,7 @@ function HrView({ token, canManagePolicy }: { token: string; canManagePolicy: bo
           showEmployee
           actions={(row) => (
             <span className="inline-flex gap-1">
-              <Button size="sm" onClick={() => void act(() => decideCompOff(token, Number(row.id), { approve: true }), "Credit approved.")}>
+              <Button size="sm" onClick={() => void act(() => approveWithCapFallback(token, Number(row.id)), "Credit approved.")}>
                 Approve
               </Button>
               <Button

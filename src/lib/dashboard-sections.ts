@@ -555,6 +555,7 @@ const leaveOperationsSectionTabGroups: DashboardSectionTabGroup[] = [
         title: "Leave Payroll",
         url: "/dashboard/leave-management/payroll-integration",
       },
+      { title: "Leave Operations", url: "/dashboard/leave-management/operations" },
     ],
   },
 ];

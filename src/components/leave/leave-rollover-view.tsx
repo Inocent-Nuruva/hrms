@@ -27,6 +27,7 @@ import {
 import { readStoredSessionTokens } from "@/lib/session-client"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
+import { LeaveCycleSchedulePanel } from "./leave-cycle-schedule-panel"
 
 function token() {
   return readStoredSessionTokens().accessToken
@@ -164,6 +165,8 @@ export function LeaveRolloverView() {
           </p>
         </section>
       ) : null}
+
+      <LeaveCycleSchedulePanel canManage={canManage} />
 
       <section className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[640px] text-sm">

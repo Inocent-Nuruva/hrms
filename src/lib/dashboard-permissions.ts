@@ -1139,6 +1139,7 @@ export const DASHBOARD_ROUTE_PERMISSIONS: Record<string, PermissionRequirement |
   "/dashboard/leave-management/policies": "leave_policies:read",
   "/dashboard/leave-management/workflows": "leave_workflows:read",
   "/dashboard/leave-management/rollover": "leave_rollover:read",
+  "/dashboard/leave-management/operations": "leave_operations:read",
   "/dashboard/leave-management/statutory": "leave_statutory:read",
   "/dashboard/leave-management/payroll-integration": {
     permissions: [
