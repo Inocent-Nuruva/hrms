@@ -49,6 +49,8 @@ import {
   ChevronRight,
   Clock3,
   Download,
+  FileText,
+  Paperclip,
   ShieldOff,
   Info,
   MoreHorizontal,
@@ -1605,6 +1607,9 @@ export function LeaveManagementView({
     React.useState<AdminRecord | null>(null);
   const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] =
     React.useState(false);
+  const [requestDetailTab, setRequestDetailTab] = React.useState<
+    "overview" | "approvals" | "documents" | "medical"
+  >("overview");
   const [currentActor, setCurrentActor] = React.useState<LeaveActor | null>(
     null,
   );
@@ -6445,6 +6450,7 @@ export function LeaveManagementView({
               setLeaveRequestDetailsOpen(open);
               if (!open) {
                 setSelectedLeaveRequestRow(null);
+                setRequestDetailTab("overview");
                 setLeaveDocumentFile(null);
                 setLeaveMedicalForm(createEmptyLeaveMedicalForm());
               }
@@ -6452,515 +6458,571 @@ export function LeaveManagementView({
           >
             <DialogPopup
               from="bottom"
-              className="flex max-h-[min(92dvh,40rem)] w-[calc(100%-1rem)] max-w-lg flex-col gap-0 overflow-hidden p-3 sm:max-w-xl sm:p-4"
+              className="w-[calc(100%-1rem)] max-w-2xl !p-0 sm:max-w-3xl"
+              bodyClassName="!gap-0 !max-h-[94dvh] overscroll-contain"
             >
-              <DialogHeader className="shrink-0 space-y-1 pr-8 text-left">
-                <div className="flex flex-wrap items-center gap-2">
-                  <DialogTitle className="text-base leading-snug sm:text-lg">
-                    {selectedLeaveRequestRow
-                      ? leaveRequestLabel(selectedLeaveRequestRow)
-                      : "Leave request"}
-                  </DialogTitle>
-                  {selectedLeaveRequestRow ? (
-                    <StatusIndicator
-                      status={readString(selectedLeaveRequestRow, ["status"])}
-                    />
-                  ) : null}
-                </div>
-                <DialogDescription className="text-xs">
-                  {selectedLeaveRequestRow
-                    ? `${employeeLabelFromRow(selectedLeaveRequestRow)} · ${leaveTypeLabelFromRequest(selectedLeaveRequestRow)}`
-                    : "Approval details"}
-                </DialogDescription>
-              </DialogHeader>
-
               {selectedLeaveRequestRow ? (
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-2">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md border border-border/60 px-2.5 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Start
-                      </p>
-                      <p className="font-medium text-foreground">
-                        {readString(selectedLeaveRequestRow, ["start_date"])}
-                      </p>
+                (() => {
+                  const row = selectedLeaveRequestRow;
+                  const isMedical = isMedicalLeaveRequest(row);
+                  const totalDays = readNumber(row, ["total_days", "days"]);
+                  const durationType = readString(row, ["duration_type"]);
+                  const reasonText = readString(row, ["reason"]);
+                  const applied = readString(row, ["submitted_at", "applied_at", "created_at"]);
+                  const docCount = leaveRequestDocuments.length;
+                  const tabs: Array<{ key: typeof requestDetailTab; label: string; badge?: number }> = [
+                    { key: "overview", label: "Overview" },
+                    { key: "approvals", label: "Approvals" },
+                    { key: "documents", label: "Documents", badge: docCount },
+                    ...(isMedical ? [{ key: "medical" as const, label: "Medical" }] : []),
+                  ];
+                  const activeTab = tabs.some((t) => t.key === requestDetailTab)
+                    ? requestDetailTab
+                    : "overview";
+                  const fact = (label: string, value: React.ReactNode) => (
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{value}</p>
                     </div>
-                    <div className="rounded-md border border-border/60 px-2.5 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        End
-                      </p>
-                      <p className="font-medium text-foreground">
-                        {readString(selectedLeaveRequestRow, ["end_date"])}
-                      </p>
-                    </div>
-                  </div>
+                  );
+                  return (
+                    <>
+                      <DialogHeader className="!mb-0 space-y-3 border-b border-border !px-4 pb-3 !pt-4 pr-12 text-left sm:!px-6">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <DialogTitle className="text-lg leading-snug">
+                              {leaveRequestLabel(row)}
+                            </DialogTitle>
+                            <StatusIndicator status={readString(row, ["status"])} />
+                          </div>
+                          <DialogDescription className="text-sm">
+                            {employeeLabelFromRow(row)} · {leaveTypeLabelFromRequest(row)}
+                          </DialogDescription>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/50 px-3 py-2.5 sm:grid-cols-4">
+                          {fact(
+                            "Period",
+                            `${formatLeaveDateTime(readString(row, ["start_date"])).split(",")[0]} – ${formatLeaveDateTime(readString(row, ["end_date"])).split(",")[0]}`,
+                          )}
+                          {fact("Days", totalDays !== null ? `${totalDays} day${totalDays === 1 ? "" : "s"}` : "-")}
+                          {fact(
+                            "Duration",
+                            durationType && durationType !== "-"
+                              ? durationType.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())
+                              : "Full day",
+                          )}
+                          {fact("Applied", applied && applied !== "-" ? formatLeaveDateTime(applied) : "-")}
+                        </div>
+                        <div className="-mb-3 flex gap-1 overflow-x-auto" role="tablist" aria-label="Leave request sections">
+                          {tabs.map((t) => (
+                            <button
+                              key={t.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={activeTab === t.key}
+                              onClick={() => setRequestDetailTab(t.key)}
+                              className={cn(
+                                "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition",
+                                activeTab === t.key
+                                  ? "border-primary font-semibold text-foreground"
+                                  : "border-transparent text-muted-foreground hover:text-foreground",
+                              )}
+                            >
+                              {t.label}
+                              {t.badge ? (
+                                <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">
+                                  {t.badge}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      </DialogHeader>
 
-                  {isMedicalLeaveRequest(selectedLeaveRequestRow) ? (
-                    <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            Medical detail
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Save treatment details and upload a supporting
-                            medical attachment.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={saving}
-                          onClick={() =>
-                            void saveLeaveMedicalDetail(selectedLeaveRequestRow)
-                          }
-                        >
-                          Save medical detail
-                        </button>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Sickness nature
-                          </p>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                            value={leaveMedicalForm.sickness_nature}
-                            onChange={(event) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                sickness_nature: event.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Doctor name
-                          </p>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                            value={leaveMedicalForm.doctor_name}
-                            onChange={(event) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                doctor_name: event.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Doctor phone
-                          </p>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                            value={leaveMedicalForm.doctor_phone}
-                            onChange={(event) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                doctor_phone: event.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Hospital name
-                          </p>
-                          <input
-                            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                            value={leaveMedicalForm.hospital_name}
-                            onChange={(event) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                hospital_name: event.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Treatment start
-                          </p>
-                          <DatePickerPresets
-                            value={leaveMedicalForm.treatment_start_date}
-                            placeholder="Select treatment start"
-                            onChange={(value) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                treatment_start_date: value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-600">
-                            Treatment end
-                          </p>
-                          <DatePickerPresets
-                            value={leaveMedicalForm.treatment_end_date}
-                            placeholder="Select treatment end"
-                            onChange={(value) =>
-                              setLeaveMedicalForm((current) => ({
-                                ...current,
-                                treatment_end_date: value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1 sm:col-span-2">
-                          <p className="text-xs font-medium text-slate-600">
-                            Medical attachment
-                          </p>
-                          <input
-                            ref={leaveMedicalAttachmentInputRef}
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
-                            className="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
-                            onChange={(event) =>
-                              setLeaveMedicalAttachmentFile(
-                                event.target.files?.[0] ?? null,
-                              )
-                            }
-                          />
-                          <p className="text-[11px] text-muted-foreground">
-                            {leaveMedicalAttachmentFile
-                              ? `Ready to upload when you save: ${leaveMedicalAttachmentFile.name}`
-                              : leaveMedicalForm.attachment_url
-                                ? "A medical attachment is already saved. Choose another file to replace it."
-                                : "Choose a PDF, image, Word, Excel, or text file (up to 10 MB)."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
+                      <div className="flex-1 space-y-4 px-4 py-4 sm:px-6">
+                        {activeTab === "overview" ? (
+                          <>
+                            <section className="space-y-1.5">
+                              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Reason
+                              </h3>
+                              <p className="whitespace-pre-wrap rounded-lg border border-border px-3 py-2.5 text-sm text-foreground">
+                                {reasonText && reasonText !== "-" ? reasonText : "No reason given."}
+                              </p>
+                            </section>
+                            <section className="space-y-2">
+                              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Status and follow-up
+                              </h3>
+                                <p role="status" className="text-sm text-muted-foreground">
+                                  {leaveEvidenceMessage(selectedLeaveRequestRow)}
+                                </p>
+                                {selectedLeaveRequestRow.notice_overridden_at ? (
+                                  <p
+                                    className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+                                    data-testid="leave-notice-override"
+                                  >
+                                    <span className="font-semibold">
+                                      Notice period overridden by HR
+                                    </span>
+                                    {" on "}
+                                    {new Date(
+                                      String(selectedLeaveRequestRow.notice_overridden_at),
+                                    ).toLocaleString()}
+                                    {": "}
+                                    {String(selectedLeaveRequestRow.notice_override_reason ?? "")}
+                                  </p>
+                                ) : null}
+                                {selectedLeaveRequestRow.routing_required === true ? (
+                                  <Button
+                                    disabled={saving}
+                                    onClick={() =>
+                                      void manageLeaveFollowUp(
+                                        selectedLeaveRequestRow,
+                                        "routing",
+                                      )
+                                    }
+                                  >
+                                    Retry routing after correcting manager assignment
+                                  </Button>
+                                ) : null}
+                                {["awaiting_evidence", "overdue"].includes(
+                                  String(selectedLeaveRequestRow.evidence_status),
+                                ) ? (
+                                  <div className="flex flex-col gap-2">
+                                    <label htmlFor="leave-evidence-deadline">
+                                      Extend evidence deadline (HR reviewer)
+                                    </label>
+                                    <Input
+                                      id="leave-evidence-deadline"
+                                      type="datetime-local"
+                                      value={evidenceDeadline}
+                                      onChange={(event) =>
+                                        setEvidenceDeadline(event.target.value)
+                                      }
+                                    />
+                                    <label htmlFor="leave-evidence-reason">
+                                      Reason for extension
+                                    </label>
+                                    <Input
+                                      id="leave-evidence-reason"
+                                      value={evidenceReason}
+                                      onChange={(event) =>
+                                        setEvidenceReason(event.target.value)
+                                      }
+                                    />
+                                    <Button
+                                      disabled={
+                                        saving || !evidenceDeadline || !evidenceReason.trim()
+                                      }
+                                      onClick={() =>
+                                        void manageLeaveFollowUp(
+                                          selectedLeaveRequestRow,
+                                          "deadline",
+                                        )
+                                      }
+                                    >
+                                      Extend deadline
+                                    </Button>
+                                  </div>
+                                ) : null}
+                            </section>
+                          </>
+                        ) : null}
 
-                  <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          Supporting documents
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          Upload a file to the request and download previously
-                          attached documents.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={saving || !leaveDocumentFile}
-                        onClick={() =>
-                          void uploadLeaveDocument(selectedLeaveRequestRow)
-                        }
-                      >
-                        Upload document
-                      </button>
-                    </div>
-                    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/60 px-3 py-3">
-                      <input
-                        type="file"
-                        className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] ?? null;
-                          setLeaveDocumentFile(file);
-                        }}
-                      />
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        {leaveDocumentFile
-                          ? `Ready to upload: ${leaveDocumentFile.name}`
-                          : "Choose a PDF, image, or other supporting document."}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      {leaveRequestDocuments.length === 0 ? (
-                        <div className="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                          No supporting documents attached yet.
-                        </div>
-                      ) : (
-                        leaveRequestDocuments.map((documentRow, index) => (
-                          <div
-                            key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-xs font-medium text-foreground">
-                                {readString(documentRow, ["file_name"])}
+                        {activeTab === "approvals" ? (
+                          <div className="space-y-4">
+                          <ApprovalChain
+                            row={selectedLeaveRequestRow}
+                            actor={currentActor}
+                          />
+
+                          {readNumber(selectedLeaveRequestRow, ["id"]) ? (
+                            <LeaveSignaturesPanel
+                              key={String(selectedLeaveRequestRow.id)}
+                              token={readStoredToken()}
+                              requestId={Number(selectedLeaveRequestRow.id)}
+                              approvals={
+                                Array.isArray(selectedLeaveRequestRow.approvals)
+                                  ? (selectedLeaveRequestRow.approvals as AdminRecord[])
+                                  : []
+                              }
+                              currentCompanyUserId={currentActor?.membershipId ?? null}
+                              isApplicant={
+                                currentActor?.employeeId != null &&
+                                readNumber(selectedLeaveRequestRow, ["employee_id"]) ===
+                                  currentActor.employeeId
+                              }
+                              canViewVerification={canOverrideManager}
+                              status={readString(selectedLeaveRequestRow, ["status"])}
+                            />
+                          ) : null}
+                          </div>
+                        ) : null}
+
+                        {activeTab === "documents" ? (
+                          <section className="space-y-3">
+                            <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-center">
+                              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted">
+                                <Paperclip className="size-4" />
+                                {leaveDocumentFile ? "Change file" : "Attach file"}
+                                <input
+                                  type="file"
+                                  className="sr-only"
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0] ?? null;
+                                    setLeaveDocumentFile(file);
+                                  }}
+                                />
+                              </label>
+                              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                {leaveDocumentFile
+                                  ? leaveDocumentFile.name
+                                  : "PDF, image or other supporting document."}
                               </p>
-                              <p className="truncate text-[11px] text-muted-foreground">
-                                {readString(documentRow, ["file_type"])} ·
-                                uploaded{" "}
-                                {formatLeaveDateTime(
-                                  readString(documentRow, ["uploaded_at"]),
-                                )}
-                              </p>
+                              <Button
+                                size="sm"
+                                disabled={saving || !leaveDocumentFile}
+                                onClick={() => void uploadLeaveDocument(row)}
+                              >
+                                Upload
+                              </Button>
                             </div>
+                            {docCount === 0 ? (
+                              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                                No supporting documents attached yet.
+                              </p>
+                            ) : (
+                              <ul className="divide-y divide-border rounded-lg border border-border">
+                                {leaveRequestDocuments.map((documentRow, index) => (
+                                  <li
+                                    key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
+                                    className="flex items-center gap-3 px-3 py-2.5"
+                                  >
+                                    <FileText className="size-5 shrink-0 text-muted-foreground" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-medium text-foreground">
+                                        {readString(documentRow, ["file_name"])}
+                                      </p>
+                                      <p className="truncate text-xs text-muted-foreground">
+                                        Uploaded {formatLeaveDateTime(readString(documentRow, ["uploaded_at"]))}
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+                                      disabled={saving}
+                                      aria-label={`Download ${readString(documentRow, ["file_name"])}`}
+                                      title="Download"
+                                      onClick={() => void downloadRequestDocument(row, documentRow)}
+                                    >
+                                      <Download className="size-4" />
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </section>
+                        ) : null}
+
+                        {activeTab === "medical" && isMedical ? (
+                          <div className="grid gap-3 rounded-lg border border-border/70 bg-background/60 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  Medical detail
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Save treatment details and upload a supporting
+                                  medical attachment.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={saving}
+                                onClick={() =>
+                                  void saveLeaveMedicalDetail(selectedLeaveRequestRow)
+                                }
+                              >
+                                Save medical detail
+                              </button>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Sickness nature
+                                </p>
+                                <input
+                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                  value={leaveMedicalForm.sickness_nature}
+                                  onChange={(event) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      sickness_nature: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Doctor name
+                                </p>
+                                <input
+                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                  value={leaveMedicalForm.doctor_name}
+                                  onChange={(event) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      doctor_name: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Doctor phone
+                                </p>
+                                <input
+                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                  value={leaveMedicalForm.doctor_phone}
+                                  onChange={(event) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      doctor_phone: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Hospital name
+                                </p>
+                                <input
+                                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
+                                  value={leaveMedicalForm.hospital_name}
+                                  onChange={(event) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      hospital_name: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Treatment start
+                                </p>
+                                <DatePickerPresets
+                                  value={leaveMedicalForm.treatment_start_date}
+                                  placeholder="Select treatment start"
+                                  onChange={(value) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      treatment_start_date: value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Treatment end
+                                </p>
+                                <DatePickerPresets
+                                  value={leaveMedicalForm.treatment_end_date}
+                                  placeholder="Select treatment end"
+                                  onChange={(value) =>
+                                    setLeaveMedicalForm((current) => ({
+                                      ...current,
+                                      treatment_end_date: value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1 sm:col-span-2">
+                                <p className="text-xs font-medium text-slate-600">
+                                  Medical attachment
+                                </p>
+                                <input
+                                  ref={leaveMedicalAttachmentInputRef}
+                                  type="file"
+                                  accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
+                                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                                  onChange={(event) =>
+                                    setLeaveMedicalAttachmentFile(
+                                      event.target.files?.[0] ?? null,
+                                    )
+                                  }
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                  {leaveMedicalAttachmentFile
+                                    ? `Ready to upload when you save: ${leaveMedicalAttachmentFile.name}`
+                                    : leaveMedicalForm.attachment_url
+                                      ? "A medical attachment is already saved. Choose another file to replace it."
+                                      : "Choose a PDF, image, Word, Excel, or text file (up to 10 MB)."}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="sticky bottom-0 z-10 border-t border-border bg-background px-4 py-3 sm:px-6">
+                      {(() => {
+                        const permissions = getLeaveRequestPermissions(
+                          row,
+                          currentActor,
+                        );
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <button
                               type="button"
-                              className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
                               disabled={saving}
                               onClick={() =>
-                                void downloadRequestDocument(
-                                  selectedLeaveRequestRow,
-                                  documentRow,
-                                )
+                                void downloadRequestPdf(row)
                               }
                             >
                               <Download className="size-3.5" />
-                              Download
+                              PDF
                             </button>
+                            {canOverrideManager ? (
+                              <button
+                                type="button"
+                                className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                                disabled={saving}
+                                title="Withdraw the QR verification code printed on this request's PDFs"
+                                onClick={() =>
+                                  void revokeRequestVerificationCode(
+                                    row,
+                                  )
+                                }
+                              >
+                                <ShieldOff className="size-3.5" />
+                                Revoke QR
+                              </button>
+                            ) : null}
+                            {permissions.canApproveOrReject ? (
+                              <div className="ml-auto flex w-full gap-1.5 sm:w-auto">
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                                  disabled={saving}
+                                  title={permissions.reasonApprove}
+                                  onClick={() =>
+                                    void approveRequest(
+                                      row,
+                                      "approve",
+                                    )
+                                  }
+                                >
+                                  <Check className="size-3.5" />
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/30 sm:flex-none"
+                                  disabled={saving}
+                                  title={permissions.reasonApprove}
+                                  onClick={() =>
+                                    void approveRequest(
+                                      row,
+                                      "reject",
+                                    )
+                                  }
+                                >
+                                  <X className="size-3.5" />
+                                  Reject
+                                </button>
+                              </div>
+                            ) : null}
+                            {permissions.canOverride ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
+                                  disabled={saving}
+                                  title="Approve at the manager stage in place of an unavailable manager (reason required, audited)."
+                                  onClick={() =>
+                                    void overrideRequest(
+                                      row,
+                                      "approve",
+                                    )
+                                  }
+                                >
+                                  <Check className="size-3.5" />
+                                  Approve for manager
+                                </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
+                                  disabled={saving}
+                                  title="Reject at the manager stage in place of an unavailable manager (reason required, audited)."
+                                  onClick={() =>
+                                    void overrideRequest(
+                                      row,
+                                      "reject",
+                                    )
+                                  }
+                                >
+                                  <X className="size-3.5" />
+                                  Reject for manager
+                                </button>
+                              </>
+                            ) : null}
+                            {permissions.canCancel ? (
+                              <button
+                                type="button"
+                                className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
+                                disabled={saving}
+                                title={permissions.reasonCancel}
+                                onClick={() => {
+                                  setPendingRequestCancel(row);
+                                  setCancelReason("Cancelled by admin");
+                                }}
+                              >
+                                Cancel request
+                              </button>
+                            ) : null}
+                            {(() => {
+                              
+                              const today = new Date().toISOString().slice(0, 10);
+                              const end = String(row.end_date ?? "").slice(0, 10);
+                              const start = String(row.start_date ?? "").slice(0, 10);
+                              const fullDay =
+                                String(row.duration_type ?? "FULL_DAY").toUpperCase() ===
+                                "FULL_DAY";
+                              const canEndEarly =
+                                String(row.status ?? "").toLowerCase() === "approved" &&
+                                fullDay &&
+                                end > start &&
+                                end > today;
+                              if (!canEndEarly) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
+                                  disabled={saving}
+                                  title="Shorten this leave; unused days return to the balance"
+                                  onClick={() => void endRequestEarly(row)}
+                                >
+                                  End early
+                                </button>
+                              );
+                            })()}
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <p role="status" className="text-sm text-muted-foreground">
-                    {leaveEvidenceMessage(selectedLeaveRequestRow)}
-                  </p>
-                  {selectedLeaveRequestRow.notice_overridden_at ? (
-                    <p
-                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
-                      data-testid="leave-notice-override"
-                    >
-                      <span className="font-semibold">
-                        Notice period overridden by HR
-                      </span>
-                      {" on "}
-                      {new Date(
-                        String(selectedLeaveRequestRow.notice_overridden_at),
-                      ).toLocaleString()}
-                      {": "}
-                      {String(selectedLeaveRequestRow.notice_override_reason ?? "")}
-                    </p>
-                  ) : null}
-                  {selectedLeaveRequestRow.routing_required === true ? (
-                    <Button
-                      disabled={saving}
-                      onClick={() =>
-                        void manageLeaveFollowUp(
-                          selectedLeaveRequestRow,
-                          "routing",
-                        )
-                      }
-                    >
-                      Retry routing after correcting manager assignment
-                    </Button>
-                  ) : null}
-                  {["awaiting_evidence", "overdue"].includes(
-                    String(selectedLeaveRequestRow.evidence_status),
-                  ) ? (
-                    <div className="flex flex-col gap-2">
-                      <label htmlFor="leave-evidence-deadline">
-                        Extend evidence deadline (HR reviewer)
-                      </label>
-                      <Input
-                        id="leave-evidence-deadline"
-                        type="datetime-local"
-                        value={evidenceDeadline}
-                        onChange={(event) =>
-                          setEvidenceDeadline(event.target.value)
-                        }
-                      />
-                      <label htmlFor="leave-evidence-reason">
-                        Reason for extension
-                      </label>
-                      <Input
-                        id="leave-evidence-reason"
-                        value={evidenceReason}
-                        onChange={(event) =>
-                          setEvidenceReason(event.target.value)
-                        }
-                      />
-                      <Button
-                        disabled={
-                          saving || !evidenceDeadline || !evidenceReason.trim()
-                        }
-                        onClick={() =>
-                          void manageLeaveFollowUp(
-                            selectedLeaveRequestRow,
-                            "deadline",
-                          )
-                        }
-                      >
-                        Extend deadline
-                      </Button>
-                    </div>
-                  ) : null}
-                  <ApprovalChain
-                    row={selectedLeaveRequestRow}
-                    actor={currentActor}
-                  />
-
-                  {readNumber(selectedLeaveRequestRow, ["id"]) ? (
-                    <LeaveSignaturesPanel
-                      key={String(selectedLeaveRequestRow.id)}
-                      token={readStoredToken()}
-                      requestId={Number(selectedLeaveRequestRow.id)}
-                      approvals={
-                        Array.isArray(selectedLeaveRequestRow.approvals)
-                          ? (selectedLeaveRequestRow.approvals as AdminRecord[])
-                          : []
-                      }
-                      currentCompanyUserId={currentActor?.membershipId ?? null}
-                      isApplicant={
-                        currentActor?.employeeId != null &&
-                        readNumber(selectedLeaveRequestRow, ["employee_id"]) ===
-                          currentActor.employeeId
-                      }
-                      canViewVerification={canOverrideManager}
-                      status={readString(selectedLeaveRequestRow, ["status"])}
-                    />
-                  ) : null}
-
-                  {(() => {
-                    const permissions = getLeaveRequestPermissions(
-                      selectedLeaveRequestRow,
-                      currentActor,
-                    );
-                    return (
-                      <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
-                        <button
-                          type="button"
-                          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                          disabled={saving}
-                          onClick={() =>
-                            void downloadRequestPdf(selectedLeaveRequestRow)
-                          }
-                        >
-                          <Download className="size-3.5" />
-                          PDF
-                        </button>
-                        {canOverrideManager ? (
-                          <button
-                            type="button"
-                            className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                            disabled={saving}
-                            title="Withdraw the QR verification code printed on this request's PDFs"
-                            onClick={() =>
-                              void revokeRequestVerificationCode(
-                                selectedLeaveRequestRow,
-                              )
-                            }
-                          >
-                            <ShieldOff className="size-3.5" />
-                            Revoke QR
-                          </button>
-                        ) : null}
-                        {permissions.canApproveOrReject ? (
-                          <>
-                            <button
-                              type="button"
-                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                              disabled={saving}
-                              title={permissions.reasonApprove}
-                              onClick={() =>
-                                void approveRequest(
-                                  selectedLeaveRequestRow,
-                                  "approve",
-                                )
-                              }
-                            >
-                              <Check className="size-3.5" />
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-rose-300 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-950/30 sm:flex-none"
-                              disabled={saving}
-                              title={permissions.reasonApprove}
-                              onClick={() =>
-                                void approveRequest(
-                                  selectedLeaveRequestRow,
-                                  "reject",
-                                )
-                              }
-                            >
-                              <X className="size-3.5" />
-                              Reject
-                            </button>
-                          </>
-                        ) : null}
-                        {permissions.canOverride ? (
-                          <>
-                            <button
-                              type="button"
-                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
-                              disabled={saving}
-                              title="Approve at the manager stage in place of an unavailable manager (reason required, audited)."
-                              onClick={() =>
-                                void overrideRequest(
-                                  selectedLeaveRequestRow,
-                                  "approve",
-                                )
-                              }
-                            >
-                              <Check className="size-3.5" />
-                              Approve for manager
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-amber-400 px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:bg-amber-950/30 sm:flex-none"
-                              disabled={saving}
-                              title="Reject at the manager stage in place of an unavailable manager (reason required, audited)."
-                              onClick={() =>
-                                void overrideRequest(
-                                  selectedLeaveRequestRow,
-                                  "reject",
-                                )
-                              }
-                            >
-                              <X className="size-3.5" />
-                              Reject for manager
-                            </button>
-                          </>
-                        ) : null}
-                        {permissions.canCancel ? (
-                          <button
-                            type="button"
-                            className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
-                            disabled={saving}
-                            title={permissions.reasonCancel}
-                            onClick={() => {
-                              setPendingRequestCancel(selectedLeaveRequestRow);
-                              setCancelReason("Cancelled by admin");
-                            }}
-                          >
-                            Cancel request
-                          </button>
-                        ) : null}
-                        {(() => {
-                          const row = selectedLeaveRequestRow;
-                          const today = new Date().toISOString().slice(0, 10);
-                          const end = String(row.end_date ?? "").slice(0, 10);
-                          const start = String(row.start_date ?? "").slice(0, 10);
-                          const fullDay =
-                            String(row.duration_type ?? "FULL_DAY").toUpperCase() ===
-                            "FULL_DAY";
-                          const canEndEarly =
-                            String(row.status ?? "").toLowerCase() === "approved" &&
-                            fullDay &&
-                            end > start &&
-                            end > today;
-                          if (!canEndEarly) return null;
-                          return (
-                            <button
-                              type="button"
-                              className="inline-flex h-9 flex-1 items-center justify-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 sm:flex-none"
-                              disabled={saving}
-                              title="Shorten this leave; unused days return to the balance"
-                              onClick={() => void endRequestEarly(row)}
-                            >
-                              End early
-                            </button>
-                          );
-                        })()}
+                        );
+                      })()}
                       </div>
-                    );
-                  })()}
-                </div>
-              ) : null}
+                    </>
+                  );
+                })()
+              ) : (
+                <DialogHeader className="px-4 pt-4">
+                  <DialogTitle>Leave request</DialogTitle>
+                  <DialogDescription>Approval details</DialogDescription>
+                </DialogHeader>
+              )}
             </DialogPopup>
           </Dialog>
         </div>
