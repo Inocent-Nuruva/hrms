@@ -5,11 +5,10 @@ import { LeaveSignaturesPanel } from "./leave-signatures-panel"
 
 import { FluentLoadingIndicator } from "@/components/common/FluentLoadingIndicator"
 import * as React from "react"
-import { CalendarDays, CircleAlert, CircleCheck, Clock, Download, FileText, Paperclip, Stethoscope, Upload } from "lucide-react"
+import { CalendarDays, CircleAlert, CircleCheck, Clock, Download, FileText, Paperclip, Stethoscope, Upload, X } from "lucide-react"
 import {
  Dialog,
  DialogDescription,
- DialogHeader,
  DialogPopup,
  DialogTitle,
 } from "@/components/animate-ui/components/base/dialog"
@@ -1277,302 +1276,496 @@ export function LeaveWorkflowDialog({
  const tone = statusTone(status)
  const evidenceMessage = leaveEvidenceMessage(detail)
 
+ const employee = asRecord(detail?.employee)
+ const employeeName =
+  readString(employee, ["full_name", "name", "display_name"]) ||
+  [readString(employee, ["first_name"]), readString(employee, ["middle_name"]), readString(employee, ["last_name"])]
+   .filter(Boolean)
+   .join(" ") ||
+  readString(detail, ["employee_name"])
+ const employeeNumber =
+  readString(employee, ["employee_no", "employee_number", "code"]) || readString(detail, ["employee_no"])
+ const department =
+  readString(asRecord(employee?.department), ["name"]) ||
+  readString(employee, ["department_name"]) ||
+  readString(detail, ["department_name"])
+ const position =
+  readString(asRecord(employee?.position), ["name", "title"]) ||
+  readString(asRecord(employee?.designation), ["name", "title"]) ||
+  readString(employee, ["position_name", "designation", "job_title"])
+ const branch = readString(asRecord(employee?.branch), ["name"]) || readString(employee, ["branch_name"])
+ const durationType = readString(detail, ["duration_type"])
+ const halfDaySession = readString(detail, ["half_day_session"])
+ const startTime = readString(detail, ["start_time"])
+ const endTime = readString(detail, ["end_time"])
+ const appliedAt = readString(detail, ["applied_at", "submitted_at"])
+ const createdAt = readString(detail, ["created_at"])
+ const approvedAt = readString(detail, ["approved_at"])
+ const cancelledAt = readString(detail, ["cancelled_at"])
+ const rejectionReason = readString(detail, ["rejection_reason"])
+ const returnReason = readString(detail, ["return_reason"])
+ const evidenceDueAt = readString(detail, ["evidence_due_at"])
+ const evidenceReceivedAt = readString(detail, ["evidence_received_at"])
+ const evidenceRequired = detail?.evidence_required === true
+ const workflow = React.useMemo(() => buildLeaveWorkflowSummary(detail), [detail])
+
  const updateMedical = (key: keyof ReturnType<typeof createEmptyMedicalForm>, value: string) =>
   setMedicalForm((current) => ({ ...current, [key]: value }))
 
+ const sections = [
+  "Employee information",
+  "Leave application details",
+  "Approval progress",
+  ...(showMedicalDetail ? ["Medical information"] : []),
+  "Signatures",
+  "Supporting documents",
+ ]
+ const letter = (title: string) => String.fromCharCode(65 + sections.indexOf(title))
+
  return (
   <Dialog open={open} onOpenChange={onOpenChange}>
-   <DialogPopup className="flex max-h-[min(94vh,880px)] w-[calc(100%-1rem)] max-w-none flex-col overflow-hidden p-0 sm:w-[min(40rem,calc(100%-2rem))] sm:max-w-none">
-    {/* Header */}
-    <DialogHeader className="mb-0 shrink-0 space-y-2 border-b border-border bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-4 pb-4 pt-5 pr-12 text-left sm:px-6">
-     <div className="flex flex-wrap items-center gap-2">
-      <span
-       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
-        tone === "good"
-         ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-         : tone === "bad"
-          ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
-          : "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-       )}
-      >
-       <span className="size-1.5 rounded-full bg-current" />
-       {formatStatusLabel(status)}
-      </span>
-      <span className="font-mono text-xs text-muted-foreground">{requestLabel}</span>
+   <DialogPopup className="h-dvh w-[100vw] max-w-none" bodyClassName="!gap-0 !p-0 bg-muted/30" showCloseButton={false}>
+    {/* Sticky page bar */}
+    <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+     <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+      <div className="min-w-0 flex-1">
+       <div className="flex flex-wrap items-center gap-2">
+        <StatusPill tone={tone} label={formatStatusLabel(status)} />
+        <span className="font-mono text-xs text-muted-foreground">{requestLabel}</span>
+       </div>
+       <DialogTitle className="mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl">{leaveType}</DialogTitle>
+       <DialogDescription className="sr-only">
+        Leave application form, approvals, signatures and documents.
+       </DialogDescription>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+       <Button type="button" disabled={busyAction !== null || loading} onClick={() => void handleDownloadPdf()}>
+        <Download className="size-4" />
+        <span className="hidden sm:inline">{busyAction === "pdf" ? "Downloading…" : "Download PDF"}</span>
+       </Button>
+       <Button type="button" variant="outline" aria-label="Close" onClick={() => onOpenChange(false)}>
+        <X className="size-4" />
+        <span className="hidden sm:inline">Close</span>
+       </Button>
+      </div>
      </div>
-     <DialogTitle className="text-xl font-semibold tracking-tight">{leaveType}</DialogTitle>
-     <DialogDescription className="text-left text-sm text-muted-foreground">
-      Leave request details, documents and approval progress.
-     </DialogDescription>
-    </DialogHeader>
+    </header>
 
-    <div className="min-h-0 w-full min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 sm:px-6">
      {loading ? (
-      <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <div className="flex min-h-60 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
        <FluentLoadingIndicator className="h-6 w-6 animate-spin text-primary" />
        Loading request…
       </div>
      ) : null}
 
-     {!loading && error ? (
-      <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-900 dark:text-amber-200">
-       <CircleAlert className="mt-0.5 size-4 shrink-0" />
-       <span>{error} Showing the last available request data.</span>
-      </div>
-     ) : null}
-     {!loading && actionError ? (
-      <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-900 dark:text-rose-200">
-       <CircleAlert className="mt-0.5 size-4 shrink-0" />
-       <span>{actionError}</span>
-      </div>
-     ) : null}
-     {!loading && actionMessage ? (
-      <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-900 dark:text-emerald-200">
-       <CircleCheck className="mt-0.5 size-4 shrink-0" />
-       <span>{actionMessage}</span>
-      </div>
-     ) : null}
+     {!loading && error ? <Notice tone="warn">{error} Showing the last available request data.</Notice> : null}
+     {!loading && actionError ? <Notice tone="bad">{actionError}</Notice> : null}
+     {!loading && actionMessage ? <Notice tone="good">{actionMessage}</Notice> : null}
 
      {!loading ? (
-      <>
-       {/* Dates summary */}
-       <section className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {[
-         { label: "Starts", value: startDate || "—", wide: false },
-         { label: "Ends", value: endDate || "—", wide: false },
-         {
-          label: "Duration",
-          value: totalDays !== null ? `${totalDays} day${totalDays === 1 ? "" : "s"}` : "—",
-          wide: true,
-         },
-        ].map((item) => (
-         <div
-          key={item.label}
-          className={cn(
-           "flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-xs",
-           item.wide ? "col-span-2 sm:col-span-1" : null
-          )}
+      <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+       {/* Form title block */}
+       <div className="border-b border-border bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-5 py-6 text-center sm:px-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Leave application form</p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{leaveType}</h2>
+        <dl className="mx-auto mt-5 grid max-w-3xl grid-cols-2 gap-3 text-left sm:grid-cols-4">
+         <SummaryStat icon={<CalendarDays className="size-4" />} label="Starts" value={startDate || "—"} />
+         <SummaryStat icon={<CalendarDays className="size-4" />} label="Ends" value={endDate || "—"} />
+         <SummaryStat
+          icon={<Clock className="size-4" />}
+          label="Days requested"
+          value={totalDays !== null ? `${totalDays} day${totalDays === 1 ? "" : "s"}` : "—"}
+         />
+         <SummaryStat
+          icon={<CircleCheck className="size-4" />}
+          label="Approvals"
+          value={workflow.totalCount ? `${workflow.approvedCount} of ${workflow.totalCount}` : "—"}
+         />
+        </dl>
+       </div>
+
+       {rejectionReason || returnReason || evidenceMessage ? (
+        <div className="space-y-2 border-b border-border px-5 py-4 sm:px-8">
+         {rejectionReason ? <Notice tone="bad">Rejection reason: {rejectionReason}</Notice> : null}
+         {returnReason ? <Notice tone="warn">Returned for changes: {returnReason}</Notice> : null}
+         {evidenceMessage ? <Notice tone="neutral">{evidenceMessage}</Notice> : null}
+        </div>
+       ) : null}
+
+       <div className="divide-y divide-border">
+        <FormSection letter={letter("Employee information")} title="Employee information">
+         <FieldGrid>
+          <Field label="Employee full name" value={employeeName} />
+          <Field label="Employee number" value={employeeNumber} />
+          <Field label="Department" value={department} />
+          <Field label="Position / designation" value={position} />
+          <Field label="Branch / office" value={branch} />
+         </FieldGrid>
+        </FormSection>
+
+        <FormSection letter={letter("Leave application details")} title="Leave application details">
+         <FieldGrid>
+          <Field label="Leave type" value={leaveType} />
+          <Field label="Reference" value={requestLabel} mono />
+          <Field label="Leave start date" value={startDate} />
+          <Field label="Leave end date" value={endDate} />
+          <Field label="Total days requested" value={totalDays !== null ? `${totalDays}` : ""} />
+          <Field label="Duration" value={durationType ? formatStatusLabel(durationType) : ""} />
+          {halfDaySession ? <Field label="Half-day session" value={formatStatusLabel(halfDaySession)} /> : null}
+          {startTime || endTime ? (
+           <Field label="Time" value={[startTime, endTime].filter(Boolean).join(" – ")} />
+          ) : null}
+          <Field label="Date of application" value={formatDateTime(appliedAt) || "Not yet submitted"} />
+          <Field label="Created" value={formatDateTime(createdAt)} />
+          {approvedAt ? <Field label="Approved on" value={formatDateTime(approvedAt)} /> : null}
+          {cancelledAt ? <Field label="Cancelled on" value={formatDateTime(cancelledAt)} /> : null}
+          {evidenceRequired ? (
+           <Field
+            label="Supporting evidence"
+            value={
+             evidenceReceivedAt
+              ? `Received ${formatDateTime(evidenceReceivedAt)}`
+              : evidenceDueAt
+               ? `Due ${formatDateTime(evidenceDueAt)}`
+               : "Required"
+            }
+           />
+          ) : null}
+         </FieldGrid>
+         <div className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground">Reason for leave</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+           {requestReason || "No reason recorded"}
+          </p>
+         </div>
+        </FormSection>
+
+        <FormSection letter={letter("Approval progress")} title="Approval progress">
+         <LeaveWorkflowProgress row={detail} />
+         {workflow.approvals.length > 0 ? (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+           <table className="w-full min-w-[36rem] text-left text-sm">
+            <thead className="bg-muted/40 text-xs text-muted-foreground">
+             <tr>
+              <th className="px-3 py-2 font-medium">Level</th>
+              <th className="px-3 py-2 font-medium">Approver</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Decision date</th>
+              <th className="px-3 py-2 font-medium">Comments</th>
+             </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+             {workflow.approvals.map((item, index) => (
+              <tr
+               key={`${item.id ?? "approval"}-${index}`}
+               className={item.isCurrentLevel ? "bg-primary/5" : undefined}
+              >
+               <td className="px-3 py-2.5 align-top font-medium">{item.level}</td>
+               <td className="px-3 py-2.5 align-top">
+                <p className="font-medium text-foreground">{item.name}</p>
+                {item.roleLabel ? <p className="text-xs text-muted-foreground">{item.roleLabel}</p> : null}
+               </td>
+               <td className="px-3 py-2.5 align-top">
+                <StatusPill tone={statusTone(item.status)} label={formatStatusLabel(item.status)} />
+               </td>
+               <td className="px-3 py-2.5 align-top text-muted-foreground">{formatDateTime(item.actedAt) || "—"}</td>
+               <td className="whitespace-pre-wrap px-3 py-2.5 align-top text-muted-foreground">{item.comments || "—"}</td>
+              </tr>
+             ))}
+            </tbody>
+           </table>
+          </div>
+         ) : null}
+        </FormSection>
+
+        {showMedicalDetail ? (
+         <FormSection
+          letter={letter("Medical information")}
+          title="Medical information"
+          icon={<Stethoscope className="size-4" />}
+          description="Keep treatment details and the medical attachment in sync with this request."
          >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-           {item.wide ? <Clock className="size-4" /> : <CalendarDays className="size-4" />}
-          </span>
-          <div className="min-w-0">
-           <p className="text-xs text-muted-foreground">{item.label}</p>
-           <p className="truncate text-sm font-semibold text-foreground">{item.value}</p>
-          </div>
-         </div>
-        ))}
-       </section>
-
-       {requestReason ? (
-        <section className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-         <p className="text-xs font-medium text-muted-foreground">Reason</p>
-         <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{requestReason}</p>
-        </section>
-       ) : null}
-
-       {evidenceMessage ? (
-        <p role="status" className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-         {evidenceMessage}
-        </p>
-       ) : null}
-
-       {/* Approval progress */}
-       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground">Approval progress</h3>
-        <LeaveWorkflowProgress row={detail} />
-       </section>
-
-       {showMedicalDetail ? (
-        <section className="rounded-xl border border-border bg-card p-4">
-         <div className="mb-4 flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-300">
-           <Stethoscope className="size-4" />
-          </span>
-          <div className="min-w-0">
-           <h3 className="text-sm font-semibold text-foreground">Medical details</h3>
-           <p className="text-xs text-muted-foreground">
-            Keep treatment details and the medical attachment in sync with this request.
-           </p>
-          </div>
-         </div>
-         <div className="grid gap-3 sm:grid-cols-2">
-          {(
-           [
-            ["sickness_nature", "Sickness nature"],
-            ["doctor_name", "Doctor name"],
-            ["doctor_phone", "Doctor phone"],
-            ["hospital_name", "Hospital name"],
-           ] as const
-          ).map(([key, label]) => (
-           <label key={key} className="grid gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">{label}</span>
-            <Input
-             type={key === "doctor_phone" ? "tel" : "text"}
-             value={medicalForm[key]}
-             onChange={(event) => updateMedical(key, event.target.value)}
+          <div className="grid gap-3 sm:grid-cols-2">
+           {(
+            [
+             ["sickness_nature", "Sickness nature"],
+             ["doctor_name", "Doctor name"],
+             ["doctor_phone", "Doctor phone"],
+             ["hospital_name", "Hospital name"],
+            ] as const
+           ).map(([key, label]) => (
+            <label key={key} className="grid gap-1.5">
+             <span className="text-xs font-medium text-muted-foreground">{label}</span>
+             <Input
+              type={key === "doctor_phone" ? "tel" : "text"}
+              value={medicalForm[key]}
+              onChange={(event) => updateMedical(key, event.target.value)}
+             />
+            </label>
+           ))}
+           <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Treatment start</span>
+            <DatePickerPresets
+             value={medicalForm.treatment_start_date}
+             placeholder="Select treatment start"
+             onChange={(value) => updateMedical("treatment_start_date", value)}
             />
            </label>
-          ))}
-          <label className="grid gap-1.5">
-           <span className="text-xs font-medium text-muted-foreground">Treatment start</span>
-           <DatePickerPresets
-            value={medicalForm.treatment_start_date}
-            placeholder="Select treatment start"
-            onChange={(value) => updateMedical("treatment_start_date", value)}
-           />
-          </label>
-          <label className="grid gap-1.5">
-           <span className="text-xs font-medium text-muted-foreground">Treatment end</span>
-           <DatePickerPresets
-            value={medicalForm.treatment_end_date}
-            placeholder="Select treatment end"
-            onChange={(value) => updateMedical("treatment_end_date", value)}
-           />
-          </label>
-          <label className="grid gap-1.5 sm:col-span-2">
-           <span className="text-xs font-medium text-muted-foreground">Medical attachment</span>
-           <Input
-            ref={medicalAttachmentInputRef}
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
-            className="h-auto py-2"
-            onChange={(event) => setMedicalAttachmentFile(event.target.files?.[0] ?? null)}
-           />
-           <span className="text-xs font-normal text-muted-foreground">
-            {medicalAttachmentFile
-             ? `Ready to upload when you save: ${medicalAttachmentFile.name}`
-             : medicalForm.attachment_url
-              ? "A medical attachment is already saved. Choose another file to replace it."
-              : "PDF, image, Word, Excel, or text file (up to 10 MB)."}
-           </span>
-          </label>
-         </div>
-         {medicalDetail && !medicalForm.attachment_url ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-           Existing medical detail saved on {formatDateTime(readString(medicalDetail, ["created_at"])) || "record"}.
-          </p>
-         ) : null}
-         <div className="mt-4 flex justify-end">
-          <Button
-           type="button"
-           size="sm"
-           className="w-full sm:w-auto"
-           disabled={busyAction !== null}
-           onClick={() => void handleSaveMedicalDetail()}
-          >
-           {busyAction === "medical" ? "Saving…" : "Save medical details"}
-          </Button>
-         </div>
-        </section>
-       ) : null}
-
-       {requestId !== null && token ? (
-        <LeaveSignaturesPanel
-         key={String(requestId)}
-         token={token}
-         requestId={Number(requestId)}
-         currentCompanyUserId={null}
-         isApplicant
-         selfService
-         status={readString(detail, ["status"])}
-        />
-       ) : null}
-
-       {/* Supporting documents */}
-       <section className="rounded-xl border border-border bg-card p-4">
-        <div className="mb-3 flex items-start gap-3">
-         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Paperclip className="size-4" />
-         </span>
-         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">
-           Supporting documents
-           {documents.length > 0 ? (
-            <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-             {documents.length}
+           <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Treatment end</span>
+            <DatePickerPresets
+             value={medicalForm.treatment_end_date}
+             placeholder="Select treatment end"
+             onChange={(value) => updateMedical("treatment_end_date", value)}
+            />
+           </label>
+           <label className="grid gap-1.5 sm:col-span-2">
+            <span className="text-xs font-medium text-muted-foreground">Medical attachment</span>
+            <Input
+             ref={medicalAttachmentInputRef}
+             type="file"
+             accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt"
+             className="h-auto py-2"
+             onChange={(event) => setMedicalAttachmentFile(event.target.files?.[0] ?? null)}
+            />
+            <span className="text-xs font-normal text-muted-foreground">
+             {medicalAttachmentFile
+              ? `Ready to upload when you save: ${medicalAttachmentFile.name}`
+              : medicalForm.attachment_url
+               ? "A medical attachment is already saved. Choose another file to replace it."
+               : "PDF, image, Word, Excel, or text file (up to 10 MB)."}
             </span>
-           ) : null}
-          </h3>
-          <p className="text-xs text-muted-foreground">Attach files that support this request.</p>
-         </div>
-        </div>
-
-        {documents.length > 0 ? (
-         <ul className="mb-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
-          {documents.map((documentRow, index) => (
-           <li
-            key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
-            className="flex items-center gap-3 px-3 py-2.5"
+           </label>
+          </div>
+          {medicalDetail && !medicalForm.attachment_url ? (
+           <p className="mt-2 text-xs text-muted-foreground">
+            Existing medical detail saved on {formatDateTime(readString(medicalDetail, ["created_at"])) || "record"}.
+           </p>
+          ) : null}
+          <div className="mt-4 flex justify-end">
+           <Button
+            type="button"
+            size="sm"
+            className="w-full sm:w-auto"
+            disabled={busyAction !== null}
+            onClick={() => void handleSaveMedicalDetail()}
            >
-            <FileText className="size-5 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-             <p className="truncate text-sm font-medium text-foreground">
-              {readString(documentRow, ["file_name", "original_file_name"]) || "Supporting document"}
-             </p>
-             <p className="truncate text-xs text-muted-foreground">
-              {readString(documentRow, ["file_type", "mime_type"]) || "File"} · uploaded{" "}
-              {formatDateTime(readString(documentRow, ["uploaded_at", "created_at"])) || "-"}
-             </p>
-            </div>
-            <Button
-             type="button"
-             variant="ghost"
-             size="sm"
-             aria-label="Download document"
-             disabled={busyAction !== null}
-             onClick={() => void handleDownloadDocument(documentRow)}
+            {busyAction === "medical" ? "Saving…" : "Save medical details"}
+           </Button>
+          </div>
+         </FormSection>
+        ) : null}
+
+        <FormSection letter={letter("Signatures")} title="Signatures">
+         {requestId !== null && token ? (
+          <LeaveSignaturesPanel
+           key={String(requestId)}
+           token={token}
+           requestId={Number(requestId)}
+           currentCompanyUserId={null}
+           isApplicant
+           selfService
+           status={readString(detail, ["status"])}
+          />
+         ) : (
+          <p className="text-sm text-muted-foreground">Signatures are unavailable.</p>
+         )}
+        </FormSection>
+
+        <FormSection
+         letter={letter("Supporting documents")}
+         title="Supporting documents"
+         icon={<Paperclip className="size-4" />}
+         description="Attach files that support this request."
+         count={documents.length}
+        >
+         {documents.length > 0 ? (
+          <ul className="mb-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
+           {documents.map((documentRow, index) => (
+            <li
+             key={`leave-document-${readNumber(documentRow, ["id"]) ?? index}`}
+             className="flex items-center gap-3 px-3 py-2.5"
             >
-             <Download className="size-4" />
-             <span className="hidden sm:inline">Download</span>
-            </Button>
-           </li>
-          ))}
-         </ul>
-        ) : null}
+             <FileText className="size-5 shrink-0 text-muted-foreground" />
+             <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-foreground">
+               {readString(documentRow, ["file_name", "original_file_name"]) || "Supporting document"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+               {readString(documentRow, ["file_type", "mime_type"]) || "File"} · uploaded{" "}
+               {formatDateTime(readString(documentRow, ["uploaded_at", "created_at"])) || "-"}
+              </p>
+             </div>
+             <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Download document"
+              disabled={busyAction !== null}
+              onClick={() => void handleDownloadDocument(documentRow)}
+             >
+              <Download className="size-4" />
+              <span className="hidden sm:inline">Download</span>
+             </Button>
+            </li>
+           ))}
+          </ul>
+         ) : null}
 
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border px-4 py-5 text-center transition-colors hover:border-primary/50 hover:bg-primary/5">
-         <Upload className="size-5 text-muted-foreground" />
-         <span className="max-w-full truncate text-sm font-medium text-foreground">
-          {documentFile ? documentFile.name : "Click to choose a file"}
-         </span>
-         <span className="text-xs text-muted-foreground">
-          {documentFile ? "Ready to upload" : "PDF, image, Word, Excel or text"}
-         </span>
-         <input
-          key={documentFile ? "has-file" : "no-file"}
-          type="file"
-          className="sr-only"
-          onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
-         />
-        </label>
-        {documentFile ? (
-         <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="ghost" size="sm" disabled={busyAction !== null} onClick={() => setDocumentFile(null)}>
-           Cancel
-          </Button>
-          <Button type="button" size="sm" disabled={busyAction !== null} onClick={() => void handleUploadDocument()}>
-           {busyAction === "document" ? "Uploading…" : "Upload document"}
-          </Button>
-         </div>
-        ) : null}
-       </section>
-      </>
+         <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border px-4 py-5 text-center transition-colors hover:border-primary/50 hover:bg-primary/5">
+          <Upload className="size-5 text-muted-foreground" />
+          <span className="max-w-full truncate text-sm font-medium text-foreground">
+           {documentFile ? documentFile.name : "Click to choose a file"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+           {documentFile ? "Ready to upload" : "PDF, image, Word, Excel or text"}
+          </span>
+          <input
+           key={documentFile ? "has-file" : "no-file"}
+           type="file"
+           className="sr-only"
+           onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
+          />
+         </label>
+         {documentFile ? (
+          <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+           <Button type="button" variant="ghost" size="sm" disabled={busyAction !== null} onClick={() => setDocumentFile(null)}>
+            Cancel
+           </Button>
+           <Button type="button" size="sm" disabled={busyAction !== null} onClick={() => void handleUploadDocument()}>
+            {busyAction === "document" ? "Uploading…" : "Upload document"}
+           </Button>
+          </div>
+         ) : null}
+        </FormSection>
+       </div>
+
+       <footer className="border-t border-border bg-muted/20 px-5 py-3 text-center text-xs text-muted-foreground sm:px-8">
+        Leave application reference: <span className="font-mono">{requestLabel}</span>
+       </footer>
+      </article>
      ) : null}
-    </div>
-
-    {/* Footer */}
-    <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:flex-row sm:justify-end sm:px-6">
-     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-      Close
-     </Button>
-     <Button type="button" disabled={busyAction !== null || loading} onClick={() => void handleDownloadPdf()}>
-      <Download className="size-4" />
-      {busyAction === "pdf" ? "Downloading…" : "Download PDF"}
-     </Button>
     </div>
    </DialogPopup>
   </Dialog>
+ )
+}
+
+function StatusPill({ tone, label }: { tone: ReturnType<typeof statusTone>; label: string }) {
+ return (
+  <span
+   className={cn(
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
+    tone === "good"
+     ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+     : tone === "bad"
+      ? "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+      : tone === "warn"
+       ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+       : "bg-muted text-muted-foreground"
+   )}
+  >
+   <span className="size-1.5 rounded-full bg-current" />
+   {label}
+  </span>
+ )
+}
+
+function Notice({ tone, children }: { tone: "good" | "bad" | "warn" | "neutral"; children: React.ReactNode }) {
+ const Icon = tone === "good" ? CircleCheck : CircleAlert
+ return (
+  <div
+   role={tone === "bad" ? "alert" : "status"}
+   className={cn(
+    "flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm",
+    tone === "good"
+     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+     : tone === "bad"
+      ? "border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-200"
+      : tone === "warn"
+       ? "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+       : "border-border bg-muted/40 text-muted-foreground"
+   )}
+  >
+   <Icon className="mt-0.5 size-4 shrink-0" />
+   <span className="whitespace-pre-wrap">{children}</span>
+  </div>
+ )
+}
+
+function SummaryStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+ return (
+  <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-xs">
+   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">{icon}</span>
+   <div className="min-w-0">
+    <dt className="text-xs text-muted-foreground">{label}</dt>
+    <dd className="truncate text-sm font-semibold text-foreground">{value}</dd>
+   </div>
+  </div>
+ )
+}
+
+function FormSection({
+ letter,
+ title,
+ description,
+ icon,
+ count,
+ children,
+}: {
+ letter: string
+ title: string
+ description?: string
+ icon?: React.ReactNode
+ count?: number
+ children: React.ReactNode
+}) {
+ return (
+  <section className="px-5 py-6 sm:px-8">
+   <div className="mb-4 flex items-start gap-3">
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+     {letter}
+    </span>
+    <div className="min-w-0 flex-1">
+     <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-foreground">
+      {icon ? <span className="text-muted-foreground">{icon}</span> : null}
+      {title}
+      {count ? (
+       <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium normal-case text-muted-foreground">
+        {count}
+       </span>
+      ) : null}
+     </h3>
+     {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+    </div>
+   </div>
+   {children}
+  </section>
+ )
+}
+
+function FieldGrid({ children }: { children: React.ReactNode }) {
+ return (
+  <dl className="grid overflow-hidden rounded-xl border border-border sm:grid-cols-2 [&>div]:border-b [&>div]:border-border sm:[&>div:nth-child(odd)]:border-r">
+   {children}
+  </dl>
+ )
+}
+
+function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+ return (
+  <div className="-mb-px px-4 py-3">
+   <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+   <dd
+    className={cn(
+     "mt-0.5 break-words text-sm font-medium text-foreground",
+     mono && "font-mono",
+     !value && "font-normal italic text-muted-foreground"
+    )}
+   >
+    {value || "Not recorded"}
+   </dd>
+  </div>
  )
 }
