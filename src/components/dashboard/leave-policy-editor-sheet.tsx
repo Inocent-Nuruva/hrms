@@ -1,5 +1,6 @@
 "use client"
 
+import { LeaveAccrualSimulator } from "@/components/leave/leave-accrual-simulator"
 import * as React from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { InfoLabel } from "@fluentui/react-components"
@@ -210,16 +211,59 @@ function PolicyTypeAccrualCarryForward({
     <>
       <ChoiceRow
         label="Accrual for this type"
-        hint="Daily pro-rata accrues the yearly allowance by days employed (28 ÷ 12 ≈ 2.33 days a month), starting on the employment date."
+        hint="Daily: entitlement ÷ days in the leave year per day. Weekly: ÷ 52 per week. Monthly: ÷ 12 per month. Yearly: one credit per leave year (upfront when credited in advance)."
         value={assignment.accrual_method}
         layoutId={`policy-type-accrual-${index}`}
         options={[
           ["", "Policy schedule"],
-          ["daily", "Daily pro-rata"],
+          ["daily", "Daily"],
+          ["weekly", "Weekly"],
           ["monthly", "Monthly"],
-          ["yearly", "Full year"],
+          ["yearly", "Yearly"],
         ]}
         onChange={(next) => onChange({ accrual_method: next })}
+      />
+      <ChoiceRow
+        label="Accrual starts"
+        hint="Eligibility to apply is set separately (Allow during probation). After probation: nothing is earned until the approved confirmation date; employees without probation earn from their hire date. Check this against the employment contract and the Employment and Labour Relations Act before using it."
+        value={assignment.accrual_start_basis}
+        layoutId={`policy-type-accrual-start-${index}`}
+        options={[
+          ["hire_date", "From hire date"],
+          ["probation_completion", "After probation"],
+        ]}
+        onChange={(next) => onChange({ accrual_start_basis: next })}
+      />
+      <ChoiceRow
+        label="Credited"
+        hint="In advance: each period's days are available from its first day (yearly in advance = upfront allocation). In arrears: only once the period has been worked."
+        value={assignment.accrual_timing}
+        layoutId={`policy-type-accrual-timing-${index}`}
+        options={[
+          ["in_advance", "In advance"],
+          ["in_arrears", "In arrears"],
+        ]}
+        onChange={(next) => onChange({ accrual_timing: next })}
+      />
+      {assignment.accrual_method === "yearly" ? (
+        <ChoiceRow
+          label="Partial first year"
+          hint="Pro-rate the yearly credit when the employee starts earning part-way through the leave year."
+          value={assignment.accrual_prorate}
+          layoutId={`policy-type-accrual-prorate-${index}`}
+          options={[
+            ["false", "Full credit"],
+            ["true", "Pro-rated"],
+          ]}
+          onChange={(next) => onChange({ accrual_prorate: next })}
+        />
+      ) : null}
+      <LeaveAccrualSimulator
+        frequency={assignment.accrual_method}
+        entitlement={assignment.annual_quota_days}
+        startBasis={assignment.accrual_start_basis}
+        timing={assignment.accrual_timing}
+        prorate={assignment.accrual_prorate === "true"}
       />
       <ChoiceRow
         label="Carry-forward"

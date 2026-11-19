@@ -10262,11 +10262,18 @@ export async function getMyLeaveRequestPdf(token: string, id: string | number) {
   return adminRequest<unknown>(`/api/me/leave/requests/${id}/pdf`, { token });
 }
 
+/**
+ * Leave Application Form; permitted supporting documents are appended into
+ * the same PDF. Pass attachments "exclude" for the form only (e.g. when an
+ * attachment cannot be read — the API answers 422 LEAVE_PDF_ATTACHMENT_FAILED).
+ */
 export async function downloadMyLeaveRequestPdf(
   token: string,
   id: string | number,
+  options: { attachments?: "include" | "exclude" } = {},
 ): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
-  const response = await fetch(buildUrl(`/api/me/leave/requests/${id}/pdf`), {
+  const query = options.attachments === "exclude" ? "?attachments=exclude" : "";
+  const response = await fetch(buildUrl(`/api/me/leave/requests/${id}/pdf${query}`), {
     method: "GET",
     headers: {
       accept: "*/*",
@@ -10805,11 +10812,14 @@ export function getLeaveRequestPdfUrl(id: string | number) {
   return buildUrl(`/api/leave/requests/${id}/pdf`);
 }
 
+/** See downloadMyLeaveRequestPdf. */
 export async function downloadLeaveRequestPdf(
   token: string,
   id: string | number,
+  options: { attachments?: "include" | "exclude" } = {},
 ): Promise<{ blob: Blob; filename: string; contentType: string | null }> {
-  const response = await fetch(buildUrl(`/api/leave/requests/${id}/pdf`), {
+  const query = options.attachments === "exclude" ? "?attachments=exclude" : "";
+  const response = await fetch(buildUrl(`/api/leave/requests/${id}/pdf${query}`), {
     method: "GET",
     headers: {
       accept: "*/*",
@@ -22841,4 +22851,320 @@ export async function approveCompOffPolicy(token: string, id: number) {
     method: "POST",
     token,
   });
+}
+
+// ─── Leave acting employee (delegation) ─────────────────────────────────────
+
+export type LeaveActingPerson = {
+  id: number;
+  name: string;
+  employee_no: string;
+  department_name: string | null;
+  position_name: string | null;
+};
+
+export type LeaveActingAssignment = {
+  id: number;
+  leave_request_id: number;
+  leave_no: string | null;
+  leave_type_name: string | null;
+  leave_start_date: string | null;
+  leave_end_date: string | null;
+  leave_status: string | null;
+  status: "PENDING" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  start_date: string;
+  end_date: string;
+  follows_leave_dates: boolean;
+  responsibilities: string | null;
+  route_approvals: boolean;
+  absent_employee: LeaveActingPerson | null;
+  acting_employee: LeaveActingPerson | null;
+  appointed_by: LeaveActingPerson | null;
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+};
+
+export type LeaveActingAssignmentInput = {
+  acting_employee_id: number;
+  start_date?: string;
+  end_date?: string;
+  responsibilities?: string;
+  route_approvals?: boolean;
+};
+
+export async function getLeaveActingAssignment(token: string, leaveRequestId: string | number) {
+  return adminRequest<{
+    current: LeaveActingAssignment | null;
+    history: LeaveActingAssignment[];
+    can_manage: boolean;
+  }>(`/api/leave/requests/${leaveRequestId}/acting-assignment`, { token });
+}
+
+export async function saveLeaveActingAssignment(
+  token: string,
+  leaveRequestId: string | number,
+  body: LeaveActingAssignmentInput,
+) {
+  return adminRequest<{ data: LeaveActingAssignment; warnings: string[] }>(
+    `/api/leave/requests/${leaveRequestId}/acting-assignment`,
+    { method: "PUT", token, body },
+  );
+}
+
+export async function checkLeaveActingCandidate(
+  token: string,
+  leaveRequestId: string | number,
+  body: LeaveActingAssignmentInput,
+) {
+  return adminRequest<{ ok: boolean; employee: LeaveActingPerson; warnings: string[] }>(
+    `/api/leave/requests/${leaveRequestId}/acting-assignment/check`,
+    { method: "POST", token, body },
+  );
+}
+
+export async function cancelLeaveActingAssignment(token: string, id: number, reason?: string) {
+  return adminRequest<LeaveActingAssignment>(`/api/leave/acting-assignments/${id}/cancel`, {
+    method: "POST",
+    token,
+    body: { reason },
+  });
+}
+
+export type EmployeeActingOverview = {
+  current_leave: {
+    leave_request_id: number;
+    leave_no: string;
+    leave_type_name: string | null;
+    start_date: string;
+    end_date: string;
+    acting_assignment: LeaveActingAssignment | null;
+  } | null;
+  acting_for: LeaveActingAssignment[];
+  covered_by: LeaveActingAssignment[];
+  history: LeaveActingAssignment[];
+};
+
+export async function getEmployeeActingOverview(token: string, employeeId: string | number) {
+  return adminRequest<EmployeeActingOverview>(
+    `/api/leave/acting-assignments/employees/${employeeId}`,
+    { token },
+  );
+}
+
+export type DirectoryAvailability = {
+  status_label: string;
+  leave_end_date: string;
+  acting_employee: {
+    id: number;
+    name: string;
+    employee_no: string;
+    position_name: string | null;
+  } | null;
+};
+
+export async function getDirectoryAvailability(token: string, employeeIds: number[]) {
+  if (!employeeIds.length) return {} as Record<string, DirectoryAvailability>;
+  return adminRequest<Record<string, DirectoryAvailability>>(
+    `/api/leave/acting-assignments/directory?employee_ids=${employeeIds.slice(0, 500).join(",")}`,
+    { token },
+  );
+}
+
+// ─── Leave accrual & balance recalculation ──────────────────────────────────
+
+export type LeaveAccrualSummaryRow = {
+  leave_type_id: number;
+  leave_type_name: string | null;
+  fiscal_year: string;
+  cycle_start: string;
+  cycle_end: string;
+  entitlement_days: number;
+  accrued_days: number;
+  used_days: number;
+  pending_days: number;
+  approved_future_days: number;
+  carried_forward_days: number;
+  available_days: number;
+  accrual_frequency: "daily" | "weekly" | "monthly" | "yearly" | "manual";
+  accrual_timing: "in_advance" | "in_arrears";
+  accrual_start_basis: "hire_date" | "probation_completion";
+  accrual_start_date: string | null;
+  accrual_explanation: string;
+  probation_status: "not_applicable" | "on_probation" | "confirmed" | "not_confirmed";
+  expected_accrual_start_date: string | null;
+  next_accrual_date: string | null;
+  next_accrual_amount: number;
+  review_pending: boolean;
+};
+
+export function getMyLeaveAccrual(token: string) {
+  return adminRequest<LeaveAccrualSummaryRow[]>("/api/me/leave/accrual", { token });
+}
+
+export function getEmployeeLeaveAccrual(token: string, employeeId: number) {
+  return adminRequest<LeaveAccrualSummaryRow[]>(
+    `/api/leave/accrual/employees/${employeeId}`,
+    { token },
+  );
+}
+
+export type LeaveAccrualSimulationInput = {
+  frequency: LeaveAccrualSummaryRow["accrual_frequency"];
+  entitlement_days: number;
+  accrual_start_basis?: LeaveAccrualSummaryRow["accrual_start_basis"];
+  accrual_timing?: LeaveAccrualSummaryRow["accrual_timing"];
+  prorate?: boolean;
+  monthly_rate?: number;
+  cycle_start: string;
+  hire_date: string;
+  probation_months?: number;
+};
+
+export function simulateLeaveAccrual(token: string, body: LeaveAccrualSimulationInput) {
+  return adminRequest<{
+    cycle_start: string;
+    cycle_end: string;
+    accrual_start_date: string | null;
+    explanation: string;
+    months: Array<{ as_of: string; accrued: number }>;
+  }>("/api/leave/accrual/simulate", { method: "POST", token, body });
+}
+
+export type LeaveRecalculationRun = {
+  id: number;
+  reference: string;
+  scope_type: "employee" | "department" | "branch" | "company";
+  scope_id: number | null;
+  leave_type_id: number | null;
+  as_of_date: string;
+  trigger: string;
+  status:
+    | "queued"
+    | "previewing"
+    | "preview_ready"
+    | "pending_approval"
+    | "approved"
+    | "applying"
+    | "completed"
+    | "partially_failed"
+    | "failed"
+    | "cancelled"
+    | "superseded";
+  reason: string | null;
+  initiated_by_company_user_id: number | null;
+  submitted_by_company_user_id: number | null;
+  approved_by_company_user_id: number | null;
+  approved_at: string | null;
+  completed_at: string | null;
+  employees_total: number;
+  employees_done: number;
+  lines_changed: number;
+  lines_applied: number;
+  lines_failed: number;
+  lines_skipped: number;
+  error: string | null;
+  created_at: string;
+};
+
+export type LeaveRecalculationLine = {
+  id: number;
+  employee_id: number;
+  employee_no: string | null;
+  employee_name: string | null;
+  leave_type_id: number;
+  leave_type_name: string | null;
+  fiscal_year: string;
+  entitlement_days: string;
+  current_accrued_days: string;
+  recalculated_accrued_days: string;
+  current_available_days: string;
+  recalculated_available_days: string;
+  difference_days: string;
+  used_days: string;
+  pending_days: string;
+  adjusted_days: string;
+  policy_version: number | null;
+  accrual_frequency: string | null;
+  accrual_start_basis: string | null;
+  accrual_start_date: string | null;
+  hire_date: string | null;
+  probation_status: string | null;
+  probation_completion_date: string | null;
+  warnings: string[] | null;
+  status: "unchanged" | "changed" | "applied" | "stale" | "failed" | "skipped";
+  error: string | null;
+};
+
+export function startLeaveRecalculation(
+  token: string,
+  body: {
+    scope_type: LeaveRecalculationRun["scope_type"];
+    scope_id?: number;
+    leave_type_id?: number;
+    as_of_date?: string;
+  },
+) {
+  return adminRequest<LeaveRecalculationRun>("/api/leave/balance-recalculations", {
+    method: "POST",
+    token,
+    body,
+  });
+}
+
+export function listLeaveRecalculations(
+  token: string,
+  params: { employee_id?: number; page?: number; limit?: number } = {},
+) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params))
+    if (value !== undefined) query.set(key, String(value));
+  return adminRequest<{
+    data: LeaveRecalculationRun[];
+    meta: { page: number; limit: number; total: number; totalPages: number };
+  }>(`/api/leave/balance-recalculations?${query}`, { token });
+}
+
+export function getLeaveRecalculation(
+  token: string,
+  id: number,
+  params: { only_changed?: boolean; page?: number; limit?: number } = {},
+) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params))
+    if (value !== undefined) query.set(key, String(value));
+  return adminRequest<{
+    run: LeaveRecalculationRun;
+    lines: LeaveRecalculationLine[];
+    meta: { page: number; limit: number; total: number; totalPages: number };
+  }>(`/api/leave/balance-recalculations/${id}?${query}`, { token, cacheTtlMs: 0, dedupe: false });
+}
+
+export function applyLeaveRecalculation(token: string, id: number, reason: string) {
+  return adminRequest<LeaveRecalculationRun>(
+    `/api/leave/balance-recalculations/${id}/apply`,
+    { method: "POST", token, body: { reason } },
+  );
+}
+
+export function leaveRecalculationAction(
+  token: string,
+  id: number,
+  action: "approve" | "cancel" | "retry",
+) {
+  return adminRequest<LeaveRecalculationRun>(
+    `/api/leave/balance-recalculations/${id}/${action}`,
+    { method: "POST", token },
+  );
+}
+
+export async function downloadLeaveRecalculationReport(token: string, id: number) {
+  const response = await fetch(buildUrl(`/api/leave/balance-recalculations/${id}/report.csv`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Report download failed (${response.status}).`);
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `recalculation-${id}.csv`;
+  return { blob: await response.blob(), filename };
 }

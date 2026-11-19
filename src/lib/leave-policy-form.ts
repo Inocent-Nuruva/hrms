@@ -12,6 +12,12 @@ export type LeavePolicyTypeAssignment = {
   maximum_accumulation_days: string
   /** "" = use the policy's accrual schedule */
   accrual_method: string
+  /** hire_date | probation_completion — when earning starts */
+  accrual_start_basis: string
+  /** in_advance | in_arrears — credited when a period starts or ends */
+  accrual_timing: string
+  /** "true" = pro-rate yearly credits for a partial first cycle */
+  accrual_prorate: string
   /** "" = use the leave type's basic carry-forward; "true"/"false" = policy rule */
   carry_forward_enabled: string
   /** "" = no cap */
@@ -194,6 +200,7 @@ function normalizeAccrualMethod(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
   if (normalized === "yearly" || normalized === "annual" || normalized === "annually") return "yearly"
   if (normalized === "monthly") return "monthly"
+  if (normalized === "weekly") return "weekly"
   if (normalized === "daily") return "daily"
   if (normalized === "manual") return "manual"
   return value.trim() || "yearly"
@@ -232,6 +239,9 @@ export function emptyLeavePolicyTypeAssignment(): LeavePolicyTypeAssignment {
     encashment_requires_approval: "true",
     maximum_accumulation_days: "0",
     accrual_method: "",
+    accrual_start_basis: "hire_date",
+    accrual_timing: "in_advance",
+    accrual_prorate: "false",
     carry_forward_enabled: "",
     carry_forward_max_days: "",
     carry_forward_expiry_mode: "none",
@@ -413,6 +423,9 @@ function readCarryForwardFields(record: PolicyRecord) {
   const maxDays = text("carry_forward_max_days")
   return {
     accrual_method: text("accrual_method"),
+    accrual_start_basis: text("accrual_start_basis") || "hire_date",
+    accrual_timing: text("accrual_timing") || "in_advance",
+    accrual_prorate: record.accrual_prorate === true ? "true" : "false",
     carry_forward_enabled: enabled === true ? "true" : enabled === false ? "false" : "",
     carry_forward_max_days: maxDays === "" ? "" : String(Number(maxDays)),
     carry_forward_expiry_mode: date ? "date" : months ? "months" : "none",
@@ -437,6 +450,9 @@ export function leavePolicyTypeCarryForwardPayload(row: LeavePolicyTypeAssignmen
   const inherit = row.carry_forward_enabled === ""
   return {
     accrual_method: row.accrual_method || null,
+    accrual_start_basis: row.accrual_start_basis || "hire_date",
+    accrual_timing: row.accrual_timing || "in_advance",
+    accrual_prorate: row.accrual_prorate === "true",
     carry_forward_enabled: inherit ? null : row.carry_forward_enabled === "true",
     carry_forward_max_days:
       inherit || row.carry_forward_max_days.trim() === "" ? null : Number(row.carry_forward_max_days),

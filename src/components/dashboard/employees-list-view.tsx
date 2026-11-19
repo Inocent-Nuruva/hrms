@@ -50,6 +50,8 @@ import {
   withNormalizedTwoFactorFields,
   type AdminRecord,
   type EmployeesQueryParams,
+  getDirectoryAvailability,
+  type DirectoryAvailability,
 } from "@/lib/admin-api";
 import {
   employeeBelongsToDirectory,
@@ -397,6 +399,24 @@ export function EmployeesListView({
   const actor = useDashboardActor();
   const [query, setQuery] = React.useState(DEFAULT_QUERY);
   const [rows, setRows] = React.useState<AdminRecord[]>([]);
+  // Who is on leave today and who acts for them (no reasons / medical detail).
+  const [availability, setAvailability] = React.useState<
+    Record<string, DirectoryAvailability>
+  >({});
+  React.useEffect(() => {
+    const token = readStoredToken();
+    const ids = rows
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (!token || !ids.length) return;
+    let alive = true;
+    getDirectoryAvailability(token, ids)
+      .then((map) => alive && setAvailability(map))
+      .catch(() => alive && setAvailability({}));
+    return () => {
+      alive = false;
+    };
+  }, [rows]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [page, setPage] = React.useState(1);
@@ -1100,7 +1120,7 @@ export function EmployeesListView({
                 : s === "inactive" || s === "terminated" || s === "offboarding"
                   ? "bg-rose-500"
                   : "bg-slate-400";
-          return (
+          const badge = (
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap ${tone}`}
               title={display}
@@ -1108,6 +1128,25 @@ export function EmployeesListView({
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
               {display}
             </span>
+          );
+          const away = availability[String(row.id)];
+          if (!away) return badge;
+          const back = new Date(`${away.leave_end_date}T00:00:00Z`).toLocaleDateString(
+            "en-GB",
+            { day: "2-digit", month: "short", timeZone: "UTC" },
+          );
+          return (
+            <div className="space-y-0.5" title={`${away.status_label} until ${back}`}>
+              {badge}
+              <span className="block text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                {away.status_label} · to {back}
+              </span>
+              {away.acting_employee ? (
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  Acting: {away.acting_employee.name}
+                </span>
+              ) : null}
+            </div>
           );
         },
       },
@@ -1203,6 +1242,7 @@ export function EmployeesListView({
       },
     ],
     [
+      availability,
       canDeleteEmployeesPermanently,
       canManageTwoFactor,
       canRemoveEmployee,

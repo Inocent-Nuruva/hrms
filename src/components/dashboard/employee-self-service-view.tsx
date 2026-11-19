@@ -1,4 +1,6 @@
 "use client"
+import { MyLeaveAccrualPanel } from "@/components/leave/leave-accrual-summary"
+import { downloadLeavePdfWithFallback } from "@/lib/leave-pdf-download"
 
 import { evidenceDayThreshold, evidenceDueText } from "@/lib/leave-evidence"
 import { fluentForm } from "@/components/ui/fluent-dialog-service";
@@ -7037,7 +7039,10 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const onDownloadPdf = async (id: number | string) => {
     if (!token) return
     try {
-      const result = await downloadMyLeaveRequestPdf(token, id)
+      const result = await downloadLeavePdfWithFallback((options) =>
+        downloadMyLeaveRequestPdf(token, id, options),
+      )
+      if (!result) return
       const url = URL.createObjectURL(result.blob)
       const a = document.createElement("a")
       a.href = url
@@ -7309,7 +7314,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
     const fiscalYear = leaveBalancesFull?.current_fiscal_year || "2026"
     const showBalancesError = balancesError && balancesError !== SELF_SERVICE_UNAVAILABLE_MESSAGE
     const balanceMetrics = [
-      { key: "allocated", label: "Total allowance", value: balanceTotals[0]?.value, hint: "Days granted" },
+      { key: "allocated", label: "Annual entitlement", value: balanceTotals[0]?.value, hint: "Full leave year, not all earned yet" },
       { key: "used", label: "Used", value: balanceTotals[1]?.value, hint: "Days taken" },
       { key: "pending", label: "Awaiting approval", value: balanceTotals[2]?.value, hint: "Requested days" },
       { key: "carried", label: "Carried over", value: balanceTotals[3]?.value, hint: "From last year" },
@@ -7325,6 +7330,7 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
           </div>
           <FluentBadge appearance="outline" color="informative">Fiscal year {fiscalYear}</FluentBadge>
         </div>
+        <MyLeaveAccrualPanel token={token || null} />
         {loading ? (
           <div className="flex min-h-24 items-center justify-center gap-3 py-4">
             <FluentLoadingIndicator size="large" />

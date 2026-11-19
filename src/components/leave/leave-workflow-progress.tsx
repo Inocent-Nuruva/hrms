@@ -1,4 +1,5 @@
 "use client"
+import { downloadLeavePdfWithFallback } from "@/lib/leave-pdf-download"
 
 import { leaveEvidenceMessage } from "@/lib/leave-evidence"
 import { LeaveSignaturesPanel } from "./leave-signatures-panel"
@@ -1148,9 +1149,16 @@ export function LeaveWorkflowDialog({
   setActionError(null)
   setActionMessage(null)
   try {
-   const result = await downloadMyLeaveRequestPdf(token, requestId)
+   const result = await downloadLeavePdfWithFallback((options) =>
+    downloadMyLeaveRequestPdf(token, requestId, options)
+   )
+   if (!result) return
    downloadBlob(result.blob, result.filename)
-   setActionMessage("Leave request PDF downloaded.")
+   setActionMessage(
+    result.formOnly
+     ? "Leave form downloaded without supporting documents."
+     : "Leave request PDF downloaded."
+   )
   } catch (errorObject) {
    setActionError(
     errorObject instanceof Error

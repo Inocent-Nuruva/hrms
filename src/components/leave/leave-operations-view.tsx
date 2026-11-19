@@ -1,4 +1,5 @@
 "use client"
+import { RecalculateLeaveBalanceButton } from "@/components/leave/leave-recalculation-dialog"
 
 import * as React from "react"
 import { RefreshCwIcon } from "lucide-react"
@@ -77,6 +78,12 @@ export function LeaveOperationsView() {
         title="Leave operations"
         description="Check the leave set-up, reconcile leave with payroll, run the historical allocation backfill and manage leave notifications. Changes need confirmation and are recorded in the history."
       />
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2.5">
+        <p className="text-sm text-muted-foreground">
+          Leave balance administration: preview and apply balance recalculations (one employee, a department, a branch or the whole company) and review their history.
+        </p>
+        <RecalculateLeaveBalanceButton token={token() || null} />
+      </div>
       <div className="flex flex-wrap gap-1 border-b border-border" role="tablist">
         {TABS.map((t) => (
           <button

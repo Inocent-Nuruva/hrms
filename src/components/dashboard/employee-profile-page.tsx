@@ -1,4 +1,6 @@
 "use client"
+import { EmployeeLeaveBalanceCard } from "@/components/leave/leave-accrual-summary"
+import { EmployeeCoverCard } from "@/components/leave/employee-cover-card"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -2893,6 +2895,7 @@ export function EmployeeProfilePage({
               onMutated={fetchEmployee}
               requestedRouteKey={requestedRouteKey}
               header={
+                <>
                 <motion.dl
                   className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
                   variants={motionPreset.metrics}
@@ -2934,6 +2937,13 @@ export function EmployeeProfilePage({
                     reduce={motionPreset.reduce}
                   />
                 </motion.dl>
+                <EmployeeCoverCard token={readStoredToken()} employeeId={readNumber(employee.id)} />
+                <EmployeeLeaveBalanceCard
+                  token={readStoredToken()}
+                  employeeId={readNumber(employee.id)}
+                  employeeName={employeeDisplayNameFromLinkedUser(employee)}
+                />
+                </>
               }
             />
           )

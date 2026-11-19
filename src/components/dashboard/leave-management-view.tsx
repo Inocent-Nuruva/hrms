@@ -1,4 +1,7 @@
 "use client";
+import { RecalculateLeaveBalanceButton } from "@/components/leave/leave-recalculation-dialog"
+import { downloadLeavePdfWithFallback } from "@/lib/leave-pdf-download"
+import { ActingEmployeePanel, type ActingDraft } from "@/components/leave/acting-employee-panel"
 
 import { Button } from "@/components/ui/button";
 import { fluentConfirm, fluentForm } from "@/components/ui/fluent-dialog-service";
@@ -1610,6 +1613,13 @@ export function LeaveManagementView({
     React.useState<AdminRecord | null>(null);
   const [leaveRequestDetailsOpen, setLeaveRequestDetailsOpen] =
     React.useState(false);
+  // Acting employee chosen in the request detail; sent with the approval.
+  const actingDraftRef = React.useRef<{ id: number; draft: ActingDraft } | null>(null);
+  const actingDraftRequestId = React.useRef<number | null>(null);
+  const handleActingDraft = React.useCallback((draft: ActingDraft) => {
+    const id = actingDraftRequestId.current;
+    actingDraftRef.current = id !== null && draft ? { id, draft } : null;
+  }, []);
   const [requestDetailTab, setRequestDetailTab] = React.useState<
     "overview" | "approvals" | "documents" | "medical"
   >("overview");
@@ -5197,11 +5207,17 @@ export function LeaveManagementView({
             ? "Rejected from dashboard"
             : "Returned for correction from dashboard";
 
+      const acting =
+        action === "approve" && actingDraftRef.current?.id === id
+          ? actingDraftRef.current.draft
+          : null;
       const actionResult = await leaveRequestApprovalAction(token, id, {
         action,
         comments: signed.comments || defaultComment,
         signature: signed.signature,
+        ...(acting ? { acting_assignment: acting } : {}),
       });
+      if (acting) actingDraftRef.current = null;
 
       const successMessage =
         action === "approve"
@@ -5446,9 +5462,16 @@ export function LeaveManagementView({
 
     setSaving(true);
     try {
-      const result = await downloadLeaveRequestPdf(token, id);
+      const result = await downloadLeavePdfWithFallback((options) =>
+        downloadLeaveRequestPdf(token, id, options),
+      );
+      if (!result) return;
       downloadBlob(result.blob, result.filename);
-      showSuccessAlert("Leave request PDF downloaded.");
+      showSuccessAlert(
+        result.formOnly
+          ? "Leave form downloaded without supporting documents."
+          : "Leave request PDF downloaded.",
+      );
     } catch (errorObject) {
       const message =
         errorObject instanceof Error
@@ -6592,6 +6615,26 @@ export function LeaveManagementView({
                                 {reasonText && reasonText !== "-" ? reasonText : "No reason given."}
                               </p>
                             </section>
+                            {(() => {
+                              const requestId = readNumber(row, ["id"]);
+                              if (requestId === null) return null;
+                              actingDraftRequestId.current = requestId;
+                              return (
+                                <ActingEmployeePanel
+                                  key={requestId}
+                                  token={readStoredToken()}
+                                  leaveRequestId={requestId}
+                                  leaveStatus={readString(row, ["status"])}
+                                  leaveStart={readString(row, ["start_date"])}
+                                  leaveEnd={readString(row, ["end_date"])}
+                                  absentEmployeeId={readNumber(row, ["employee_id"])}
+                                  savesWithDecision={
+                                    getLeaveRequestPermissions(row, currentActor).canApproveOrReject
+                                  }
+                                  onDraftChange={handleActingDraft}
+                                />
+                              );
+                            })()}
                             <section className="space-y-2">
                               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Status and follow-up
@@ -9044,6 +9087,7 @@ export function LeaveManagementView({
                     ? "Reconciling..."
                     : "Reconcile balances"}
                 </button>
+                <RecalculateLeaveBalanceButton token={readStoredToken() || null} />
                 {canAdjustBalances ? (
                   <button
                     type="button"
