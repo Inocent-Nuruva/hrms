@@ -35,7 +35,8 @@ function VersionDetails({ version }: { version: KpiVersion }) {
 
 export function KpiDefinitionDetail({ id }: { id: number }) {
   const actor = useDashboardActor()
-  const canEdit = actor.roleNames?.some((role) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(role)) ?? false
+  const canArchive = actor.roleNames?.some((role) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(role)) ?? false
+  const canEdit = canArchive || actor.roleNames?.some((role) => ["DEPARTMENT_MANAGER", "BRANCH_MANAGER"].includes(role)) || actor.permissionLabels.includes("kpi_definitions:create")
   const [record, setRecord] = React.useState<KpiDefinition | null>(null)
   const [error, setError] = React.useState("")
   const [loading, setLoading] = React.useState(true)
@@ -55,7 +56,7 @@ export function KpiDefinitionDetail({ id }: { id: number }) {
       <div className="space-y-1"><Link href="/dashboard/kpi" className="text-sm text-primary hover:underline">KPI Library</Link><div className="flex flex-wrap items-center gap-2"><h1 className="text-xl font-semibold">{record ? `Definition ${record.code}` : "KPI definition"}</h1>{record && <KpiStatusBadge status={record.status} />}</div><p className="text-sm text-muted-foreground">Review details, workflow and version history.</p></div>
       <div className="flex flex-wrap items-center gap-2">
         {record && canEdit && record.status !== "archived" && (currentVersion?.publishedAt ? <KpiFluentButton disabled={busy} className="rounded bg-[var(--primary)] px-3 py-2 text-sm text-white" onClick={() => void action(() => kpiApi.reviseDefinition(token, id))}>Create draft revision</KpiFluentButton> : <><Link className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm hover:bg-muted" href={`/dashboard/kpi/create?edit=${id}`}>Edit draft</Link><KpiFluentButton disabled={busy} className="rounded bg-[var(--primary)] px-3 py-2 text-sm text-white" onClick={() => void action(() => kpiApi.publishDefinition(token, id))}>Publish draft</KpiFluentButton></>)}
-        {record && canEdit && record.status !== "archived" && <KpiFluentButton disabled={busy} className="rounded border border-red-600 px-3 py-2 text-sm text-red-700" onClick={() => { void fluentConfirm("Archive this KPI definition? Existing assignments will remain.").then((confirmed) => { if (confirmed) void action(() => kpiApi.archiveDefinition(token, id)) }) }}>Archive</KpiFluentButton>}
+        {record && canArchive && record.status !== "archived" && <KpiFluentButton disabled={busy} className="rounded border border-red-600 px-3 py-2 text-sm text-red-700" onClick={() => { void fluentConfirm("Archive this KPI definition? Existing assignments will remain.").then((confirmed) => { if (confirmed) void action(() => kpiApi.archiveDefinition(token, id)) }) }}>Archive</KpiFluentButton>}
       </div>
     </div>
     {record && <KpiWorkflowGuidancePanel recordKind="definition" recordId={id} compact />}

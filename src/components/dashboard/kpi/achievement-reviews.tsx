@@ -1,8 +1,8 @@
 "use client";
 
-import { Button, MessageBar, MessageBarBody, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell } from "@fluentui/react-components";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Dropdown, MessageBar, MessageBarBody, Option, Table, TableHeader, TableBody, TableRow, TableHeaderCell, TableCell } from "@fluentui/react-components";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
-import { KpiFluentInput, KpiFluentSelect, KpiFluentTextarea } from "./kpi-fluent-fields";
+import { KpiFluentTextarea } from "./kpi-fluent-fields";
 import * as React from "react";
 import { KpiFluentButton } from "./kpi-fluent-button";
 import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
@@ -11,9 +11,14 @@ import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { achievementApi, type Achievement, type AchievementActivity } from "@/lib/achievement-api";
 import { achievementsEnabled, readKpiToken } from "@/lib/kpi-session";
 import { KpiWorkflowGuidancePanel } from "./kpi-workflow-guidance";
+import { listBranches, listDepartments, listEmployees, type AdminRecord } from "@/lib/admin-api";
+import { kpiApi } from "@/lib/kpi-api";
+import { KpiSearchSelect, type KpiChoice } from "./kpi-search-select";
 
 const input =
   "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900";
+type AdvancedReviewFilters = { employee: string; department: string; branch: string; period: string };
+const emptyAdvancedFilters: AdvancedReviewFilters = { employee: "", department: "", branch: "", period: "" };
 function text(value: unknown) {
   return value === null || value === undefined
     ? "—"
@@ -33,87 +38,120 @@ export function AchievementReviews() {
     [period, setPeriod] = React.useState("");
   const [loading, setLoading] = React.useState(true),
     [error, setError] = React.useState("");
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [draftFilters, setDraftFilters] = React.useState<AdvancedReviewFilters>(emptyAdvancedFilters);
   React.useEffect(() => {
     if (!actor.ready || !token || !achievementsEnabled) return;
     void achievementApi
       .pending(token, status)
-      .then(setRows)
+      .then((result) => { setRows(result); setError(""); })
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : "Unable to load reviews"),
       )
       .finally(() => setLoading(false));
   }, [actor.ready, token, status]);
+  const loadEmployees = React.useCallback(async (search: string): Promise<KpiChoice[]> => {
+    const result = await listEmployees(token, { limit: 100, search });
+    return result.rows.map((row: AdminRecord) => ({ id: Number(row.id), label: [row.first_name ?? row.firstName, row.last_name ?? row.lastName].filter(Boolean).join(" ") || String(row.name ?? row.email ?? `Employee #${row.id}`) })).filter((choice) => Number.isInteger(choice.id));
+  }, [token]);
+  const loadDepartments = React.useCallback(async (search: string): Promise<KpiChoice[]> => {
+    const result = await listDepartments(token, { limit: 100, search });
+    return result.rows.map((row: AdminRecord) => ({ id: Number(row.id), label: String(row.name ?? `Department #${row.id}`) })).filter((choice) => Number.isInteger(choice.id));
+  }, [token]);
+  const loadBranches = React.useCallback(async (search: string): Promise<KpiChoice[]> => {
+    const result = await listBranches(token, { limit: 100, search });
+    return result.rows.map((row: AdminRecord) => ({ id: Number(row.id), label: String(row.name ?? `Branch #${row.id}`) })).filter((choice) => Number.isInteger(choice.id));
+  }, [token]);
+  const loadPeriods = React.useCallback(async (search: string): Promise<KpiChoice[]> => {
+    const result = await kpiApi.periods(token);
+    return result.filter((row) => row.label.toLowerCase().includes(search.toLowerCase())).map((row) => ({ id: row.id, label: row.label }));
+  }, [token]);
   const filtered = rows.filter(
     (row) =>
-      (!employee || String(row.assignment.subjectId).includes(employee)) &&
+      (!employee || String(row.assignment.subjectId) === employee) &&
       (!department || String(row.assignment.organizationSnapshot?.departmentId) === department) &&
       (!branch || String(row.assignment.organizationSnapshot?.branchId) === branch) &&
       (!period || String(row.assignment.periodId) === period),
   );
+  const advancedFilterCount = [employee, department, branch, period].filter(Boolean).length;
+  function openAdvancedFilters() {
+    setDraftFilters({ employee, department, branch, period });
+    setFiltersOpen(true);
+  }
+  function applyAdvancedFilters() {
+    setEmployee(draftFilters.employee);
+    setDepartment(draftFilters.department);
+    setBranch(draftFilters.branch);
+    setPeriod(draftFilters.period);
+    setFiltersOpen(false);
+  }
   if (!achievementsEnabled)
     return <p className="p-6">KPI reviews are disabled in this environment.</p>;
   return (
     <div className="space-y-4 pt-3">
-      <KpiPageHeader title="Achievement Reviews" description="Review submitted actuals and evidence before they contribute to scorecards." actions={<span className="rounded-full border border-border bg-muted px-3 py-1 text-xs text-foreground">{rows.filter((row) => ["submitted", "under_review"].includes(row.current.status)).length} pending</span>} />
-      <KpiWorkflowGuidancePanel compact />
-      <div className="flex flex-wrap gap-3">
-        <label className="text-sm">
-          Status
-          <KpiFluentSelect
-            className={input}
-            value={status}
-            onChange={(e) => {
-              setLoading(true);
-              setStatus(e.target.value);
-            }}
-          >
-            <option value="">Pending</option>
-            {[
-              "submitted",
-              "under_review",
-              "approved",
-              "returned",
-              "rejected",
-            ].map((value) => (
-              <option value={value} key={value}>
-                {value.replaceAll("_", " ")}
-              </option>
-            ))}
-          </KpiFluentSelect>
-        </label>
-        <label className="text-sm">
-          Employee ID
-          <KpiFluentInput
-            className={input}
-            value={employee}
-            onChange={(e) => setEmployee(e.target.value)}
-          />
-        </label>
-        <label className="text-sm">
-          Department ID
-          <KpiFluentInput className={input} value={department} onChange={(e) => setDepartment(e.target.value)} />
-        </label>
-        <label className="text-sm">
-          Branch ID
-          <KpiFluentInput className={input} value={branch} onChange={(e) => setBranch(e.target.value)} />
-        </label>
-        <label className="text-sm">
-          Period ID
-          <KpiFluentInput
-            className={input}
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-          />
-        </label>
-      </div>
+      <KpiPageHeader title="Achievement Reviews" description="Check submitted results and evidence before approving them." actions={<span className="rounded-full border border-white/30 px-3 py-1 text-sm text-white">{rows.filter((row) => ["submitted", "under_review"].includes(row.current.status)).length} awaiting review</span>} />
+      <section aria-label="Review filters" className="space-y-3 py-1">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="block w-full max-w-xs space-y-1 text-sm">
+            <span className="font-medium">Show submissions</span>
+            <Dropdown
+              aria-label="Show submissions"
+              className="w-full"
+              button={{ className: "!w-full" }}
+              value={{ "": "Awaiting review", submitted: "Submitted", under_review: "In review", approved: "Approved", returned: "Returned", rejected: "Rejected" }[status] ?? "Awaiting review"}
+              selectedOptions={[status]}
+              onOptionSelect={(_, data) => {
+                const next = data.optionValue ?? "";
+                if (next === status) return;
+                setLoading(true);
+                setError("");
+                setStatus(next);
+              }}
+            >
+              <Option value="">Awaiting review</Option>
+              <Option value="submitted">Submitted</Option>
+              <Option value="under_review">In review</Option>
+              <Option value="approved">Approved</Option>
+              <Option value="returned">Returned</Option>
+              <Option value="rejected">Rejected</Option>
+            </Dropdown>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button appearance="secondary" onClick={openAdvancedFilters}>More filters{advancedFilterCount ? ` (${advancedFilterCount})` : ""}</Button>
+            {(status || advancedFilterCount > 0) && <Button appearance="subtle" onClick={() => { if (status) setLoading(true); setStatus(""); setEmployee(""); setDepartment(""); setBranch(""); setPeriod(""); }}>Clear filters</Button>}
+          </div>
+        </div>
+      </section>
+      <Dialog open={filtersOpen} onOpenChange={(_, data) => setFiltersOpen(data.open)}>
+        <DialogSurface className="max-h-[90vh] !w-[min(44rem,calc(100vw-2rem))] overflow-y-auto">
+          <DialogBody>
+            <DialogTitle>Filter submissions</DialogTitle>
+            <DialogContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">Filter by person, team, or reporting period.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <KpiSearchSelect label="Employee" value={draftFilters.employee} onChange={(value) => setDraftFilters((current) => ({ ...current, employee: value }))} load={loadEmployees} emptyLabel="All employees" fluentDropdown />
+                <KpiSearchSelect label="Department" value={draftFilters.department} onChange={(value) => setDraftFilters((current) => ({ ...current, department: value }))} load={loadDepartments} emptyLabel="All departments" fluentDropdown />
+                <KpiSearchSelect label="Branch" value={draftFilters.branch} onChange={(value) => setDraftFilters((current) => ({ ...current, branch: value }))} load={loadBranches} emptyLabel="All branches" fluentDropdown />
+                <KpiSearchSelect label="Period" value={draftFilters.period} onChange={(value) => setDraftFilters((current) => ({ ...current, period: value }))} load={loadPeriods} emptyLabel="All periods" fluentDropdown />
+              </div>
+              {Object.values(draftFilters).some(Boolean) && <Button appearance="subtle" size="small" onClick={() => setDraftFilters(emptyAdvancedFilters)}>Clear selections</Button>}
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setFiltersOpen(false)}>Cancel</Button>
+              <Button appearance="primary" onClick={applyAdvancedFilters}>Apply filters</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       {loading && <p>Loading submissions…</p>}
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
       {!loading && filtered.length === 0 && (
-        <p className="rounded border p-4 text-sm">
-          No matching KPI submissions.
-        </p>
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <h2 className="font-semibold">{status || employee || department || branch || period ? "No submissions match these filters" : "Nothing waiting for review"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{status || employee || department || branch || period ? "Change or clear a filter to see more submissions." : "Submitted KPI results will appear here when a manager needs to review them."}</p>
+        </div>
       )}
-      <div className="overflow-x-auto rounded-lg border">
+      {!loading && filtered.length > 0 && <div className="overflow-x-auto rounded-lg border">
         <Table className="w-full text-left text-sm">
           <TableHeader>
             <TableRow className="border-b">
@@ -154,7 +192,7 @@ export function AchievementReviews() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </div>}
     </div>
   );
 }

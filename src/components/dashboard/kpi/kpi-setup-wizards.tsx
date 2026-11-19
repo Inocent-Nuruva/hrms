@@ -6,7 +6,7 @@ import { Info16Regular } from "@fluentui/react-icons"
 import { toast } from "@/components/ui/fluent-toast-store"
 import { DateInput } from "@/components/ui/date-input"
 import { listBranches, listDepartments, listEmployees, type AdminRecord } from "@/lib/admin-api"
-import { kpiApi, type KpiAssignment, type KpiDefinition, type KpiDefinitionForm, type KpiPeriod, type KpiTemplate } from "@/lib/kpi-api"
+import { kpiApi, type KpiDefinition, type KpiDefinitionForm, type KpiPeriod, type KpiTemplate } from "@/lib/kpi-api"
 import { KpiWizardControls, KpiWizardProgress, type KpiFlowStep } from "./kpi-guided-flow"
 import { validateKpiDefinition } from "./kpi-definition-validation"
 import { targetFor } from "./kpi-target-input"
@@ -31,7 +31,7 @@ function subjectLabel(row: AdminRecord, subjectType: string) {
   if (subjectType === "employee") {
     const name = value("full_name", "fullName", "name") || [value("first_name", "firstName"), value("last_name", "lastName")].filter(Boolean).join(" ")
     const number = value("employee_no", "employee_number", "employeeNumber", "employeeNo")
-    return [name || `Employee #${row.id}`, number ? `(${number})` : ""].filter(Boolean).join(" ")
+    return [name || value("email") || `Employee #${row.id}`, number ? `(${number})` : ""].filter(Boolean).join(" ")
   }
   return value("name", "department_name", "departmentName", "branch_name", "branchName", "title") || `#${row.id}`
 }
@@ -131,10 +131,10 @@ const assignmentSteps: KpiFlowStep[] = [
   { title: "Set target", description: "The target belongs to this assignment, not the KPI definition." },
   { title: "Review assignment", description: "Check subject, KPI, period and target, then create the assignment." },
 ]
-export function KpiAssignmentWizard({ token, definitions, periods, onDone, onCancel }: { token: string; definitions: KpiDefinition[]; periods: KpiPeriod[]; onDone: () => void; onCancel: () => void }) {
+export function KpiAssignmentWizard({ token, definitions, periods, initialDefinitionId = "", initialPeriodId = "", onDone, onCancel }: { token: string; definitions: KpiDefinition[]; periods: KpiPeriod[]; initialDefinitionId?: string; initialPeriodId?: string; onDone: () => void; onCancel: () => void }) {
   const [step, setStep] = React.useState(0), [subjectType, setSubjectType] = React.useState("employee"), [subjectId, setSubjectId] = React.useState("")
   const [subjectSearch, setSubjectSearch] = React.useState("")
-  const [definitionId, setDefinitionId] = React.useState(""), [periodId, setPeriodId] = React.useState(""), [target, setTarget] = React.useState("")
+  const [definitionId, setDefinitionId] = React.useState(initialDefinitionId), [periodId, setPeriodId] = React.useState(initialPeriodId), [target, setTarget] = React.useState("")
   const [managerId, setManagerId] = React.useState(""), [managerSearch, setManagerSearch] = React.useState(""), [managerOptions, setManagerOptions] = React.useState<AdminRecord[]>([]), [subjects, setSubjects] = React.useState<AdminRecord[]>([])
   const [busy, setBusy] = React.useState(false), [error, setError] = React.useState("")
   const savingRef = React.useRef(false)

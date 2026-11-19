@@ -1,3 +1,5 @@
+import { kpiEnabled } from "@/lib/kpi-session"
+
 export function mergeUniqueNavItems<T extends { url?: string; title: string }>(
   ...groups: T[][]
 ): T[] {
@@ -42,6 +44,7 @@ export function canShowKpiNavigationRoute(
       !path.startsWith("/dashboard/me/scorecards") && !path.startsWith("/dashboard/me/evaluations")) {
     return true
   }
+  if (!kpiEnabled) return false
   if (scope !== "company") return false
   const roles = new Set(roleNames.map((role) => role.trim().toUpperCase()))
   const hasAny = (allowed: Set<string>) => [...roles].some((role) => allowed.has(role))
@@ -50,13 +53,13 @@ export function canShowKpiNavigationRoute(
   const canManageAssignments = permissionLabels.includes("kpi_assignments:create") || permissionLabels.includes("kpi_assignments:update") || permissionLabels.includes("kpi_targets:revise")
   if (path === "/dashboard/me/kpi/reports") return roles.has("EMPLOYEE")
   if (path.startsWith("/dashboard/me/")) return hasAny(KPI_PERSONAL_ROLES)
-  if (path === "/dashboard/kpi/create" ||
-      path === "/dashboard/kpi/periods" ||
+  if (path === "/dashboard/kpi/create") return hasAny(KPI_WRITE_ROLES) || canCreateDefinitions
+  if (path === "/dashboard/kpi/periods" ||
       path === "/dashboard/kpi/templates" ||
       path.startsWith("/dashboard/kpi/evaluation-cycles") ||
       path.startsWith("/dashboard/kpi/evaluation-templates") ||
       path.startsWith("/dashboard/kpi/scoring-policies") ||
-      path.startsWith("/dashboard/kpi/scorecard-templates")) return hasAny(KPI_ADMIN_ROLES) || (path === "/dashboard/kpi/create" && canCreateDefinitions)
+      path.startsWith("/dashboard/kpi/scorecard-templates")) return hasAny(KPI_ADMIN_ROLES)
   if (path.startsWith("/dashboard/kpi/assignments") || path.startsWith("/dashboard/kpi/targets")) return hasAny(KPI_WRITE_ROLES) || canReadAssignments || canManageAssignments
   if (path.startsWith("/dashboard/kpi/reviews") ||
       path.startsWith("/dashboard/kpi/evaluations") ||

@@ -17,6 +17,7 @@ export const evaluationApi = {
   cycles: (token: string) => call<EvaluationCycle[]>(token, "/cycles"),
   createCycle: (token: string, body: Record<string, unknown>) => call<EvaluationCycle>(token, "/cycles", "POST", body),
   cycleAction: (token: string, id: number, action: "open" | "in-progress" | "review" | "close") => call<EvaluationCycle>(token, `/cycles/${id}/${action}`, "POST"),
+  setDeadlinePolicy: (token: string, id: number, mode: "soft" | "hard", reason: string) => call<EvaluationCycle>(token, `/cycles/${id}/deadline-policy`, "POST", { mode, reason }),
   enroll: (token: string, id: number, employeeId: number, managerEmployeeId: number, scorecardId: number) => call<Evaluation>(token, `/cycles/${id}/participants`, "POST", { employeeId, managerEmployeeId, scorecardId }),
   dashboard: (token: string) => call<{ total: number; finalized: number; pendingSelf: number; pendingManager: number; pendingHr: number; activeCycles: number; overdue: number; ratingDistribution: Record<string, number>; completionPercent: number }>(token, "/dashboard"),
   list: (token: string) => call<Evaluation[]>(token, ""),

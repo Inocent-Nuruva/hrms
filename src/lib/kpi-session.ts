@@ -7,10 +7,11 @@ export function readKpiToken() {
     return tokens?.accessToken ?? tokens?.access_token ?? window.localStorage.getItem("hrms.admin.accessToken") ?? ""
   } catch { return window.localStorage.getItem("hrms.admin.accessToken") ?? "" }
 }
-// KPI is part of the main HRMS; record access remains enforced by the API.
-export const kpiEnabled = true
-export const scorecardsEnabled = true
-export const achievementsEnabled = true
-export const evaluationsEnabled = true
-export const analyticsEnabled = true
-export const reportsEnabled = true
+// The public flag is frozen into the frontend build. The backend enforces its own
+// KPI_ENABLED switch and remains the authority for access to every record.
+export const kpiEnabled = process.env.NEXT_PUBLIC_KPI_ENABLED !== "false"
+export const scorecardsEnabled = kpiEnabled
+export const achievementsEnabled = kpiEnabled
+export const evaluationsEnabled = kpiEnabled
+export const analyticsEnabled = kpiEnabled
+export const reportsEnabled = kpiEnabled

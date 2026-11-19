@@ -53,18 +53,12 @@ export function ScorecardList() {
   if (!scorecardsEnabled) return <p className="p-6">Scorecards are disabled in this environment.</p>
   const canCreate = actor.roleNames.some((r) => roles.includes(r))
   return <div className="space-y-4 pt-3">
-    <KpiPageHeader title="Scorecards" description="A scorecard brings one person’s KPIs together for a reporting period, so their progress can be reviewed in one place. You can give each KPI a share of the overall score or track status without combining scores." actions={<>
-      {canCreate && <Button appearance="subtle" onClick={() => router.push("/dashboard/kpi/scorecards/new")}>New scorecard</Button>}
-      {actor.roleNames.some((r) => ["COMPANY_ADMIN", "HR_MANAGER"].includes(r)) && <>
-        <Button as="a" href="/dashboard/kpi/scoring-policies" appearance="subtle">Scoring policies</Button>
-        <Button as="a" href="/dashboard/kpi/scorecard-templates" appearance="subtle">Templates</Button>
-      </>}
-    </>} />
+    <KpiPageHeader title="Scorecards" description="Review a person’s KPIs together for a reporting period." actions={canCreate ? <Button appearance="subtle" onClick={() => router.push("/dashboard/kpi/scorecards/new")}>New scorecard</Button> : undefined} />
     {loading && <div className="py-4"><Spinner size="small" label="Loading scorecards" /></div>}
     {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
     {!loading && !error && rows.length === 0 && <Card appearance="outline" className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl p-8 text-center">
       <Text as="h2" size={400} weight="semibold">No scorecards yet</Text>
-      <Text as="p" size={300} className="max-w-lg text-muted-foreground">A scorecard is a simple summary of someone’s KPIs for a set period. It helps a manager review progress together instead of checking each KPI separately. Create one from the person’s existing KPI assignments.</Text>
+      <Text as="p" size={300} className="max-w-lg text-muted-foreground">Create a scorecard from a person’s KPI assignments to review their progress in one place.</Text>
     </Card>}
     {!loading && !error && rows.length > 0 && <Card appearance="outline" className="overflow-hidden rounded-xl p-0 shadow-sm">
       <div className="overflow-x-auto"><Table aria-label="KPI scorecards" size="small" className="w-full text-left text-sm">
@@ -119,12 +113,10 @@ export function ScorecardBuilder({ scorecardId }: { scorecardId?: number }) {
     if (!items.length) { setError("Add at least one eligible KPI assignment. An authorized manager can create one in KPI Assignments."); return }
     if (items.some((item) => !Number.isFinite(Number(item.weight)) || Number(item.weight) < 0)) { setError("Weights must be non-negative numbers"); return }
     savingRef.current = true; setBusy(true); setError(""); setNotice("")
-    let draftSaved = false
     try {
       const draft: ScorecardDraft = { name, description, mode, policyVersionId: policyId ? Number(policyId) : undefined, entries: items }
       const card = existing ? await scorecardApi.update(token, existing.id, draft) : await scorecardApi.create(token, { ...draft, code, subjectType, subjectId: Number(subjectId), periodId: Number(periodId), managerEmployeeId: managerId ? Number(managerId) : undefined } as ScorecardCreate)
       setExisting(card)
-      draftSaved = true
       setNotice("Draft scorecard saved"); router.push(`/dashboard/kpi/scorecards/${card.id}`)
     } catch (e) { setError(errorText(e)) } finally { savingRef.current = false; setBusy(false) }
   }

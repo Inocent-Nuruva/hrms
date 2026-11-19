@@ -265,7 +265,7 @@ export const personalKpiSectionTabGroups: DashboardSectionTabGroup[] = [
       { title: "My Performance", url: "/dashboard/me/kpi/overview" },
       { title: "My KPIs", url: "/dashboard/me/kpi" },
       { title: "My Scorecards", url: "/dashboard/me/scorecards" },
-      { title: "My Evaluations", url: "/dashboard/me/evaluations" },
+      { title: "My Reviews", url: "/dashboard/me/evaluations" },
       { title: "My KPI Report", url: "/dashboard/me/kpi/reports" },
     ],
   },
@@ -273,18 +273,41 @@ export const personalKpiSectionTabGroups: DashboardSectionTabGroup[] = [
 
 export const managementKpiSectionTabGroups: DashboardSectionTabGroup[] = [
   {
-    title: "KPI Management",
+    title: "Set up",
     items: [
-      { title: "Reporting Periods", url: "/dashboard/kpi/periods" },
       { title: "KPI Library", url: "/dashboard/kpi" },
+      { title: "Reporting Periods", url: "/dashboard/kpi/periods" },
       { title: "Templates", url: "/dashboard/kpi/templates" },
+    ],
+  },
+  {
+    title: "Assign & review",
+    items: [
       { title: "Assignments", url: "/dashboard/kpi/assignments" },
       { title: "Scorecards", url: "/dashboard/kpi/scorecards" },
-      { title: "Scoring Policies", url: "/dashboard/kpi/scoring-policies" },
       { title: "Achievement Reviews", url: "/dashboard/kpi/reviews" },
-      { title: "Performance Evaluations", url: "/dashboard/kpi/evaluations" },
+    ],
+  },
+  {
+    title: "Evaluate",
+    items: [
+      { title: "Performance Reviews", url: "/dashboard/kpi/evaluations" },
+      { title: "Review Periods", url: "/dashboard/kpi/evaluation-cycles" },
+      { title: "Review Criteria", url: "/dashboard/kpi/evaluation-templates" },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
       { title: "Analytics", url: "/dashboard/kpi/analytics" },
       { title: "Reports", url: "/dashboard/kpi/reports" },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [
+      { title: "Scoring Policies", url: "/dashboard/kpi/scoring-policies" },
+      { title: "Scorecard Templates", url: "/dashboard/kpi/scorecard-templates" },
     ],
   },
 ];

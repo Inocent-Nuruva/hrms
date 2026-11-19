@@ -87,7 +87,10 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
         }
       } else setNotice("Draft KPI saved. Publish it when its definition is ready.")
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save KPI")
+      const message = cause instanceof Error ? cause.message : "Could not save KPI"
+      setError(/KPI role and active company are required|Active company context is required/i.test(message)
+        ? "This account cannot create a KPI in the active company. Check that your role has KPI creation access, then sign in again. Your entries are still here."
+        : message)
     } finally { savingRef.current = false; setBusy(false) }
   }
 
@@ -130,7 +133,6 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
         ["Unit", form.measurementUnit || "—"], ["Direction", form.direction.replaceAll("_", " ")],
         ["Frequency", form.frequency], ["Next assignment period", matchingPeriods.find((period) => String(period.id) === periodId)?.label ?? "Choose later"],
       ].map(([key, value]) => <TableRow key={key}><TableCell className="font-medium">{key}</TableCell><TableCell>{value}</TableCell></TableRow>)}</TableBody></Table>
-      <MessageBar intent="info"><MessageBarBody>Insurance examples and provisional scoring policies are guidance only. Confirm the definition before publishing.</MessageBarBody></MessageBar>
     </Card>}
 
     {step === 5 && created && <Card className="space-y-4 p-5"><div className="flex items-center gap-3"><CheckmarkCircle24Filled className="text-[color:var(--colorPaletteGreenForeground1)]" aria-hidden /><div><h3 className="font-semibold">KPI {created.status === "published" ? "published" : "draft saved"}</h3><p className="text-sm text-muted-foreground">{created.currentVersion?.name ?? form.name} · {created.code} · {created.status}</p></div></div>

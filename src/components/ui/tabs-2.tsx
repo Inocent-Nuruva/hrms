@@ -23,12 +23,9 @@ import {
   PeopleTeam20Regular,
   ShieldKeyhole20Regular,
   Code20Regular,
-  ArrowTrendingLines20Regular,
   ChartMultiple20Regular,
   DocumentText20Regular,
   Gauge20Regular,
-  Target20Regular,
-  Trophy20Regular,
 } from "@fluentui/react-icons"
 import {
   CounterBadge,
@@ -126,8 +123,11 @@ export function Tabs2({ groups, currentPath, className, showGroupNavigation = fa
   const router = useRouter()
   const styles = useStyles()
   const attentionUrls = useNotificationAttentionRoutes()
+  const activeUrl = groups.flatMap((group) => group.items)
+    .filter((item) => isActivePath(currentPath, item.url))
+    .sort((left, right) => right.url.length - left.url.length)[0]?.url
   const activeGroup =
-    groups.find((group) => group.items.some((item) => isActivePath(currentPath, item.url))) ??
+    groups.find((group) => group.items.some((item) => item.url === activeUrl)) ??
     groups[0] ??
     null
   const tabs = activeGroup?.items ?? []

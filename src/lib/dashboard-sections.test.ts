@@ -137,12 +137,13 @@ describe("employee section navigation", () => {
 
 
 describe("KPI management navigation", () => {
-  it("starts with reporting periods and preserves the KPI Library route", () => {
+  it("groups KPI tasks into short, navigable sections", () => {
+    expect(managementKpiSectionTabGroups.map((group) => group.title)).toEqual([
+      "Set up", "Assign & review", "Evaluate", "Insights", "Settings",
+    ])
     expect(managementKpiSectionTabGroups[0]?.items[0]).toEqual({
-      title: "Reporting Periods", url: "/dashboard/kpi/periods",
-    })
-    expect(managementKpiSectionTabGroups[0]?.items[1]).toEqual({
       title: "KPI Library", url: "/dashboard/kpi",
     })
+    expect(managementKpiSectionTabGroups.every((group) => group.items.length <= 3)).toBe(true)
   })
 })

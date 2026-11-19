@@ -67,7 +67,7 @@ function ActionCard({ action }: { action: KpiWorkflowAction }) {
   </Card>
 }
 
-export function KpiWorkflowGuidancePanel({ recordKind, recordId, compact = false, onGuidance, onAction }: { recordKind?: KpiWorkflowRecord["kind"]; recordId?: number; compact?: boolean; onGuidance?: (guidance: KpiWorkflowGuidance) => void; onAction?: (action: KpiWorkflowAction) => void }) {
+export function KpiWorkflowGuidancePanel({ recordKind, recordId, compact = false, guidanceOnly = false, onGuidance, onAction }: { recordKind?: KpiWorkflowRecord["kind"]; recordId?: number; compact?: boolean; guidanceOnly?: boolean; onGuidance?: (guidance: KpiWorkflowGuidance) => void; onAction?: (action: KpiWorkflowAction) => void }) {
   const actor = useDashboardActor()
   const [guidance, setGuidance] = React.useState<KpiWorkflowGuidance | null>(null)
   const [error, setError] = React.useState("")
@@ -90,6 +90,7 @@ export function KpiWorkflowGuidancePanel({ recordKind, recordId, compact = false
     const interval = window.setInterval(() => { if (document.visibilityState === "visible") refresh() }, 30000)
     return () => { window.removeEventListener("hrms:refresh-page-data", refresh); window.removeEventListener("focus", refresh); window.clearInterval(interval) }
   }, [load])
+  if (guidanceOnly) return null
   if (!actor.ready || loading) return <Spinner size="small" label="Loading workflow guidance" />
   if (error) return <MessageBar intent="warning"><MessageBarBody>{error}</MessageBarBody></MessageBar>
   if (!guidance) return null

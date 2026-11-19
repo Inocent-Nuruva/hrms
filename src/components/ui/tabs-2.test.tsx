@@ -4,7 +4,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { Tabs2 } from "./tabs-2"
-import { employeeSectionTabGroups } from "@/lib/dashboard-sections"
+import { employeeSectionTabGroups, managementKpiSectionTabGroups } from "@/lib/dashboard-sections"
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
@@ -42,5 +42,18 @@ describe("employee workspace navigation", () => {
     }
     await act(async () => (tabs[3] as HTMLButtonElement).click())
     expect(push).toHaveBeenCalledWith("/dashboard/employees/contracts")
+  })
+})
+
+describe("KPI workspace navigation", () => {
+  it("shows the active task group despite the KPI Library parent route", async () => {
+    await act(async () => root.render(<Tabs2 groups={managementKpiSectionTabGroups} currentPath="/dashboard/kpi/assignments" showGroupNavigation />))
+    const group = [...container.querySelectorAll("nav button")].find((button) => button.textContent === "Assign & review")
+    expect(group?.getAttribute("data-hrms-button-tone")).toBe("brand")
+    const tabs = [...container.querySelectorAll('[role="tab"]')]
+    expect(tabs).toHaveLength(3)
+    for (const [index, label] of ["Assignments", "Scorecards", "Achievement Reviews"].entries()) {
+      expect(tabs[index].textContent).toContain(label)
+    }
   })
 })
