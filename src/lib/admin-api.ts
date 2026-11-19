@@ -173,11 +173,21 @@ export interface LeaveTypesQueryParams extends UsersQueryParams {
   status?: string;
 }
 
+export type LeaveRequestView =
+  | "all"
+  | "mine"
+  | "pending_my_approval"
+  | "my_approval_history";
+
 export interface LeaveRequestsQueryParams extends UsersQueryParams {
+  view?: LeaveRequestView;
   employee_id?: number;
   leave_type_id?: number;
   department_id?: number;
+  branch_id?: number;
   manager_employee_id?: number;
+  approval_level?: number;
+  current_approver_company_user_id?: number;
   status?: string;
   from_date?: string;
   to_date?: string;
@@ -2094,6 +2104,19 @@ function buildLeaveRequestsQuery(params: LeaveRequestsQueryParams) {
   }
   if (params.to_date && params.to_date.trim()) {
     searchParams.set("to_date", params.to_date.trim());
+  }
+  if (params.view) {
+    searchParams.set("view", params.view);
+  }
+  for (const key of [
+    "branch_id",
+    "approval_level",
+    "current_approver_company_user_id",
+  ] as const) {
+    const value = params[key];
+    if (typeof value === "number" && value > 0) {
+      searchParams.set(key, String(value));
+    }
   }
   const query = searchParams.toString();
   return query ? `?${query}` : "";
@@ -4854,6 +4877,73 @@ export async function listLeaveRequests(
     fallbackLimit,
   );
   return { rows, ...pagination };
+}
+
+/** Counts per status group for a view and filters (status filter ignored). */
+export interface LeaveRequestSummary {
+  total: number;
+  open: number;
+  awaiting_decision: number;
+  draft: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  /** null when the caller is not an approver. */
+  pending_my_approval: number | null;
+}
+
+function normalizeLeaveRequestSummary(payload: unknown): LeaveRequestSummary {
+  const record = (
+    payload && typeof payload === "object" && "data" in payload
+      ? (payload as { data: unknown }).data
+      : payload
+  ) as Record<string, unknown> | null;
+  const n = (key: string) => {
+    const value = Number(record?.[key]);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const pending = record?.pending_my_approval;
+  return {
+    total: n("total"),
+    open: n("open"),
+    awaiting_decision: n("awaiting_decision"),
+    draft: n("draft"),
+    approved: n("approved"),
+    rejected: n("rejected"),
+    cancelled: n("cancelled"),
+    pending_my_approval:
+      pending === null || pending === undefined ? null : Number(pending),
+  };
+}
+
+export async function getLeaveRequestSummary(
+  token: string,
+  params: LeaveRequestsQueryParams = {},
+): Promise<LeaveRequestSummary> {
+  const { page: _page, limit: _limit, status: _status, ...rest } = params;
+  void _page;
+  void _limit;
+  void _status;
+  const payload = await adminRequest<unknown>(
+    `/api/leave/requests/summary${buildLeaveRequestsQuery(rest)}`,
+    { token },
+  );
+  return normalizeLeaveRequestSummary(payload);
+}
+
+export async function getMyLeaveRequestSummary(
+  token: string,
+  params: LeaveRequestsQueryParams = {},
+): Promise<LeaveRequestSummary> {
+  const { page: _page, limit: _limit, status: _status, ...rest } = params;
+  void _page;
+  void _limit;
+  void _status;
+  const payload = await adminRequest<unknown>(
+    `/api/me/leave/requests/summary${buildLeaveRequestsQuery(rest)}`,
+    { token },
+  );
+  return normalizeLeaveRequestSummary(payload);
 }
 
 export async function listAllLeaveRequests(

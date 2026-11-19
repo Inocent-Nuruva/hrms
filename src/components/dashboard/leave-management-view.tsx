@@ -114,6 +114,7 @@ import {
   listLeaveHolidays,
   listLeavePolicies,
   listLeaveRequests,
+  getLeaveRequestSummary,
   bulkLeaveApprovalAction,
   listAllLeaveRequests,
   listAllLeaveTypes,
@@ -1444,6 +1445,13 @@ export function LeaveManagementView({
   const [evidenceDeadline, setEvidenceDeadline] = React.useState("");
   const [evidenceReason, setEvidenceReason] = React.useState("");
   const [requestStatusFilter, setRequestStatusFilter] = React.useState("all");
+  // Approval queue views are filtered server-side by the active approval level.
+  const [requestView, setRequestView] = React.useState<
+    "all" | "pending_my_approval" | "my_approval_history"
+  >("all");
+  const [pendingMyApprovalCount, setPendingMyApprovalCount] = React.useState<
+    number | null
+  >(null);
   // Server-side request list: filters, paging and bulk selection.
   const [requestFilters, setRequestFilters] = React.useState({
     department_id: "",
@@ -1463,6 +1471,7 @@ export function LeaveManagementView({
   const [bulkBusy, setBulkBusy] = React.useState(false);
   const requestQueryRef = React.useRef({
     page: 1,
+    view: "all" as "all" | "pending_my_approval" | "my_approval_history",
     status: "all",
     search: "",
     filters: {
@@ -2069,6 +2078,7 @@ export function LeaveManagementView({
 
   requestQueryRef.current = {
     page: requestPage,
+    view: requestView,
     status: requestStatusFilter,
     search: requestSearch,
     filters: requestFilters,
@@ -2111,6 +2121,7 @@ export function LeaveManagementView({
             const toId = (value: string) =>
               value ? Number(value) : undefined;
             const result = await listLeaveRequests(token, {
+              view: query.view,
               page: query.page,
               limit: 25,
               sortBy: "created_at",
@@ -2124,6 +2135,11 @@ export function LeaveManagementView({
               to_date: query.filters.to_date || undefined,
             });
             setRequests(result.rows);
+            void getLeaveRequestSummary(token, { view: "pending_my_approval" })
+              .then((summary) =>
+                setPendingMyApprovalCount(summary.pending_my_approval),
+              )
+              .catch(() => setPendingMyApprovalCount(null));
             setRequestMeta({
               total: result.total ?? null,
               totalPages: result.totalPages ?? null,
@@ -2227,12 +2243,13 @@ export function LeaveManagementView({
   // Filters change the result set, so they restart at page 1.
   React.useEffect(() => {
     setRequestPage(1);
-  }, [requestFilters, requestSearch, requestStatusFilter]);
+  }, [requestFilters, requestSearch, requestStatusFilter, requestView]);
 
   const requestReloadKey = JSON.stringify([
     requestPage,
     requestFilters,
     requestStatusFilter,
+    requestView,
   ]);
   const lastRequestReloadKey = React.useRef(requestReloadKey);
   const lastRequestSearch = React.useRef(requestSearch);
@@ -5852,6 +5869,42 @@ export function LeaveManagementView({
 
       {tab === "requests" ? (
         <div className="space-y-2">
+          <div
+            role="tablist"
+            aria-label="Leave request views"
+            className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1"
+          >
+            {(
+              [
+                ["all", "All requests"],
+                ["pending_my_approval", "Pending my approval"],
+                ["my_approval_history", "My approval history"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={requestView === key}
+                onClick={() => setRequestView(key)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  requestView === key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                {key === "pending_my_approval" &&
+                pendingMyApprovalCount !== null &&
+                pendingMyApprovalCount > 0 ? (
+                  <span className="rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                    {pendingMyApprovalCount}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
           <div className="flex min-w-0 items-center justify-between gap-1.5 md:hidden">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
               <SearchToggleField

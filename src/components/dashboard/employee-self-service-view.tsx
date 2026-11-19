@@ -82,10 +82,7 @@ import {
   PeopleTeam20Color,
   Person20Color,
   ArrowSync20Regular,
-  DocumentPdf20Regular,
-  Eye20Regular,
   Send20Regular,
-  Edit20Regular,
   Dismiss20Regular,
   Save20Regular,
 } from "@fluentui/react-icons"
@@ -175,6 +172,7 @@ import { LeaveWorkflowDialog } from "@/components/leave/leave-workflow-progress"
 import { LeaveAccrualProjectionCard } from "@/components/leave/leave-accrual-projection-card"
 import { LeaveEncashmentSelfPanel } from "@/components/leave/leave-encashment-self-panel"
 import { LeaveCompOffPanel } from "@/components/leave/leave-comp-off-panel"
+import { LeaveRequestsPanel } from "@/components/leave/leave-requests-panel"
 import { LeaveDelegationsPanel } from "@/components/leave/leave-delegations-panel"
 import { LeaveRequestPreviewPanel, useLeaveRequestPreview } from "@/components/leave/leave-request-preview"
 import { notifySubmittedRequestApprovers } from "@/lib/request-notifications"
@@ -793,109 +791,6 @@ function formatLeaveRequestError(errorObject: unknown, availableDays: number | n
   const normalizedAvailable = Number.isFinite(parsedDays) ? Number(parsedDays) : availableDays
 
   return buildLeaveBalanceSubmissionError(normalizedAvailable ?? null)
-}
-
-function resolveLeaveStatusMeta(value: unknown) {
-  const raw = typeof value === "string" ? value.trim() : ""
-  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_")
-
-  if (normalized === "draft") {
-    return {
-      key: "draft" as const,
-      label: "Draft",
-      badgeClassName: "bg-slate-500/12 text-slate-700 dark:text-slate-300",
-      helperText: "Saved as draft",
-      textClassName: "text-slate-700 dark:text-slate-300",
-      barClassName: "bg-slate-400",
-      chipClassName: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
-    }
-  }
-
-  if (normalized === "returned_for_correction") {
-    return {
-      key: "returned" as const,
-      label: "Returned",
-      badgeClassName: "bg-orange-500/12 text-orange-800 dark:text-orange-300",
-      helperText: "Needs your changes — edit and resubmit",
-      textClassName: "text-orange-700 dark:text-orange-300",
-      barClassName: "bg-orange-500",
-      chipClassName: "bg-orange-500/10 text-orange-800 dark:text-orange-300",
-    }
-  }
-
-  if (
-    [
-      "pending",
-      "submitted",
-      "in_review",
-      "under_review",
-      "pending_department_manager",
-      "pending_hr",
-    ].includes(normalized)
-  ) {
-    return {
-      key: "pending" as const,
-      label:
-        normalized === "pending_department_manager"
-          ? "Pending manager"
-          : normalized === "pending_hr"
-            ? "Pending HR"
-            : normalized === "in_review"
-              ? "Pending management"
-              : raw.replace(/_/g, " ") || "Pending",
-      badgeClassName: "bg-amber-500/12 text-amber-800 dark:text-amber-300",
-      helperText: "Awaiting review",
-      textClassName: "text-amber-700 dark:text-amber-300",
-      barClassName: "bg-amber-500",
-      chipClassName: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
-    }
-  }
-
-  if (normalized === "approved" || normalized === "completed") {
-    return {
-      key: "approved" as const,
-      label: normalized === "completed" ? "Completed" : "Approved",
-      badgeClassName: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
-      helperText: "Approved",
-      textClassName: "text-emerald-700 dark:text-emerald-300",
-      barClassName: "bg-emerald-500",
-      chipClassName: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    }
-  }
-
-  if (normalized === "rejected") {
-    return {
-      key: "rejected" as const,
-      label: "Rejected",
-      badgeClassName: "bg-rose-500/12 text-rose-700 dark:text-rose-300",
-      helperText: "Rejected",
-      textClassName: "text-rose-700 dark:text-rose-300",
-      barClassName: "bg-rose-500",
-      chipClassName: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
-    }
-  }
-
-  if (normalized === "cancelled") {
-    return {
-      key: "cancelled" as const,
-      label: "Cancelled",
-      badgeClassName: "bg-muted text-muted-foreground",
-      helperText: "Cancelled",
-      textClassName: "text-muted-foreground",
-      barClassName: "bg-slate-300 dark:bg-slate-600",
-      chipClassName: "bg-muted text-muted-foreground",
-    }
-  }
-
-  return {
-    key: "other" as const,
-    label: raw.replace(/_/g, " ") || "Pending",
-    badgeClassName: "bg-primary/10 text-primary",
-    helperText: raw ? "In progress" : "",
-    textClassName: "text-primary",
-    barClassName: "bg-primary",
-    chipClassName: "bg-primary/10 text-primary",
-  }
 }
 
 function resolveMovementStatusMeta(value: unknown) {
@@ -6370,7 +6265,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
   const [workflowDialogOpen, setWorkflowDialogOpen] = React.useState(false)
   const [workflowRequestId, setWorkflowRequestId] = React.useState<number | string | null>(null)
   const [workflowRequestRow, setWorkflowRequestRow] = React.useState<AdminRecord | null>(null)
-  const [leaveRequestStatusFilter, setLeaveRequestStatusFilter] = React.useState<string | null>(null)
   const [holidayFilter, setHolidayFilter] = React.useState<"all" | "year" | "upcoming">("all")
 
   const [requestForm, setRequestForm] = React.useState({
@@ -6394,37 +6288,6 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   const employeeId = readNumber(employee, ["id", "employee_id"])
   const activeTab = tab
-
-  const leaveRequestStatusCounts = React.useMemo(() => {
-    const counts = {
-      all: requests.length,
-      draft: 0,
-      pending: 0,
-      approved: 0,
-      rejected: 0,
-      cancelled: 0,
-    }
-    for (const row of requests) {
-      const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
-      if (meta.key === "draft") counts.draft += 1
-      else if (meta.key === "pending" || meta.key === "returned") counts.pending += 1
-      else if (meta.key === "approved") counts.approved += 1
-      else if (meta.key === "rejected") counts.rejected += 1
-      else if (meta.key === "cancelled") counts.cancelled += 1
-    }
-    return counts
-  }, [requests])
-
-  const filteredLeaveRequests = React.useMemo(() => {
-    if (!leaveRequestStatusFilter) return requests
-    return requests.filter((row) => {
-      const meta = resolveLeaveStatusMeta(readString(row, ["status"], "pending"))
-      return (
-        meta.key === leaveRequestStatusFilter ||
-        (leaveRequestStatusFilter === "pending" && meta.key === "returned")
-      )
-    })
-  }, [leaveRequestStatusFilter, requests])
 
   const openLeaveWorkflowDialog = React.useCallback((id: number | string, row: AdminRecord | null) => {
     setWorkflowRequestId(id)
@@ -7128,182 +6991,25 @@ export function EmployeeSelfServiceLeaveView({ tab }: EmployeeSelfServiceLeaveVi
 
   let tabContent: React.ReactNode = null
   if (activeTab === "requests") {
-    const statusChips: Array<{
-      key: string | null
-      label: string
-      value: number
-    }> = [
-      { key: null, label: "All", value: leaveRequestStatusCounts.all },
-      { key: "pending", label: "Open", value: leaveRequestStatusCounts.pending },
-      { key: "draft", label: "Draft", value: leaveRequestStatusCounts.draft },
-      { key: "approved", label: "Approved", value: leaveRequestStatusCounts.approved },
-      { key: "rejected", label: "Rejected", value: leaveRequestStatusCounts.rejected },
-      { key: "cancelled", label: "Cancelled", value: leaveRequestStatusCounts.cancelled },
-    ]
-
     tabContent = (
       <motion.section className="w-full min-w-0 max-w-full space-y-5" variants={profileTabStagger} initial="hidden" animate="show">
-        <motion.header variants={profileTabItem} className="flex flex-col gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-              <CalendarClock20Color className="size-7" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">Leave requests</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">Request time off and follow each request through approval.</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <FluentButton appearance="subtle" icon={<ArrowSync20Regular className={loading ? "animate-spin" : ""} />} onClick={() => void loadData()} disabled={loading}>Refresh</FluentButton>
-            <FluentButton appearance="primary" icon={<CalendarClock20Color />} onClick={() => setRequestDialogOpen(true)}>New request</FluentButton>
-          </div>
-        </motion.header>
-
-        <motion.div variants={profileTabItem} className="min-w-0 overflow-x-auto border-b border-border" role="presentation">
-          <TabList
-            aria-label="Filter leave requests by status"
-            selectedValue={leaveRequestStatusFilter ?? "all"}
-            onTabSelect={(_event, data) => setLeaveRequestStatusFilter(data.value === "all" ? null : String(data.value))}
-            size="small"
-            className="min-w-max"
-          >
-          {statusChips.map((chip) => {
-            return (
-              <Tab key={chip.label} value={chip.key ?? "all"} className="gap-2">
-                {chip.label}<FluentBadge appearance="tint" color="informative" size="small">{chip.value}</FluentBadge>
-              </Tab>
-            )
-          })}
-          </TabList>
+        <motion.div variants={profileTabItem} className="min-w-0">
+          <LeaveRequestsPanel
+            token={token}
+            refreshSignal={requests}
+            leaveTypes={availableLeaveTypes}
+            highlightedRequestId={highlightedRequestId}
+            busy={loading}
+            onNewRequest={() => setRequestDialogOpen(true)}
+            onView={(id, row) => openLeaveWorkflowDialog(id, row)}
+            onDownloadPdf={(id) => void onDownloadPdf(id)}
+            onEndEarly={(id, row) => void onEndLeaveEarly(id, row)}
+            onEdit={(id, row) => openEditLeaveRequest(id, row)}
+            onSubmit={(id) => void onSubmitRequest(id)}
+            onCancel={(id) => openCancelDialog(id)}
+            reviewHref={(id) => `/dashboard/leave-management/requests?highlight=${id}`}
+          />
         </motion.div>
-
-        {leaveRequestStatusFilter ? (
-          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-            <span>Showing {filteredLeaveRequests.length} of {requests.length} requests</span>
-            <FluentButton appearance="subtle" size="small" onClick={() => setLeaveRequestStatusFilter(null)}>Clear filter</FluentButton>
-          </div>
-        ) : null}
-
-        {loading && requests.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-14 text-muted-foreground">
-            <FluentLoadingIndicator size="large" />
-            <p className="text-sm">Loading your leave requests…</p>
-          </div>
-        ) : null}
-
-        {!loading && requests.length === 0 ? (
-          <motion.div variants={profileTabItem} className="flex min-h-64 flex-col items-center justify-center px-5 py-10 text-center">
-            <span className="mb-4 flex size-16 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-              <CalendarClock20Color className="size-9" aria-hidden="true" />
-            </span>
-            <h3 className="text-lg font-semibold text-foreground">No leave requests yet</h3>
-            <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">When you need time off, create a request here. You can check its approval progress at any time.</p>
-            <FluentButton appearance="primary" icon={<CalendarClock20Color />} onClick={() => setRequestDialogOpen(true)} className="mt-5">New request</FluentButton>
-          </motion.div>
-        ) : null}
-
-        {!loading && requests.length > 0 && filteredLeaveRequests.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <p className="text-sm text-muted-foreground">No requests match this status.</p>
-            <FluentButton appearance="subtle" onClick={() => setLeaveRequestStatusFilter(null)}>Show all requests</FluentButton>
-          </div>
-        ) : null}
-
-        {filteredLeaveRequests.length > 0 ? (
-          <motion.div variants={profileTabItem} className="min-w-0">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold text-foreground">Your requests</h3>
-              <span className="text-sm text-muted-foreground">{filteredLeaveRequests.length} total</span>
-            </div>
-            <div className="overflow-x-auto">
-              <FluentTable aria-label="Your leave requests" size="small" className="w-full min-w-[560px]">
-                <FluentTableHeader>
-                  <FluentTableRow>
-                    <FluentTableHeaderCell>Request</FluentTableHeaderCell>
-                    <FluentTableHeaderCell>Dates</FluentTableHeaderCell>
-                    <FluentTableHeaderCell>Status</FluentTableHeaderCell>
-                    <FluentTableHeaderCell className="text-right">Actions</FluentTableHeaderCell>
-                  </FluentTableRow>
-                </FluentTableHeader>
-                <FluentTableBody>
-                  {filteredLeaveRequests.map((row, index) => {
-              const id = readNumber(row, ["id"])
-              const status = readString(row, ["status"], "pending").toLowerCase()
-              // The API enforces policy cutoffs and start dates for approved leave.
-              const canCancel = [
-                "pending",
-                "draft",
-                "pending_department_manager",
-                "pending_hr",
-                "in_review",
-                "returned_for_correction",
-                "approved",
-              ].includes(status)
-              const canEdit = status === "draft" || status === "returned_for_correction"
-              const today = new Date().toISOString().slice(0, 10)
-              const canEndEarly =
-                status === "approved" &&
-                String(row.start_date ?? "").slice(0, 10) <= today &&
-                String(row.end_date ?? "").slice(0, 10) > today
-              const statusMeta = resolveLeaveStatusMeta(status)
-              const leaveType =
-                readString(asRecord(row.leave_type), ["name", "display_name", "code"], "") ||
-                readString(row, ["leave_type_name"], "Leave")
-              const leaveNo = readString(row, ["leave_no", "request_no"], "")
-              const reason = readString(row, ["reason"], "")
-              const daysRaw =
-                readString(row, ["days", "total_days", "number_of_days", "duration_days"], "") ||
-                (readNumberish(row.days ?? row.total_days ?? row.number_of_days) !== null
-                  ? String(readNumberish(row.days ?? row.total_days ?? row.number_of_days))
-                  : "")
-              const daysLabel = daysRaw && daysRaw !== "-" ? daysRaw : "—"
-              const startLabel = formatDate(row.start_date)
-              const endLabel = formatDate(row.end_date)
-              const slipId =
-                leaveNo && leaveNo !== "-"
-                  ? leaveNo
-                  : id !== null
-                    ? `LR-${id}`
-                    : `REQ-${index + 1}`
-              const isHighlighted =
-                highlightedRequestId &&
-                (String(id) === String(highlightedRequestId) ||
-                  String(leaveNo) === String(highlightedRequestId))
-
-              return (
-                <FluentTableRow key={String(row.id ?? index)} className={isHighlighted ? "bg-blue-50/70 dark:bg-blue-950/20" : undefined}>
-                  <FluentTableCell>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-foreground">{leaveType}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{slipId} · {daysLabel} {daysLabel === "1" ? "day" : "days"}</p>
-                      {reason && reason !== "-" ? <p className="mt-1 max-w-56 truncate text-xs text-muted-foreground" title={reason}>{reason}</p> : null}
-                    </div>
-                  </FluentTableCell>
-                  <FluentTableCell>
-                    <p className="font-medium text-foreground">{startLabel} – {endLabel}</p>
-                    {statusMeta.helperText ? <p className="mt-0.5 text-xs text-muted-foreground">{statusMeta.helperText}</p> : null}
-                  </FluentTableCell>
-                  <FluentTableCell>
-                    <FluentBadge appearance="tint" color={status === "approved" ? "success" : status === "rejected" ? "danger" : status === "cancelled" ? "subtle" : status === "pending" ? "warning" : "informative"}>{statusMeta.label}</FluentBadge>
-                  </FluentTableCell>
-                  <FluentTableCell>
-                    <div className="flex justify-end gap-1">
-                      {id ? <FluentButton appearance="subtle" size="small" icon={<Eye20Regular />} aria-label={`View workflow for ${slipId}`} title="View approval progress" disabled={loading} onClick={() => openLeaveWorkflowDialog(id, row)} /> : null}
-                      {id ? <FluentButton appearance="subtle" size="small" icon={<DocumentPdf20Regular />} aria-label={`Download PDF for ${slipId}`} title="Download request PDF" disabled={loading} onClick={() => void onDownloadPdf(id)} /> : null}
-                      {id && canEndEarly ? <FluentButton appearance="subtle" size="small" disabled={loading} onClick={() => void onEndLeaveEarly(id, row)}>End early</FluentButton> : null}
-                      {id && canEdit ? <FluentButton appearance={status === "returned_for_correction" ? "primary" : "subtle"} size="small" icon={<Edit20Regular />} disabled={loading} onClick={() => openEditLeaveRequest(id, row)}>{status === "returned_for_correction" ? "Edit & resubmit" : "Edit"}</FluentButton> : null}
-                      {id && status === "draft" ? <FluentButton appearance="primary" size="small" icon={<Send20Regular />} disabled={loading} onClick={() => void onSubmitRequest(id)}>Submit</FluentButton> : null}
-                      {id && canCancel ? <FluentButton appearance="subtle" size="small" icon={<Dismiss20Regular />} aria-label={status === "draft" ? `Discard ${slipId}` : `Cancel ${slipId}`} title={status === "draft" ? "Discard draft" : "Cancel request"} disabled={loading} onClick={() => openCancelDialog(id)} /> : null}
-                    </div>
-                  </FluentTableCell>
-                </FluentTableRow>
-              )
-                  })}
-                </FluentTableBody>
-              </FluentTable>
-            </div>
-          </motion.div>
-        ) : null}
 
         {error ? <p className="text-xs text-red-600">{error}</p> : null}
         <LeaveDelegationsPanel token={token} mode="self" />
