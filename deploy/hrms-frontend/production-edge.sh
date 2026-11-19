@@ -20,11 +20,11 @@ TARGET="${3:-production}"
   die 'Usage: hrms-frontend-edge {configure|preflight|status} [true|false]'
 }
 [[ "$TARGET" == 'production' ]] || die 'Only Production serves hrms.alliance.co.tz; UAT uses 196.41.62.162 directly.'
-APP_PORT='8880'; BACKEND_PORT='8888'; FOREIGN_PORTS='9999|9990'
+APP_PORT='8880'; FOREIGN_PORTS='9999|9990|8888'  # Nginx serves the frontend only
 TEMPLATE_FILE='hrms.alliance.co.tz.conf'
 
 readonly DOMAIN='hrms.alliance.co.tz'
-readonly TARGET APP_PORT BACKEND_PORT FOREIGN_PORTS
+readonly TARGET APP_PORT FOREIGN_PORTS
 readonly HEALTH_PATH='/api/health/ready'
 readonly APP_HEALTH_URL="http://127.0.0.1:${APP_PORT}${HEALTH_PATH}"
 readonly LOCAL_NGINX_HEALTH_URL="http://127.0.0.1${HEALTH_PATH}"
@@ -87,7 +87,7 @@ site_has_expected_base() {
   [[ -f "$SITE_AVAILABLE" ]] || return 1
   grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' "$SITE_AVAILABLE" &&
     grep -Fq "proxy_pass http://127.0.0.1:${APP_PORT};" "$SITE_AVAILABLE" &&
-    grep -Fq "proxy_pass http://127.0.0.1:${BACKEND_PORT};" "$SITE_AVAILABLE"
+    ! grep -Eq "127\.0\.0\.1:(${FOREIGN_PORTS})" "$SITE_AVAILABLE"
 }
 
 [[ "$ACTION" == 'status' ]] || {
@@ -194,7 +194,7 @@ conf_d_link_removed=0
 
 if [[ ! -f "$SITE_AVAILABLE" || "$expected_hash" != "$installed_hash" ]] || ! site_has_expected_base; then
   if [[ -f "$SITE_AVAILABLE" ]] && certificate_valid && [[ -z "$SSL_EMAIL" ]] &&
-    ! grep -Eq '127\.0\.0\.1:(9999|9990)' "$SITE_AVAILABLE"; then
+    ! grep -Eq "127\.0\.0\.1:(${FOREIGN_PORTS})" "$SITE_AVAILABLE"; then
     warn 'The Nginx template changed, but SSL_EMAIL is unavailable. Preserving the current SSL-enabled site.'
     config_update_deferred=1
   else

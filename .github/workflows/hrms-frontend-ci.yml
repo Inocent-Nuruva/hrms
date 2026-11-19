@@ -64,18 +64,14 @@ jobs:
           fi
           current="${NEXT_PUBLIC_API_BASE_URL:-}"
           if [[ -z "$current" ]]; then
-            # Browser-facing defaults: Production goes through the HTTPS domain
-            # (Nginx -> 127.0.0.1:8888); UAT talks to its backend on the public IP.
-            if [[ "$port" == 8888 ]]; then
-              current="https://hrms.alliance.co.tz"
-            else
-              current="http://196.41.62.162:${port}"
-            fi
+            # Both environments use /api: the frontend proxies it to its own backend
+            # (APP_ENV=uat -> 127.0.0.1:9999, production -> localhost:8888).
+            current="/api"
           elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
             current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
           fi
           if [[ "$port" == 9999 && "$current" == *hrms.alliance.co.tz* ]]; then
-            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use http://196.41.62.162:9999." >&2
+            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use /api." >&2
             exit 1
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
@@ -97,9 +93,9 @@ jobs:
           node --check deploy/hrms-frontend/ecosystem.config.js
           grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
           grep -Fq 'proxy_pass http://127.0.0.1:8880;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
-          grep -Fq 'proxy_pass http://127.0.0.1:8888;' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf
-          if grep -Eq '127\.0\.0\.1:(9999|9990)|listen[[:space:]]+(\[::\]:)?9990|server_name[^;]*[[:space:]]_[[:space:];]' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; then
-            echo "Production Nginx template must not target UAT ports or use a catch-all server_name." >&2
+          # The domain serves the frontend only; the frontend proxies to the backend itself.
+          if grep -Eq '127\.0\.0\.1:(9999|9990|8888)|listen[[:space:]]+(\[::\]:)?9990|server_name[^;]*[[:space:]]_[[:space:];]' deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; then
+            echo "Production Nginx template must proxy to the frontend (8880) only and must not use a catch-all server_name." >&2
             exit 1
           fi
           # The domain belongs to Production only; UAT must not ship a domain template.
@@ -221,18 +217,14 @@ jobs:
           fi
           current="${NEXT_PUBLIC_API_BASE_URL:-}"
           if [[ -z "$current" ]]; then
-            # Browser-facing defaults: Production goes through the HTTPS domain
-            # (Nginx -> 127.0.0.1:8888); UAT talks to its backend on the public IP.
-            if [[ "$port" == 8888 ]]; then
-              current="https://hrms.alliance.co.tz"
-            else
-              current="http://196.41.62.162:${port}"
-            fi
+            # Both environments use /api: the frontend proxies it to its own backend
+            # (APP_ENV=uat -> 127.0.0.1:9999, production -> localhost:8888).
+            current="/api"
           elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
             current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
           fi
           if [[ "$port" == 9999 && "$current" == *hrms.alliance.co.tz* ]]; then
-            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use http://196.41.62.162:9999." >&2
+            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use /api." >&2
             exit 1
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
@@ -294,8 +286,10 @@ jobs:
           [[ "$TARGET_ENV" == uat && "$APP_PORT" == 9990 || "$TARGET_ENV" == production && "$APP_PORT" == 8880 ]]
           [[ "$REQUIRE_SSL" == true || "$REQUIRE_SSL" == false ]]
           echo "require_ssl=$REQUIRE_SSL" >> "$GITHUB_OUTPUT"
-          if [[ "$TARGET_ENV" == production && ! "$NEXT_PUBLIC_API_BASE_URL" =~ ^https://hrms\.alliance\.co\.tz/?$ ]]; then
-            echo "Production NEXT_PUBLIC_API_BASE_URL must be https://hrms.alliance.co.tz (got '${NEXT_PUBLIC_API_BASE_URL}')." >&2
+          # The domain is frontend-only, so an absolute domain URL would make the
+          # frontend proxy to itself. Production must use the same-origin /api proxy.
+          if [[ "$TARGET_ENV" == production && "$NEXT_PUBLIC_API_BASE_URL" != /api ]]; then
+            echo "Production NEXT_PUBLIC_API_BASE_URL must be /api (got '${NEXT_PUBLIC_API_BASE_URL}')." >&2
             exit 1
           fi
           [[ "$(id -u)" -ne 0 && -w "$BASE_DIR/releases" && -w "$BASE_DIR/shared" && -w "$BASE_DIR/tmp" ]]

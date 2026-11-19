@@ -35,45 +35,47 @@ workflow `runs-on` lists.
 
 ## Environment URLs
 
-| Environment | Browser URL | Browser API base | PM2 (server) |
+Both environments are reachable directly by port on `196.41.62.162` (public) and
+`192.168.1.30` (LAN). Production's frontend is also served at `https://hrms.alliance.co.tz`.
+
+| Environment | Frontend | Backend | Browser API base |
 |---|---|---|---|
-| UAT | `http://196.41.62.162:9990` | `http://196.41.62.162:9999` | frontend `9990`, backend `9999` |
-| Production | `https://hrms.alliance.co.tz` | `https://hrms.alliance.co.tz` (Nginx `/api`, `/uploads`, `/socket.io` -> `127.0.0.1:8888`) | frontend `8880`, backend `8888` (loopback) |
+| UAT | `http://196.41.62.162:9990`, `http://192.168.1.30:9990` | `:9999` on both IPs | `/api` (frontend proxies to `127.0.0.1:9999`) |
+| Production | `https://hrms.alliance.co.tz`, `http://196.41.62.162:8880`, `http://192.168.1.30:8880` | `:8888` on both IPs | `/api` (frontend proxies to `localhost:8888`) |
 
-`hrms.alliance.co.tz` belongs to Production only. UAT never configures Nginx and
-CI rejects a UAT `NEXT_PUBLIC_API_BASE_URL` that contains the domain.
+The domain is Production-only and serves the frontend only (Nginx -> `8880`); the
+frontend proxies `/api`, `/uploads` and `/socket.io` to its backend. UAT never
+configures Nginx, and CI rejects a UAT `NEXT_PUBLIC_API_BASE_URL` containing the domain.
+Plain-HTTP requests to either IP on port 80 redirect to `https://hrms.alliance.co.tz`.
 
-### UAT (direct public IP)
+### Network
 
-1. Network: forward TCP `9990` and `9999` on `196.41.62.162` to the UAT host.
-   UAT PM2 apps must bind `APP_HOST=0.0.0.0`.
-2. GitHub Environment `hrms-frontend-uat`: `NEXT_PUBLIC_API_BASE_URL=http://196.41.62.162:9999`,
-   `DEPLOY_PUBLIC_URL=http://196.41.62.162:9990`; delete `CONFIGURE_EDGE`.
-3. UAT backend shared `.env`: `APP_URL=http://196.41.62.162:9999`,
-   `APP_FRONTEND_URL=http://196.41.62.162:9990`, and
-   `APP_ALLOWED_ORIGINS` / `NOTIFICATION_WEBSOCKET_ALLOWED_ORIGINS=http://196.41.62.162:9990`
-   (remove any `hrms.alliance.co.tz` entry). Keep `DB_NAME=hrms_uat_db`.
+Forward TCP `80`, `443` (domain + Let's Encrypt renewals), `8880`, `8888` (Production)
+and `9990`, `9999` (UAT) on `196.41.62.162` to the HRMS host (`192.168.1.30`).
+All four PM2 apps bind `APP_HOST=0.0.0.0`.
 
-### Production domain and HTTPS (hrms.alliance.co.tz)
+### GitHub environments
 
-1. DNS: `A hrms.alliance.co.tz -> 196.41.62.162`; forward TCP 80 and 443 to the
-   Production host. Port 80 must stay open for Let's Encrypt renewals. Do not
-   forward `8880`/`8888`.
-2. GitHub Environment `hrms-frontend-production`: secret `SSL_EMAIL`; variables
-   `FRONTEND_PUBLIC_IP=196.41.62.162`,
-   `NEXT_PUBLIC_API_BASE_URL=https://hrms.alliance.co.tz`,
-   `DEPLOY_PUBLIC_URL=https://hrms.alliance.co.tz`, `APP_HOST=127.0.0.1`,
-   `REQUIRE_SSL=false` for the first issuance, then `true`.
-3. Backend production `.env`: `APP_HOST=127.0.0.1`, `APP_URL`, `APP_FRONTEND_URL`,
-   `APP_ALLOWED_ORIGINS` and `NOTIFICATION_WEBSOCKET_ALLOWED_ORIGINS` all
-   `https://hrms.alliance.co.tz`; keep `APP_TRUST_PROXY=true`.
-4. Rerun `server-setup.sh` as root from the new release (it removes the old UAT
-   template and UAT sudo rules), then deploy Production from `master`. If the
-   site was previously configured for UAT, Production takes it over.
+- `hrms-frontend-uat`: `NEXT_PUBLIC_API_BASE_URL=/api`, `APP_HOST=0.0.0.0`.
+- `hrms-frontend-production`: secret `SSL_EMAIL`; `NEXT_PUBLIC_API_BASE_URL=/api`
+  (an absolute domain URL would make the frontend proxy to itself),
+  `APP_HOST=0.0.0.0`, `FRONTEND_PUBLIC_IP=196.41.62.162`, `REQUIRE_SSL=true`.
 
-The Production template proxies the domain to frontend `8880` and backend `8888` only.
-Certbot adds the 443 block and HTTP->HTTPS redirect. Plain-HTTP requests to the
-server IP on port 80 are redirected to `https://hrms.alliance.co.tz`.
+### Backend shared `.env`
+
+- UAT: `APP_URL=http://196.41.62.162:9999`, `APP_FRONTEND_URL=http://196.41.62.162:9990`,
+  `APP_ALLOWED_ORIGINS` and `NOTIFICATION_WEBSOCKET_ALLOWED_ORIGINS` =
+  `http://196.41.62.162:9990,http://192.168.1.30:9990`. No domain entry; `DB_NAME=hrms_uat_db`.
+- Production: `APP_URL` and `APP_FRONTEND_URL` = `https://hrms.alliance.co.tz`;
+  `APP_ALLOWED_ORIGINS` and `NOTIFICATION_WEBSOCKET_ALLOWED_ORIGINS` =
+  `https://hrms.alliance.co.tz,http://196.41.62.162:8880,http://192.168.1.30:8880`;
+  `APP_TRUST_PROXY=true`.
+
+### Domain setup
+
+Rerun `server-setup.sh` as root from the new release (it removes the old UAT
+template and UAT sudo rules), then deploy Production from `master`. If the site was
+previously configured for UAT, Production takes it over and keeps the certificate.
 
 ## Static assets missing after deployment
 
