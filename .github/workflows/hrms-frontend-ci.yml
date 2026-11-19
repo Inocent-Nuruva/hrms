@@ -64,9 +64,19 @@ jobs:
           fi
           current="${NEXT_PUBLIC_API_BASE_URL:-}"
           if [[ -z "$current" ]]; then
-            current="http://127.0.0.1:${port}"
+            # Browser-facing defaults: Production goes through the HTTPS domain
+            # (Nginx -> 127.0.0.1:8888); UAT talks to its backend on the public IP.
+            if [[ "$port" == 8888 ]]; then
+              current="https://hrms.alliance.co.tz"
+            else
+              current="http://196.41.62.162:${port}"
+            fi
           elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
             current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
+          fi
+          if [[ "$port" == 9999 && "$current" == *hrms.alliance.co.tz* ]]; then
+            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use http://196.41.62.162:9999." >&2
+            exit 1
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
           echo "Using API origin ${current} (UAT=9999, production=8888)"
@@ -77,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          for file in package.json package-lock.json next.config.ts deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/rollback.sh deploy/hrms-frontend/server-setup.sh deploy/hrms-frontend/production-edge.sh deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf deploy/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf deploy/hrms-frontend/ecosystem.config.js; do
+          for file in package.json package-lock.json next.config.ts deploy/hrms-frontend/deploy.sh deploy/hrms-frontend/stage-release.sh deploy/hrms-frontend/rollback.sh deploy/hrms-frontend/server-setup.sh deploy/hrms-frontend/production-edge.sh deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf deploy/hrms-frontend/ecosystem.config.js; do
             [[ -f "$file" ]] || { echo "Required file missing: $file"; exit 1; }
           done
           for file in deploy/hrms-frontend/*.sh; do
@@ -92,12 +102,9 @@ jobs:
             echo "Production Nginx template must not target UAT ports or use a catch-all server_name." >&2
             exit 1
           fi
-          uat_conf=deploy/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf
-          grep -Eq '^[[:space:]]*server_name[[:space:]][^;]*hrms\.alliance\.co\.tz[^;]*;' "$uat_conf"
-          grep -Fq 'proxy_pass http://127.0.0.1:9990;' "$uat_conf"
-          grep -Fq 'proxy_pass http://127.0.0.1:9999;' "$uat_conf"
-          if grep -Eq '127\.0\.0\.1:(8888|8880)|listen[[:space:]]+(\[::\]:)?(9990|8880)|server_name[^;]*[[:space:]]_[[:space:];]' "$uat_conf"; then
-            echo "UAT Nginx template must not target Production ports or use a catch-all server_name." >&2
+          # The domain belongs to Production only; UAT must not ship a domain template.
+          if [[ -e deploy/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf ]]; then
+            echo "UAT must not serve hrms.alliance.co.tz; remove nginx/hrms.alliance.co.tz.uat.conf." >&2
             exit 1
           fi
       - name: Exclude desktop and e2e-only tooling
@@ -183,7 +190,6 @@ jobs:
       cancel-in-progress: false
     outputs:
       require_ssl: ${{ steps.deployment-policy.outputs.require_ssl }}
-      configure_edge: ${{ env.TARGET_ENV == 'uat' && env.CONFIGURE_EDGE == 'true' }}
     env:
       TARGET_ENV: ${{ github.event_name == 'push' && 'uat' || inputs.environment }}
       BASE_DIR: ${{ vars.BASE_DIR }}
@@ -195,7 +201,6 @@ jobs:
       KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '3' }}
       DEPLOY_PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL }}
       REQUIRE_SSL: ${{ vars.REQUIRE_SSL || 'false' }}
-      CONFIGURE_EDGE: ${{ vars.CONFIGURE_EDGE || 'false' }}
       FRONTEND_PUBLIC_IP: ${{ vars.FRONTEND_PUBLIC_IP }}
       CI: true
       NEXT_PUBLIC_APP_NAME: ${{ vars.NEXT_PUBLIC_APP_NAME || 'HRMS' }}
@@ -216,9 +221,19 @@ jobs:
           fi
           current="${NEXT_PUBLIC_API_BASE_URL:-}"
           if [[ -z "$current" ]]; then
-            current="http://127.0.0.1:${port}"
+            # Browser-facing defaults: Production goes through the HTTPS domain
+            # (Nginx -> 127.0.0.1:8888); UAT talks to its backend on the public IP.
+            if [[ "$port" == 8888 ]]; then
+              current="https://hrms.alliance.co.tz"
+            else
+              current="http://196.41.62.162:${port}"
+            fi
           elif [[ "$current" =~ ^https?://[^/]+:[0-9]+ ]]; then
             current="$(printf '%s\n' "$current" | sed -E "s#:[0-9]+([/?]|$)#:${port}\\1#")"
+          fi
+          if [[ "$port" == 9999 && "$current" == *hrms.alliance.co.tz* ]]; then
+            echo "UAT must not use the Production domain hrms.alliance.co.tz (got '${current}'). Use http://196.41.62.162:9999." >&2
+            exit 1
           fi
           echo "NEXT_PUBLIC_API_BASE_URL=${current}" >> "$GITHUB_ENV"
           echo "Using API origin ${current} (UAT=9999, production=8888)"
@@ -258,8 +273,7 @@ jobs:
             deploy/hrms-frontend/production-edge.sh \
             deploy/hrms-frontend/ecosystem.config.js \
             deploy/hrms-frontend/check-assets.mjs \
-            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf \
-            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf; do
+            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
             [[ -f "$release/$file" ]] || { echo "Release is missing $file" >&2; exit 1; }
           done
           cmp public/assets/alliance-logo.png "$release/public/assets/alliance-logo.png"
@@ -298,24 +312,20 @@ jobs:
           for file in \
             deploy/hrms-frontend/server-setup.sh \
             deploy/hrms-frontend/production-edge.sh \
-            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf \
-            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf; do
+            deploy/hrms-frontend/nginx/hrms.alliance.co.tz.conf; do
             [[ -f "$BASE_DIR/releases/$GITHUB_SHA/$file" ]] || { echo "Deployed release is missing $file" >&2; exit 1; }
           done
-      # UAT serves hrms.alliance.co.tz only until Production first configures it;
-      # the helper then ignores UAT. UAT opts in with CONFIGURE_EDGE=true.
+      # hrms.alliance.co.tz is Production-only. UAT is served directly on
+      # 196.41.62.162:9990 (frontend) / :9999 (backend) and never touches Nginx.
       - name: Configure domain Nginx and SSL
-        if: env.TARGET_ENV == 'production' || env.CONFIGURE_EDGE == 'true'
+        if: env.TARGET_ENV == 'production'
         shell: bash
         env:
           SSL_EMAIL: ${{ secrets.SSL_EMAIL }}
         run: |
           set -Eeuo pipefail
-          [[ "$TARGET_ENV" == "$APP_ENV" ]]
-          [[ "$TARGET_ENV" == production && "$APP_PORT" == 8880 || "$TARGET_ENV" == uat && "$APP_PORT" == 9990 ]]
-          edge_target="$TARGET_ENV"
+          [[ "$TARGET_ENV" == "$APP_ENV" && "$APP_PORT" == 8880 ]]
           template=hrms.alliance.co.tz.conf
-          [[ "$TARGET_ENV" == uat ]] && template=hrms.alliance.co.tz.uat.conf
           curl --noproxy '*' --fail --silent --show-error "$HEALTH_URL" >/dev/null
           pm2 status "$PM2_APP_NAME"
           [[ -x /usr/local/sbin/hrms-frontend-edge ]] || {
@@ -327,9 +337,7 @@ jobs:
               echo "The installed edge helper/template is stale. Rerun $BASE_DIR/current/deploy/hrms-frontend/server-setup.sh as root." >&2
               exit 1
             }
-          edge_args=(configure "$REQUIRE_SSL")
-          [[ "$edge_target" == uat ]] && edge_args+=(uat)
-          printf '%s\n%s\n' "${SSL_EMAIL:-}" "${FRONTEND_PUBLIC_IP:-}" | sudo -n /usr/local/sbin/hrms-frontend-edge "${edge_args[@]}"
+          printf '%s\n%s\n' "${SSL_EMAIL:-}" "${FRONTEND_PUBLIC_IP:-196.41.62.162}" | sudo -n /usr/local/sbin/hrms-frontend-edge configure "$REQUIRE_SSL"
       - name: Verify deployment
         shell: bash
         run: |
@@ -339,8 +347,6 @@ jobs:
           [[ "$(readlink -f "$BASE_DIR/current")" == "$BASE_DIR/releases/$GITHUB_SHA" ]]
           if [[ "$APP_ENV" == production ]]; then
             sudo -n /usr/local/sbin/hrms-frontend-edge status false </dev/null
-          elif [[ "$CONFIGURE_EDGE" == true ]]; then
-            sudo -n /usr/local/sbin/hrms-frontend-edge status false uat </dev/null
           fi
 
   verify-production-edge:
@@ -348,10 +354,9 @@ jobs:
     needs: deploy
     if: >-
       needs.deploy.result == 'success' &&
-      ((github.event_name == 'workflow_dispatch' &&
-        github.ref == 'refs/heads/master' &&
-        inputs.environment == 'production') ||
-       needs.deploy.outputs.configure_edge == 'true')
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master' &&
+      inputs.environment == 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

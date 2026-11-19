@@ -446,8 +446,9 @@ export function resolveNotificationsSocketOrigin() {
     process.env.NEXT_PUBLIC_API_BASE_URL?.trim(),
     browserBackendOrigin,
     browserOrigin,
-    // Keep parity with admin-api default so local REST + socket share a host.
-    "http://192.168.1.30:9999",
+    // Same default as NEXT_PUBLIC_API_BASE_URL in env.ts, so local REST and the
+    // socket share a host. Hosted environments always set the env variable.
+    "http://localhost:8888",
   ].filter((value): value is string => Boolean(value));
 
   for (const rawValue of candidates) {

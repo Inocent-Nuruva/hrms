@@ -46,8 +46,7 @@ apt-get install -y \
 
 for file in \
   "$SCRIPT_DIR/production-edge.sh" \
-  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.conf" \
-  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.uat.conf"; do
+  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.conf"; do
   [[ -f "$file" ]] || {
     echo "Missing production edge deployment file: $file" >&2
     exit 1
@@ -61,9 +60,9 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0644 \
   "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.conf" \
   /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.conf
-install -o root -g root -m 0644 \
-  "$SCRIPT_DIR/nginx/hrms.alliance.co.tz.uat.conf" \
-  /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf
+# UAT no longer serves the domain (it uses 196.41.62.162:9990/9999 directly);
+# remove the stale UAT template left by older setups.
+rm -f /usr/local/share/hrms-frontend/nginx/hrms.alliance.co.tz.uat.conf
 
 sudoers_tmp="$(mktemp)"
 trap 'rm -f -- "$sudoers_tmp"' EXIT
@@ -72,10 +71,6 @@ $DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure f
 $DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure true
 $DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge preflight false
 $DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge status false
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure false uat
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge configure true uat
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge preflight false uat
-$DEPLOY_USER ALL=(root) NOPASSWD: /usr/local/sbin/hrms-frontend-edge status false uat
 EOF
 chmod 0440 "$sudoers_tmp"
 visudo -cf "$sudoers_tmp"

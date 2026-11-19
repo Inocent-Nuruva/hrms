@@ -12,22 +12,16 @@ die() { printf '[hrms-edge] ERROR: %s\n' "$*" >&2; exit 1; }
 
 ACTION="${1:-}"
 REQUIRE_SSL="${2:-false}"
-# The domain serves UAT until Production first configures it; after that,
-# Production owns it and UAT deploys leave Nginx alone.
+# hrms.alliance.co.tz belongs to Production only. UAT is served directly on
+# 196.41.62.162:9990 (frontend) / :9999 (backend) and never configures this edge.
 TARGET="${3:-production}"
 [[ "$REQUIRE_SSL" == 'true' || "$REQUIRE_SSL" == 'false' ]] || die 'REQUIRE_SSL must be true or false.'
 [[ "$ACTION" == 'configure' || "$ACTION" == 'preflight' || "$ACTION" == 'status' ]] || {
-  die 'Usage: hrms-frontend-edge {configure|preflight|status} [true|false] [production|uat]'
+  die 'Usage: hrms-frontend-edge {configure|preflight|status} [true|false]'
 }
-case "$TARGET" in
-  production)
-    APP_PORT='8880'; BACKEND_PORT='8888'; FOREIGN_PORTS='9999|9990'
-    TEMPLATE_FILE='hrms.alliance.co.tz.conf' ;;
-  uat)
-    APP_PORT='9990'; BACKEND_PORT='9999'; FOREIGN_PORTS='8888|8880'
-    TEMPLATE_FILE='hrms.alliance.co.tz.uat.conf' ;;
-  *) die 'Target must be production or uat.' ;;
-esac
+[[ "$TARGET" == 'production' ]] || die 'Only Production serves hrms.alliance.co.tz; UAT uses 196.41.62.162 directly.'
+APP_PORT='8880'; BACKEND_PORT='8888'; FOREIGN_PORTS='9999|9990'
+TEMPLATE_FILE='hrms.alliance.co.tz.conf'
 
 readonly DOMAIN='hrms.alliance.co.tz'
 readonly TARGET APP_PORT BACKEND_PORT FOREIGN_PORTS
@@ -151,9 +145,8 @@ if [[ "$ACTION" == 'status' ]]; then
   exit 0
 fi
 
-if [[ "$TARGET" == 'uat' && "$(domain_owner || true)" == 'production' ]]; then
-  log "Production already serves ${DOMAIN}; leaving Nginx unchanged for UAT."
-  exit 0
+if [[ "$(domain_owner || true)" == 'uat' ]]; then
+  log "${DOMAIN} was previously configured for UAT; Production is taking it over."
 fi
 
 IFS= read -r SSL_EMAIL || SSL_EMAIL=''
@@ -200,7 +193,8 @@ conf_d_link_created=0
 conf_d_link_removed=0
 
 if [[ ! -f "$SITE_AVAILABLE" || "$expected_hash" != "$installed_hash" ]] || ! site_has_expected_base; then
-  if [[ -f "$SITE_AVAILABLE" ]] && certificate_valid && [[ -z "$SSL_EMAIL" ]]; then
+  if [[ -f "$SITE_AVAILABLE" ]] && certificate_valid && [[ -z "$SSL_EMAIL" ]] &&
+    ! grep -Eq '127\.0\.0\.1:(9999|9990)' "$SITE_AVAILABLE"; then
     warn 'The Nginx template changed, but SSL_EMAIL is unavailable. Preserving the current SSL-enabled site.'
     config_update_deferred=1
   else
