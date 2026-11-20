@@ -23,10 +23,10 @@ export function KpiPageHeader({ title, description, actions, section, variant = 
   if (variant === "plain") {
     return <header className="flex flex-col gap-4 py-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 space-y-1">
-        {section && section !== "KPI Management" && <Text as="p" size={200} weight="semibold" className="uppercase tracking-[0.18em] text-muted-foreground">{section}</Text>}
+        {section && section !== "KPI Management" && <Text as="p" size={200} weight="semibold" className="uppercase tracking-[0.18em] text-muted-foreground" style={{ display: "block" }}>{section}</Text>}
         {leadingContent}
-        <Text as="h1" size={titleSize ?? 700} weight="semibold" className="tracking-tight" style={{ fontFamily: titleFontFamily }}>{title}</Text>
-        {description && <Text as="p" size={300} className="text-muted-foreground">{description}</Text>}
+        <Text as="h1" size={titleSize ?? 700} weight="semibold" className="tracking-tight" style={{ display: "block", fontFamily: titleFontFamily }}>{title}</Text>
+        {description && <Text as="p" size={300} className="text-muted-foreground" style={{ display: "block" }}>{description}</Text>}
       </div>
       {actions && <div className="flex shrink-0 flex-nowrap gap-2">{actions}</div>}
     </header>

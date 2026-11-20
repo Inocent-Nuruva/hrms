@@ -1,14 +1,26 @@
 "use client";
 
 import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
+  Badge,
   Button,
   Card,
+  DataGrid,
+  DataGridBody,
+  DataGridCell,
+  DataGridHeader,
+  DataGridHeaderCell,
+  DataGridRow,
   Dialog,
   DialogActions,
   DialogBody,
   DialogContent,
   DialogSurface,
   DialogTitle,
+  Divider,
   Field,
   Table,
   TableBody,
@@ -16,7 +28,9 @@ import {
   TableHeader,
   TableHeaderCell,
   TableRow,
+  TableCellLayout,
   Text,
+  createTableColumn,
   tokens,
 } from "@fluentui/react-components";
 import * as React from "react";
@@ -27,8 +41,8 @@ import { kpiApi, type KpiAssignment } from "@/lib/kpi-api";
 import { achievementsEnabled, readKpiToken } from "@/lib/kpi-session";
 import { fluentConfirm } from "@/components/ui/fluent-dialog-service";
 import { KpiFluentInput, KpiFluentTextarea } from "./kpi-fluent-fields";
-import { KpiFeedback, KpiPageHeader, KpiStatusBadge } from "./kpi-page-elements";
-import { ArrowRight20Regular, CalendarLtr24Regular, DocumentBulletList20Regular, Edit20Regular } from "@fluentui/react-icons";
+import { KpiFeedback, KpiStatusBadge } from "./kpi-page-elements";
+import { ArrowUpload20Regular, Attach20Regular, Delete20Regular, Document20Regular, DocumentBulletList20Regular, Edit20Regular, History20Regular, Target20Regular } from "@fluentui/react-icons";
 
 type AchievementFlowStep = "mode" | "quick" | "activities";
 type ActivityForm = {
@@ -92,6 +106,15 @@ function displayPeriodDate(value?: string | null) {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const month = Number(match[2]);
   return month >= 1 && month <= 12 ? `${Number(match[3])} ${months[month - 1]} ${match[1]}` : value;
+}
+function displayDateTime(value: string) {
+  return new Date(value).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+function friendlyStatus(status: string) {
+  return status.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+function ActivityProgressBadge({ status }: { status: string }) {
+  return status === "draft" ? <Badge appearance="outline" color="success">Saved</Badge> : <KpiStatusBadge status={status} />;
 }
 function parseActual(type: string, raw: string): unknown {
   if (!raw.trim()) return undefined;
@@ -157,10 +180,10 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const [modePickerOpen, setModePickerOpen] = React.useState(false);
   const [flowStep, setFlowStep] = React.useState<AchievementFlowStep>("mode");
   const [activityOpen, setActivityOpen] = React.useState(false);
+  const [selectedActivityId, setSelectedActivityId] = React.useState<number | null>(null);
   const [editingActivity, setEditingActivity] = React.useState<AchievementActivity | null>(null);
   const [activityForm, setActivityForm] = React.useState<ActivityForm>(emptyActivity);
   const [activityEvidenceFile, setActivityEvidenceFile] = React.useState<File | null>(null);
-  const [confirmSubmit, setConfirmSubmit] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -218,6 +241,14 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const canEditDraft = draft && !blockedAchievement;
   const measurementType = assignment?.definitionVersion?.measurementType ?? "numeric";
   const activities = record?.current?.activities ?? [];
+  const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? null;
+  const achievementStatus = record?.current.status ?? assignment?.status ?? "draft";
+  const nextStepTitle = canEditDraft
+    ? record ? "Finish your draft" : "Record your first activity"
+    : ["submitted", "under_review"].includes(achievementStatus) ? "Waiting for manager review"
+    : achievementStatus === "approved" ? "Your result is approved"
+    : ["returned", "rejected"].includes(achievementStatus) ? "Review your manager’s feedback"
+    : "View your recorded work";
 
   function openActivityForm() {
     setEditingActivity(null);
@@ -329,13 +360,13 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
     }
   }
   async function removeActivity(activity: AchievementActivity) {
-    if (!record) return;
+    if (!record) return false;
     const confirmed = await fluentConfirm(`Remove “${activity.title}” from this draft? Its evidence will also be removed unless another revision retains a reference.`, {
       title: "Remove activity",
       confirmLabel: "Remove activity",
     });
-    if (!confirmed) return;
-    await action(() => achievementApi.removeActivity(token, record.id, activity.id, activity.rowVersion), "Activity removed");
+    if (!confirmed) return false;
+    return action(() => achievementApi.removeActivity(token, record.id, activity.id, activity.rowVersion), "Activity removed");
   }
   async function uploadActivityFile(activity: AchievementActivity, file?: File) {
     if (!record || !file) return;
@@ -350,7 +381,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       fileString: await fileToBase64(file),
     }), "Activity evidence uploaded");
   }
-  async function prepareSubmission() {
+  async function submitAchievement() {
     if (!assignment) return;
     setBusy(true);
     setError("");
@@ -360,15 +391,19 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       if (submittedActual === undefined || actual.trim() === "") {
         throw new Error("Enter the final actual achievement before requesting review.");
       }
-      const latest = record
+      const draft = record
         ? await achievementApi.update(token, record.id, record.current.rowVersion, submittedActual, comments)
         : await achievementApi.create(token, assignmentId, submittedActual, comments);
-      setRecord(latest);
-      setActual(initialActual(latest.current.actual));
-      setComments(latest.current.comments ?? "");
-      setConfirmSubmit(true);
+      const submitted = await achievementApi.submit(token, draft.id, draft.current.rowVersion);
+      ++loadSequence.current;
+      setRecord(submitted);
+      setActual(initialActual(submitted.current.actual));
+      setComments(submitted.current.comments ?? "");
+      setModePickerOpen(false);
+      setNotice("Achievement submitted to your manager for review");
+      window.dispatchEvent(new Event("hrms:refresh-page-data"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to prepare the submission");
+      setError(e instanceof Error ? e.message : "Unable to submit the achievement");
     } finally {
       setBusy(false);
     }
@@ -380,74 +415,83 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
     <div className="space-y-4 pt-3">
       <KpiPageHeader
         title={assignment?.definitionVersion?.name ?? "KPI achievement"}
-        description={undefined}
+        description={pageDescription}
+        section="MY KPIs"
         variant="plain"
         titleFontFamily="var(--font-fredoka)"
         titleSize={800}
         actions={<Button onClick={() => router.push("/dashboard/me/kpi")} appearance="secondary" size="medium">Back to My KPIs</Button>}
       />
-      {assignment && <div className="flex flex-wrap items-center gap-3" aria-label="Reporting period dates"><CalendarLtr24Regular aria-hidden style={{ color: tokens.colorBrandForeground1, flexShrink: 0 }} /><Text as="span" size={700} weight="semibold" style={{ color: tokens.colorNeutralForeground1, fontFamily: "var(--font-fredoka)", lineHeight: 1.1 }}>{displayPeriodDate(assignment.period?.startDate)}</Text><ArrowRight20Regular aria-hidden style={{ color: tokens.colorNeutralForeground3, flexShrink: 0 }} /><Text as="span" size={700} weight="semibold" style={{ color: tokens.colorNeutralForeground1, fontFamily: "var(--font-fredoka)", lineHeight: 1.1 }}>{displayPeriodDate(assignment.period?.endDate)}</Text></div>}
-      {assignment?.definitionVersion?.description && <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{assignment.definitionVersion.description}</p>}
-      <hr className="border-0 border-t" style={{ borderColor: tokens.colorNeutralStroke2 }} />
+      {assignment && <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.85fr)]" aria-label="Achievement overview">
+        <Card appearance="outline" className="min-w-0 overflow-hidden !p-0">
+          <div className="px-5 pb-5 pt-5 sm:px-6 sm:pt-6">
+            <Text as="p" size={200} weight="semibold" className="uppercase tracking-wide" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Reporting period</Text>
+            <div className="mt-2 flex min-w-0 items-start gap-3">
+              <CalendarLtr24Regular aria-hidden className="mt-0.5 shrink-0" style={{ color: tokens.colorBrandForeground1 }} />
+              <div className="min-w-0">
+                <Text as="h2" size={500} weight="semibold" className="break-words" style={{ display: "block" }}>{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</Text>
+              </div>
+            </div>
+            {assignment.definitionVersion?.description && <Text as="p" size={300} className="mt-4 max-w-2xl leading-relaxed" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>{assignment.definitionVersion.description}</Text>}
+          </div>
+          <div className="grid border-t sm:grid-cols-2" style={{ borderColor: tokens.colorNeutralStroke2, backgroundColor: tokens.colorNeutralBackground2 }}>
+            <div className="min-w-0 px-5 py-5 sm:border-r sm:px-6" style={{ borderColor: tokens.colorNeutralStroke2 }}>
+              <div className="flex items-center gap-2"><Target20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Goal for this period</Text></div>
+              <Text as="p" size={600} weight="semibold" className="mt-2 break-words tracking-tight" style={{ display: "block" }}>{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</Text>
+            </div>
+            <div className="min-w-0 border-t px-5 py-5 sm:border-t-0 sm:px-6" style={{ borderColor: tokens.colorNeutralStroke2 }}>
+              <div className="flex items-center gap-2"><DocumentBulletList20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Your final result</Text></div>
+              <Text as="p" size={600} weight="semibold" className="mt-2 break-words tracking-tight" style={{ display: "block" }}>{record?.current.actual === null || record?.current.actual === undefined ? "Not entered yet" : formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit)}</Text>
+            </div>
+          </div>
+        </Card>
+        <Card appearance="outline" className="flex min-w-0 flex-col p-5 sm:p-6" style={{ borderTop: `3px solid ${tokens.colorBrandStroke1}` }}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4" style={{ borderColor: tokens.colorNeutralStroke2 }}><Text as="p" size={200} weight="semibold" className="uppercase tracking-wide" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Current status</Text><KpiStatusBadge status={achievementStatus} /></div>
+          <Text as="h2" size={500} weight="semibold" className="mt-5 block">{nextStepTitle}</Text>
+          <Text as="p" size={300} className="mt-2 block leading-relaxed" style={{ color: tokens.colorNeutralForeground2 }}>{nextStepDescription}</Text>
+          {record?.current.reviewComment && <div className="mt-5 border-l-2 pl-3" style={{ borderColor: tokens.colorBrandStroke1 }}><Text as="p" size={200} weight="semibold">Manager feedback</Text><Text as="p" size={300} className="mt-1 block whitespace-pre-wrap">{record.current.reviewComment}</Text></div>}
+          {canEditDraft && <div className="mt-auto flex flex-wrap gap-2 pt-5"><Button type="button" appearance="secondary" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="primary" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></div>}
+          {record && ["returned", "rejected"].includes(record.current.status) && <Button className="mt-5 self-start" appearance="primary" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
+          {!!record?.current.evidence.length && <div className="mt-4 flex flex-wrap gap-2">{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
+        </Card>
+      </section>}
       {loading && <p>Loading achievement…</p>}
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
       {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
       {blockedAchievement && <KpiFeedback intent="warning">{blockedAchievement}</KpiFeedback>}
-      {assignment?.status !== "active" && assignment && <section className="space-y-3 rounded-xl border p-4" aria-label="Inactive assignment history">
-        <h2 className="font-semibold">Assignment history</h2>
-        <dl className="grid gap-3 text-sm sm:grid-cols-2"><div><dt className="text-muted-foreground">Reporting period</dt><dd className="font-medium">{assignment.period?.label} · {displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</dd></div><div><dt className="text-muted-foreground">Final target</dt><dd className="font-medium">{format(assignment.currentTarget?.target)}{assignment.definitionVersion?.measurementUnit ? ` ${assignment.definitionVersion.measurementUnit}` : ""}</dd></div></dl>
-        {!!assignment.targetHistory?.length && <div className="space-y-2 border-t pt-3"><h3 className="text-sm font-medium">Target changes</h3>{assignment.targetHistory.map((item) => <p key={item.revision} className="text-sm text-muted-foreground">Revision {item.revision} · {format(item.target)}{assignment.definitionVersion?.measurementUnit ? ` ${assignment.definitionVersion.measurementUnit}` : ""} · {item.reason} · {new Date(item.changedAt).toLocaleString()}</p>)}</div>}
-      </section>}
-      {assignment && <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-5" aria-label="KPI activity list">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-xl font-semibold">Activity records <span className="ml-1 text-base font-normal text-muted-foreground">({activities.length})</span></h2><p className="text-sm text-muted-foreground">{assignment.period?.label}</p></div>
-          <KpiStatusBadge status={record?.current.status ?? assignment.status} />
-        </div>
-        {canEditDraft && <div className="flex flex-wrap gap-2 border-b pb-4">
-          <Button type="button" appearance="secondary" onClick={openActivityForm}>Add Activity</Button>
-          <Button type="button" appearance="primary" onClick={() => { setFlowStep("mode"); setModePickerOpen(true); }}>Submit Achievement</Button>
-          <Button type="button" appearance="secondary" disabled={busy || !actual.trim()} onClick={() => void prepareSubmission()}>{busy ? "Preparing…" : "Review & Submit"}</Button>
-        </div>}
-        {record && !draft && <div className="space-y-2 border-b pb-4 text-sm">
-          <p>Final actual: <b>{format(record.current.actual)}{assignment.definitionVersion?.measurementUnit ? ` ${assignment.definitionVersion.measurementUnit}` : ""}</b> · Revision {record.current.revision}</p>
-          {record.current.reviewComment && <p>Manager feedback: {record.current.reviewComment}</p>}
-          {record.current.evidence.map((evidence) => <Button key={evidence.id} appearance="subtle" onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}
-          {["returned", "rejected"].includes(record.current.status) && <Button appearance="primary" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Prepare correction</Button>}
-        </div>}
-        {activities.length === 0 ? <div className="py-8 text-center"><p className="font-medium">No activity records</p><p className="mt-1 text-sm text-muted-foreground">{assignment.status === "active" ? "Use Add Activity to record work, or Submit Achievement to enter a final result." : "No activities were recorded for this inactive assignment. Achievement revisions and review events, when present, are listed below."}</p></div> : <>
-          <div className="space-y-2 md:hidden">{activities.map((activity) => <Card key={activity.id} appearance="outline" className="space-y-2 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs text-muted-foreground">{displayPeriodDate(activity.activityDate.slice(0, 10))}</p><h3 className="font-medium">{activity.title}</h3></div><KpiStatusBadge status={activity.status} /></div>
-            <details><summary className="cursor-pointer text-sm">View work details</summary><p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{activity.details}</p>{activity.comments && <p className="mt-1 text-sm">{activity.comments}</p>}</details>
-            <p className="text-sm"><span className="font-medium">Result:</span> {formatActivityResult(activity.measurableResult, assignment.definitionVersion?.measurementUnit)}</p>
-            <div className="flex flex-wrap items-center gap-2">{activity.evidence.map((file) => <Button type="button" key={file.id} appearance="subtle" size="small" onClick={() => void achievementApi.downloadActivityEvidence(token, record!.id, activity, file).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{file.fileName}</Button>)}{canEditDraft && record && <KpiFluentInput type="file" aria-label={`Attach evidence to ${activity.title}`} accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadActivityFile(activity, file); event.currentTarget.value = ""; }} />}</div>
-            {canEditDraft && <div className="flex gap-2"><Button type="button" appearance="subtle" size="small" onClick={() => { setEditingActivity(activity); setActivityForm({ activityDate: activity.activityDate.slice(0, 10), title: activity.title, details: activity.details, measurableResult: activityResultInput(activity.measurableResult), comments: activity.comments ?? "" }); setActivityEvidenceFile(null); setActivityFormError(""); setActivityOpen(true); }}>Edit</Button><Button type="button" appearance="subtle" size="small" onClick={() => void removeActivity(activity)}>Remove</Button></div>}
-          </Card>)}</div>
-          <div className="hidden overflow-x-auto md:block"><Table aria-label="Recorded KPI activities" className="w-full min-w-[560px]"><TableHeader><TableRow><TableHeaderCell>Date</TableHeaderCell><TableHeaderCell>Activity</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell><TableHeaderCell className="text-right">Result</TableHeaderCell><TableHeaderCell>Evidence and actions</TableHeaderCell></TableRow></TableHeader><TableBody>{activities.map((activity) => <TableRow key={activity.id}>
-            <TableCell className="whitespace-nowrap">{new Date(`${activity.activityDate}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</TableCell>
-            <TableCell><details className="max-w-xl"><summary className="cursor-pointer font-medium">{activity.title}</summary><div className="mt-2 space-y-2 text-sm"><p className="whitespace-pre-wrap text-muted-foreground">{activity.details}</p>{activity.comments && <p>Note: {activity.comments}</p>}</div></details></TableCell>
-            <TableCell><KpiStatusBadge status={activity.status} /></TableCell><TableCell className="text-right tabular-nums">{formatActivityResult(activity.measurableResult, assignment.definitionVersion?.measurementUnit)}</TableCell>
-            <TableCell><div className="flex flex-wrap items-center gap-1">{activity.evidence.map((file) => <Button type="button" key={file.id} appearance="subtle" size="small" onClick={() => void achievementApi.downloadActivityEvidence(token, record!.id, activity, file).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{file.fileName}</Button>)}{canEditDraft && record && <KpiFluentInput type="file" aria-label={`Attach evidence to ${activity.title}`} accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadActivityFile(activity, file); event.currentTarget.value = ""; }} />}{canEditDraft && <><Button type="button" appearance="subtle" size="small" onClick={() => { setEditingActivity(activity); setActivityForm({ activityDate: activity.activityDate.slice(0, 10), title: activity.title, details: activity.details, measurableResult: activityResultInput(activity.measurableResult), comments: activity.comments ?? "" }); setActivityEvidenceFile(null); setActivityFormError(""); setActivityOpen(true); }}>Edit</Button><Button type="button" appearance="subtle" size="small" onClick={() => void removeActivity(activity)}>Remove</Button></>}</div>{!activity.evidence.length && <p className="text-xs text-muted-foreground">No evidence attached</p>}</TableCell>
-          </TableRow>)}</TableBody></Table></div>
-        </>}
+      {assignment?.status !== "active" && assignment && !!assignment.targetHistory?.length && <Card appearance="outline" className="p-5" aria-label="Target history"><Text as="h2" size={400} weight="semibold">Target changes</Text><div className="mt-3 space-y-2">{assignment.targetHistory.map((item) => <Text as="p" size={300} key={item.revision} style={{ color: tokens.colorNeutralForeground2 }}>Revision {item.revision} · {formatTarget(item.target, assignment.definitionVersion?.measurementUnit)} · {item.reason} · {displayDateTime(item.changedAt)}</Text>)}</div></Card>}
+      {assignment && <section className="space-y-4" aria-label="KPI activity list">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><Text as="h2" size={500} weight="semibold" style={{ display: "block" }}>Work recorded</Text><Text as="p" size={200} className="mt-1" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>{activities.length === 1 ? "1 activity" : `${activities.length} activities`} during this reporting period</Text></div>{canEditDraft && activities.length > 0 && <Button type="button" appearance="secondary" onClick={openActivityForm}>Add another activity</Button>}</div>
+        {activities.length === 0 ? <Card appearance="filled-alternative" className="items-center p-7 text-center"><Text as="h3" size={400} weight="semibold">No work recorded yet</Text><Text as="p" size={300} className="max-w-md" style={{ color: tokens.colorNeutralForeground2 }}>{assignment.status === "active" ? "Add an activity to show what you did during this period." : "No activities were recorded for this assignment."}</Text>{canEditDraft && <Button type="button" appearance="secondary" onClick={openActivityForm}>Add your first activity</Button>}</Card> : <ActivityTable activities={activities} unit={assignment.definitionVersion?.measurementUnit} onOpen={(activityId) => { setError(""); setNotice(""); setSelectedActivityId(activityId); }} />}
       </section>}
 
-      {record && <section className="space-y-3 rounded-xl border p-4 text-sm">
-        <h2 className="font-semibold">Revision and activity history</h2>
-        {record.revisions.map((revision) => (
-          <details className="rounded-lg border p-3" key={revision.id} open={revision.id === record.current.id}>
-            <summary className="cursor-pointer font-medium">Revision {revision.revision} · {revision.effectiveStatus} · Actual: {format(revision.actual)}</summary>
-            <p className="mt-2">Feedback: {revision.reviewComment || "—"}</p>
-            <ActivityReadOnlyList activities={revision.activities ?? []} achievementId={record.id} token={token} onError={setError} />
-            {revision.evidence.map((evidence) => <Button key={evidence.id} appearance="subtle" onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}
-          </details>
-        ))}
-        <h3 className="font-medium">Audit events</h3>
-        {record.history.map((event) => <p key={event.id}>{new Date(event.createdAt).toLocaleString()} · {event.action.replaceAll("_", " ")} · user #{event.actorId}</p>)}
-      </section>}
+      <ActivityDetailsDialog
+        activity={selectedActivity}
+        unit={assignment?.definitionVersion?.measurementUnit}
+        canEdit={canEditDraft}
+        busy={busy}
+        error={error}
+        notice={notice}
+        onClose={() => setSelectedActivityId(null)}
+        onDownload={(activity, file) => { if (record) void achievementApi.downloadActivityEvidence(token, record.id, activity, file).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed")); }}
+        onUpload={(activity, file) => void uploadActivityFile(activity, file)}
+        onEdit={(activity) => { setSelectedActivityId(null); setEditingActivity(activity); setActivityForm({ activityDate: activity.activityDate.slice(0, 10), title: activity.title, details: activity.details, measurableResult: activityResultInput(activity.measurableResult), comments: activity.comments ?? "" }); setActivityEvidenceFile(null); setActivityFormError(""); setActivityOpen(true); }}
+        onRemove={(activity) => { void removeActivity(activity).then((removed) => { if (removed) setSelectedActivityId(null); }); }}
+      />
+
+      {record && <Card appearance="outline" className="p-2 sm:p-3" aria-label="Submission history">
+        <Accordion collapsible><AccordionItem value="history"><AccordionHeader icon={<History20Regular />}><Text weight="semibold">Previous submissions and change history</Text></AccordionHeader><AccordionPanel>
+          <Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>Your current work is shown above. Earlier submissions and system changes are kept here for reference.</Text>
+          <Accordion collapsible multiple className="mt-3">
+            {record.revisions.filter((revision) => revision.id !== record.current.id).map((revision) => <AccordionItem value={`revision-${revision.id}`} key={revision.id}><AccordionHeader>Previous submission {revision.revision} · {friendlyStatus(revision.effectiveStatus)}</AccordionHeader><AccordionPanel><Text as="p" size={300}>Final result: {formatActivityResult(revision.actual, assignment?.definitionVersion?.measurementUnit)}</Text>{revision.reviewComment && <Text as="p" size={300} className="mt-2 block">Manager feedback: {revision.reviewComment}</Text>}<ActivityReadOnlyList activities={revision.activities ?? []} achievementId={record.id} token={token} onError={setError} />{revision.evidence.map((evidence) => <Button key={evidence.id} appearance="subtle" size="small" onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</AccordionPanel></AccordionItem>)}
+            {!!record.history.length && <AccordionItem value="events"><AccordionHeader>System activity log</AccordionHeader><AccordionPanel><ol className="space-y-3">{record.history.map((event) => <li key={event.id}><Text as="p" size={300} weight="semibold">{friendlyStatus(event.action)}</Text><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>{displayDateTime(event.createdAt)} · User #{event.actorId}</Text></li>)}</ol></AccordionPanel></AccordionItem>}
+          </Accordion>
+        </AccordionPanel></AccordionItem></Accordion>
+      </Card>}
 
       <Dialog open={modePickerOpen} onOpenChange={(_, data) => { if (!busy) setModePickerOpen(data.open); }}>
         <DialogSurface className="max-h-[min(88vh,52rem)] w-[min(46rem,calc(100vw-2rem))] overflow-y-auto"><DialogBody>
-          <DialogTitle>{flowStep === "mode" ? "Record achievement" : flowStep === "quick" ? "Quick Entry" : flowStep === "activities" ? "Detailed Activity Log" : editingActivity ? "Edit activity" : "Add activity"}</DialogTitle>
+          <DialogTitle>{flowStep === "mode" ? "Record achievement" : flowStep === "quick" ? "Submit achievement" : flowStep === "activities" ? "Detailed Activity Log" : editingActivity ? "Edit activity" : "Add activity"}</DialogTitle>
           {flowStep === "mode" && <>
             <DialogContent className="space-y-3">
               <p className="text-sm text-muted-foreground">Choose how you want to record this KPI result. Your choice opens the entry form here.</p>
@@ -461,9 +505,10 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
           {flowStep === "quick" && <>
             <DialogContent className="space-y-4">
               <p className="text-sm text-muted-foreground">{assignment!.definitionVersion?.name} · {assignment!.period?.label}</p>
+              <KpiFeedback intent="info">Your {activities.length === 1 ? "activity is" : `${activities.length} activities are`} saved as supporting work. Enter the final result, then submit the complete achievement to your manager.</KpiFeedback>
               <div className="grid gap-3 sm:grid-cols-2"><Field label={`Final actual achievement${assignment!.definitionVersion?.measurementUnit ? ` (${assignment!.definitionVersion.measurementUnit})` : ""}`} required><KpiFluentInput value={actual} onChange={(event) => setActual(event.target.value)} placeholder="Enter the reporting-period result" /></Field><Field label="Supporting comments"><KpiFluentTextarea value={comments} onChange={(event) => setComments(event.target.value)} maxLength={4000} rows={3} /></Field></div>
             </DialogContent>
-            <DialogActions><Button appearance="secondary" onClick={() => setFlowStep("mode")}>Back</Button><Button appearance="secondary" disabled={busy} onClick={() => { setModePickerOpen(false); void action(() => record ? achievementApi.update(token, record.id, record.current.rowVersion, enteredActual(), comments) : achievementApi.create(token, assignmentId, enteredActual(), comments), "Draft saved"); }}>Save draft</Button><Button appearance="primary" disabled={busy || !actual.trim()} onClick={() => { setModePickerOpen(false); void prepareSubmission(); }}>Review &amp; Submit</Button></DialogActions>
+            <DialogActions><Button appearance="secondary" onClick={() => setModePickerOpen(false)}>Cancel</Button><Button appearance="secondary" disabled={busy} onClick={() => { setModePickerOpen(false); void action(() => record ? achievementApi.update(token, record.id, record.current.rowVersion, enteredActual(), comments) : achievementApi.create(token, assignmentId, enteredActual(), comments), "Draft saved"); }}>Save for later</Button><Button appearance="primary" disabled={busy || !actual.trim()} onClick={() => void submitAchievement()}>{busy ? "Submitting…" : "Submit to manager"}</Button></DialogActions>
           </>}
           {flowStep === "activities" && <>
             <DialogContent className="space-y-4">
@@ -472,7 +517,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
               <div className="flex items-center justify-between"><h3 className="font-semibold">Activity records</h3><span className="text-sm text-muted-foreground">{activities.length} recorded</span></div>
               {activities.length ? <Card appearance="outline" className="overflow-x-auto"><Table aria-label="Activity records" className="w-full min-w-[32rem]"><TableHeader><TableRow><TableHeaderCell>Date</TableHeaderCell><TableHeaderCell>Activity</TableHeaderCell><TableHeaderCell className="text-right">Result</TableHeaderCell></TableRow></TableHeader><TableBody>{activities.map((activity) => <TableRow key={activity.id}><TableCell>{new Date(`${activity.activityDate}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</TableCell><TableCell><details><summary className="cursor-pointer font-medium">{activity.title}</summary><p className="mt-1 text-sm text-muted-foreground">{activity.details}</p></details></TableCell><TableCell className="text-right">{formatActivityResult(activity.measurableResult, assignment!.definitionVersion?.measurementUnit)}</TableCell></TableRow>)}</TableBody></Table></Card> : <Card appearance="outline" className="p-4 text-center text-sm text-muted-foreground">No activity records yet. Add your first activity to begin.</Card>}
             </DialogContent>
-            <DialogActions className="flex flex-wrap items-center justify-end gap-2"><Button size="medium" className="!min-w-24 !whitespace-nowrap" appearance="secondary" onClick={() => setFlowStep("mode")}>Back</Button><Button size="medium" className="!min-w-36 !whitespace-nowrap" appearance="secondary" onClick={openActivityForm}>+ Add Activity</Button><Button size="medium" className="!min-w-40 !whitespace-nowrap" appearance="primary" disabled={busy || !actual.trim()} onClick={() => { setModePickerOpen(false); void prepareSubmission(); }}>Submit Achievement</Button></DialogActions>
+            <DialogActions className="flex flex-wrap items-center justify-end gap-2"><Button size="medium" className="!min-w-24 !whitespace-nowrap" appearance="secondary" onClick={() => setFlowStep("mode")}>Back</Button><Button size="medium" className="!min-w-36 !whitespace-nowrap" appearance="secondary" onClick={openActivityForm}>+ Add Activity</Button><Button size="medium" className="!min-w-40 !whitespace-nowrap" appearance="primary" disabled={busy || !actual.trim()} onClick={() => void submitAchievement()}>{busy ? "Submitting…" : "Submit to manager"}</Button></DialogActions>
           </>}
         </DialogBody></DialogSurface>
       </Dialog>
@@ -509,25 +554,101 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
           <DialogActions><Button appearance="secondary" disabled={busy} onClick={() => setActivityOpen(false)}>Cancel</Button><Button appearance="primary" disabled={busy || !activityForm.title.trim() || !activityForm.details.trim()} onClick={() => void saveActivity()}>{busy ? "Saving…" : "Save activity"}</Button></DialogActions>
         </DialogBody></DialogSurface>
       </Dialog>
-      <Dialog open={confirmSubmit} onOpenChange={(_, data) => setConfirmSubmit(data.open)}>
-        <DialogSurface><DialogBody>
-          <DialogTitle>Review achievement submission</DialogTitle>
-          <DialogContent className="space-y-3 text-sm">
-            <p><b>KPI:</b> {assignment?.definitionVersion?.name}</p>
-            <p><b>Reporting period:</b> {assignment?.period?.label}</p>
-            <p><b>Target:</b> {formatTarget(assignment?.currentTarget?.target ?? null, assignment?.definitionVersion?.measurementUnit)}</p>
-            <p><b>Final actual:</b> {format(record?.current.actual)}{assignment?.definitionVersion?.measurementUnit ? ` ${assignment.definitionVersion.measurementUnit}` : ""}</p>
-            <p><b>Supporting comments:</b> {record?.current.comments || "—"}</p>
-            <p><b>Recorded activities:</b> {activities.length} · {activities.reduce((sum, activity) => sum + activity.evidence.length, 0)} activity evidence files · {record?.current.evidence.length ?? 0} submission evidence files</p>
-            {record?.current.evidence.map((evidence) => <p key={evidence.id} className="text-xs text-muted-foreground">Submission evidence: {evidence.fileName}</p>)}
-            {activities.map((activity) => <div key={activity.id} className="rounded border p-2"><b>{activity.activityDate} · {activity.title}</b><p className="mt-1 whitespace-pre-wrap">{activity.details}</p><span className="text-muted-foreground">Result: {format(activity.measurableResult)} · {activity.evidence.length} evidence files</span>{activity.evidence.map((file) => <p key={file.id} className="text-xs text-muted-foreground">{file.fileName}</p>)}</div>)}
-            <KpiFeedback intent="info">Submitting freezes this revision for manager review. The scorecard changes only after approval.</KpiFeedback>
-          </DialogContent>
-          <DialogActions><Button appearance="secondary" disabled={busy} onClick={() => setConfirmSubmit(false)}>Continue editing</Button><Button appearance="primary" disabled={busy || !record} onClick={() => { setConfirmSubmit(false); if (record) void action(() => achievementApi.submit(token, record.id, record.current.rowVersion), "Achievement submitted for review"); }}>{busy ? "Submitting…" : "Submit for manager review"}</Button></DialogActions>
-        </DialogBody></DialogSurface>
-      </Dialog>
     </div>
   );
+}
+
+function ActivityTable({ activities, unit, onOpen }: { activities: AchievementActivity[]; unit?: string | null; onOpen: (activityId: number) => void }) {
+  const columns = React.useMemo(() => [
+    createTableColumn<AchievementActivity>({
+      columnId: "activity",
+      compare: (a, b) => a.title.localeCompare(b.title),
+      renderHeaderCell: () => "Activity",
+      renderCell: (item) => <TableCellLayout media={<DocumentBulletList20Regular aria-hidden />}><Button type="button" appearance="subtle" size="small" className="!max-w-full !justify-start !px-1" onClick={(event) => { event.stopPropagation(); onOpen(item.id); }} title={`View ${item.title}`}>{item.title}</Button></TableCellLayout>,
+    }),
+    createTableColumn<AchievementActivity>({
+      columnId: "date",
+      compare: (a, b) => a.activityDate.localeCompare(b.activityDate),
+      renderHeaderCell: () => "Date",
+      renderCell: (item) => displayPeriodDate(item.activityDate.slice(0, 10)),
+    }),
+    createTableColumn<AchievementActivity>({
+      columnId: "progress",
+      compare: (a, b) => a.status.localeCompare(b.status),
+      renderHeaderCell: () => "Progress",
+      renderCell: (item) => <ActivityProgressBadge status={item.status} />,
+    }),
+    createTableColumn<AchievementActivity>({
+      columnId: "result",
+      compare: (a, b) => formatActivityResult(a.measurableResult, unit).localeCompare(formatActivityResult(b.measurableResult, unit)),
+      renderHeaderCell: () => "Result",
+      renderCell: (item) => item.measurableResult === null || item.measurableResult === undefined || item.measurableResult === "" ? <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Not entered</Text> : formatActivityResult(item.measurableResult, unit),
+    }),
+    createTableColumn<AchievementActivity>({
+      columnId: "files",
+      compare: (a, b) => a.evidence.length - b.evidence.length,
+      renderHeaderCell: () => "Files",
+      renderCell: (item) => item.evidence.length === 1 ? "1 file" : `${item.evidence.length} files`,
+    }),
+  ], [onOpen, unit]);
+  const widths: Record<string, string> = { activity: "37%", date: "17%", progress: "16%", result: "18%", files: "12%" };
+
+  return <Card appearance="outline" className="min-w-0 overflow-hidden p-0">
+    <div className="overflow-x-auto" role="region" aria-label="Recorded activities table" tabIndex={0}>
+      <DataGrid items={activities} columns={columns} getRowId={(item) => item.id} sortable defaultSortState={{ sortColumn: "date", sortDirection: "descending" }} size="small" aria-label="Recorded activities" style={{ minWidth: "640px", width: "100%", tableLayout: "fixed" }}>
+        <DataGridHeader style={{ backgroundColor: tokens.colorNeutralBackground2 }}><DataGridRow>{({ columnId, renderHeaderCell }) => <DataGridHeaderCell key={columnId} style={{ width: widths[String(columnId)] }}>{renderHeaderCell()}</DataGridHeaderCell>}</DataGridRow></DataGridHeader>
+        <DataGridBody<AchievementActivity>>{({ item, rowId }) => <DataGridRow<AchievementActivity> key={rowId} className="cursor-pointer" onClick={() => onOpen(item.id)} aria-label={`Open ${item.title}, ${friendlyStatus(item.status)}`}>{({ columnId, renderCell }) => <DataGridCell key={columnId} style={{ width: widths[String(columnId)] }}>{renderCell(item)}</DataGridCell>}</DataGridRow>}</DataGridBody>
+      </DataGrid>
+    </div>
+  </Card>;
+}
+
+function ActivityDetailsDialog({
+  activity,
+  unit,
+  canEdit,
+  busy,
+  error,
+  notice,
+  onClose,
+  onDownload,
+  onUpload,
+  onEdit,
+  onRemove,
+}: {
+  activity: AchievementActivity | null;
+  unit?: string | null;
+  canEdit: boolean;
+  busy: boolean;
+  error: string;
+  notice: string;
+  onClose: () => void;
+  onDownload: (activity: AchievementActivity, file: AchievementActivity["evidence"][number]) => void;
+  onUpload: (activity: AchievementActivity, file: File) => void;
+  onEdit: (activity: AchievementActivity) => void;
+  onRemove: (activity: AchievementActivity) => void;
+}) {
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const hasResult = activity?.measurableResult !== null && activity?.measurableResult !== undefined && activity?.measurableResult !== "";
+  return <Dialog open={!!activity} onOpenChange={(_, data) => { if (!data.open && !busy) onClose(); }}>
+    <DialogSurface className="max-h-[min(88vh,48rem)] w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"><DialogBody>
+      <DialogTitle>{activity?.title ?? "Activity details"}</DialogTitle>
+      {activity && <><DialogContent className="space-y-4">
+        {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
+        {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
+        <div className="flex flex-wrap items-center gap-2"><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>{displayPeriodDate(activity.activityDate.slice(0, 10))}</Text><ActivityProgressBadge status={activity.status} /></div>
+        <Divider />
+        <div><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>WORK COMPLETED</Text><Text as="p" size={300} className="mt-1 whitespace-pre-wrap break-words leading-relaxed" style={{ display: "block" }}>{activity.details}</Text></div>
+        {activity.comments && <div><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>ADDITIONAL NOTE</Text><Text as="p" size={300} className="mt-1 whitespace-pre-wrap break-words leading-relaxed" style={{ display: "block" }}>{activity.comments}</Text></div>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card appearance="filled-alternative" className="p-4"><Target20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Result for this activity</Text><Text as="p" size={300} weight="semibold" style={{ display: "block" }}>{hasResult ? formatActivityResult(activity.measurableResult, unit) : "No result entered"}</Text></Card>
+          <Card appearance="filled-alternative" className="p-4"><Attach20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Supporting files</Text>{activity.evidence.length ? <div className="flex flex-wrap gap-2">{activity.evidence.map((file) => <Button type="button" key={file.id} appearance="subtle" size="small" icon={<Document20Regular />} onClick={() => onDownload(activity, file)}>{file.fileName}</Button>)}</div> : <Text as="p" size={300} style={{ display: "block" }}>No files attached yet</Text>}</Card>
+        </div>
+        {canEdit && <div><input ref={fileInput} type="file" className="sr-only" tabIndex={-1} aria-label={`Attach evidence to ${activity.title}`} accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt" disabled={busy} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onUpload(activity, file); event.currentTarget.value = ""; }} /><Button type="button" appearance="secondary" size="small" className="!whitespace-nowrap !px-3" icon={<ArrowUpload20Regular />} disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? "Uploading…" : "Attach evidence"}</Button><Text as="p" size={200} className="mt-1" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Documents or images up to 10 MB</Text></div>}
+      </DialogContent>
+      <DialogActions className="!flex !flex-row flex-wrap items-center justify-end gap-2 [&>button]:!min-w-0 [&>button]:!whitespace-nowrap [&>button]:!px-4"><Button type="button" appearance="secondary" onClick={onClose} disabled={busy}>Close</Button>{canEdit && <><Button type="button" appearance="subtle" icon={<Delete20Regular />} disabled={busy} onClick={() => onRemove(activity)}>Remove</Button><Button type="button" appearance="primary" icon={<Edit20Regular />} disabled={busy} onClick={() => onEdit(activity)}>Edit activity</Button></>}</DialogActions></>}
+    </DialogBody></DialogSurface>
+  </Dialog>;
 }
 
 function ActivityReadOnlyList({
@@ -542,13 +663,12 @@ function ActivityReadOnlyList({
   onError: (message: string) => void;
 }) {
   if (!activities.length) return null;
-  return <div className="my-3 space-y-2 border-l-2 border-primary/30 pl-3">
-    {activities.map((activity) => <div key={activity.id} className="rounded-md bg-muted/40 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{activity.activityDate} · {activity.title}</p><KpiStatusBadge status={activity.status} /></div>
-      <p className="mt-1 whitespace-pre-wrap">{activity.details}</p>
-      <p className="mt-1 text-muted-foreground">Measured result: {formatActivityResult(activity.measurableResult)} · Comments: {activity.comments || "—"}</p>
-      {activity.evidence.map((file) => <Button key={file.id} appearance="subtle" size="small" onClick={() => void achievementApi.downloadActivityEvidence(token, achievementId, activity, file).catch((e: unknown) => onError(e instanceof Error ? e.message : "Download failed"))}>{file.fileName}</Button>)}
-      {!activity.evidence.length && <span className="text-xs text-muted-foreground">No evidence attached</span>}
-    </div>)}
+  return <div className="my-3 space-y-3">
+    {activities.map((activity) => <Card key={activity.id} appearance="filled-alternative" className="p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2"><Text weight="semibold">{displayPeriodDate(activity.activityDate.slice(0, 10))} · {activity.title}</Text><ActivityProgressBadge status={activity.status} /></div>
+      <Text as="p" size={300} className="whitespace-pre-wrap">{activity.details}</Text>
+      <Text as="p" size={200} style={{ color: tokens.colorNeutralForeground2 }}>Result: {activity.measurableResult === null || activity.measurableResult === undefined ? "Not entered" : formatActivityResult(activity.measurableResult)}{activity.comments ? ` · Note: ${activity.comments}` : ""}</Text>
+      <div className="flex flex-wrap gap-2">{activity.evidence.map((file) => <Button key={file.id} appearance="subtle" size="small" icon={<Document20Regular />} onClick={() => void achievementApi.downloadActivityEvidence(token, achievementId, activity, file).catch((e: unknown) => onError(e instanceof Error ? e.message : "Download failed"))}>{file.fileName}</Button>)}</div>
+    </Card>)}
   </div>;
 }
