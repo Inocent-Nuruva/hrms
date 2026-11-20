@@ -29,8 +29,17 @@ import {
   removeAccessGroupDevice,
   listAccessGroupDoors,
   listAccessGroupEmployees,
+  listAccessOrganizationEmployees,
   removeAccessGroupDoor,
   syncAccessGroup,
+  previewAccessGroup,
+  type AccessGroupPreview,
+  previewEffectiveDeviceAccess,
+  type EffectiveDeviceAccess,
+  listGroupReconciliationOperations,
+  type AccessReconciliationOperation,
+  inspectAccessReconciliationDevice,
+  type AccessReconciliationInspection,
   type AdminRecord,
 } from "@/lib/admin-api"
 import {
@@ -38,6 +47,8 @@ import {
   type EmployeeAccessRemovalTarget,
 } from "@/components/dashboard/employee-access-removal-dialog"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { useDashboardActor } from "@/hooks/use-dashboard-actor"
+import { canPerformPermission } from "@/lib/dashboard-permissions"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -151,10 +162,13 @@ function resolveColumns(rows: AdminRecord[], preferred: string[]) {
 }
 
 export function AccessGroupDetailView({ groupId }: { groupId: string }) {
+  const actor = useDashboardActor()
   const [group, setGroup] = React.useState<AdminRecord | null>(null)
   const [assignedDoors, setAssignedDoors] = React.useState<AdminRecord[]>([])
   const [assignedDevices, setAssignedDevices] = React.useState<AdminRecord[]>([])
   const [employees, setEmployees] = React.useState<AdminRecord[]>([])
+  const [organizationEmployees, setOrganizationEmployees] = React.useState<AdminRecord[]>([])
+  const [organizationEmployeeError, setOrganizationEmployeeError] = React.useState<string | null>(null)
   const [allEmployees, setAllEmployees] = React.useState<AdminRecord[]>([])
   const [availableDoors, setAvailableDoors] = React.useState<AdminRecord[]>([])
   const [templates, setTemplates] = React.useState<AdminRecord[]>([])
@@ -194,6 +208,18 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
   const [deviceSearch, setDeviceSearch] = React.useState("")
   const [employeeSearch, setEmployeeSearch] = React.useState("")
   const [syncingGroup, setSyncingGroup] = React.useState(false)
+  const [preview, setPreview] = React.useState<AccessGroupPreview | null>(null)
+  const [previewError, setPreviewError] = React.useState<string | null>(null)
+  const [effectiveAccess, setEffectiveAccess] = React.useState<EffectiveDeviceAccess | null>(null)
+  const [effectiveAfterRemoval, setEffectiveAfterRemoval] = React.useState<EffectiveDeviceAccess | null>(null)
+  const [effectiveError, setEffectiveError] = React.useState<string | null>(null)
+  const [effectiveLoading, setEffectiveLoading] = React.useState(false)
+  const [operations, setOperations] = React.useState<AccessReconciliationOperation[] | null>(null)
+  const [operationsError, setOperationsError] = React.useState<string | null>(null)
+  const [operationsLoading, setOperationsLoading] = React.useState(false)
+  const [inspection, setInspection] = React.useState<AccessReconciliationInspection | null>(null)
+  const [inspectionLoading, setInspectionLoading] = React.useState(false)
+  const [inspectionError, setInspectionError] = React.useState<string | null>(null)
 
   const doorSearchActive = doorSearch.trim().length > 0
   const deviceSearchActive = deviceSearch.trim().length > 0
@@ -209,6 +235,17 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
 
     setLoading(true)
     setError(null)
+    setPreview(null)
+    setPreviewError(null)
+    setOperations(null)
+    setOperationsError(null)
+    setInspection(null)
+    setInspectionError(null)
+    setEffectiveAccess(null)
+    setEffectiveAfterRemoval(null)
+    setEffectiveError(null)
+    setOrganizationEmployees([])
+    setOrganizationEmployeeError(null)
     try {
       const [groupRecord, groupDoorRows, groupDeviceRows, employeeRows, deviceRows, allEmployeeRows, templateRows, allDoorRows] =
         await Promise.all([
@@ -250,6 +287,23 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
       setAvailableDoors(allDoorRows.rows)
       setAllEmployees(allEmployeeRows.rows)
       setTemplates(templateRows.rows)
+      const organizationId = readNumberFromRecord(groupRecord ?? {}, ["organization_id", "organizationId"])
+      if (organizationId !== null) {
+        try {
+          const members = await listAccessOrganizationEmployees(token, organizationId)
+          setOrganizationEmployees(members.flatMap((member) => {
+            const id = readNumberFromRecord(member, ["employee_id", "employeeId"])
+            return id === null ? [] : [{ ...member, id, full_name: member.employee_name }]
+          }))
+        } catch (membershipError) {
+          setOrganizationEmployeeError(membershipError instanceof Error ? membershipError.message : "Could not load organization employees.")
+        }
+      }
+      try {
+        setPreview(await previewAccessGroup(token, groupId))
+      } catch (previewFailure) {
+        setPreviewError(previewFailure instanceof Error ? previewFailure.message : "Unable to check access readiness.")
+      }
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Failed to load group details.")
     } finally {
@@ -462,7 +516,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
 
   const assignableEmployees = React.useMemo(
     () =>
-      allEmployees.filter((employee) => {
+      organizationEmployees.filter((employee) => {
         const employeeId = readNumberFromRecord(employee, ["id", "employee_id", "employeeId"])
         const employeeNo = readStringFromRecord(employee, ["employee_no", "employee_number", "employeeNumber"])
         if (employeeId !== null && assignedEmployeeKeys.has(`id:${employeeId}`)) {
@@ -473,7 +527,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
         }
         return employeeId !== null
       }),
-    [allEmployees, assignedEmployeeKeys]
+    [organizationEmployees, assignedEmployeeKeys]
   )
 
   const filteredAssignableEmployees = React.useMemo(() => {
@@ -785,13 +839,59 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
     setSyncingGroup(true)
     setError(null)
     try {
-      await syncAccessGroup(token, groupId)
-      setMessage("Group sync started successfully.")
+      const response = await syncAccessGroup(token, groupId)
+      const result = response && typeof response === "object" ? response as AdminRecord : {}
+      const rows = Array.isArray(result.results) ? result.results : []
+      const failed = rows.filter((row) => row && typeof row === "object" && (row as AdminRecord).status === "FAILED").length
+      const skipped = rows.filter((row) => row && typeof row === "object" && (row as AdminRecord).status === "SKIPPED").length
+      setMessage(failed || skipped ? `Group sync completed with ${failed} failed and ${skipped} skipped result(s). Review device audit logs.` : `Group sync completed for ${rows.length} result(s).`)
     } catch (errorObject) {
       setError(errorObject instanceof Error ? errorObject.message : "Failed to sync group.")
     } finally {
       setSyncingGroup(false)
     }
+  }
+
+  const onPreviewEffective = async (employeeId: number, deviceId: number) => {
+    const token = readStoredToken()
+    if (!token) { setEffectiveError("Authentication required. Please log in again."); return }
+    setEffectiveLoading(true)
+    setEffectiveAccess(null)
+    setEffectiveAfterRemoval(null)
+    setEffectiveError(null)
+    try {
+      const groupNumber = Number(groupId)
+      if (!Number.isInteger(groupNumber) || groupNumber <= 0) throw new Error("Invalid group ID.")
+      const [current, afterRemoval] = await Promise.all([
+        previewEffectiveDeviceAccess(token, employeeId, deviceId),
+        previewEffectiveDeviceAccess(token, employeeId, deviceId, groupNumber),
+      ])
+      setEffectiveAccess(current)
+      setEffectiveAfterRemoval(afterRemoval)
+    }
+    catch (errorObject) { setEffectiveError(errorObject instanceof Error ? errorObject.message : "Could not calculate combined access.") }
+    finally { setEffectiveLoading(false) }
+  }
+
+  const onLoadOperations = async () => {
+    const token = readStoredToken()
+    if (!token) { setOperationsError("Authentication required."); return }
+    setOperationsLoading(true)
+    setOperationsError(null)
+    try { setOperations((await listGroupReconciliationOperations(token, groupId)).data) }
+    catch (errorObject) { setOperationsError(errorObject instanceof Error ? errorObject.message : "Could not load pending changes.") }
+    finally { setOperationsLoading(false) }
+  }
+
+  const onInspectOperation = async (operationId: number) => {
+    const token = readStoredToken()
+    if (!token) { setInspectionError("Authentication required."); return }
+    setInspectionLoading(true)
+    setInspectionError(null)
+    setInspection(null)
+    try { setInspection(await inspectAccessReconciliationDevice(token, operationId)) }
+    catch (errorObject) { setInspectionError(errorObject instanceof Error ? errorObject.message : "Device inspection failed.") }
+    finally { setInspectionLoading(false) }
   }
 
   const onAssignEmployee = async () => {
@@ -886,7 +986,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
               type="button"
               onClick={() => void onSyncGroup()}
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              disabled={syncingGroup}
+              disabled={syncingGroup || loading || !preview?.ready}
             >
               {syncingGroup ? <FluentLoadingIndicator className="h-4 w-4 animate-spin" /> : <RefreshCwIcon className="h-4 w-4" />}
               {syncingGroup ? "Syncing..." : "Sync Group"}
@@ -930,7 +1030,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
         </div>
 
         {activeTab === "details" ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
               ["Group Name", groupName],
               ["Display Name", readStringFromRecord(group ?? {}, ["name"])],
@@ -951,6 +1051,32 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
                 <p className="mt-1 text-sm text-slate-900">{value || "-"}</p>
               </div>
             ))}
+          </div>
+          <section aria-label="Access preview" className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <h3 className="font-semibold text-slate-900">Access preview and readiness</h3>
+            {previewError ? <p className="text-sm text-red-700">{previewError}</p> : null}
+            {!preview && !previewError ? <p className="text-sm text-slate-500">Checking configuration…</p> : null}
+            {preview ? <>
+              <p className={`text-sm font-medium ${preview.ready ? "text-green-700" : "text-red-700"}`}>{preview.ready ? "Ready to sync" : "Resolve these issues before syncing"}</p>
+              <ul className="space-y-1 text-sm">{preview.issues.map((issue, index) => <li key={`${issue.message}-${index}`} className={issue.severity === "error" ? "text-red-700" : "text-amber-700"}>{issue.severity === "error" ? "Required: " : "Note: "}{issue.message}</li>)}</ul>
+              <p className="text-sm text-slate-600">Showing {Math.min(preview.access.length, 100)} of {preview.access.length} employee, device and door assignments.</p>
+              <div className="max-h-80 overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th>Employee</th><th>Device</th><th>Door</th><th>Schedule</th><th>Result</th><th>Combined access</th></tr></thead><tbody>{preview.access.slice(0, 100).map((row, index) => <tr key={`${row.employee_id}-${row.device_id}-${row.door_id}-${index}`} className="border-t"><td>{row.employee_name || row.employee_no || row.employee_id}</td><td>{row.device_name}</td><td>{row.door_name}</td><td>{row.schedule_template_name} {row.week_plan_name ? `(${row.week_plan_name})` : ""}</td><td>{row.included ? "Included" : "Skipped"}</td><td><button type="button" className="text-primary underline disabled:opacity-50" disabled={effectiveLoading} onClick={() => void onPreviewEffective(row.employee_id, row.device_id)}>View</button></td></tr>)}</tbody></table></div>
+              {effectiveLoading ? <p className="text-sm">Calculating combined access…</p> : null}
+              {effectiveError ? <p className="text-sm text-red-700">{effectiveError}</p> : null}
+              {effectiveAccess ? <div className="space-y-2 rounded-md bg-slate-50 p-3 text-sm"><p className="font-semibold">Combined access for employee {effectiveAccess.employee_no || effectiveAccess.employee_id} on {effectiveAccess.device_name}</p><p className="text-amber-700">{effectiveAccess.warning}</p>{effectiveAccess.issues.map((issue) => <p key={issue} className="text-red-700">{issue}</p>)}{effectiveAccess.desired_rights.length ? <ul className="list-disc pl-5">{effectiveAccess.desired_rights.map((right) => <li key={`${right.door_no}-${right.template_no}`}>{right.door_name} — {right.template_name} ({right.groups.map((group) => group.name).join(", ")})</li>)}</ul> : <p>No group-derived rights are configured for this employee and device.</p>}{effectiveAfterRemoval ? <div><p className="mt-2 font-semibold">If this group is removed</p>{effectiveAfterRemoval.issues.map((issue) => <p key={issue} className="text-red-700">{issue}</p>)}{effectiveAfterRemoval.desired_rights.length ? <ul className="list-disc pl-5">{effectiveAfterRemoval.desired_rights.map((right) => <li key={`${right.door_no}-${right.template_no}`}>{right.door_name} — {right.template_name} ({right.groups.map((group) => group.name).join(", ")})</li>)}</ul> : <p>No group-derived rights would remain for this device.</p>}</div> : null}<p className="text-slate-500">Recorded HRMS sync state: {effectiveAccess.recorded_sync_status || "none"}; device state has not been verified. Removing a group does not automatically update the device.</p></div> : null}
+            </> : null}
+          </section>
+          {actor.ready && ["access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission)) ? (
+            <section className="space-y-2 rounded-lg border border-slate-200 p-4" aria-label="Pending access changes">
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Pending access changes</h3><button type="button" className="rounded-md border px-3 py-1 text-sm disabled:opacity-50" disabled={operationsLoading} onClick={() => void onLoadOperations()}>{operationsLoading ? "Loading…" : "Load changes"}</button></div>
+              <p className="text-sm text-amber-700">Latest 100 records. These require review; device synchronization and revocation are not yet automatic.</p>
+              {operationsError ? <p className="text-sm text-red-700">{operationsError}</p> : null}
+              {operations ? operations.length ? <ul className="max-h-48 space-y-1 overflow-y-auto text-sm">{operations.map((operation) => <li key={operation.id}>Employee #{operation.employee_id} · Device #{operation.device_id} · {operation.reason.replaceAll("_", " ")} · {operation.status.replaceAll("_", " ")} {canPerformPermission(actor.permissionLabels, "access_control_sync:execute") ? <button type="button" className="text-primary underline disabled:opacity-50" disabled={inspectionLoading} onClick={() => void onInspectOperation(operation.id)}>Inspect device</button> : null}</li>)}</ul> : <p className="text-sm text-slate-500">No recorded membership changes.</p> : null}
+              {inspectionLoading ? <p className="text-sm">Reading device…</p> : null}
+              {inspectionError ? <p className="text-sm text-red-700">{inspectionError}</p> : null}
+              {inspection ? <div className="space-y-1 rounded bg-slate-50 p-3 text-sm"><p className="font-semibold">Operation #{inspection.operation_id}</p><p className="text-amber-700">{inspection.warning}</p>{inspection.desired.issues.map((issue) => <p key={issue} className="text-red-700">{issue}</p>)}<p>HRMS desired: {inspection.desired.desired_rights.map((right) => `${right.door_name} (${right.template_name})`).join(", ") || "No group-derived rights"}</p><p>Device: {inspection.observed ? inspection.observed.exists ? `User found; door rights ${inspection.observed.door_right || "none"}; plans ${inspection.observed.right_plan.map((plan) => `${plan.door_no}:${plan.plan_template_no}`).join(", ") || "none"}` : "User not found" : "Not inspected"}</p></div> : null}
+            </section>
+          ) : null}
           </div>
         ) : null}
 
@@ -1583,6 +1709,7 @@ export function AccessGroupDetailView({ groupId }: { groupId: string }) {
         <DialogPopup className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Assign Employee To Group</DialogTitle>
+            {organizationEmployeeError ? <p className="text-sm text-red-600">{organizationEmployeeError}</p> : null}
             <DialogDescription>Select an employee to add to this access group.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">

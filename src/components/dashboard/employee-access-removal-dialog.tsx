@@ -29,6 +29,7 @@ import { showErrorAlert } from "@/lib/error-alert"
 import { showSuccessAlert } from "@/lib/success-alert"
 import { cn } from "@/lib/utils"
 import { AUTH_STORAGE_KEYS } from "@/utils/constants"
+import { initialRemovalChoices } from "./employee-access-removal-defaults"
 
 const TOKEN_STORAGE_KEY = "hrms.admin.accessToken"
 
@@ -114,15 +115,7 @@ type Props = {
 }
 
 function emptyChoices(): RemovalChoices {
-  return {
-    devices: {},
-    groups: {},
-    disableFingerprintsOnSelectedDevices: true,
-    endShiftAssignments: false,
-    archiveEmployee: true,
-    suspendEmployee: false,
-    terminateEmployee: false,
-  }
+  return initialRemovalChoices([], [])
 }
 
 export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onCompleted }: Props) {
@@ -293,28 +286,7 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
       setGroups(nextGroups)
       setShifts(nextShifts)
 
-      const deviceChoices: Record<string, boolean> = {}
-      nextDevices.forEach((device) => {
-        const preferred =
-          target.preferredDeviceId != null && String(target.preferredDeviceId) === device.id
-        deviceChoices[device.id] = preferred || nextDevices.length === 1
-      })
-      const groupChoices: Record<string, boolean> = {}
-      nextGroups.forEach((group) => {
-        const preferred =
-          target.preferredGroupId != null && String(target.preferredGroupId) === group.id
-        groupChoices[group.id] = preferred
-      })
-
-      setChoices({
-        devices: deviceChoices,
-        groups: groupChoices,
-        disableFingerprintsOnSelectedDevices: true,
-        endShiftAssignments: nextShifts.length > 0,
-        archiveEmployee: true,
-        suspendEmployee: false,
-        terminateEmployee: false,
-      })
+      setChoices(initialRemovalChoices(nextDevices.map((device) => device.id), nextGroups.map((group) => group.id), target.preferredDeviceId, target.preferredGroupId))
       setLoading(false)
     })()
 
@@ -422,19 +394,24 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
       if (choices.disableFingerprintsOnSelectedDevices) {
         await runStep(`Disable fingerprints on ${deviceLabel}`, async () => {
           const fingerprints = await listEmployeeDeviceFingerprints(token, target.employeeId, deviceId)
+          let failed = 0
           for (const fp of fingerprints) {
             const fpId =
               readString(fp, ["id", "fingerprint_id", "fingerprintId", "uuid"]) ??
               (readNumber(fp, ["id", "fingerprint_id"]) !== null
                 ? String(readNumber(fp, ["id", "fingerprint_id"]))
                 : null)
-            if (!fpId) continue
+            if (!fpId) {
+              failed += 1
+              continue
+            }
             try {
               await disableEmployeeDeviceFingerprint(token, target.employeeId, deviceId, fpId)
             } catch {
-              // Best effort per fingerprint.
+              failed += 1
             }
           }
+          if (failed > 0) throw new Error(`${failed} fingerprint(s) could not be disabled; review device credentials.`)
         })
       }
 
@@ -493,7 +470,9 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
     setProgressLabel("")
 
     if (failures.length === 0) {
-      showSuccessAlert("Removal completed successfully.")
+      showSuccessAlert(selectedGroupIds.length > 0 && selectedDeviceIds.length === 0
+        ? "Group membership removed. Verify device access separately."
+        : "Removal completed successfully.")
       onCompleted?.()
     } else if (failures.length < outcome.length) {
       showSuccessAlert("Removal finished with some warnings.")
@@ -623,6 +602,9 @@ export function EmployeeAccessRemovalDialog({ open, target, onOpenChange, onComp
                     ))}
                   </ul>
                 )}
+                {selectedGroupIds.length > 0 ? (
+                  <p className="text-xs text-amber-700">Removing a group updates HRMS membership only. Device access may remain; review device rights separately. Removing a device assignment can also affect access granted through other groups.</p>
+                ) : null}
               </section>
 
               {shifts.length > 0 ? (

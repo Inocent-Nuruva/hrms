@@ -65,6 +65,8 @@ import {
   listHikvisionDeviceAttendanceLogs,
   listEmployees,
   manageHikvisionDevice,
+  previewDeviceSetup,
+  type DeviceSetupPreview,
   registerEmployeeDeviceUser,
   resyncEmployeeDeviceFingerprint,
   resyncEmployeeDeviceUser,
@@ -87,6 +89,7 @@ import {
 } from "@/components/dashboard/employee-access-removal-dialog";
 import { useDashboardActor } from "@/hooks/use-dashboard-actor";
 import { canSeeDashboardPage } from "@/lib/forbidden-routes";
+import { canPerformPermission } from "@/lib/dashboard-permissions";
 import { cn } from "@/lib/utils";
 import { showErrorAlert } from "@/lib/error-alert";
 import { showSuccessAlert } from "@/lib/success-alert";
@@ -111,7 +114,7 @@ function readJobId(payload: unknown) {
 }
 type DeviceSyncStepKey =
   "core" | "doors" | "templates" | "week-plans" | "users" | "fingerprints";
-type DeviceSyncStepState = "idle" | "running" | "success" | "error";
+type DeviceSyncStepState = "idle" | "running" | "queued" | "success" | "error";
 type CredentialTypeValue =
   "CARD" | "FINGERPRINT" | "FACE" | "PASSWORD" | "QR" | "PIN";
 type DeviceSyncStatus = Record<
@@ -1014,6 +1017,10 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       actor.accessMode,
     );
   const [testingConnection, setTestingConnection] = React.useState(false);
+  const [setupPreview, setSetupPreview] = React.useState<DeviceSetupPreview | null>(null);
+  const [setupPreviewError, setSetupPreviewError] = React.useState<string | null>(null);
+  const [setupPreviewLoading, setSetupPreviewLoading] = React.useState(false);
+  const canPreviewSetup = actor.ready && ["attendance_devices:read", "access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission));
   const [managingDevice, setManagingDevice] = React.useState(false);
   const [deviceAuditLogs, setDeviceAuditLogs] = React.useState<AdminRecord[]>(
     [],
@@ -1578,11 +1585,16 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     ) => {
       setSyncStepStatus(step, "running", options.pendingMessage);
       try {
-        await withTimeout(
+        const response = await withTimeout(
           action(),
           options.timeoutMs ?? env.NEXT_PUBLIC_DEVICE_ACTION_TIMEOUT_MS,
           `${options.pendingMessage} timed out.`,
         );
+        const result = asRecord(response);
+        const status = String(result?.status ?? "").toUpperCase();
+        if (result?.ok === false || status === "FAILED" || status === "PARTIAL" || Number(result?.failed ?? 0) > 0) {
+          throw new Error(`${options.pendingMessage} reported a failure or partial result. Review synchronization history.`);
+        }
         setSyncStepStatus(step, "success", options.successMessage);
       } catch (errorObject) {
         const nextMessage =
@@ -1648,9 +1660,20 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           : "Connection test failed.";
       setError(message);
       showErrorAlert(message);
+      await fetchDeviceData();
     } finally {
       setTestingConnection(false);
     }
+  };
+
+  const onPreviewSetup = async () => {
+    const token = readStoredToken();
+    if (!token) { setSetupPreviewError("Authentication required."); return; }
+    setSetupPreviewLoading(true);
+    setSetupPreviewError(null);
+    try { setSetupPreview(await previewDeviceSetup(token, deviceId)); }
+    catch (errorObject) { setSetupPreview(null); setSetupPreviewError(errorObject instanceof Error ? errorObject.message : "Could not load setup preview."); }
+    finally { setSetupPreviewLoading(false); }
   };
 
   const onManageHikvisionDevice = async () => {
@@ -1661,7 +1684,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
     }
     setManagingDevice(true);
     try {
-      const payload = await manageHikvisionDevice(token, deviceId);
+      const payload = await manageHikvisionDevice(token, deviceId, { action: "SYNC_ALL" });
       const jobId = readJobId(payload);
       if (jobId) {
         const job = await getHikvisionSyncJob(token, jobId);
@@ -1669,7 +1692,13 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
           readDisplayField(job, ["status", "state", "jobStatus"]) || "queued";
         showSuccessAlert(`Hikvision manage job ${jobId} is ${status}.`);
       } else {
-        showSuccessAlert("Hikvision manage command sent.");
+        const result = asRecord(payload);
+        const status = String(result?.status ?? "UNKNOWN").toUpperCase();
+        if (status === "FAILED" || status === "PARTIAL") {
+          throw new Error(`Device import ${status.toLowerCase()}; review synchronization history.`);
+        }
+        if (status !== "SUCCESS") throw new Error("Device import did not return a confirmed success status.");
+        showSuccessAlert("Device people and credential import completed.");
       }
       setError(null);
       await fetchDeviceData();
@@ -1791,19 +1820,28 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
               ? "Fingerprints"
               : resource.charAt(0).toUpperCase() + resource.slice(1);
 
+      if (resource === "users" || resource === "fingerprints") {
+        setSyncStepStatus(resource, "running", `Queueing ${label.toLowerCase()} import`);
+        const payload = await withTimeout(action(), env.NEXT_PUBLIC_DEVICE_BULK_ACTION_TIMEOUT_MS, `${label} import request timed out.`);
+        const jobId = readJobId(payload);
+        if (!jobId) throw new Error(`${label} import did not return a job ID.`);
+        setSyncStepStatus(resource, "queued", `Import queued (job ${jobId}); check synchronization history for the final result.`);
+        setMessage(`${label} import queued. Completion has not yet been confirmed.`);
+        setError(null);
+        return;
+      }
+
       await runSyncStep(resource, action, {
         pendingMessage: `Syncing ${label.toLowerCase()}`,
         successMessage: `${label} synced`,
-        timeoutMs:
-          resource === "users" || resource === "fingerprints"
-            ? env.NEXT_PUBLIC_DEVICE_BULK_ACTION_TIMEOUT_MS
-            : env.NEXT_PUBLIC_DEVICE_ACTION_TIMEOUT_MS,
+        timeoutMs: env.NEXT_PUBLIC_DEVICE_ACTION_TIMEOUT_MS,
       });
 
       setMessage(`${label} synced successfully.`);
       setError(null);
       await fetchDeviceData();
     } catch (errorObject) {
+      setSyncStepStatus(resource, "error", errorObject instanceof Error ? errorObject.message : "Import failed.");
       setError(
         errorObject instanceof Error ? errorObject.message : "Sync failed.",
       );
@@ -2616,7 +2654,24 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
       ),
     },
   ];
+  const deviceHealth = asRecord(device?.health);
   const attendanceSyncRows = [
+    {
+      label: "Connection",
+      value: formatStatusLabel(stringifyValue(deviceHealth?.status ?? "UNKNOWN")),
+    },
+    {
+      label: "Last Checked",
+      value: stringifyValue(deviceHealth?.tested_at),
+    },
+    {
+      label: "Last Successful Connection",
+      value: stringifyValue(deviceHealth?.last_success_at),
+    },
+    {
+      label: "Connection Detail",
+      value: stringifyValue(deviceHealth?.message),
+    },
     {
       label: "Sync Status",
       value: formatStatusLabel(
@@ -2787,6 +2842,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
 
         {activeTab === "details" ? (
           <div className="space-y-6">
+            {canPreviewSetup ? <section className="space-y-2 rounded-lg border border-slate-200 p-4" aria-label="Device setup overview"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-semibold">Device setup overview</h3><p className="text-xs text-slate-500">Review linked groups and readiness before making configuration changes.</p></div><button type="button" className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50" onClick={() => void onPreviewSetup()} disabled={setupPreviewLoading}>{setupPreviewLoading ? "Loading…" : "Review setup"}</button></div>{setupPreviewError ? <p className="text-sm text-red-700">{setupPreviewError}</p> : null}{setupPreview && String(setupPreview.device.id) === String(deviceId) ? <><p className="text-sm">Connection: {setupPreview.device.health.status} · Groups: {setupPreview.groups.length} · Employees included: {setupPreview.included_employee_count}</p>{setupPreview.groups.length ? <ul className="space-y-1">{setupPreview.groups.map((group) => <li key={group.id} className="text-sm"><Link className="text-primary underline" href={`/dashboard/access-control/groups/${group.id}`}>{group.name}</Link> — {group.ready ? "ready for group sync" : "needs review"} ({group.included_employee_count} employees){!group.ready ? <ul className="list-disc pl-5 text-xs text-red-700">{group.issues.filter((issue) => issue.severity === "error").map((issue, index) => <li key={`${issue.message}-${index}`}>{issue.message}</li>)}</ul> : null}</li>)}</ul> : <p className="text-sm text-slate-500">No access groups are linked to this device.</p>}<ul className="list-disc space-y-1 pl-5 text-xs text-slate-500">{setupPreview.notes.map((note) => <li key={note}>{note}</li>)}</ul></> : null}</section> : null}
             {/* Properties as a clean 2-col definition list */}
             <dl className="grid gap-x-8 gap-y-0 border-t border-slate-100 sm:grid-cols-2">
               {deviceSummaryRows
@@ -3168,7 +3224,7 @@ export function AttendanceDeviceDetailView({ deviceId }: { deviceId: string }) {
                   ? "text-emerald-600"
                   : status.state === "error"
                     ? "text-rose-600"
-                    : status.state === "running"
+                    : status.state === "running" || status.state === "queued"
                       ? "text-amber-600"
                       : "text-slate-500";
 

@@ -21,6 +21,13 @@ import {
   syncAccessOrganizationToDevice,
   syncAccessOrganizationsFromDevice,
   syncAccessWeekPlanToDevice,
+  syncHikvisionDeviceUsers,
+  syncHikvisionDeviceFingerprints,
+  previewEffectiveDeviceAccess,
+  previewDeviceSetup,
+  previewAccessScheduleImpact,
+  listGroupReconciliationOperations,
+  inspectAccessReconciliationDevice,
   updateAccessCredentialStatus,
 } from "./admin-api"
 
@@ -38,6 +45,59 @@ describe("access control admin API helpers", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("queues device user and fingerprint imports using the supported action route", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ job_id: "42", state: "waiting" })))
+    vi.stubGlobal("fetch", fetchMock)
+    await syncHikvisionDeviceUsers("token", 2)
+    await syncHikvisionDeviceFingerprints("token", 2)
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8888/api/hikvision/devices/2/manage", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "SYNC_USERS" }) }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8888/api/hikvision/devices/2/manage", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "SYNC_FINGERPRINTS" }) }))
+  })
+
+  it("requests a read-only combined-access preview for one employee and device", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ employee_id: 7, device_id: 3, desired_rights: [], device_state: "NOT_VERIFIED" }))
+    vi.stubGlobal("fetch", fetchMock)
+    const result = await previewEffectiveDeviceAccess("token", 7, 3)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/employees/7/devices/3/effective-access", expect.objectContaining({ method: "GET" }))
+    expect(result.device_state).toBe("NOT_VERIFIED")
+  })
+
+  it("includes the group exclusion when previewing removal impact", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ employee_id: 7, device_id: 3, excluded_group_id: 4, desired_rights: [], device_state: "NOT_VERIFIED" }))
+    vi.stubGlobal("fetch", fetchMock)
+    await previewEffectiveDeviceAccess("token", 7, 3, 4)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/employees/7/devices/3/effective-access?exclude_group_id=4", expect.objectContaining({ method: "GET" }))
+  })
+
+  it("loads a device setup preview without making changes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ device: { id: 3 }, groups: [], notes: [] }))
+    vi.stubGlobal("fetch", fetchMock)
+    await previewDeviceSetup("token", 3)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/device-setup/3/preview", expect.objectContaining({ method: "GET" }))
+  })
+
+  it("loads a week plan dependency preview", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ kind: "week-plan", id: 4, groups: [], devices: [], warning: "read-only" }))
+    vi.stubGlobal("fetch", fetchMock)
+    await previewAccessScheduleImpact("token", "week-plan", 4)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/configuration-impact/week-plans/4", expect.objectContaining({ method: "GET" }))
+  })
+
+  it("loads pending reconciliation records for one group", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ group_id: 4, data: [], warning: "review required" }))
+    vi.stubGlobal("fetch", fetchMock)
+    const result = await listGroupReconciliationOperations("token", 4)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/groups/4/reconciliation-operations", expect.objectContaining({ method: "GET" }))
+    expect(result.data).toEqual([])
+  })
+
+  it("requests read-only device inspection for a pending operation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ operation_id: 12, observed: null, warning: "read-only" }))
+    vi.stubGlobal("fetch", fetchMock)
+    await inspectAccessReconciliationDevice("token", 12)
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8888/api/access-control/reconciliation-operations/12/inspect-device", expect.objectContaining({ method: "GET" }))
   })
 
   it("lists access credentials with supported filters", async () => {

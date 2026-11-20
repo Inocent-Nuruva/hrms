@@ -44,6 +44,8 @@ import {
   syncAccessScheduleTemplatesFromDevice,
   syncAccessControlDeviceWeekPlans,
   syncAccessWeekPlanToDevice,
+  previewAccessScheduleImpact,
+  type AccessScheduleImpact,
   type AccessControlResourceKey,
   type AccessDoorLiveCommand,
   type AdminRecord,
@@ -876,6 +878,10 @@ export function AccessControlManagementView({
   const [doorControlId, setDoorControlId] = React.useState("")
   const [doorBusy, setDoorBusy] = React.useState("")
   const [doorConfig, setDoorConfig] = React.useState<AdminRecord | null>(null)
+  const [impactOpen, setImpactOpen] = React.useState(false)
+  const [impact, setImpact] = React.useState<AccessScheduleImpact | null>(null)
+  const [impactLoading, setImpactLoading] = React.useState(false)
+  const [impactError, setImpactError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setCreateValues(activeSection === "templates" ? emptyTemplateCreateValues() : buildInitialState(fields))
@@ -1344,10 +1350,11 @@ export function AccessControlManagementView({
     setSyncing(true)
     setFormError(null)
     try {
-      if (activeSection === "week-plans") {
-        await syncAccessWeekPlanToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
-      } else {
-        await syncAccessScheduleTemplateToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
+      const response = activeSection === "week-plans"
+        ? await syncAccessWeekPlanToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
+        : await syncAccessScheduleTemplateToDevice(token, syncToRecordId.trim(), { device_id: deviceId })
+      if (response && typeof response === "object" && (response as AdminRecord).ok === false) {
+        throw new Error("The device rejected the synchronization. Review the device response and try again.")
       }
       setMessage(activeSection === "week-plans" ? "Week plan synced to device." : "Template synced to device.")
       setSyncToOpen(false)
@@ -1375,10 +1382,11 @@ export function AccessControlManagementView({
     setSyncing(true)
     setError(null)
     try {
-      if (activeSection === "week-plans") {
-        await syncAccessControlDeviceWeekPlans(token, deviceId)
-      } else {
-        await syncAccessScheduleTemplatesFromDevice(token, deviceId)
+      const response = activeSection === "week-plans"
+        ? await syncAccessControlDeviceWeekPlans(token, deviceId)
+        : await syncAccessScheduleTemplatesFromDevice(token, deviceId)
+      if (response && typeof response === "object" && Number((response as AdminRecord).failed ?? 0) > 0) {
+        throw new Error("Some device records could not be imported. Review the synchronization results.")
       }
       setMessage(activeSection === "week-plans" ? "Week plans synced from device." : "Templates synced from device.")
       await fetchRows()
@@ -1387,6 +1395,18 @@ export function AccessControlManagementView({
     } finally {
       setSyncing(false)
     }
+  }
+
+  const openImpact = async (row: AdminRecord, index: number) => {
+    const token = readStoredToken()
+    setImpactOpen(true)
+    setImpact(null)
+    setImpactError(null)
+    if (!token) { setImpactError("Authentication required."); return }
+    setImpactLoading(true)
+    try { setImpact(await previewAccessScheduleImpact(token, activeSection === "week-plans" ? "week-plan" : "template", resolveRowId(row, index))) }
+    catch (errorObject) { setImpactError(errorObject instanceof Error ? errorObject.message : "Unable to load configuration impact.") }
+    finally { setImpactLoading(false) }
   }
 
   const openEditDialog = (row: AdminRecord, fallbackIndex: number) => {
@@ -1515,6 +1535,9 @@ export function AccessControlManagementView({
                         >
                           <ArrowDownload16Regular className="size-4 text-blue-600 dark:text-blue-400" />
                         </button>
+                      ) : null}
+                      {(activeSection === "templates" || activeSection === "week-plans") && ["access_schedule_templates:read", "access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission)) ? (
+                        <button type="button" className="admin-table-icon-button" aria-label="Preview configuration impact" title="Preview configuration impact" onClick={() => void openImpact(row, rows.indexOf(row))}><Eye16Regular className="size-4 text-blue-600 dark:text-blue-400" /></button>
                       ) : null}
                       {canUpdate ? (
                         <button
@@ -1906,6 +1929,16 @@ export function AccessControlManagementView({
               Close
             </button>
           </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog open={impactOpen} onOpenChange={setImpactOpen}>
+        <DialogPopup className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>Configuration impact</DialogTitle><DialogDescription>Review dependencies before changing this schedule.</DialogDescription></DialogHeader>
+          {impactLoading ? <p className="text-sm">Loading impact…</p> : null}
+          {impactError ? <p className="text-sm text-red-700">{impactError}</p> : null}
+          {impact ? <div className="space-y-3 text-sm"><p className="font-medium">{impact.name}</p><p>{impact.devices.length} device(s), {impact.groups.length} group(s), {impact.linked_employee_count} linked employee(s)</p><p>Devices: {impact.devices.map((device) => device.name).join(", ") || "None"}</p><p>Groups: {impact.groups.map((group) => group.name).join(", ") || "None"}</p><p className="text-amber-700">{impact.warning}</p></div> : null}
+          <DialogFooter><button type="button" className="rounded-md border px-3 py-1.5 text-sm" onClick={() => setImpactOpen(false)}>Close</button></DialogFooter>
         </DialogPopup>
       </Dialog>
 

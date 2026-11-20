@@ -7133,10 +7133,11 @@ export async function syncHikvisionDeviceFingerprints(
   deviceId: string | number,
 ) {
   return adminRequest<unknown>(
-    `/api/hikvision/devices/${deviceId}/sync-fingerprints`,
+    `/api/hikvision/devices/${deviceId}/manage`,
     {
       method: "POST",
       token,
+      body: { action: "SYNC_FINGERPRINTS" },
     },
   );
 }
@@ -7146,10 +7147,11 @@ export async function syncHikvisionDeviceUsers(
   deviceId: string | number,
 ) {
   return adminRequest<unknown>(
-    `/api/hikvision/devices/${deviceId}/sync-users`,
+    `/api/hikvision/devices/${deviceId}/manage`,
     {
       method: "POST",
       token,
+      body: { action: "SYNC_USERS" },
     },
   );
 }
@@ -8246,6 +8248,79 @@ export async function syncAccessGroup(token: string, groupId: string | number) {
     method: "POST",
     token,
   });
+}
+
+export type AccessGroupPreview = {
+  group_id: number;
+  ready: boolean;
+  issues: Array<{ severity: "error" | "warning"; message: string }>;
+  access: Array<{ employee_id: number; employee_name: string | null; employee_no: string | null; device_id: number; device_name: string; door_id: number; door_name: string; door_no: number; schedule_template_name: string; week_plan_name: string | null; included: boolean }>;
+};
+
+export async function previewAccessGroup(token: string, groupId: string | number) {
+  return adminRequest<AccessGroupPreview>(`/api/access-control/groups/${groupId}/preview`, { token });
+}
+
+export type AccessReconciliationOperation = { id: number; employee_id: number; device_id: number; reason: string; status: string; created_at: string; last_error: string | null };
+export async function listGroupReconciliationOperations(token: string, groupId: string | number) {
+  return adminRequest<{ group_id: number; data: AccessReconciliationOperation[]; warning: string }>(`/api/access-control/groups/${groupId}/reconciliation-operations`, { token });
+}
+
+export type AccessReconciliationInspection = {
+  operation_id: number;
+  desired: EffectiveDeviceAccess;
+  observed: { exists: boolean; employee_no: string; door_right: string | null; right_plan: Array<{ door_no: number; plan_template_no: string }> } | null;
+  warning: string;
+};
+
+export async function inspectAccessReconciliationDevice(token: string, operationId: number) {
+  return adminRequest<AccessReconciliationInspection>(`/api/access-control/reconciliation-operations/${operationId}/inspect-device`, { token });
+}
+
+export type EffectiveDeviceAccess = {
+  employee_id: number;
+  employee_no: string | null;
+  device_id: number;
+  device_name: string;
+  excluded_group_id: number | null;
+  desired_version: string;
+  desired_rights: Array<{ door_no: number; door_name: string; template_no: string; template_name: string; groups: Array<{ id: number; name: string }> }>;
+  conflicts: Array<{ door_no: number; template_numbers: string[] }>;
+  issues: string[];
+  ready: boolean;
+  recorded_rights: Array<{ door_no: number; template_no: string }>;
+  recorded_sync_status: string | null;
+  device_state: "NOT_VERIFIED";
+  warning: string;
+};
+
+export async function previewEffectiveDeviceAccess(token: string, employeeId: number, deviceId: number, excludedGroupId?: number) {
+  const suffix = excludedGroupId === undefined ? "" : `?exclude_group_id=${encodeURIComponent(excludedGroupId)}`;
+  return adminRequest<EffectiveDeviceAccess>(`/api/access-control/employees/${employeeId}/devices/${deviceId}/effective-access${suffix}`, { token });
+}
+
+export type DeviceSetupPreview = {
+  device: { id: number; name: string; status: string; health: { status: string; tested_at: string | null; last_success_at: string | null } };
+  groups: Array<{ id: number; name: string; ready: boolean; included_employee_count: number; issues: Array<{ severity: "error" | "warning"; message: string }> }>;
+  included_employee_count: number;
+  notes: string[];
+};
+
+export async function previewDeviceSetup(token: string, deviceId: string | number) {
+  return adminRequest<DeviceSetupPreview>(`/api/access-control/device-setup/${deviceId}/preview`, { token });
+}
+
+export type AccessScheduleImpact = {
+  kind: "template" | "week-plan"; id: number; name: string;
+  templates: Array<{ id: number; name: string; device_id: number | null }>;
+  devices: Array<{ id: number; name: string; status: string }>;
+  groups: Array<{ id: number; name: string; status: string }>;
+  linked_employee_count: number; recorded_right_plan_count: number; warning: string;
+};
+
+export async function previewAccessScheduleImpact(token: string, kind: "template" | "week-plan", id: string | number) {
+  const path = kind === "template" ? "templates" : "week-plans";
+  return adminRequest<AccessScheduleImpact>(`/api/access-control/configuration-impact/${path}/${id}`, { token });
 }
 
 export async function assignAccessGroupDoors(

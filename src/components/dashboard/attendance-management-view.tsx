@@ -547,7 +547,7 @@ const SECTION_FIELDS: Record<AttendanceSectionKey, FieldConfig[]> = {
       label: "Protocol",
       type: "select",
       required: true,
-      options: [{ label: "ISAPI", value: "ISAPI" }],
+      options: [{ label: "HTTP", value: "http" }, { label: "HTTPS", value: "https" }, { label: "ISAPI (legacy HTTP)", value: "ISAPI" }],
     },
     { key: "api_username", label: "API Username", type: "text", required: true },
     { key: "api_password", label: "API Password", type: "password", required: true },
@@ -963,7 +963,7 @@ function resolveVisibleColumns(section: AttendanceSectionKey, rows: AdminRecord[
       "require_geo_fencing",
       "requireGeoFencing",
     ],
-    devices: ["device_code", "device_serial_number", "device_model", "branch_id", "vendor_name", "integration_type", "status", "ip_address"],
+    devices: ["device_code", "device_serial_number", "device_model", "branch_id", "vendor_name", "integration_type", "status", "connection_health", "ip_address"],
     checkpoints: ["name", "type", "policy_set_id", "status"],
     geofences: ["name", "status", "type", "branchId"],
     "wifi-networks": ["name", "status", "ssid"],
@@ -1219,10 +1219,20 @@ function buildInitialState(fields: FieldConfig[]) {
   return initial
 }
 
+function readSafeAttendanceDraft(key: string, initial: Record<string, string>, fields: FieldConfig[]) {
+  const values = readPersistedFormState(key, initial)
+  for (const field of fields) if (field.type === "password") values[field.key] = ""
+  return values
+}
+
 function buildEditState(fields: FieldConfig[], row: AdminRecord) {
   const next: Record<string, string> = {}
 
   for (const field of fields) {
+    if (field.type === "password") {
+      next[field.key] = ""
+      continue
+    }
     const value = row[field.key]
 
     if (value === null || value === undefined) {
@@ -1281,7 +1291,7 @@ function buildEditState(fields: FieldConfig[], row: AdminRecord) {
   return next
 }
 
-function toPayload(fields: FieldConfig[], values: Record<string, string>) {
+function toPayload(fields: FieldConfig[], values: Record<string, string>, editing = false) {
   const payload: AdminRecord = {}
   for (const field of fields) {
     const raw = values[field.key]
@@ -1292,7 +1302,7 @@ function toPayload(fields: FieldConfig[], values: Record<string, string>) {
       continue
     }
 
-    if (field.required && !trimmed) {
+    if (field.required && !trimmed && !(editing && field.type === "password")) {
       throw new Error(`${field.label} is required.`)
     }
 
@@ -2293,7 +2303,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     [activeSection]
   )
   const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
-    readPersistedFormState(createDraftKey, initialCreateState)
+    readSafeAttendanceDraft(createDraftKey, initialCreateState, fields)
   )
   const [editValues, setEditValues] = React.useState<Record<string, string>>(() => initialCreateState)
   const [editingId, setEditingId] = React.useState("")
@@ -2335,7 +2345,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
   } | null>(null)
 
   React.useEffect(() => {
-    setCreateValues(readPersistedFormState(createDraftKey, initialCreateState))
+    setCreateValues(readSafeAttendanceDraft(createDraftKey, initialCreateState, fields))
     setEditValues(initialCreateState)
     setEditingId("")
     setEditingLoading(false)
@@ -2360,11 +2370,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setDeviceVendorFilter("all")
     setDeviceIntegrationFilter("all")
     setFocusedDeviceFingerprint(null)
-  }, [createDraftKey, initialCreateState])
+  }, [createDraftKey, initialCreateState, fields])
 
   React.useEffect(() => {
-    persistFormState(createDraftKey, createValues)
-  }, [createDraftKey, createValues])
+    const safeValues = { ...createValues }
+    for (const field of fields) if (field.type === "password") delete safeValues[field.key]
+    persistFormState(createDraftKey, safeValues)
+  }, [createDraftKey, createValues, fields])
 
   const editDraftKey = React.useMemo(() => {
     return editingId ? buildFormDraftStorageKey(`attendance:${activeSection}:edit:${editingId}`) : ""
@@ -2374,8 +2386,10 @@ export function AttendanceManagementView({ section }: { section: string }) {
     if (!editDraftKey) {
       return
     }
-    persistFormState(editDraftKey, editValues)
-  }, [editDraftKey, editValues])
+    const safeValues = { ...editValues }
+    for (const field of fields) if (field.type === "password") delete safeValues[field.key]
+    persistFormState(editDraftKey, safeValues)
+  }, [editDraftKey, editValues, fields])
 
   React.useEffect(() => {
     setCurrentCompanyName(readStoredCompanyName())
@@ -2752,7 +2766,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     try {
       const payload = toPayload(fields, createValues)
       validateAttendancePayload(activeSection, payload)
-      await createAttendanceResource(token, activeSection, payload)
+      const created = await createAttendanceResource(token, activeSection, payload)
       if (activeSection === "devices") {
         const fingerprint = {
           code: typeof payload.device_code === "string" ? payload.device_code : undefined,
@@ -2781,8 +2795,12 @@ export function AttendanceManagementView({ section }: { section: string }) {
         setDeviceIntegrationFilter(
           fingerprint.integrationType ? fingerprint.integrationType.toLowerCase() : "all"
         )
+        const createdRecord = created && typeof created === "object" ? created as AdminRecord : null
+        const health = createdRecord?.connection_health
         setMessage(
-          preferredSearchTerm
+          health === "OFFLINE" || health === "AUTHENTICATION_FAILED"
+            ? "Device saved, but the connection could not be verified. Open the device details to review the error."
+            : preferredSearchTerm
             ? `Created successfully. Filtered the device list to help verify ${preferredSearchTerm}.`
             : "Created successfully."
         )
@@ -2812,10 +2830,13 @@ export function AttendanceManagementView({ section }: { section: string }) {
       return
     }
     try {
-      const payload = toPayload(fields, editValues)
+      const payload = toPayload(fields, editValues, true)
       validateAttendancePayload(activeSection, payload)
-      await updateAttendanceResourceById(token, activeSection, editingId.trim(), payload)
-      setMessage("Updated successfully.")
+      const updated = await updateAttendanceResourceById(token, activeSection, editingId.trim(), payload)
+      const updatedRecord = updated && typeof updated === "object" ? updated as AdminRecord : null
+      setMessage(activeSection === "devices" && ["OFFLINE", "AUTHENTICATION_FAILED"].includes(String(updatedRecord?.connection_health))
+        ? "Device settings saved, but the connection could not be verified. Open the device details to review the error."
+        : "Updated successfully.")
       setError(null)
       setFormError(null)
       setEditOpen(false)
@@ -3046,7 +3067,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
     setEditingId(String(recordId))
     const initialEditState = buildEditState(fields, row)
     const initialDraftKey = buildFormDraftStorageKey(`attendance:${activeSection}:edit:${String(recordId)}`)
-    setEditValues(readPersistedFormState(initialDraftKey, initialEditState))
+    setEditValues(readSafeAttendanceDraft(initialDraftKey, initialEditState, fields))
     setEditingLoading(true)
     setEditOpen(true)
     setFormError(null)
@@ -3056,9 +3077,9 @@ export function AttendanceManagementView({ section }: { section: string }) {
       try {
         const latest = await getAttendanceResourceById(token, activeSection, recordId)
         const latestState = buildEditState(fields, latest ? { ...row, ...latest } : row)
-        setEditValues(readPersistedFormState(initialDraftKey, latestState))
+        setEditValues(readSafeAttendanceDraft(initialDraftKey, latestState, fields))
       } catch {
-        setEditValues(readPersistedFormState(initialDraftKey, initialEditState))
+        setEditValues(readSafeAttendanceDraft(initialDraftKey, initialEditState, fields))
       } finally {
         setEditingLoading(false)
       }
@@ -3616,7 +3637,7 @@ export function AttendanceManagementView({ section }: { section: string }) {
                   <Field
                     key={`edit-${field.key}`}
                     className="w-full"
-                    label={<FieldLabel field={field} />}
+                    label={<FieldLabel field={field.type === "password" ? { ...field, required: false, description: "Leave blank to keep the existing password." } : field} />}
                   >
                     <FieldInput
                       field={field}
