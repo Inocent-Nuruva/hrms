@@ -75,7 +75,6 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
     try {
       const draft = await kpiApi.createDefinition(token, { ...form, code: form.code.trim().toUpperCase(), name: form.name.trim(), category: form.category.trim() })
       setCreated(draft)
-      onCreated?.()
       setStep(5)
       if (publish) {
         try {
@@ -86,6 +85,7 @@ export function KpiCreationWizard({ token, periods, onCancel, onCreated }: {
           setError(`Draft saved, but publication failed: ${cause instanceof Error ? cause.message : "Request failed"}`)
         }
       } else setNotice("Draft KPI saved. Publish it when its definition is ready.")
+      onCreated?.()
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Could not save KPI"
       setError(/KPI role and active company are required|Active company context is required/i.test(message)

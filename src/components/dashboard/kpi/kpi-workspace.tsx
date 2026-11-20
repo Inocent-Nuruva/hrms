@@ -126,7 +126,9 @@ export function KpiWorkspace({ view = "library" }: { view?: string }) {
     try {
       const [d, t, p, a] = await Promise.all([kpiApi.definitions(token), canDefine ? kpiApi.templates(token) : Promise.resolve([]), kpiApi.periods(token), canReadAssignments ? kpiApi.assignments(token) : Promise.resolve([])])
       setDefinitions(d); setTemplates(t); setPeriods(p); setAssignments(a)
-    } catch (err) { setError(errorMessage(err)) } finally { if (!options?.silent) setLoading(false) }
+    } catch (err) {
+      if (!(err instanceof Error && err.name === "AbortError")) setError(errorMessage(err))
+    } finally { if (!options?.silent) setLoading(false) }
   }, [canRead, canDefine, canReadAssignments, token, setError, setAssignments, setDefinitions, setTemplates, setPeriods, setLoading])
   React.useEffect(() => { void load() }, [load])
   React.useEffect(() => {
