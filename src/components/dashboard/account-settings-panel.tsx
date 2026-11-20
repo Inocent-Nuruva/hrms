@@ -141,7 +141,7 @@ const NOTIFICATION_PREFERENCE_GROUPS: Array<{
   },
   {
     title: "KPI & Performance",
-    types: ["KPI_PERIOD_CREATED"],
+    types: ["KPI_PERIOD_CREATED", "KPI_ASSIGNED"],
   },
 ]
 

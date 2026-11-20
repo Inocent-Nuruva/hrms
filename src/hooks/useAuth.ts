@@ -237,6 +237,9 @@ export function useAuth() {
   const logout = async () => {
     try {
       const session = readStoredSessionTokens();
+      await import("@/lib/browser-push")
+        .then(({ disableBrowserPush }) => disableBrowserPush(storedTokens?.accessToken || session.accessToken))
+        .catch(() => {});
       await authService.logout({
         accessToken: storedTokens?.accessToken || session.accessToken,
         refreshToken: storedTokens?.refreshToken || session.refreshToken,
@@ -251,6 +254,9 @@ export function useAuth() {
       clearSession();
       return;
     }
+    await import("@/lib/browser-push")
+      .then(({ disableBrowserPush }) => disableBrowserPush(accessToken))
+      .catch(() => {});
     await authService.logoutAll(accessToken);
     clearSession();
   };

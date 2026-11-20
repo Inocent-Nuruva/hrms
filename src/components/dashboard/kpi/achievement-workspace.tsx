@@ -42,6 +42,12 @@ function localToday() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+function defaultActivityDate(period?: KpiAssignment["period"]) {
+  const today = localToday();
+  const start = period?.startDate?.slice(0, 10) ?? today;
+  const end = period?.endDate?.slice(0, 10) ?? today;
+  return today < start ? start : today > end ? end : today;
+}
 function emptyActivity(): ActivityForm {
   return {
   activityDate: "",
@@ -197,7 +203,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
       return;
     }
     setEditingActivity(null);
-    setActivityForm({ ...emptyActivity(), activityDate: assignment.period?.startDate.slice(0, 10) ?? localToday() });
+    setActivityForm({ ...emptyActivity(), activityDate: defaultActivityDate(assignment.period) });
     setActivityEvidenceFile(null);
     setActivityFormError("");
     setActivityOpen(true);
@@ -215,7 +221,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
 
   function openActivityForm() {
     setEditingActivity(null);
-    setActivityForm({ ...emptyActivity(), activityDate: assignment?.period?.startDate.slice(0, 10) ?? localToday() });
+    setActivityForm({ ...emptyActivity(), activityDate: defaultActivityDate(assignment?.period) });
     setActivityEvidenceFile(null);
     setActivityFormError("");
     setModePickerOpen(false);

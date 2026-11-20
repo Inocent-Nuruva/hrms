@@ -95,16 +95,17 @@ export function KpiTemplateWizard({ token, definitions, onDone, onCancel }: { to
 
 const periodSteps: KpiFlowStep[] = [
   { title: "Period information", description: "Choose a name and supported reporting frequency." },
-  { title: "Date boundaries", description: "Use explicit dates. Existing organization timezone rules apply." },
+  { title: "Date boundaries", description: "Set the dates and time zone used for this reporting period." },
   { title: "Review", description: "Confirm the range before creating a reporting period." },
 ]
-export function KpiPeriodWizard({ token, onDone, onCancel }: { token: string; onDone: () => void; onCancel: () => void }) {
+export function KpiPeriodWizard({ token, onCreated, onDone, onCancel }: { token: string; onCreated: (period: KpiPeriod) => void; onDone: () => void; onCancel: () => void }) {
   const [step, setStep] = React.useState(0), [label, setLabel] = React.useState(""), [frequency, setFrequency] = React.useState("monthly")
   const [startDate, setStartDate] = React.useState(""), [endDate, setEndDate] = React.useState(""), [busy, setBusy] = React.useState(false), [error, setError] = React.useState("")
+  const [timezone, setTimezone] = React.useState("Africa/Dar_es_Salaam")
   const [saved, setSaved] = React.useState<KpiPeriod | null>(null)
   const savingRef = React.useRef(false)
-  function next() { if (step === 0 && !label.trim()) { setError("Enter a period name."); return } if (step === 1 && (!startDate || !endDate || endDate < startDate)) { setError("Enter a valid start and end date."); return } setError(""); setStep((value) => value + 1) }
-  async function submit() { if (savingRef.current || busy || saved) return; savingRef.current = true; setBusy(true); setError(""); try { setSaved(await kpiApi.createPeriod(token, { label: label.trim(), frequency, startDate, endDate })) } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save period") } finally { savingRef.current = false; setBusy(false) } }
+  function next() { if (step === 0 && !label.trim()) { setError("Enter a period name."); return } if (step === 1) { if (!startDate || !endDate || endDate < startDate) { setError("Enter a valid start and end date."); return } try { new Intl.DateTimeFormat("en", { timeZone: timezone.trim() }) } catch { setError("Enter a valid IANA time zone, such as Africa/Dar_es_Salaam."); return } } setError(""); setStep((value) => value + 1) }
+  async function submit() { if (savingRef.current || busy || saved) return; savingRef.current = true; setBusy(true); setError(""); try { const period = await kpiApi.createPeriod(token, { label: label.trim(), frequency, startDate, endDate, timezone: timezone.trim() }); setSaved(period); onCreated(period) } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save period") } finally { savingRef.current = false; setBusy(false) } }
   if (saved) return <Saved text={`Reporting period ${saved.label} created.`} onDone={onDone} />
   return <div className="space-y-5">
     <div className="space-y-3">
@@ -118,8 +119,8 @@ export function KpiPeriodWizard({ token, onDone, onCancel }: { token: string; on
       <Field label="Period name" required><Input value={label} onChange={(_, data) => setLabel(data.value)} /></Field>
       <Choice label="Frequency" value={frequency} options={[["monthly", "Monthly"], ["quarterly", "Quarterly"], ["semiannual", "Twice a year"], ["annual", "Yearly"]]} onChange={setFrequency} info="Frequency means how often results are reported: Monthly is every month; Quarterly is every 3 months; Twice a year is every 6 months; Yearly is once a year." />
     </div>}
-    {step === 1 && <div className="grid gap-4 md:grid-cols-2"><Field label="Start date" required><DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field><Field label="End date" required><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field></div>}
-    {step === 2 && <Summary rows={[["Name", label], ["Frequency", frequency.replace("semiannual", "twice a year").replace("annual", "yearly")], ["Start", startDate], ["End", endDate]]} />}
+    {step === 1 && <div className="grid gap-4 md:grid-cols-2"><Field label="Start date" required><DateInput value={startDate} onChange={(event) => setStartDate(event.target.value)} /></Field><Field label="End date" required><DateInput value={endDate} onChange={(event) => setEndDate(event.target.value)} /></Field><Field label="Time zone" required hint="Use an IANA time zone, such as Africa/Dar_es_Salaam."><Input value={timezone} list="kpi-timezones" onChange={(_, data) => setTimezone(data.value)} /></Field><datalist id="kpi-timezones"><option value="Africa/Dar_es_Salaam" /><option value="Africa/Nairobi" /><option value="Africa/Kampala" /><option value="UTC" /></datalist></div>}
+    {step === 2 && <Summary rows={[["Name", label], ["Frequency", frequency.replace("semiannual", "twice a year").replace("annual", "yearly")], ["Start", startDate], ["End", endDate], ["Time zone", timezone]]} />}
     <KpiWizardControls step={step} steps={periodSteps} busy={busy} error={error} onBack={() => setStep((value) => value - 1)} onNext={next} onCancel={onCancel} onFinish={() => void submit()} finishLabel="Create period" confirmFinish />
   </div>
 }

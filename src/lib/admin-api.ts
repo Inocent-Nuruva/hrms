@@ -318,6 +318,7 @@ export type NotificationChannel = "IN_APP" | "EMAIL" | "SMS" | "PUSH";
 export type NotificationPreferenceType =
   | "GENERAL"
   | "KPI_PERIOD_CREATED"
+  | "KPI_ASSIGNED"
   | "AUTH_SECURITY"
   | "ACCESS_CHANGE"
   | "LEAVE_SUBMITTED"
