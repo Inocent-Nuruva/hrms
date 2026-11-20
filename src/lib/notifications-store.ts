@@ -13,6 +13,7 @@ import {
 import { subscribeToDashboardActorSnapshot } from "@/lib/dashboard-permissions";
 import { showErrorAlert } from "@/lib/error-alert";
 import { readStoredSessionTokens } from "@/lib/session-client";
+import { showNotificationPopup } from "@/lib/notification-popups";
 
 export type {
   NotificationCategory,
@@ -138,6 +139,7 @@ let notificationAudioUnlocked = false;
 let notificationSoundPending = false;
 /** Avoid chime on the first unread-count fetch after login. */
 let unreadCountBaselineReady = false;
+let attentionBaselineReady = false;
 /** A malformed notification:new is followed by a REST counter refresh; avoid double audio. */
 let suppressUnreadIncreaseSoundUntil = 0;
 
@@ -843,6 +845,7 @@ async function loadAttentionItems(tokenOverride?: string) {
   const token = tokenOverride ?? (state.token || readStoredToken());
   if (!token) {
     setState({ attentionItems: [] });
+    attentionBaselineReady = false;
     return [] as NotificationItem[];
   }
 
@@ -867,7 +870,15 @@ async function loadAttentionItems(tokenOverride?: string) {
       (item) =>
         isUnreadNotificationItem(item) && !isArchivedNotificationItem(item),
     );
+    const previousIds = new Set(state.attentionItems.map(readItemId));
     setState({ attentionItems });
+    if (attentionBaselineReady) {
+      for (const item of attentionItems) {
+        const id = readItemId(item);
+        if (id !== null && !previousIds.has(id)) showNotificationPopup(item);
+      }
+    }
+    attentionBaselineReady = true;
     return attentionItems;
   } catch {
     return state.attentionItems;
@@ -1320,6 +1331,7 @@ function connectSocket(token: string) {
     // created as already-seen/read by a backend workflow.
     if (!alreadyPresent) {
       playNotificationSound();
+      showNotificationPopup(item);
     }
 
     if (isDefaultNotificationQuery(state.currentQuery)) {
@@ -1469,6 +1481,7 @@ function connectSocketAction(token?: string) {
 
   if (nextToken !== state.token) {
     unreadCountBaselineReady = false;
+    attentionBaselineReady = false;
     setState({ token: nextToken });
   }
 
@@ -1503,6 +1516,7 @@ function syncTokenFromStorage() {
   }
 
   unreadCountBaselineReady = false;
+  attentionBaselineReady = false;
 
   const nextQuery =
     state.drawerOpen && state.currentQueryKey

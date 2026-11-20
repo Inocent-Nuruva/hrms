@@ -2,8 +2,13 @@ const STATIC_CACHE = "hrms-static-v3";
 const RUNTIME_CACHE = "hrms-runtime-v3";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/offline", "/login", "/manifest.webmanifest", "/icon.png", "/apple-icon.png", "/favicon.ico"];
+const IS_DEV = new URL(self.location.href).searchParams.has("dev");
 
 self.addEventListener("install", (event) => {
+  if (IS_DEV) {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
   );
@@ -25,6 +30,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (IS_DEV) return;
   const { request } = event;
 
   if (request.method !== "GET") {
@@ -75,4 +81,59 @@ self.addEventListener("fetch", (event) => {
         .catch(() => Response.error());
     })
   );
+});
+
+function safeNotificationPath(value) {
+  try {
+    const url = new URL(value || "/dashboard", self.location.origin);
+    if (url.origin !== self.location.origin) return "/dashboard";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/dashboard";
+  }
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let payload = {};
+    try {
+      const decoded = event.data?.json();
+      payload = decoded && typeof decoded === "object" ? decoded : {};
+    } catch { /* Show a generic alert. */ }
+    const notification = {
+      id: Number(payload.id) || 0,
+      title: typeof payload.title === "string" ? payload.title : "New HRMS notification",
+      message: typeof payload.body === "string" ? payload.body : "Open HRMS to view your notification.",
+      action_url: safeNotificationPath(payload.actionUrl),
+    };
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const focused = windows.find((client) => client.focused && new URL(client.url).origin === self.location.origin);
+    if (focused) {
+      focused.postMessage({ type: "hrms:web-push", notification });
+      return;
+    }
+    await self.registration.showNotification(notification.title, {
+      body: notification.message,
+      icon: "/icon.png",
+      badge: "/favicon.ico",
+      tag: notification.id ? `hrms-notification-${notification.id}` : undefined,
+      data: { url: notification.action_url },
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const path = safeNotificationPath(event.notification.data?.url);
+    const url = new URL(path, self.location.origin).href;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const existing = windows.find((client) => new URL(client.url).origin === self.location.origin);
+    if (existing) {
+      await existing.navigate(url);
+      await existing.focus();
+    } else {
+      await self.clients.openWindow(url);
+    }
+  })());
 });

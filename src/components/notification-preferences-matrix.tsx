@@ -18,7 +18,7 @@ import { readStoredSessionTokens } from "@/lib/session-client";
 
 const CHANNELS: NotificationChannel[] = ["IN_APP", "EMAIL", "SMS", "PUSH"];
 const GROUPS: Array<{ title: string; types: NotificationPreferenceType[] }> = [
-  { title: "KPI & Performance", types: ["KPI_PERIOD_CREATED"] },
+  { title: "KPI & Performance", types: ["KPI_PERIOD_CREATED", "KPI_ASSIGNED"] },
   {
     title: "General",
     types: ["GENERAL", "AUTH_SECURITY", "ACCESS_CHANGE", "SYSTEM_ALERT"],

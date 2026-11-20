@@ -24,6 +24,7 @@ import {
 } from "@fluentui/react-icons";
 import { Button } from "@/components/ui/button";
 import { NotificationPreferencesMatrix } from "@/components/notification-preferences-matrix";
+import { BrowserNotificationSettings } from "@/components/browser-notification-settings";
 import {
   Dialog,
   DialogHeader,
@@ -924,6 +925,7 @@ export function NotificationCenter({
             </DialogTitle>
           </DialogHeader>
           <main className="min-h-[32rem] overflow-y-auto p-6">
+            <BrowserNotificationSettings />
             <NotificationPreferencesMatrix />
           </main>
         </DialogPopup>
