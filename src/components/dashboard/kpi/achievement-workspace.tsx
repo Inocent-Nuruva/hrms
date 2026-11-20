@@ -242,6 +242,7 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   const measurementType = assignment?.definitionVersion?.measurementType ?? "numeric";
   const activities = record?.current?.activities ?? [];
   const selectedActivity = activities.find((activity) => activity.id === selectedActivityId) ?? null;
+  const hasFinalResult = record?.current.actual !== null && record?.current.actual !== undefined;
   const achievementStatus = record?.current.status ?? assignment?.status ?? "draft";
   const nextStepTitle = canEditDraft
     ? record ? "Finish your draft" : "Record your first activity"
@@ -412,8 +413,17 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
   if (!achievementsEnabled) return <p className="p-6">Achievement submissions are disabled in this environment.</p>;
 
   return (
-    <div className="space-y-4 pt-3">
-      <section className="min-w-0 overflow-hidden rounded-xl bg-primary px-5 py-5 text-primary-foreground sm:px-6" aria-label="KPI achievement overview">
+    <div className="space-y-4">
+      <section className="relative -mx-3 w-[calc(100%+1.5rem)] min-w-0 overflow-hidden bg-gradient-to-r from-primary via-primary to-primary/90 px-5 py-5 text-primary-foreground sm:-mx-4 sm:w-[calc(100%+2rem)] sm:px-8" aria-label="KPI achievement overview">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="finance-hero-drift absolute -right-16 -top-24 size-80 rounded-full border-[42px] border-primary-foreground/[0.12]" />
+          <div className="finance-hero-orbit absolute right-16 top-[calc(50%-4.5rem)] size-36 rounded-full border border-primary-foreground/15" />
+          <div className="finance-hero-band absolute bottom-0 right-28 h-32 w-56 bg-primary-foreground/[0.08]" />
+          <div className="finance-hero-line absolute left-[46%] top-5 h-24 w-px bg-primary-foreground/15" />
+          <div className="finance-hero-dot absolute left-[49%] top-9 size-2 rounded-full bg-primary-foreground/25" />
+          <div className="finance-hero-dot finance-hero-dot-delayed absolute left-[51%] top-16 size-1.5 rounded-full bg-primary-foreground/20" />
+        </div>
+        <div className="relative z-10">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-foreground/75">My KPIs</p>
@@ -422,15 +432,16 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
           </div>
           <Button type="button" appearance="subtle" size="small" className="!shrink-0 !text-primary-foreground hover:!bg-white/10" onClick={() => router.push("/dashboard/me/kpi")}>Back to My KPIs</Button>
         </div>
-        {assignment && <div className="mt-5 grid gap-x-5 gap-y-4 border-t border-primary-foreground/20 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_minmax(0,1.4fr)]">
+        {assignment && <div className="mt-5 grid gap-x-5 gap-y-4 border-t border-primary-foreground/20 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
           <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Reporting period</p><p className="mt-1 break-words text-sm font-semibold">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</p></div>
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Goal</p><p className="mt-1 break-words text-lg font-semibold leading-tight">{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</p></div>
-          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Final result</p><p className="mt-1 break-words text-lg font-semibold leading-tight">{record?.current.actual === null || record?.current.actual === undefined ? "Not entered" : formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit)}</p></div>
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Goal</p><p className="mt-1 break-words text-3xl font-semibold leading-none tracking-tight sm:text-4xl">{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</p></div>
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Final result</p><p className={hasFinalResult ? "mt-1 break-words text-3xl font-semibold leading-none tracking-tight sm:text-4xl" : "mt-2 text-sm text-primary-foreground/75"}>{hasFinalResult ? formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit) : "Not entered"}</p></div>
           <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Status · {friendlyStatus(achievementStatus)}</p><p className="mt-1 break-words text-sm font-semibold">{nextStepTitle}</p></div>
         </div>}
         {record?.current.reviewComment && <div className="mt-4 border-t border-primary-foreground/20 pt-3"><p className="text-xs font-semibold text-primary-foreground/75">Manager feedback</p><p className="mt-1 whitespace-pre-wrap text-sm">{record.current.reviewComment}</p></div>}
         {canEditDraft && <div className="mt-4 flex flex-wrap gap-2"><Button type="button" appearance="secondary" size="small" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="secondary" size="small" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></div>}
         {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" className="mt-4" appearance="secondary" size="small" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
+        </div>
       </section>
       {!!record?.current.evidence.length && <div className="flex flex-wrap items-center gap-2"><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Supporting files</Text>{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
       {loading && <p>Loading achievement…</p>}
