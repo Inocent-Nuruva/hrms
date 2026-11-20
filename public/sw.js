@@ -2,7 +2,7 @@ const STATIC_CACHE = "hrms-static-v3";
 const RUNTIME_CACHE = "hrms-runtime-v3";
 const OFFLINE_URL = "/offline";
 const PRECACHE_URLS = ["/offline", "/login", "/manifest.webmanifest", "/icon.png", "/apple-icon.png", "/favicon.ico"];
-const IS_DEV = new URL(self.location.href).searchParams.has("dev");
+const IS_DEV = new URL(self.location.href || "/sw.js", self.location.origin).searchParams.has("dev");
 
 self.addEventListener("install", (event) => {
   if (IS_DEV) {
