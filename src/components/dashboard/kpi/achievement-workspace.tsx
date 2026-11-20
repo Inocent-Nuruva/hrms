@@ -413,48 +413,26 @@ export function EmployeeAchievement({ assignmentId, startAction }: { assignmentI
 
   return (
     <div className="space-y-4 pt-3">
-      <KpiPageHeader
-        title={assignment?.definitionVersion?.name ?? "KPI achievement"}
-        description={pageDescription}
-        section="MY KPIs"
-        variant="plain"
-        titleFontFamily="var(--font-fredoka)"
-        titleSize={800}
-        actions={<Button onClick={() => router.push("/dashboard/me/kpi")} appearance="secondary" size="medium">Back to My KPIs</Button>}
-      />
-      {assignment && <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,0.85fr)]" aria-label="Achievement overview">
-        <Card appearance="outline" className="min-w-0 overflow-hidden !p-0">
-          <div className="px-5 pb-5 pt-5 sm:px-6 sm:pt-6">
-            <Text as="p" size={200} weight="semibold" className="uppercase tracking-wide" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Reporting period</Text>
-            <div className="mt-2 flex min-w-0 items-start gap-3">
-              <CalendarLtr24Regular aria-hidden className="mt-0.5 shrink-0" style={{ color: tokens.colorBrandForeground1 }} />
-              <div className="min-w-0">
-                <Text as="h2" size={500} weight="semibold" className="break-words" style={{ display: "block" }}>{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</Text>
-              </div>
-            </div>
-            {assignment.definitionVersion?.description && <Text as="p" size={300} className="mt-4 max-w-2xl leading-relaxed" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>{assignment.definitionVersion.description}</Text>}
+      <section className="min-w-0 overflow-hidden rounded-xl bg-primary px-5 py-5 text-primary-foreground sm:px-6" aria-label="KPI achievement overview">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-foreground/75">My KPIs</p>
+            <h1 className="mt-1 break-words text-xl font-semibold leading-tight sm:text-2xl" style={{ fontFamily: "var(--font-fredoka)" }}>{assignment?.definitionVersion?.name ?? "KPI achievement"}</h1>
+            {assignment?.definitionVersion?.description && <p className="mt-1 max-w-2xl text-sm leading-relaxed text-primary-foreground/80">{assignment.definitionVersion.description}</p>}
           </div>
-          <div className="grid border-t sm:grid-cols-2" style={{ borderColor: tokens.colorNeutralStroke2, backgroundColor: tokens.colorNeutralBackground2 }}>
-            <div className="min-w-0 px-5 py-5 sm:border-r sm:px-6" style={{ borderColor: tokens.colorNeutralStroke2 }}>
-              <div className="flex items-center gap-2"><Target20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Goal for this period</Text></div>
-              <Text as="p" size={600} weight="semibold" className="mt-2 break-words tracking-tight" style={{ display: "block" }}>{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</Text>
-            </div>
-            <div className="min-w-0 border-t px-5 py-5 sm:border-t-0 sm:px-6" style={{ borderColor: tokens.colorNeutralStroke2 }}>
-              <div className="flex items-center gap-2"><DocumentBulletList20Regular aria-hidden style={{ color: tokens.colorBrandForeground1 }} /><Text as="p" size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Your final result</Text></div>
-              <Text as="p" size={600} weight="semibold" className="mt-2 break-words tracking-tight" style={{ display: "block" }}>{record?.current.actual === null || record?.current.actual === undefined ? "Not entered yet" : formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit)}</Text>
-            </div>
-          </div>
-        </Card>
-        <Card appearance="outline" className="flex min-w-0 flex-col p-5 sm:p-6" style={{ borderTop: `3px solid ${tokens.colorBrandStroke1}` }}>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4" style={{ borderColor: tokens.colorNeutralStroke2 }}><Text as="p" size={200} weight="semibold" className="uppercase tracking-wide" style={{ color: tokens.colorNeutralForeground2, display: "block" }}>Current status</Text><KpiStatusBadge status={achievementStatus} /></div>
-          <Text as="h2" size={500} weight="semibold" className="mt-5 block">{nextStepTitle}</Text>
-          <Text as="p" size={300} className="mt-2 block leading-relaxed" style={{ color: tokens.colorNeutralForeground2 }}>{nextStepDescription}</Text>
-          {record?.current.reviewComment && <div className="mt-5 border-l-2 pl-3" style={{ borderColor: tokens.colorBrandStroke1 }}><Text as="p" size={200} weight="semibold">Manager feedback</Text><Text as="p" size={300} className="mt-1 block whitespace-pre-wrap">{record.current.reviewComment}</Text></div>}
-          {canEditDraft && <div className="mt-auto flex flex-wrap gap-2 pt-5"><Button type="button" appearance="secondary" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="primary" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></div>}
-          {record && ["returned", "rejected"].includes(record.current.status) && <Button className="mt-5 self-start" appearance="primary" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
-          {!!record?.current.evidence.length && <div className="mt-4 flex flex-wrap gap-2">{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
-        </Card>
-      </section>}
+          <Button type="button" appearance="subtle" size="small" className="!shrink-0 !text-primary-foreground hover:!bg-white/10" onClick={() => router.push("/dashboard/me/kpi")}>Back to My KPIs</Button>
+        </div>
+        {assignment && <div className="mt-5 grid gap-x-5 gap-y-4 border-t border-primary-foreground/20 pt-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.65fr)_minmax(0,0.75fr)_minmax(0,1.4fr)]">
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Reporting period</p><p className="mt-1 break-words text-sm font-semibold">{displayPeriodDate(assignment.period?.startDate)} – {displayPeriodDate(assignment.period?.endDate)}</p></div>
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Goal</p><p className="mt-1 break-words text-lg font-semibold leading-tight">{formatTarget(assignment.currentTarget?.target ?? null, assignment.definitionVersion?.measurementUnit)}</p></div>
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Final result</p><p className="mt-1 break-words text-lg font-semibold leading-tight">{record?.current.actual === null || record?.current.actual === undefined ? "Not entered" : formatActivityResult(record.current.actual, assignment.definitionVersion?.measurementUnit)}</p></div>
+          <div className="min-w-0"><p className="text-xs text-primary-foreground/70">Status · {friendlyStatus(achievementStatus)}</p><p className="mt-1 break-words text-sm font-semibold">{nextStepTitle}</p></div>
+        </div>}
+        {record?.current.reviewComment && <div className="mt-4 border-t border-primary-foreground/20 pt-3"><p className="text-xs font-semibold text-primary-foreground/75">Manager feedback</p><p className="mt-1 whitespace-pre-wrap text-sm">{record.current.reviewComment}</p></div>}
+        {canEditDraft && <div className="mt-4 flex flex-wrap gap-2"><Button type="button" appearance="secondary" size="small" onClick={openActivityForm}>Add activity</Button><Button type="button" appearance="secondary" size="small" disabled={busy} onClick={() => { setFlowStep("quick"); setModePickerOpen(true); }}>Submit achievement</Button></div>}
+        {record && ["returned", "rejected"].includes(record.current.status) && <Button type="button" className="mt-4" appearance="secondary" size="small" disabled={busy} onClick={() => void action(() => achievementApi.create(token, assignmentId), "Correction draft created")}>Start a correction</Button>}
+      </section>
+      {!!record?.current.evidence.length && <div className="flex flex-wrap items-center gap-2"><Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>Supporting files</Text>{record.current.evidence.map((evidence) => <Button key={evidence.id} size="small" appearance="subtle" icon={<Document20Regular />} onClick={() => void achievementApi.download(token, record.id, evidence).catch((e: unknown) => setError(e instanceof Error ? e.message : "Download failed"))}>{evidence.fileName}</Button>)}</div>}
       {loading && <p>Loading achievement…</p>}
       {error && <KpiFeedback intent="error">{error}</KpiFeedback>}
       {notice && <KpiFeedback intent="success">{notice}</KpiFeedback>}
