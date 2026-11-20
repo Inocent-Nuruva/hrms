@@ -4,10 +4,8 @@ The frontend mirrors the backend's immutable release layout at
 `/opt/apps/hrms-v2/{uat,prod}/frontend`: `releases/<git-sha>`, `current`,
 `shared/.env`, `shared/ecosystem.config.js`, `shared/logs`, and `tmp`.
 
-- Pushes to `uat` validate, build, and checksum. UAT deployment remains manual
-  while repository variable `KPI_UAT_AUTO_DEPLOY_ENABLED` is unset or `false`.
-  After the first approved KPI release, setting it to `true` permits the
-  existing deploy job to run automatically after required CI checks pass.
+- Pushes to `uat` validate, build, checksum and deploy automatically after
+  the required CI checks pass.
 - Pushes to `master` validate and package only. Production is deployed manually
   from `master` with the `production` input and protected environment approval.
 - Pull requests to either branch run validation without publishing an artifact.
