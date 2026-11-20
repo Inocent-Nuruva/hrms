@@ -36,6 +36,8 @@ import {
   getAccessScheduleTemplate,
   listAttendanceDevices,
   listAccessControlResources,
+  listAccessReconciliationOperations,
+  type AccessReconciliationOperation,
   listAccessScheduleTemplates,
   listBranches,
   listDepartments,
@@ -851,6 +853,9 @@ export function AccessControlManagementView({
   const [error, setError] = React.useState<string | null>(null)
   const [formError, setFormError] = React.useState<string | null>(null)
   const [message, setMessage] = React.useState<string | null>(null)
+  const [accessChanges, setAccessChanges] = React.useState<Array<AccessReconciliationOperation & { group_id: number | null }> | null>(null)
+  const [changesLoading, setChangesLoading] = React.useState(false)
+  const [changesError, setChangesError] = React.useState<string | null>(null)
 
   useFluentToastState(message, setMessage, "success")
   const [createValues, setCreateValues] = React.useState<Record<string, string>>(() =>
@@ -1465,6 +1470,12 @@ export function AccessControlManagementView({
   return (
     <div className="w-full space-y-2">
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      {activeSection === "groups" && ["access_groups:read", "data_scope:company"].every((permission) => canPerformPermission(actor.permissionLabels, permission)) ? <section className="space-y-2 rounded border p-3 text-sm">
+        <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Recent access changes</p><p className="text-slate-600">Review records do not confirm that device access has changed.</p></div><FluentButton disabled={changesLoading} onClick={() => { const token = readStoredToken(); setChangesLoading(true); setChangesError(null); void listAccessReconciliationOperations(token).then((result) => setAccessChanges(result.data)).catch((err: unknown) => setChangesError(err instanceof Error ? err.message : "Could not load access changes")).finally(() => setChangesLoading(false)) }}>{changesLoading ? "Loading…" : "Load changes"}</FluentButton></div>
+        {changesError ? <p className="text-red-700">{changesError}</p> : null}
+        {accessChanges ? accessChanges.length ? <ul className="max-h-48 space-y-1 overflow-auto">{accessChanges.map((change) => <li key={change.id}>{change.employee_id === null ? `Unlinked device user ${change.unresolved_employee_no || "(number missing)"}` : `Employee #${change.employee_id}`} · Device #{change.device_id} · {change.group_id === null ? "Direct assignment" : `Group #${change.group_id}`} · {change.reason.replaceAll("_", " ")} · {change.status.replaceAll("_", " ")}{change.effective_date ? ` · Effective ${change.effective_date}` : ""}</li>)}</ul> : <p>No access changes recorded.</p> : null}
+      </section> : null}
 
       <ResizableTable
         title={title}

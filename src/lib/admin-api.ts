@@ -8261,7 +8261,10 @@ export async function previewAccessGroup(token: string, groupId: string | number
   return adminRequest<AccessGroupPreview>(`/api/access-control/groups/${groupId}/preview`, { token });
 }
 
-export type AccessReconciliationOperation = { id: number; employee_id: number; device_id: number; reason: string; status: string; created_at: string; last_error: string | null };
+export type AccessReconciliationOperation = { id: number; employee_id: number | null; unresolved_employee_no: string | null; effective_date: string | null; device_id: number; reason: string; status: string; created_at: string; last_error: string | null };
+export async function listAccessReconciliationOperations(token: string) {
+  return adminRequest<{ data: Array<AccessReconciliationOperation & { group_id: number | null }>; warning: string }>("/api/access-control/reconciliation-operations", { token });
+}
 export async function listGroupReconciliationOperations(token: string, groupId: string | number) {
   return adminRequest<{ group_id: number; data: AccessReconciliationOperation[]; warning: string }>(`/api/access-control/groups/${groupId}/reconciliation-operations`, { token });
 }
